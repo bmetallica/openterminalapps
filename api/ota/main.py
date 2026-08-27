@@ -10,7 +10,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import select
 
-from . import agent_client, recipes, schema_sync
+from . import agent_client, migrate, recipes, schema_sync
 from .db import Base, SessionLocal, engine
 from .models import Session as SessionModel
 from .routers import (
@@ -144,10 +144,20 @@ async def _reaper() -> None:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    # create_all legt fehlende Tabellen an — fehlende Spalten nicht. Genau das
-    # hat am 2026-08-27 eine laufende Anlage lahmgelegt: neue Spalte im Modell,
-    # "Schema bereit" im Protokoll, und danach scheiterte jede Abfrage auf die
-    # Tabelle. Deshalb der zweite Schritt (siehe schema_sync.py).
+    # Drei Schritte, und jeder deckt ab, was der vorige nicht kann:
+    #
+    #   1. Migrationen (migrate.py) — der eigentliche Weg. Baut eine leere
+    #      Datenbank auf und uebernimmt eine bestehende per Stempel.
+    #   2. create_all — legt Tabellen an, die noch keine Migration hat.
+    #   3. schema_sync — ergaenzt fehlende Spalten. create_all tut das nicht,
+    #      und genau daran ist am 2026-08-27 eine laufende Anlage gescheitert:
+    #      neue Spalte im Modell, "Schema bereit" im Protokoll, und danach
+    #      scheiterte jede Abfrage auf die Tabelle.
+    #
+    # Schritt 2 und 3 sind das Netz fuers Weiterbauen, nicht der Ersatz fuer
+    # eine Migration. Was sie ergaenzen, steht im Protokoll und gehoert
+    # nachgetragen.
+    migrate.run(engine)
     Base.metadata.create_all(bind=engine)
     added = schema_sync.sync(engine)
     if added:

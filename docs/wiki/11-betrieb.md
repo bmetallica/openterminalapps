@@ -60,6 +60,60 @@ Frist drastisch kürzt und sofortige Wirkung braucht, setzt zusätzlich die Sitz
 > Nicht zu verwechseln mit dem **automatischen Beenden von Sessions**. Das steht je Workspace unter
 > *Ressourcen → Sitzung endet nach Inaktivität* und betrifft den Container, nicht die Anmeldung.
 
+## Schema und Migrationen ✅
+
+Beim Start der API laufen drei Schritte, und jeder deckt ab, was der vorige nicht kann:
+
+1. **Migrationen** (`alembic upgrade head`). Auf einer leeren Datenbank baut das alles auf.
+   Steht schon ein Schema da, ohne dass Alembic es kennt — etwa eine Anlage aus der Zeit davor —,
+   wird es auf den Ausgangsstand **gestempelt** statt migriert; ein `CREATE TABLE` auf bestehende
+   Tabellen würde nur scheitern.
+2. **`create_all`** für Tabellen, zu denen es noch keine Migration gibt.
+3. **Fehlende Spalten ergänzen** (`schema_sync.py`). `create_all` tut das nämlich nicht — und
+   genau daran ist am 2026-08-27 eine laufende Anlage gescheitert.
+
+Schritt 2 und 3 sind das Netz fürs Weiterbauen, **nicht der Ersatz für eine Migration**. Was sie
+ergänzt haben, steht im Protokoll und gehört nachgetragen:
+
+```bash
+docker compose -f deploy/docker-compose.yml logs api | grep "Spalte ergänzt"
+```
+
+**Scheitert die Migration, startet der Dienst trotzdem.** Ein Dienst, der wegen eines
+Migrationsproblems gar nicht erst hochkommt, lässt sich auch nicht mehr reparieren.
+
+Eine neue Migration schreiben:
+
+```bash
+docker compose -f deploy/docker-compose.yml exec -w /app api \
+  alembic revision --autogenerate -m "was sich ändert"
+docker cp ota-api:/app/migrations/versions/. api/migrations/versions/
+```
+
+Der zweite Befehl ist nötig, weil das Verzeichnis im Abbild liegt und nicht eingehängt ist.
+
+## Speicher: wer zuerst stirbt ✅
+
+Alle Anwendungen eines Nutzers teilen sich **ein** Speicherlimit. Reisst eine davon es, sucht der
+Kernel ein Opfer — und ohne Zutun trifft es gern den grössten Prozess. Das kann Xvnc sein; dann
+stirbt der ganze Arbeitsplatz an einer einzigen Anwendung.
+
+OTA setzt deshalb beim Start jeder Anwendung `oom_score_adj=500` auf sie und alle ihre
+Kindprozesse. Die Infrastruktur im Container bleibt bei 0. Bei Speichernot trifft es damit eine
+Anwendung, nicht den Arbeitsplatz.
+
+Nachsehen lässt sich das so:
+
+```bash
+docker exec <container> bash -lc \
+  'for p in $(pgrep -f code/code | head -3); do echo "$p $(cat /proc/$p/oom_score_adj)"; done'
+```
+
+> **Eine Ausnahme, die man kennen sollte:** Anwendungen, die ihre Arbeit an einen bereits laufenden
+> Dienst übergeben statt selbst zu arbeiten — `xfce4-terminal` etwa reicht an seinen eigenen
+> Hintergrunddienst weiter —, entkommen dem Wert. Bei den Speicherfressern (allem auf
+> Electron- oder Chromium-Basis) greift er, und darauf kommt es an.
+
 ## Update
 
 ```bash

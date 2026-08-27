@@ -83,7 +83,19 @@ if wmctrl -l 2>/dev/null | awk '$2 != -1' | grep -q .; then
   exit 0
 fi
 
-nohup @COMMAND@ > /tmp/ota-app-@SLUG@.log 2>&1 &
+# Die Anwendung bekommt einen hohen oom_score_adj, die Infrastruktur nicht.
+#
+# Warum: Alle Anwendungen eines Nutzers teilen sich ein Speicherlimit. Reisst
+# eine davon es, sucht der Kernel ein Opfer — und ohne Zutun trifft es gern
+# den groessten Prozess. Das kann Xvnc sein oder die Aufsicht des Containers;
+# dann stirbt der ganze Arbeitsplatz an einer einzigen Anwendung.
+#
+# Der Wert wird in einer Zwischen-Shell gesetzt, die sich danach durch die
+# Anwendung ersetzt (`exec`). So erben ihn auch alle Kindprozesse — bei
+# Electron sind das ein Dutzend. Erhoehen darf jeder Prozess fuer sich selbst;
+# Senken braeuchte CAP_SYS_RESOURCE, und genau deshalb wird nur erhoeht.
+nohup bash -c 'echo 500 > /proc/self/oom_score_adj 2>/dev/null; exec @COMMAND@' \
+  > /tmp/ota-app-@SLUG@.log 2>&1 &
 
 for i in $(seq 1 60); do
   if DISPLAY=:@DISPLAY@ wmctrl -l 2>/dev/null | awk '$2 != -1' | grep -q .; then

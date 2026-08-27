@@ -126,6 +126,72 @@ echo "$HDRS" | grep -qi "frame-ancestors 'self'" \
 [ "$(curl -s --cacert "$CA" -o /dev/null -w '%{ssl_verify_result}' "$BASE/")" = "0" ] \
   && ok "TLS-Kette gültig (Secure Context vorhanden)" || bad "TLS-Kette ungültig"
 
+# --------------------------------------------------------------------------
+# Zweiter Faktor
+#
+# Am Wegwerf-Konto, nicht am echten: Der Test schaltet ihn ein, benutzt einen
+# Rueckfallcode und schaltet ihn wieder ab. Ein Test, der das Konto eines
+# Menschen anfasst, waere ein Test, den niemand zweimal laufen laesst.
+# --------------------------------------------------------------------------
+echo
+
+jqp() {  # jqp <python-ausdruck ueber d> — liest JSON von stdin
+  python3 -c "import sys,json;d=json.load(sys.stdin);print($1)" 2>/dev/null
+}
+
+otp() {  # otp <geheimnis> -> aktueller Zeitcode
+  docker compose -f "$ROOT/deploy/docker-compose.yml" exec -T -e S="$1" api \
+    python -c "import pyotp,os;print(pyotp.TOTP(os.environ['S']).now())" 2>/dev/null | tr -d '\r'
+}
+
+SETUP=$(curl -s --cacert "$CA" -b "$TMP/user.jar" -X POST "$BASE/api/auth/totp/setup")
+SECRET=$(echo "$SETUP" | jqp "d.get('secret','')")
+[ -n "$SECRET" ] && ok "Einrichtung liefert ein Geheimnis" || bad "Keine Einrichtung möglich"
+echo "$SETUP" | grep -q "<svg" && ok "Einrichtungscode kommt als Bild mit" \
+                               || bad "Kein Einrichtungscode im Ergebnis"
+
+CODES=$(curl -s --cacert "$CA" -b "$TMP/user.jar" -X POST "$BASE/api/auth/totp/activate" \
+  -H 'Content-Type: application/json' \
+  -d "{\"secret\":\"$SECRET\",\"code\":\"$(otp "$SECRET")\"}")
+N=$(echo "$CODES" | jqp "len(d.get('codes',[]))")
+[ "${N:-0}" -eq 10 ] && ok "Zehn Rückfallcodes bei der Einrichtung" \
+                     || bad "Rückfallcodes fehlen (bekam ${N:-0})"
+RC=$(echo "$CODES" | jqp "d['codes'][0]")
+
+# Ohne Code kommt niemand mehr herein.
+OUT=$(curl -s --cacert "$CA" -X POST "$BASE/api/auth/login" -H 'Content-Type: application/json' \
+  -d "{\"username\":\"$TEST_USER\",\"password\":\"$TEST_PW\"}")
+echo "$OUT" | grep -q "Code aus deiner App" \
+  && ok "Anmeldung ohne zweiten Faktor wird abgelehnt" \
+  || bad "Anmeldung ohne zweiten Faktor ging durch"
+
+# Mit Rückfallcode schon — und danach ist dieser Code verbraucht.
+OUT=$(curl -s --cacert "$CA" -X POST "$BASE/api/auth/login" -H 'Content-Type: application/json' \
+  -d "{\"username\":\"$TEST_USER\",\"password\":\"$TEST_PW\",\"totp\":\"$RC\"}")
+LEFT=$(echo "$OUT" | jqp "d.get('recovery_left',-1)")
+[ "$LEFT" = "9" ] && ok "Rückfallcode lässt herein und wird verbraucht (9 übrig)" \
+                  || bad "Rückfallcode wirkte nicht (übrig: $LEFT)"
+
+OUT=$(curl -s --cacert "$CA" -X POST "$BASE/api/auth/login" -H 'Content-Type: application/json' \
+  -d "{\"username\":\"$TEST_USER\",\"password\":\"$TEST_PW\",\"totp\":\"$RC\"}")
+echo "$OUT" | grep -q "stimmt nicht" \
+  && ok "Derselbe Rückfallcode wirkt kein zweites Mal" \
+  || bad "Ein verbrauchter Rückfallcode ging erneut durch"
+
+# Abschalten verlangt Passwort UND Code.
+OUT=$(curl -s --cacert "$CA" -b "$TMP/user.jar" -X DELETE "$BASE/api/auth/totp" \
+  -H 'Content-Type: application/json' -d "{\"password\":\"$TEST_PW\",\"code\":\"000000\"}")
+echo "$OUT" | grep -q "stimmt nicht" \
+  && ok "Abschalten ohne gültigen Code wird verweigert" \
+  || bad "Zweiter Faktor liess sich ohne Code abschalten"
+
+curl -s --cacert "$CA" -b "$TMP/user.jar" -X DELETE "$BASE/api/auth/totp" \
+  -H 'Content-Type: application/json' \
+  -d "{\"password\":\"$TEST_PW\",\"code\":\"$(otp "$SECRET")\"}" >/dev/null
+STATE=$(curl -s --cacert "$CA" -b "$TMP/user.jar" "$BASE/api/auth/me" | jqp "d.get('totp_enabled')")
+[ "$STATE" = "False" ] && ok "Abschalten mit Passwort und Code gelingt" \
+                       || bad "Zweiter Faktor blieb an"
+
 echo
 echo "─────────────────────────────────────"
 printf '  bestanden: %d   fehlgeschlagen: %d\n' "$pass" "$fail"

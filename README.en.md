@@ -15,7 +15,7 @@ key, the same clipboard.
 Alongside that, single applications can run as throwaway containers, and existing Kasm images and
 whole registries can be attached — as an addition, not as the foundation.
 
-> **Status:** running and in use. 124 automated checks, 64 of them in a real browser. What is still
+> **Status:** running and in use. 135 automated checks, 67 of them in a real browser. What is still
 > missing is listed openly in [roadmap.md](roadmap.md) — nothing there is dressed up.
 >
 > The documentation is written in German. This file is the exception.
@@ -51,6 +51,7 @@ after any later certificate change.
 - Sign-in limit configurable (30 min to 48 h), rolling — nobody working is ever signed out
 - Interface in German and English, switchable before signing in as well
 - The handbook lives **inside the application**, filtered by permission
+- **My account** for everyone: change your own password, set up two-factor with recovery codes
 
 **Getting software into the workspaces**
 - Pick packages, build the image, activate the version — with a log and a way back
@@ -111,7 +112,7 @@ were.
 make test
 ```
 
-**124 checks in four suites**, each one setting up its own preconditions:
+**135 checks in four suites**, each one setting up its own preconditions:
 
 | Suite | Checks |
 |---|---|

@@ -52,8 +52,10 @@ formatfüllend auf eigenem Display, alle im selben Container mit gemeinsamem
 - [x] Sicherheits-Header inklusive `Permissions-Policy` für die Zwischenablage; **HSTS bewusst aus**,
       solange die CA nicht verteilt ist
 - [x] Oberflächenentwurf lauffähig (`web/`), Design-System nach `plan.md` §13
-- [ ] Erste **Alembic-Migration** erzeugen. Postgres läuft; das Schema entsteht
-      derzeit über `create_all`, Schemaänderungen laufen von Hand
+- [x] Erste **Alembic-Migration** erzeugt und beim Start ausgeführt (`api/ota/migrate.py`).
+      Gegen eine leere Datenbank erzeugt, damit sie wirklich alles aufbaut — nachgewiesen: 18
+      Tabellen aus dem Nichts. Eine bestehende Anlage wird auf den Ausgangsstand gestempelt statt
+      migriert. `create_all` und `schema_sync` bleiben als Netz fürs Weiterbauen, nicht als Ersatz
 - [ ] ADR-Format und ADR-001 dokumentieren
 
 **Erreicht**: `https://<host>:8443/` liefert die Oberfläche mit gültiger Kette, Kasm läuft unbeeinträchtigt.
@@ -119,8 +121,11 @@ Siehe Handbuch, Kapitel 12.
 - [x] `template_overrides` (Ressourcen je Gruppe und je Nutzer) samt Auflösung nach `plan.md` §5;
       Referenz ist `effectiveResources()` aus dem Oberflächenentwurf
 - [x] Aufgelöste Werte beim Session-Start festschreiben und als `--cpus`/`--memory` setzen
-- [ ] **TOTP-Einrichtung im UI** samt Recovery-Codes. Die *Prüfung* beim Login
-      steht bereits — es fehlt der Weg, einen zweiten Faktor zu hinterlegen
+- [x] **Zwei-Faktor im UI einrichten**, mit QR-Code als SVG, Geheimnis zum Abtippen und zehn
+      Rückfallcodes. Gespeichert wird erst nach bestandener Probe; abschalten verlangt Passwort
+      **und** Code. Niemand kann den zweiten Faktor eines anderen entfernen — deshalb sind die
+      Rückfallcodes Pflicht und nicht Zubehör. Acht Prüfungen in `test-authz.sh`
+- [ ] Offen: Zwei-Faktor je Gruppe erzwingen
 - [x] Seed-Skript für den ersten Admin
 - [x] **Autorisierungstests**: je Admin-Endpunkt ein Test, der mit Nutzer-Token 403 erwartet
 
@@ -138,7 +143,10 @@ Der Entwurf steht bereits (`web/`, `plan.md` §13). Hier wird er verkabelt.
 - [x] Session-Viewer mit echter Kontrollleiste: Vollbild, Auflösung, Zwischenablage-Panel,
       Upload/Download, Ton, Verbindungsqualität, `Strg+Alt+Shift`
 - [x] Startvorgang mit echten Phasen statt Spinner
-- [ ] Eigene Einstellungen: Passwort, 2FA, Sprache, Auflösung
+- [x] **Mein Konto** für jeden Angemeldeten: Passwort selbst ändern, Zwei-Faktor, Sprache am
+      Konto gemerkt. Ein normaler Nutzer konnte sein Passwort vorher nicht ändern — nur ein
+      Administrator konnte es für ihn setzen. Eine Auflösung braucht es nicht mehr: Der ferne
+      Bildschirm folgt dem Browserfenster
 - [x] Admin: Nutzer, Gruppen, Sessions, Audit-Log — inklusive Anlegen und Ändern
 - [x] Entwurfsleiste entfernt
 
@@ -169,7 +177,10 @@ Der Entwurf steht bereits (`web/`, `plan.md` §13). Hier wird er verkabelt.
 
 **Ressourcen**
 - [x] Grenzen gelten für den Container als Ganzes (`plan.md` §9.3); Spitzenlast-Dimensionierung
-- [ ] `oom_score_adj` so setzen, dass nicht der ganze Arbeitsplatz an einer App stirbt
+- [x] `oom_score_adj=500` für jede gestartete Anwendung und ihre Kindprozesse; die Infrastruktur
+      bleibt bei 0. Bei Speichernot trifft es damit eine Anwendung statt Xvnc. Nachgemessen an
+      VS Code: alle Prozesse erben den Wert. Gesetzt in einer Zwischen-Shell, die sich per `exec`
+      ersetzt — Erhöhen darf jeder Prozess für sich, Senken bräuchte CAP_SYS_RESOURCE
 
 **Arbeitsgefühl** — nachgezogen am 2026-08-27 nach dem ersten echten Benutzen
 - [x] **Der Stream wächst mit dem Fenster.** Der KasmVNC-Client schaltet `resize` im iframe auf

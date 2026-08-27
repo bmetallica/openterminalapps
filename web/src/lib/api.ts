@@ -11,6 +11,9 @@ export type Me = {
   groups: string[]
   locale: string
   must_change_password: boolean
+  /** Ist der zweite Faktor eingerichtet? Das Geheimnis selbst kommt nie hierher. */
+  totp_enabled: boolean
+  recovery_left: number
 }
 
 export type App = {
@@ -122,6 +125,8 @@ export type DiscoveredApp = {
 }
 
 /** Was das Image über einen Paketnamen weiss. */
+export type TotpSetup = { secret: string; uri: string; qr_svg: string }
+
 export type RecipeKind = 'apt_repo' | 'deb_url' | 'tarball' | 'appimage' | 'script'
 
 export type Recipe = {
@@ -331,6 +336,21 @@ export const api = {
     call<Me>('/auth/login', { method: 'POST', body: JSON.stringify({ username, password, totp }) }),
   logout: () => call<void>('/auth/logout', { method: 'POST' }),
   me: () => call<Me>('/auth/me'),
+  setLocale: (locale: string) =>
+    call<Me>('/auth/locale', { method: 'PUT', body: JSON.stringify({ locale }) }),
+  totpSetup: () => call<TotpSetup>('/auth/totp/setup', { method: 'POST' }),
+  totpActivate: (secret: string, code: string) =>
+    call<{ codes: string[] }>('/auth/totp/activate', {
+      method: 'POST', body: JSON.stringify({ secret, code }),
+    }),
+  totpRenewCodes: (password: string) =>
+    call<{ codes: string[] }>('/auth/totp/recovery', {
+      method: 'POST', body: JSON.stringify({ password }),
+    }),
+  totpDisable: (password: string, code: string) =>
+    call<{ status: string }>('/auth/totp', {
+      method: 'DELETE', body: JSON.stringify({ password, code }),
+    }),
   changePassword: (current_password: string, new_password: string) =>
     call<{ status: string }>('/auth/password', {
       method: 'POST', body: JSON.stringify({ current_password, new_password }),

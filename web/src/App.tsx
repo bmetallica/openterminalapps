@@ -8,6 +8,7 @@ import { Help } from './screens/Help'
 import { Settings } from './screens/Settings'
 import { Images } from './screens/Images'
 import { Storage } from './screens/Storage'
+import { Account } from './screens/Account'
 import { StandaloneViewer } from './screens/StandaloneViewer'
 import { openInTab, parseRoute, viewPath, type Route } from './lib/routes'
 import { ApiError, api, type Host, type Me, type Session, type Stream, type Template } from './lib/api'
@@ -15,7 +16,8 @@ import { gb } from './lib/format'
 import { setLang, t, useLang, type Lang } from './lib/i18n'
 import './styles/app.css'
 
-type View = 'dashboard' | 'workspaces' | 'images' | 'storage' | 'people' | 'monitor' | 'settings' | 'help'
+type View = 'dashboard' | 'workspaces' | 'images' | 'storage' | 'people'
+  | 'monitor' | 'settings' | 'account' | 'help'
 type Toast = { id: number; msg: string; tone: 'ok' | 'bad' }
 
 const NAV: { id: View; glyph: string; cap: string; adminOnly: boolean }[] = [
@@ -33,6 +35,10 @@ const NAV: { id: View; glyph: string; cap: string; adminOnly: boolean }[] = [
   // Administratoren vorbehalten.
   { id: 'help', glyph: '?', cap: 'Hilfe', adminOnly: false },
 ]
+
+/* Das eigene Konto sitzt unten bei „Abmelden", nicht oben bei den Ansichten:
+   Es ist nichts, was man beim Arbeiten braucht, sondern etwas, das zur
+   eigenen Person gehört. */
 
 export default function App() {
   useLang()
@@ -116,7 +122,15 @@ export default function App() {
   }
 
   const visible = NAV.filter((n) => !n.adminOnly || me.is_admin)
-  const current = visible.some((n) => n.id === view) ? view : 'dashboard'
+
+  /* Der Rückfall auf das Dashboard fängt den Fall ab, dass jemand seine
+     Rechte verliert, während eine Verwaltungsansicht offen ist.
+     `account` steht bewusst nicht in NAV — es ist keine Ansicht der Anlage,
+     sondern die des eigenen Kontos — muss hier aber trotzdem gelten. Ohne
+     diese Ausnahme sprang der Punkt „Mein Konto" wirkungslos zurück. */
+  const outsideNav: View[] = ['account']
+  const current = visible.some((n) => n.id === view) || outsideNav.includes(view)
+    ? view : 'dashboard'
   const freePct = host ? (host.memory_available / host.memory_total) * 100 : null
 
   return (
@@ -135,6 +149,13 @@ export default function App() {
         ))}
 
         <div className="rail__spacer" />
+
+        <button className={`rail__btn${current === 'account' ? ' is-on' : ''}`}
+          onClick={() => setView('account')}
+          aria-current={current === 'account' ? 'page' : undefined}>
+          <span className="rail__glyph" aria-hidden="true">◔</span>
+          <span className="rail__cap">{t('Mein Konto')}</span>
+        </button>
 
         <LangSwitch />
 
@@ -173,6 +194,7 @@ export default function App() {
         {current === 'people' && <People onToast={toast} />}
         {current === 'monitor' && <Monitor onToast={toast} />}
         {current === 'settings' && <Settings onToast={toast} />}
+        {current === 'account' && <Account me={me} onMe={setMe} onToast={toast} />}
         {current === 'help' && <Help onToast={toast} />}
       </main>
 

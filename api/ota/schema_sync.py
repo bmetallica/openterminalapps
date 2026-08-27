@@ -85,9 +85,27 @@ def _add_clause(conn, column) -> str | None:
         return ddl
 
     default = getattr(column.default, "arg", None) if column.default is not None else None
-    if callable(default) or default is None:
-        # Etwa `default=uuid4` oder gar keiner. Für Altbestände unbrauchbar.
+    if default is None:
         return None
+
+    if callable(default):
+        # Ein aufrufbarer Vorgabewert ist nicht grundsätzlich unbrauchbar:
+        # `default=list` und `default=dict` liefern immer dasselbe leere
+        # Gebilde, und das ist für Altbestände genau richtig. `default=uuid4`
+        # oder `utcnow` dagegen liefern jedes Mal etwas anderes — die fallen
+        # unten durch, weil `_literal` sie nicht darstellen kann.
+        # SQLAlchemy hüllt einen einfachen Vorgabewert ein, sodass die
+        # Hülle einen Ausführungskontext erwartet. Deshalb beide Formen
+        # versuchen — ohne Argument und mit None.
+        try:
+            default = default()
+        except TypeError:
+            try:
+                default = default(None)
+            except Exception:  # noqa: BLE001
+                return None
+        except Exception:  # noqa: BLE001 — ein Vorgabewert darf hier nichts tun
+            return None
 
     literal = _literal(default)
     return f"{ddl} DEFAULT {literal}" if literal is not None else None

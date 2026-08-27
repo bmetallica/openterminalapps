@@ -15,7 +15,7 @@ Projekte, denselben SSH-Schlüssel, dieselbe Zwischenablage.
 Daneben lassen sich einzelne Anwendungen als Wegwerf-Container starten und vorhandene Kasm-Images
 sowie ganze Registries einbinden — als Zusatz, nicht als Fundament.
 
-> **Stand:** läuft und wird benutzt. 124 automatische Prüfungen, davon 64 in einem echten Browser.
+> **Stand:** läuft und wird benutzt. 135 automatische Prüfungen, davon 67 in einem echten Browser.
 > Was noch fehlt, steht offen in [roadmap.md](roadmap.md) — nichts davon ist beschönigt.
 
 ---
@@ -49,6 +49,7 @@ nicht mehr — auch nach jedem späteren Zertifikatswechsel.
 - Anmeldefrist einstellbar (30 min bis 48 h), rollend — wer arbeitet, wird nicht abgemeldet
 - Oberfläche auf Deutsch und Englisch, umschaltbar auch vor der Anmeldung
 - Das Handbuch liegt **im Programm**, gefiltert nach Rechten
+- **Mein Konto** für jeden: Passwort selbst ändern, Zwei-Faktor mit Rückfallcodes einrichten
 
 **Software in die Arbeitsplätze bringen**
 - Pakete anklicken, Image bauen, Fassung aktivieren — mit Protokoll und Rückrollen
@@ -108,7 +109,7 @@ aussahen, als sie waren.
 make test
 ```
 
-**124 Prüfungen in vier Suiten**, jede stellt ihren Vorzustand selbst her:
+**135 Prüfungen in vier Suiten**, jede stellt ihren Vorzustand selbst her:
 
 | Suite | Prüft |
 |---|---|

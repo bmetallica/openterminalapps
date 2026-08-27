@@ -1169,3 +1169,11 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .drop.is-over {
   border-color: var(--accent); background: var(--bay); color: var(--accent);
 }
+
+/* Der Einrichtungscode für den zweiten Faktor. Weisser Grund, weil
+   Kameras einen QR-Code auf dunklem Untergrund oft nicht lesen. */
+.totp__qr {
+  display: inline-block; padding: 12px; margin-bottom: 16px;
+  background: #fff; border-radius: var(--r-ctl);
+}
+.totp__qr svg { display: block; width: 200px; height: 200px; }

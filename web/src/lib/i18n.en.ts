@@ -749,4 +749,53 @@ export const EN: Record<string, string> = {
     'Runs at every session start, as the user inside the container, before the workspace is ready. For anything that belongs in the home directory but not in the image.',
   'Nicht für Installationen — die gehören ins Golden Image, sonst wartet jeder Nutzer bei jedem Start darauf. Scheitert das Skript, startet der Arbeitsplatz trotzdem; die Ausgabe steht im Container unter /tmp/ota-start.log.':
     'Not for installing software — that belongs in the golden image, or every user waits for it at every start. If the script fails the workspace still starts; its output is in the container at /tmp/ota-start.log.',
+
+  // --------------------------------------------------------- Mein Konto
+  'Mein Konto': 'My account',
+  'Noch einmal': 'Once more',
+  'Die beiden neuen Passwörter sind nicht gleich.': 'The two new passwords do not match.',
+  'Passwort geändert. Deine anderen Sitzungen sind jetzt abgemeldet.':
+    'Password changed. Your other sessions are signed out now.',
+  'Ein Passwortwechsel meldet alle anderen Sitzungen ab — diese hier bleibt bestehen.':
+    'Changing the password signs out all your other sessions — this one stays.',
+
+  'Zwei-Faktor': 'Two-factor',
+  'Zwei-Faktor einrichten': 'Set up two-factor',
+  'Zwei-Faktor ist eingeschaltet.': 'Two-factor is on.',
+  'Zwei-Faktor abschalten': 'Turn two-factor off',
+  'Zwei-Faktor abgeschaltet.': 'Two-factor turned off.',
+  'Mit dem zweiten Faktor reicht dein Passwort allein nicht mehr aus. Du brauchst dafür eine Authenticator-App auf dem Telefon.':
+    'With a second factor your password alone is no longer enough. You need an authenticator app on your phone.',
+  'Scanne den Code mit deiner Authenticator-App und tippe danach die sechs Ziffern ein, die sie zeigt.':
+    'Scan the code with your authenticator app, then type the six digits it shows.',
+  'Geht das Scannen nicht?': 'Cannot scan it?',
+  'Dann trage dieses Geheimnis von Hand in der App ein.': 'Then enter this secret in the app by hand.',
+  'Einschalten': 'Turn on',
+  'Abschalten': 'Turn off',
+  'Einrichtung fehlgeschlagen': 'Setup failed',
+  'Abschalten fehlgeschlagen': 'Turning it off failed',
+  'Erneuern fehlgeschlagen': 'Renewing failed',
+  'Diese Codes siehst du nur jetzt. Drucke sie aus oder leg sie in deinen Passwortspeicher — mit ihnen kommst du herein, wenn dein Telefon weg ist. Jeder gilt einmal.':
+    'You see these codes only now. Print them or put them in your password manager — they get you in when your phone is gone. Each one works once.',
+  'Kopieren': 'Copy',
+  'Codes in die Zwischenablage kopiert.': 'Codes copied to the clipboard.',
+  'Der Browser gibt die Zwischenablage nicht frei.': 'The browser withholds clipboard access.',
+  'Ich habe sie gesichert': 'I have saved them',
+  '{n} Rückfallcodes übrig.': '{n} recovery codes left.',
+  'Nur noch {n} Rückfallcodes übrig — erneuere sie.': 'Only {n} recovery codes left — renew them.',
+  'Neue Rückfallcodes': 'New recovery codes',
+  'Codes erneuern': 'Renew codes',
+  'Die bisherigen gelten danach nicht mehr.': 'The previous ones stop working.',
+  'Für beide Handlungen unten.': 'For both actions below.',
+  'Verlangt zusätzlich einen gültigen Code — wer nur dein Passwort hat, soll ihn nicht entfernen können.':
+    'Also requires a valid code — someone with only your password should not be able to remove it.',
+  'Code': 'Code',
+
+  'Sprache gemerkt.': 'Language remembered.',
+  'Gilt sofort und wird am Konto gemerkt — an einem anderen Rechner musst du sie nicht erneut suchen.':
+    'Applies at once and is remembered on your account — on another machine you will not have to find it again.',
+  'Die Auflösung deiner Anwendungen musst du nicht einstellen: Der ferne Bildschirm folgt der Grösse deines Browserfensters.':
+    'You do not have to set a resolution: the remote screen follows the size of your browser window.',
+  'Sechs Ziffern aus der App — oder einer deiner Rückfallcodes.':
+    'Six digits from the app — or one of your recovery codes.',
 }

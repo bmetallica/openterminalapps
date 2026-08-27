@@ -607,6 +607,33 @@ try {
   const sw = await page.evaluate(() => navigator.serviceWorker?.controller !== undefined)
   check(sw, 'Service Worker ist eingerichtet')
 
+  // --------------------------------------------------------- Mein Konto
+  console.log('\nMein Konto')
+  await page.evaluate(() => {
+    const b = [...document.querySelectorAll('.rail__btn')]
+      .find((x) => x.textContent?.includes('Mein Konto'))
+    b?.click()
+  })
+  await page.waitForSelector('.wb__tabs', { timeout: 15000 })
+  const accountTabs = await page.$$eval('.wb__tab', (els) => els.map((e) => e.textContent))
+  check(accountTabs.join(',') === 'Passwort,Zwei-Faktor,Sprache',
+    `Eigenes Konto mit drei Bereichen (${accountTabs.join(', ')})`)
+
+  // Ein normaler Nutzer konnte sein Passwort bis M2 nicht selbst ändern.
+  const pwFields = await page.$$eval('.wb__body input[type="password"]', (e) => e.length)
+  check(pwFields === 3, `Passwortwechsel steht jedem offen (${pwFields} Felder)`)
+
+  await page.evaluate(() => {
+    const t = [...document.querySelectorAll('.wb__tab')]
+      .find((x) => x.textContent?.includes('Zwei-Faktor'))
+    t?.click()
+  })
+  await new Promise((r) => setTimeout(r, 400))
+  const totpText = await page.$eval('.wb__body', (e) => e.innerText)
+  check(/Zwei-Faktor einrichten/.test(totpText),
+    'Zwei-Faktor lässt sich selbst einrichten')
+  await shot(page, '18-konto')
+
   // ------------------------------------------------------------- Ablage
   console.log('\nAblage und Startskript')
   await page.evaluate(() => {

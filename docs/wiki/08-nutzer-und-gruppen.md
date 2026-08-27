@@ -60,10 +60,50 @@ ausserhalb von `/home`. Was dauerhaft dabei sein soll, gehört ins Golden Image
 - Bei Fehlversuchen exponentiell steigende Wartezeit je Konto und IP, Sperre nach N Versuchen
 - Alles im Audit-Log
 
-## Zwei-Faktor
+## Mein Konto ✅
 
-TOTP je Nutzer aktivierbar, je Gruppe erzwingbar. Recovery-Codes bei der Einrichtung.
-WebAuthn/Passkeys 🔨 M9.
+Jeder Angemeldete verwaltet sein eigenes Konto unter **Mein Konto** (unten in der Leiste). Das
+braucht keine Verwaltungsrechte — es geht um die eigene Person.
+
+| Reiter | Was dort geht |
+|---|---|
+| **Passwort** | Selbst ändern. Der Wechsel meldet alle *anderen* Sitzungen ab, die eigene bleibt |
+| **Zwei-Faktor** | Einrichten, Rückfallcodes erneuern, abschalten |
+| **Sprache** | Deutsch oder Englisch, am Konto gemerkt statt nur im Browser |
+
+> Eine Auflösung lässt sich nicht einstellen, und das ist kein Versehen: Der ferne Bildschirm folgt
+> der Grösse des Browserfensters ([Kapitel 3](03-arbeitsplatz.md)).
+
+## Zwei-Faktor ✅
+
+**Mein Konto → Zwei-Faktor.** Einrichten mit einer Authenticator-App: Code abscannen, sechs Ziffern
+zur Probe eintippen, fertig. Wer nicht scannen kann, trägt das Geheimnis von Hand ein — es steht
+daneben.
+
+Gespeichert wird erst, wenn die Probe besteht. Sonst schaltete man sich mit einem Tippfehler aus.
+
+### Rückfallcodes
+
+Bei der Einrichtung entstehen **zehn Codes**. Sie erscheinen genau einmal; danach liegen sie nur
+noch gehasht auf dem Server, wie Passwörter. **Jeder gilt einmal** und wird beim Einlösen entfernt.
+
+Sie sind kein Zubehör, sondern die Antwort auf ein verlorenes Telefon. Die Alternative wäre „ein
+Administrator schaltet den zweiten Faktor ab" — und genau das wäre die Hintertür, die er verhindern
+soll. **In OTA kann niemand den zweiten Faktor eines anderen entfernen.**
+
+Bei der Anmeldung wird ein Rückfallcode einfach statt der sechs Ziffern eingetippt.
+
+Gehen sie zur Neige, erzeugt *Codes erneuern* zehn neue; die alten gelten dann nicht mehr.
+
+### Abschalten
+
+Verlangt **Passwort und einen gültigen Code**. Wer nur das Passwort hat — etwa an einem
+unbeaufsichtigten Rechner —, soll den zweiten Faktor nicht entfernen können; sonst wäre er keiner.
+
+### Was noch fehlt
+
+Ein Zwang je Gruppe („diese Gruppe muss Zwei-Faktor haben") ist 🔨 offen, ebenso WebAuthn und
+Passkeys (M9).
 
 ## Active Directory und LDAP 🔨 M6
 

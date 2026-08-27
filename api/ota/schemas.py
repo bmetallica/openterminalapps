@@ -17,6 +17,36 @@ class PasswordChangeIn(BaseModel):
     new_password: str
 
 
+class PasswordIn(BaseModel):
+    password: str
+
+
+class LocaleIn(BaseModel):
+    locale: str
+
+
+class TotpSetupOut(BaseModel):
+    # Das Geheimnis geht mit, damit es auch von Hand eingetippt werden kann —
+    # nicht jede Umgebung laesst das Abscannen eines Codes zu.
+    secret: str
+    uri: str
+    qr_svg: str
+
+
+class TotpActivateIn(BaseModel):
+    secret: str
+    code: str
+
+
+class TotpDisableIn(BaseModel):
+    password: str
+    code: str
+
+
+class TotpCodesOut(BaseModel):
+    codes: list[str]
+
+
 class GroupOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
@@ -57,6 +87,10 @@ class MeOut(BaseModel):
     groups: list[str]
     locale: str
     must_change_password: bool
+    # Ist der zweite Faktor eingerichtet, und wie viele Rueckfallcodes sind
+    # noch uebrig? Das Geheimnis selbst verlaesst den Server nie.
+    totp_enabled: bool = False
+    recovery_left: int = 0
 
 
 class AppOut(BaseModel):

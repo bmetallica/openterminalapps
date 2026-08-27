@@ -60,6 +60,11 @@ class User(Base):
     must_change_password: Mapped[bool] = mapped_column(Boolean, default=False)
 
     totp_secret: Mapped[str | None] = mapped_column(String(64))
+    # Rueckfallcodes fuer den zweiten Faktor, **gehasht** wie Passwoerter.
+    # Wer sein Telefon verliert, kaeme sonst nicht mehr herein — und ein
+    # Administrator, der den zweiten Faktor einfach abschalten kann, waere
+    # genau die Hintertuer, die er verhindern soll.
+    totp_recovery: Mapped[list] = mapped_column(JSONB, default=list)
 
     locale: Mapped[str] = mapped_column(String(8), default="de")
     theme: Mapped[str] = mapped_column(String(16), default="dark")

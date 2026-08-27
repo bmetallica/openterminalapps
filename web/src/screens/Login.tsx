@@ -58,9 +58,18 @@ export function Login({ onDone }: { onDone: (me: Me) => void }) {
           <label className="field">
             <span className="field__label" style={{ display: 'block', marginBottom: 8 }}>{t('Code aus deiner App')}</span>
             <div className="row-item">
-              <input value={totp} inputMode="numeric" autoComplete="one-time-code" maxLength={6}
+              {/* Kein maxLength von 6 und kein numerisches Tastenfeld: Hier
+                  darf auch ein Rückfallcode stehen, und der hat Buchstaben
+                  und einen Bindestrich. Mit der alten Begrenzung liess sich
+                  einer gar nicht eingeben — der Weg für ein verlorenes
+                  Telefon wäre damit versperrt gewesen. */}
+              <input value={totp} autoComplete="one-time-code" maxLength={32}
+                aria-label={t('Code aus deiner App')} autoFocus
                 onChange={(e) => setTotp(e.target.value)} />
             </div>
+            <p className="field__hint">
+              {t('Sechs Ziffern aus der App — oder einer deiner Rückfallcodes.')}
+            </p>
           </label>
         )}
 
