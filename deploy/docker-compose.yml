@@ -1,0 +1,172 @@
+# OpenTerminalApps — Basisstack
+#
+# Port 443 gehört noch Kasm. OTA läuft deshalb auf 8443, bis Kasm abgelöst ist
+# (siehe roadmap.md M6). Der Umzug ist dann eine Zeile in der .env.
+
+name: ota
+
+services:
+
+  traefik:
+    image: traefik:v3.7
+    container_name: ota-traefik
+    restart: unless-stopped
+    ports:
+      - "${OTA_HTTP_PORT:-8081}:8080"     # leitet auf HTTPS um
+      - "${OTA_HTTPS_PORT:-8443}:8443"
+      - "127.0.0.1:8449:8081"             # Dashboard, nur lokal erreichbar
+    volumes:
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik/dynamic:/etc/traefik/dynamic:ro
+      - ./certs:/etc/traefik/certs:ro
+      # Nur lesend: Traefik muss Container sehen, aber keine starten.
+      # Das Starten macht später ausschliesslich ota-agent.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      # Docker 29 hat die API-Versionen unter 1.40 abgeschafft. Traefiks
+      # Docker-Client meldet sich sonst mit 1.24 und bekommt vom Daemon
+      # "client version 1.24 is too old" — der Docker-Provider bleibt dann
+      # komplett stumm und keine einzige Route entsteht.
+      # Docker 29 hat die API-Versionen unter 1.40 abgeschafft. Ältere
+      # Traefik-Versionen melden sich fest mit 1.24 und der Docker-Provider
+      # bleibt dann stumm — keine einzige Route entsteht, ohne dass am
+      # Router etwas falsch aussieht. Ab v3.7 wird die Version ausgehandelt;
+      # die Variable bleibt als Sicherheitsnetz stehen.
+      DOCKER_API_VERSION: "${DOCKER_API_VERSION:-1.44}"
+    networks:
+      - public
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  web:
+    build:
+      context: ../web
+      dockerfile: Dockerfile
+    image: ota/web:${OTA_VERSION:-dev}
+    container_name: ota-web
+    restart: unless-stopped
+    volumes:
+      # Nur die Konfiguration wird gemountet — der gebaute Inhalt steckt im Image.
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      - public
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ota-web.rule=PathPrefix(`/`)"
+      - "traefik.http.routers.ota-web.entrypoints=websecure"
+      - "traefik.http.routers.ota-web.tls=true"
+      - "traefik.http.routers.ota-web.priority=1"
+      - "traefik.http.routers.ota-web.middlewares=ota-headers@file"
+      - "traefik.http.services.ota-web.loadbalancer.server.port=80"
+    healthcheck:
+      # 127.0.0.1 statt localhost: localhost löst im Container zuerst auf ::1
+      # auf, nginx lauscht aber nur auf IPv4. Sonst bleibt der Container
+      # dauerhaft "unhealthy" — und Traefik ignoriert unhealthy Container
+      # kommentarlos, sodass keine Route entsteht.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  api:
+    build:
+      context: ../api
+      dockerfile: Dockerfile
+    image: ota/api:${OTA_VERSION:-dev}
+    container_name: ota-api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      agent:
+        condition: service_healthy
+    environment:
+      OTA_DATABASE_URL: "postgresql+psycopg://${POSTGRES_USER:-ota}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-ota}"
+      OTA_JWT_SECRET: "${OTA_JWT_SECRET:?OTA_JWT_SECRET fehlt in deploy/.env}"
+      OTA_AGENT_URL: "http://agent:8100"
+      OTA_AGENT_TOKEN: "${OTA_AGENT_TOKEN:?OTA_AGENT_TOKEN fehlt in deploy/.env}"
+      OTA_PROFILES_ROOT: "${OTA_PROFILES_ROOT:-/srv/ota/profiles}"
+      OTA_COOKIE_SECURE: "true"
+    networks:
+      - public      # damit Traefik sie erreicht
+      - internal    # damit sie DB und Agent erreicht
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=ota_public"
+      - "traefik.http.routers.ota-api.rule=PathPrefix(`/api`)"
+      - "traefik.http.routers.ota-api.entrypoints=websecure"
+      - "traefik.http.routers.ota-api.tls=true"
+      - "traefik.http.routers.ota-api.priority=50"
+      - "traefik.http.routers.ota-api.middlewares=ota-headers@file"
+      - "traefik.http.services.ota-api.loadbalancer.server.port=8000"
+
+  agent:
+    build:
+      context: ../agent
+      dockerfile: Dockerfile
+    image: ota/agent:${OTA_VERSION:-dev}
+    container_name: ota-agent
+    restart: unless-stopped
+    environment:
+      OTA_AGENT_TOKEN: "${OTA_AGENT_TOKEN:?OTA_AGENT_TOKEN fehlt in deploy/.env}"
+      OTA_PROFILES_ROOT: "${OTA_PROFILES_ROOT:-/srv/ota/profiles}"
+      OTA_SESSION_NETWORK: ota_sessions
+      OTA_PUBLIC_NETWORK: ota_public
+    volumes:
+      # Der einzige Dienst mit Schreibzugriff auf den Docker-Socket.
+      # Die API bekommt ihn bewusst nicht — sie verarbeitet Nutzereingaben.
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${OTA_PROFILES_ROOT:-/srv/ota/profiles}:${OTA_PROFILES_ROOT:-/srv/ota/profiles}
+    networks:
+      # Kein "public": Von aussen ist der Agent nicht erreichbar.
+      - internal
+      # Nur damit Compose das Session-Netz überhaupt anlegt. Compose erzeugt
+      # ausschliesslich Netze, die mindestens ein Dienst verwendet.
+      - sessions
+    labels:
+      - "traefik.enable=false"
+
+  db:
+    image: postgres:16-alpine
+    container_name: ota-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: "${POSTGRES_DB:-ota}"
+      POSTGRES_USER: "${POSTGRES_USER:-ota}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD fehlt in deploy/.env}"
+      # Deutsche Sortierung, damit Namenslisten erwartungsgemäss sortieren.
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    networks:
+      # Bewusst NICHT im Netz "public" und nicht im Netz "sessions":
+      # Die Datenbank ist von aussen und aus Session-Containern nicht erreichbar.
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ota} -d ${POSTGRES_DB:-ota}"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+volumes:
+  db-data:
+    name: ota_db_data
+
+networks:
+  # Traefik und die öffentlich erreichbaren Dienste.
+  public:
+    name: ota_public
+
+  # Später: ota-api, ota-db, ota-agent. Kein Weg nach draussen.
+  internal:
+    name: ota_internal
+    internal: true
+
+  # Später: Session-Container. Erreichen ota-db bewusst nicht.
+  sessions:
+    name: ota_sessions

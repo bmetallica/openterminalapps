@@ -1,0 +1,44 @@
+http:
+  middlewares:
+
+    # Sicherheits-Header.
+    #
+    # Bewusst NICHT gesetzt:
+    #   - HSTS: Solange die lokale CA nicht in jedem Browser importiert ist,
+    #     würde HSTS den "trotzdem fortfahren"-Ausweg entfernen und Nutzer
+    #     komplett aussperren. Einschalten, sobald die CA verteilt oder ein
+    #     echtes Zertifikat im Einsatz ist — siehe unten.
+    #   - X-Frame-Options: DENY würde den Session-Viewer zerstören, der den
+    #     Stream absichtlich in ein iframe einbettet. frame-ancestors in der
+    #     CSP regelt das präziser.
+    ota-headers:
+      headers:
+        contentTypeNosniff: true
+        browserXssFilter: true
+        referrerPolicy: "strict-origin-when-cross-origin"
+        customResponseHeaders:
+          # Die Zwischenablage muss ausdrücklich erlaubt werden. Ohne diesen
+          # Header greift in manchen Browsern eine restriktive Vorgabe und
+          # navigator.clipboard schlägt lautlos fehl.
+          Permissions-Policy: "clipboard-read=(self), clipboard-write=(self), camera=(self), microphone=(self), fullscreen=(self)"
+          Content-Security-Policy: "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self' ws: wss:; frame-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'"
+          Server: ""
+
+    # Erst aktivieren, wenn die CA verteilt oder ein echtes Zertifikat aktiv ist.
+    # Dann in den Router zusätzlich zu ota-headers eintragen.
+    ota-hsts:
+      headers:
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        stsPreload: false
+
+    # Wird VOR jedem Request auf /s/<id>/... aufgerufen, auch vor dem
+    # WebSocket-Handshake. Die API prüft, ob der Cookie zum Eigentümer der
+    # Session gehört. Ohne diese Middleware könnte jeder mit einer Session-ID
+    # fremde Bildschirme sehen.
+    ota-authz:
+      forwardAuth:
+        address: "http://api:8000/api/internal/authz"
+        trustForwardHeader: true
+        authResponseHeaders:
+          - X-Ota-User

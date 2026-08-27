@@ -1,0 +1,7 @@
+{
+  "name": "ota-tests",
+  "private": true,
+  "type": "module",
+  "scripts": { "e2e": "node e2e.mjs" },
+  "dependencies": { "puppeteer-core": "^23.11.1" }
+}

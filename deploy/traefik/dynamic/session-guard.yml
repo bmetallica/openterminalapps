@@ -1,0 +1,35 @@
+# Schutzwall für Session-Pfade.
+#
+# Wenn für eine Session kein Router existiert — weil der Container weg ist,
+# die Labels fehlerhaft waren oder die Session längst beendet wurde —, fiele
+# die Anfrage sonst auf die Weboberfläche durch, die für jeden Pfad die
+# Anwendung mit HTTP 200 ausliefert. Von aussen sähe das aus, als wäre die
+# Session ohne Anmeldung erreichbar.
+#
+# Dieser Router liegt über der Weboberfläche (Priorität 1) und unter den
+# echten Session-Routern (100 und 200). Er greift also nur, wenn kein
+# Session-Router passt, und beantwortet den Fall verständlich statt still.
+
+http:
+  routers:
+    ota-session-guard:
+      rule: "PathPrefix(`/s/`)"
+      entryPoints: [websecure]
+      tls: {}
+      priority: 50
+      middlewares:
+        - ota-authz@file       # erst anmelden, dann erklären
+        - ota-session-gone@file
+      service: ota-api-guard
+
+  middlewares:
+    ota-session-gone:
+      replacePathRegex:
+        regex: "^/s/.*"
+        replacement: "/api/internal/session-unavailable"
+
+  services:
+    ota-api-guard:
+      loadBalancer:
+        servers:
+          - url: "http://api:8000"

@@ -1,0 +1,50 @@
+# Statische Traefik-Konfiguration. Änderungen hier erfordern einen Neustart.
+
+entryPoints:
+  web:
+    address: ":8080"
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+  websecure:
+    address: ":8443"
+    http:
+      tls: {}
+  # Dashboard. Der Name MUSS "traefik" lauten — an diesen Entrypoint bindet
+  # sich api.insecure fest. Im Compose nur an 127.0.0.1 gebunden.
+  traefik:
+    address: ":8081"
+
+providers:
+  # Session-Container melden sich später selbst über Labels an.
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false
+    network: ota_public
+  # Zertifikate, Middlewares und alles, was nicht am Container hängt.
+  file:
+    directory: /etc/traefik/dynamic
+    watch: true
+
+# Achtung: Traefik liest die statische Konfiguration aus GENAU EINER Quelle.
+# Sobald diese Datei existiert, werden CLI-Argumente vollständig ignoriert —
+# sie werden nicht zusammengeführt. Alles Statische gehört deshalb hierher.
+api:
+  dashboard: true
+  insecure: true
+
+# Für den Healthcheck des Containers. Ohne diesen Abschnitt antwortet
+# `traefik healthcheck --ping` nicht und der Container gilt dauerhaft als
+# unhealthy — was Traefik zwar nicht stört, aber jede Überwachung falsch alarmiert.
+ping:
+  entryPoint: traefik
+
+log:
+  level: INFO
+
+accessLog:
+  filters:
+    statusCodes:
+      - "400-599"

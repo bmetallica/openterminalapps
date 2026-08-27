@@ -1,0 +1,893 @@
+/* ============================================================
+   OpenTerminalApps — Bedienoberfläche
+   Leitregel: Farbe ist Information. Chrome bleibt neutral,
+   gesättigte Farbe tritt ausschliesslich als Zustand auf.
+   ============================================================ */
+
+:root {
+  /* Flächen — tiefes Teal-Ink, chromatisch statt neutralschwarz */
+  --ground:    #0B1315;
+  --bay:       #111E21;
+  --bay-2:     #16272B;
+  --well:      #0D181B;   /* eingelassene Flächen: Inputs, Fader-Schienen */
+  --edge:      #223438;
+  --edge-lit:  #33555D;
+
+  /* Text */
+  --text:      #E6EDEC;
+  --label:     #8AA1A5;
+  --mute:      #5C7378;
+
+  /* Primäraktion — warmes Bone, das einzige Warm im neutralen Chrome */
+  --bone:      #EADFCB;
+  --bone-dim:  #CFC3AC;
+
+  /* Zustände — die einzigen gesättigten Farben im Layout */
+  --live:      #3ECF9A;
+  --paused:    #5FB8D6;
+  --caution:   #F0A742;
+  --halt:      #F2666F;
+
+  --live-bg:    rgba(62, 207, 154, .12);
+  --paused-bg:  rgba(95, 184, 214, .12);
+  --caution-bg: rgba(240, 167, 66, .12);
+  --halt-bg:    rgba(242, 102, 111, .12);
+
+  --r-panel: 10px;
+  --r-ctl: 7px;
+  --rail-w: 76px;
+
+  --shadow-drawer: -24px 0 60px rgba(0,0,0,.5);
+  --shadow-pop: 0 16px 40px rgba(0,0,0,.55);
+
+  --ease: cubic-bezier(.2,.7,.3,1);
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--text);
+  font-family: Archivo, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-variation-settings: "wdth" 100;
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+button, input, select, textarea { font: inherit; color: inherit; }
+
+:focus-visible {
+  outline: 2px solid var(--bone);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ---------- Typografische Rollen ---------- */
+
+/* Silkscreen-Label: gedruckte Beschriftung auf einer Gerätefront */
+.silk {
+  font-family: Archivo, sans-serif;
+  font-variation-settings: "wdth" 118;
+  font-weight: 600;
+  font-size: 10px;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+  color: var(--mute);
+}
+
+.data { font-family: "IBM Plex Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+
+.h-page { font-size: 27px; font-weight: 600; font-variation-settings: "wdth" 108; letter-spacing: -.015em; margin: 0; }
+.h-card { font-size: 18px; font-weight: 600; font-variation-settings: "wdth" 104; letter-spacing: -.01em; margin: 0; }
+.sub    { color: var(--label); font-size: 13.5px; margin: 0; }
+
+/* ============================================================
+   Rail — schmale Gerätekante links
+   ============================================================ */
+
+.shell { display: flex; height: 100%; }
+
+.rail {
+  width: var(--rail-w);
+  flex: none;
+  background: var(--bay);
+  border-right: 1px solid var(--edge);
+  display: flex; flex-direction: column; align-items: center;
+  padding: 14px 0 12px;
+  gap: 4px;
+}
+
+.rail__mark {
+  width: 34px; height: 34px; border-radius: 9px;
+  background: var(--bone); color: #0B1315;
+  display: grid; place-items: center;
+  font-weight: 700; font-size: 15px; font-variation-settings: "wdth" 112;
+  margin-bottom: 14px;
+}
+
+.rail__btn {
+  width: 58px; padding: 9px 0 7px;
+  background: none; border: 0; border-radius: var(--r-ctl);
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  color: var(--mute); cursor: pointer;
+  transition: background .14s var(--ease), color .14s var(--ease);
+}
+.rail__btn:hover { background: var(--bay-2); color: var(--label); }
+.rail__btn.is-on { background: var(--bay-2); color: var(--text); }
+.rail__btn.is-on .rail__glyph { color: var(--bone); }
+.rail__glyph { font-size: 17px; line-height: 1; }
+.rail__cap { font-size: 9px; letter-spacing: .08em; text-transform: uppercase; font-weight: 600; }
+
+.rail__spacer { flex: 1; }
+
+.rail__host {
+  width: 58px; padding: 9px 0; border-radius: var(--r-ctl);
+  background: var(--well); border: 1px solid var(--edge);
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+}
+.rail__host b { font-size: 11px; font-weight: 600; }
+
+/* ============================================================
+   Layout
+   ============================================================ */
+
+.main { flex: 1; overflow-y: auto; }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 30px 32px 64px; }
+
+.topbar {
+  display: flex; align-items: flex-end; justify-content: space-between;
+  gap: 24px; margin-bottom: 26px;
+}
+
+.section { margin-top: 34px; }
+.section__head {
+  display: flex; align-items: center; gap: 12px; margin-bottom: 13px;
+}
+.section__rule { flex: 1; height: 1px; background: var(--edge); }
+
+/* ============================================================
+   Panel / Karte mit Zustandskante
+   ============================================================ */
+
+.panel {
+  position: relative;
+  background: var(--bay);
+  border: 1px solid var(--edge);
+  border-radius: var(--r-panel);
+  overflow: hidden;
+}
+
+/* Die 2px-Kante links ist der Zustandsträger der Karte */
+.panel--state::before {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px;
+  background: var(--state, var(--edge));
+}
+.panel--live    { --state: var(--live); }
+.panel--paused  { --state: var(--paused); }
+.panel--stopped { --state: var(--mute); }
+.panel--fail    { --state: var(--halt); }
+
+/* ---------- Status-LED ---------- */
+
+.led { display: inline-flex; align-items: center; gap: 7px; }
+.led__dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--c, var(--mute)); flex: none;
+}
+.led--live   { --c: var(--live); }
+.led--paused { --c: var(--paused); }
+.led--stop   { --c: var(--mute); }
+.led--fail   { --c: var(--halt); }
+.led__text { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; font-weight: 600; color: var(--label); }
+
+.led--live .led__dot { animation: breathe 2.6s var(--ease) infinite; }
+@keyframes breathe { 0%,100% { opacity: 1; } 50% { opacity: .45; } }
+
+/* ============================================================
+   Session-Bucht — der Held des Nutzer-Dashboards
+   ============================================================ */
+
+.bay-grid { display: grid; gap: 14px; }
+
+.bay {
+  display: grid;
+  grid-template-columns: 232px 1fr auto;
+  gap: 22px; align-items: center;
+  padding: 16px 20px 16px 22px;
+}
+
+.bay__screen {
+  aspect-ratio: 16/10; border-radius: 6px;
+  background: var(--well); border: 1px solid var(--edge);
+  overflow: hidden; position: relative;
+}
+.bay__screen img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.bay__screen--empty { display: grid; place-items: center; color: var(--mute); font-size: 11px; }
+
+.bay__meta { min-width: 0; }
+.bay__title-row { display: flex; align-items: center; gap: 11px; margin-bottom: 7px; }
+.bay__facts { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 11px; }
+.bay__fact { display: flex; flex-direction: column; gap: 2px; }
+.bay__fact b { font-size: 13px; font-weight: 500; font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; }
+
+.bay__actions { display: flex; align-items: center; gap: 8px; }
+
+/* ============================================================
+   App-Kacheln
+   ============================================================ */
+
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(228px, 1fr)); gap: 13px; }
+
+.tile {
+  padding: 17px 17px 15px; text-align: left;
+  cursor: pointer; background: var(--bay);
+  border: 1px solid var(--edge); border-radius: var(--r-panel);
+  display: flex; flex-direction: column; gap: 10px;
+  transition: border-color .15s var(--ease), transform .15s var(--ease), background .15s var(--ease);
+}
+.tile:hover { border-color: var(--edge-lit); background: var(--bay-2); transform: translateY(-1px); }
+.tile:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+
+.tile__top { display: flex; align-items: center; gap: 11px; }
+.tile__icon {
+  width: 34px; height: 34px; border-radius: 8px; flex: none;
+  background: var(--bay-2); border: 1px solid var(--edge);
+  display: grid; place-items: center; font-size: 17px;
+}
+.tile:hover .tile__icon { border-color: var(--edge-lit); }
+.tile__name { font-size: 14.5px; font-weight: 600; }
+.tile__desc { color: var(--label); font-size: 12.5px; line-height: 1.45; flex: 1; }
+.tile__foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-top: 3px; }
+.tile__spec { display: flex; gap: 9px; font-size: 11px; color: var(--mute); }
+
+/* ============================================================
+   Buttons
+   ============================================================ */
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  height: 34px; padding: 0 15px;
+  border-radius: var(--r-ctl); border: 1px solid var(--edge);
+  background: var(--bay-2); color: var(--text);
+  font-size: 13.5px; font-weight: 500; cursor: pointer; white-space: nowrap;
+  transition: background .14s var(--ease), border-color .14s var(--ease), color .14s var(--ease);
+}
+.btn:hover { border-color: var(--edge-lit); background: #1B2E33; }
+.btn:disabled { opacity: .4; cursor: not-allowed; }
+
+.btn--primary { background: var(--bone); border-color: var(--bone); color: #0B1315; font-weight: 600; }
+.btn--primary:hover { background: #F4EBDA; border-color: #F4EBDA; }
+
+.btn--ghost { background: none; border-color: transparent; color: var(--label); }
+.btn--ghost:hover { background: var(--bay-2); color: var(--text); border-color: transparent; }
+
+.btn--halt { color: var(--halt); }
+.btn--halt:hover { background: var(--halt-bg); border-color: rgba(242,102,111,.4); }
+
+.btn--sm { height: 29px; padding: 0 11px; font-size: 12.5px; }
+.btn--icon { width: 34px; padding: 0; }
+
+/* ============================================================
+   Feld-Gerüst
+   ============================================================ */
+
+.field { display: block; margin-bottom: 20px; }
+.field__head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; }
+.field__label { font-size: 13px; font-weight: 600; }
+.field__hint { color: var(--mute); font-size: 12px; line-height: 1.45; margin-top: 7px; }
+
+/* Vererbungsmarke: sagt, woher ein Default kommt */
+.inherit {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 10.5px; color: var(--mute);
+  background: var(--well); border: 1px solid var(--edge);
+  padding: 1px 7px; border-radius: 20px;
+}
+.inherit button {
+  background: none; border: 0; padding: 0; cursor: pointer;
+  color: var(--paused); font-size: 10.5px; text-decoration: underline; text-underline-offset: 2px;
+}
+
+/* ============================================================
+   SIGNATURE — Kapazitäts-Fader
+   Schiene mit gedruckter Skala; der Bereich, ab dem dieser Host
+   überbucht wäre, ist auf der Schiene selbst eingefärbt.
+   ============================================================ */
+
+.fader { --pct: 0%; --limit: 100%; }
+
+.fader__read {
+  display: flex; align-items: baseline; gap: 7px; margin-bottom: 9px;
+}
+.fader__value { font-family: "IBM Plex Mono", monospace; font-size: 19px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.fader__unit { color: var(--mute); font-size: 12px; }
+
+.fader__track {
+  position: relative; height: 30px;
+  display: flex; align-items: center;
+}
+
+/* eingelassene Schiene */
+.fader__rail {
+  position: absolute; left: 0; right: 0; height: 8px;
+  background: var(--well);
+  border: 1px solid var(--edge);
+  border-radius: 5px; overflow: hidden;
+}
+
+/* Überbuchungszone — beginnt bei --limit */
+.fader__over {
+  position: absolute; top: 0; bottom: 0; left: var(--limit); right: 0;
+  background: repeating-linear-gradient(
+    -45deg, var(--caution-bg) 0 5px, transparent 5px 10px
+  );
+  border-left: 1px solid var(--caution);
+}
+
+.fader__fill {
+  position: absolute; top: 0; bottom: 0; left: 0; width: var(--pct);
+  background: var(--bone-dim);
+  transition: width .06s linear, background .18s var(--ease);
+}
+.fader.is-over .fader__fill { background: var(--caution); }
+
+.fader__input {
+  position: relative; width: 100%; margin: 0;
+  -webkit-appearance: none; appearance: none; background: none; height: 30px;
+  cursor: grab;
+}
+.fader__input:active { cursor: grabbing; }
+
+/* machinierter Daumen */
+.fader__input::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 15px; height: 24px; border-radius: 4px;
+  background: linear-gradient(180deg, #F3EADA 0%, var(--bone) 45%, #BFB49E 100%);
+  border: 1px solid rgba(0,0,0,.5);
+  box-shadow: 0 2px 5px rgba(0,0,0,.5);
+  cursor: inherit;
+}
+.fader__input::-moz-range-thumb {
+  width: 15px; height: 24px; border-radius: 4px; border: 1px solid rgba(0,0,0,.5);
+  background: linear-gradient(180deg, #F3EADA 0%, var(--bone) 45%, #BFB49E 100%);
+  box-shadow: 0 2px 5px rgba(0,0,0,.5); cursor: inherit;
+}
+
+/* gedruckte Skala — jeder Strich sitzt auf seinem Wert */
+.fader__scale { position: relative; height: 18px; margin-top: 2px; }
+.fader__tick {
+  position: absolute; top: 0; transform: translateX(-50%);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 9.5px; color: var(--mute); white-space: nowrap;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+}
+/* Randbeschriftungen nach innen ziehen, damit sie nicht abgeschnitten werden */
+.fader__tick:first-child { transform: translateX(-2px); align-items: flex-start; }
+.fader__tick:last-child  { transform: translateX(-100%); align-items: flex-end; }
+.fader__tick::before { content: ""; width: 1px; height: 4px; background: var(--edge-lit); }
+
+.fader__warn {
+  display: flex; align-items: center; gap: 7px;
+  margin-top: 9px; font-size: 12px; color: var(--caution);
+}
+
+/* ============================================================
+   Toggle
+   ============================================================ */
+
+.toggle {
+  display: flex; align-items: center; gap: 13px;
+  padding: 11px 0; cursor: pointer; width: 100%;
+  background: none; border: 0; text-align: left;
+  border-bottom: 1px solid var(--edge);
+}
+.toggle:last-child { border-bottom: 0; }
+
+.toggle__switch {
+  width: 38px; height: 22px; flex: none; border-radius: 12px;
+  background: var(--well); border: 1px solid var(--edge);
+  position: relative; transition: background .18s var(--ease), border-color .18s var(--ease);
+}
+.toggle__knob {
+  position: absolute; top: 2px; left: 2px;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--mute);
+  transition: transform .18s var(--ease), background .18s var(--ease);
+}
+/* An = Bone, nicht Mint. Mint bleibt dem Laufzeitzustand vorbehalten. */
+.toggle[aria-pressed="true"] .toggle__switch { background: rgba(234,223,203,.16); border-color: var(--bone-dim); }
+.toggle[aria-pressed="true"] .toggle__knob { transform: translateX(16px); background: var(--bone); }
+
+.toggle__body { flex: 1; min-width: 0; }
+.toggle__body { display: flex; flex-direction: column; gap: 2px; }
+.toggle__name { display: block; font-size: 13.5px; font-weight: 500; }
+.toggle__note { display: block; font-size: 12px; color: var(--mute); line-height: 1.4; }
+
+/* ============================================================
+   Segmented Control
+   ============================================================ */
+
+.seg {
+  display: inline-flex; padding: 3px; gap: 3px;
+  background: var(--well); border: 1px solid var(--edge);
+  border-radius: var(--r-ctl);
+}
+.seg__opt {
+  padding: 5px 13px; border: 0; border-radius: 5px;
+  background: none; color: var(--label);
+  font-size: 12.5px; font-weight: 500; cursor: pointer; white-space: nowrap;
+  transition: background .14s var(--ease), color .14s var(--ease);
+}
+.seg__opt:hover { color: var(--text); }
+.seg__opt.is-on { background: var(--bay-2); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.4); }
+.seg__opt.is-on[data-tone="halt"] { color: var(--halt); }
+
+/* ============================================================
+   Select / Combobox
+   ============================================================ */
+
+.select {
+  position: relative; width: 100%;
+}
+.select__btn {
+  width: 100%; height: 38px; padding: 0 34px 0 12px;
+  background: var(--well); border: 1px solid var(--edge);
+  border-radius: var(--r-ctl); color: var(--text);
+  font-size: 13.5px; text-align: left; cursor: pointer;
+  display: flex; align-items: center; gap: 9px;
+  transition: border-color .14s var(--ease);
+}
+.select__btn:hover { border-color: var(--edge-lit); }
+.select__caret {
+  position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+  color: var(--mute); font-size: 10px; pointer-events: none;
+}
+.select__sub { color: var(--mute); font-family: "IBM Plex Mono", monospace; font-size: 11.5px; margin-left: auto; padding-right: 4px; }
+
+.pop {
+  position: absolute; z-index: 40; top: calc(100% + 5px); left: 0; right: 0;
+  background: var(--bay-2); border: 1px solid var(--edge-lit);
+  border-radius: var(--r-ctl); box-shadow: var(--shadow-pop);
+  max-height: 264px; overflow-y: auto; padding: 5px;
+}
+.pop__search {
+  width: 100%; height: 32px; margin-bottom: 5px; padding: 0 10px;
+  background: var(--well); border: 1px solid var(--edge);
+  border-radius: 5px; font-size: 13px; outline: none;
+}
+.pop__search:focus { border-color: var(--edge-lit); }
+.pop__opt {
+  width: 100%; padding: 8px 10px; border: 0; border-radius: 5px;
+  background: none; text-align: left; cursor: pointer;
+  display: flex; align-items: center; gap: 9px; font-size: 13.5px;
+}
+.pop__opt:hover { background: var(--bay); }
+.pop__opt.is-on { background: var(--bay); }
+.pop__opt.is-on::after { content: "✓"; margin-left: auto; color: var(--live); font-size: 12px; }
+.pop__empty { padding: 14px 10px; color: var(--mute); font-size: 12.5px; text-align: center; }
+
+/* ============================================================
+   Chips (Mehrfachauswahl)
+   ============================================================ */
+
+.chips { display: flex; flex-wrap: wrap; gap: 7px; }
+.chip {
+  height: 30px; padding: 0 12px; border-radius: 16px;
+  background: var(--well); border: 1px solid var(--edge);
+  color: var(--label); font-size: 12.5px; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px;
+  transition: all .14s var(--ease);
+}
+.chip:hover { border-color: var(--edge-lit); color: var(--text); }
+.chip.is-on { background: var(--bay-2); border-color: var(--bone-dim); color: var(--text); }
+.chip.is-on::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--bone); }
+
+/* ============================================================
+   Zeilen-Builder (ENV, Volumes)
+   ============================================================ */
+
+.rows { display: flex; flex-direction: column; gap: 7px; }
+.row-item { display: flex; gap: 7px; align-items: center; }
+.row-item input {
+  flex: 1; min-width: 0; height: 34px; padding: 0 11px;
+  background: var(--well); border: 1px solid var(--edge);
+  border-radius: 6px; font-size: 13.5px; outline: none;
+}
+/* Monospace nur für echte Daten: Variablennamen, Pfade, Bezeichner */
+.rows .row-item input { font-family: "IBM Plex Mono", monospace; font-size: 13px; }
+.row-item input:focus { border-color: var(--edge-lit); }
+.row-item .btn--icon { flex: none; }
+
+/* ============================================================
+   Zuweisung — zweispaltige Liste
+   ============================================================ */
+
+.assign { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.assign__col { background: var(--well); border: 1px solid var(--edge); border-radius: var(--r-ctl); overflow: hidden; }
+.assign__head { padding: 9px 12px; border-bottom: 1px solid var(--edge); background: var(--bay); }
+.assign__list { max-height: 210px; overflow-y: auto; padding: 5px; }
+.assign__item {
+  width: 100%; padding: 8px 10px; border: 0; border-radius: 5px;
+  background: none; text-align: left; cursor: pointer; font-size: 13px;
+  display: flex; align-items: center; gap: 9px;
+}
+.assign__item:hover { background: var(--bay-2); }
+.assign__count { margin-left: auto; font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--mute); }
+.assign__empty { padding: 22px 10px; text-align: center; color: var(--mute); font-size: 12.5px; }
+
+.delta {
+  margin-top: 11px; padding: 10px 13px;
+  background: var(--paused-bg); border: 1px solid rgba(95,184,214,.28);
+  border-radius: var(--r-ctl); font-size: 12.5px; color: #A9DCEE;
+}
+
+/* ============================================================
+   Drawer
+   ============================================================ */
+
+.scrim {
+  position: fixed; inset: 0; background: rgba(5,10,11,.62);
+  z-index: 50; animation: fade .16s var(--ease);
+}
+@keyframes fade { from { opacity: 0; } }
+
+.drawer {
+  position: fixed; top: 0; right: 0; bottom: 0; width: min(560px, 100vw);
+  background: var(--bay); border-left: 1px solid var(--edge);
+  box-shadow: var(--shadow-drawer); z-index: 51;
+  display: flex; flex-direction: column;
+  animation: slide .22s var(--ease);
+}
+@keyframes slide { from { transform: translateX(26px); opacity: .4; } }
+
+.drawer__head {
+  padding: 18px 22px; border-bottom: 1px solid var(--edge);
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;
+}
+.drawer__tabs { display: flex; gap: 2px; padding: 0 14px; border-bottom: 1px solid var(--edge); }
+.drawer__tab {
+  padding: 11px 12px; background: none; border: 0; cursor: pointer;
+  color: var(--mute); font-size: 13px; font-weight: 500;
+  border-bottom: 2px solid transparent; margin-bottom: -1px;
+}
+.drawer__tab:hover { color: var(--label); }
+.drawer__tab.is-on { color: var(--text); border-bottom-color: var(--bone); }
+.drawer__body { flex: 1; overflow-y: auto; padding: 22px; }
+.drawer__foot {
+  padding: 14px 22px; border-top: 1px solid var(--edge);
+  display: flex; gap: 9px; justify-content: flex-end; background: var(--bay);
+}
+
+/* ============================================================
+   Tabelle
+   ============================================================ */
+
+.tbl { width: 100%; border-collapse: collapse; }
+.tbl th {
+  text-align: left; padding: 0 14px 9px;
+  font-size: 10px; letter-spacing: .13em; text-transform: uppercase;
+  font-weight: 600; color: var(--mute);
+  border-bottom: 1px solid var(--edge);
+}
+.tbl td { padding: 12px 14px; border-bottom: 1px solid var(--edge); font-size: 13.5px; }
+.tbl tbody tr { cursor: pointer; transition: background .12s var(--ease); }
+.tbl tbody tr:hover { background: var(--bay-2); }
+.tbl tbody tr:last-child td { border-bottom: 0; }
+
+/* ============================================================
+   Host-Meter
+   ============================================================ */
+
+.meters { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.meter { padding: 14px 16px; }
+.meter__top { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; }
+.meter__val { font-family: "IBM Plex Mono", monospace; font-size: 17px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.meter__bar { height: 5px; border-radius: 3px; background: var(--well); overflow: hidden; border: 1px solid var(--edge); }
+.meter__fill { height: 100%; background: var(--bone-dim); transition: width .3s var(--ease); }
+.meter__fill[data-tone="caution"] { background: var(--caution); }
+.meter__fill[data-tone="halt"] { background: var(--halt); }
+.meter__note { margin-top: 7px; font-size: 11.5px; color: var(--mute); }
+
+/* ============================================================
+   Leerzustand
+   ============================================================ */
+
+.empty {
+  padding: 46px 30px; text-align: center;
+  border: 1px dashed var(--edge); border-radius: var(--r-panel);
+}
+.empty__title { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+.empty__body { color: var(--label); font-size: 13px; max-width: 380px; margin: 0 auto 18px; line-height: 1.55; }
+
+/* ============================================================
+   Toast
+   ============================================================ */
+
+.toasts { position: fixed; bottom: 22px; right: 22px; z-index: 60; display: flex; flex-direction: column; gap: 9px; }
+.toast {
+  background: var(--bay-2); border: 1px solid var(--edge-lit);
+  border-radius: var(--r-ctl); box-shadow: var(--shadow-pop);
+  padding: 12px 16px; font-size: 13px; min-width: 260px;
+  display: flex; align-items: center; gap: 10px;
+  animation: rise .2s var(--ease);
+}
+@keyframes rise { from { transform: translateY(8px); opacity: 0; } }
+
+/* ============================================================
+   Responsiv
+   ============================================================ */
+
+@media (max-width: 900px) {
+  .bay { grid-template-columns: 1fr; gap: 15px; }
+  .bay__screen { max-width: 260px; }
+  .bay__actions { flex-wrap: wrap; }
+  .assign { grid-template-columns: 1fr; }
+  .meters { grid-template-columns: 1fr; }
+  .wrap { padding: 22px 18px 52px; }
+}
+
+@media (max-width: 620px) {
+  .rail { width: 58px; --rail-w: 58px; }
+  .rail__btn, .rail__host { width: 46px; }
+  .rail__cap { display: none; }
+  .topbar { flex-direction: column; align-items: flex-start; gap: 14px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}
+
+/* ============================================================
+   Entwurfsleiste — verschwindet, sobald echte Daten fliessen
+   ============================================================ */
+
+.draftbar {
+  display: flex; align-items: center; justify-content: flex-end; gap: 14px;
+  padding: 10px 32px; border-bottom: 1px solid var(--edge); background: var(--bay);
+}
+
+/* Kein-Signal-Fläche: ehrlich leer, aber als Gerätefläche gestaltet */
+.bay__screen {
+  background:
+    repeating-linear-gradient(-45deg, rgba(255,255,255,.014) 0 6px, transparent 6px 12px),
+    var(--well);
+  display: grid; place-items: center;
+}
+.bay__screen--on { border-color: var(--edge-lit); }
+.bay__screen-tag {
+  font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--mute);
+  border: 1px solid var(--edge); border-radius: 4px; padding: 3px 8px; background: var(--ground);
+}
+.bay__screen--on .bay__screen-tag { color: var(--live); border-color: rgba(62,207,154,.35); }
+
+/* Laufende Kachel: nicht ausgegraut, sondern als belegt markiert */
+.tile--busy { border-color: rgba(62,207,154,.28); }
+.tile--busy .tile__name, .tile--busy .tile__desc { opacity: .72; }
+
+/* ============================================================
+   Zuteilung je Nutzer — was für wen tatsächlich gilt
+   ============================================================ */
+
+.alloc { display: flex; flex-direction: column; gap: 7px; }
+
+.alloc__row {
+  background: var(--well); border: 1px solid var(--edge);
+  border-radius: var(--r-ctl); overflow: hidden;
+  transition: border-color .14s var(--ease);
+}
+.alloc__row.is-open { border-color: var(--edge-lit); background: var(--bay-2); }
+
+.alloc__head {
+  width: 100%; display: grid;
+  grid-template-columns: 1fr auto auto 84px 18px;
+  align-items: center; gap: 12px;
+  padding: 11px 13px; background: none; border: 0;
+  cursor: pointer; text-align: left;
+}
+.alloc__head:hover { background: rgba(255,255,255,.02); }
+
+.alloc__name { font-size: 13.5px; font-weight: 500; }
+.alloc__val { font-size: 12.5px; color: var(--label); white-space: nowrap; }
+
+.alloc__src {
+  font-size: 10px; letter-spacing: .1em; text-transform: uppercase; font-weight: 600;
+  color: var(--mute); text-align: right;
+}
+/* Eine eigene Zuteilung wird als Abweichung markiert, nicht als Fehler */
+.alloc__src.is-custom { color: var(--paused); }
+
+.alloc__caret { font-size: 9px; color: var(--mute); }
+
+.alloc__body { padding: 4px 15px 6px; border-top: 1px solid var(--edge); }
+.alloc__body .field:last-child { margin-bottom: 12px; }
+
+@media (max-width: 560px) {
+  .alloc__head { grid-template-columns: 1fr auto 18px; row-gap: 4px; }
+  .alloc__src { display: none; }
+}
+
+/* ============================================================
+   Multi-App-Container: App-Leiste in der Session-Bucht
+   ============================================================ */
+
+.strip { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+
+.strip__app {
+  display: inline-flex; align-items: center; gap: 7px;
+  height: 30px; padding: 0 11px;
+  background: var(--well); border: 1px solid var(--edge);
+  border-radius: var(--r-ctl); color: var(--label);
+  font-size: 12.5px; cursor: pointer;
+  transition: border-color .14s var(--ease), color .14s var(--ease), background .14s var(--ease);
+}
+.strip__app:hover { border-color: var(--edge-lit); color: var(--text); background: var(--bay-2); }
+.strip__app.is-on { color: var(--text); border-color: rgba(62,207,154,.35); }
+
+.strip__icon { font-size: 13px; opacity: .8; }
+.strip__name { white-space: nowrap; }
+
+/* Nur laufende Apps tragen die Zustandsfarbe */
+.strip__led {
+  width: 5px; height: 5px; border-radius: 50%; background: var(--live);
+  animation: breathe 2.6s var(--ease) infinite;
+}
+
+.tile__mode {
+  font-size: 11px; color: var(--mute);
+  border-top: 1px solid var(--edge); padding-top: 8px; margin-top: 2px;
+}
+
+/* ============================================================
+   App-Katalog im Editor
+   ============================================================ */
+
+.applist { display: flex; flex-direction: column; gap: 7px; margin-top: 14px; }
+
+.applist__row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 13px;
+  background: var(--well); border: 1px solid var(--edge);
+  border-radius: var(--r-ctl);
+}
+.applist__row.is-blocked { border-color: rgba(240,167,66,.3); }
+
+.applist__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.applist__name { font-size: 13.5px; font-weight: 500; }
+.applist__reg { font-size: 11.5px; color: var(--mute); }
+.applist__block { font-size: 11.5px; color: var(--caution); }
+
+/* Der Toggle sitzt hier ohne eigene Beschriftung in der Zeile */
+.applist__row .toggle { width: auto; flex: none; padding: 0; border-bottom: 0; }
+.applist__row .toggle__body { display: none; }
+.applist__row.is-blocked .toggle { opacity: .4; pointer-events: none; }
+
+/* ============================================================
+   Hinweiszeilen
+   ============================================================ */
+
+.note-warn, .note-info {
+  padding: 10px 13px; border-radius: var(--r-ctl);
+  font-size: 12.5px; line-height: 1.5; margin: 0 0 4px;
+}
+.note-warn { background: var(--caution-bg); border: 1px solid rgba(240,167,66,.28); color: #F3C583; }
+.note-info { background: var(--paused-bg); border: 1px solid rgba(95,184,214,.24); color: #A9DCEE; margin-bottom: 20px; }
+
+/* ============================================================
+   Anmeldung
+   ============================================================ */
+
+.boot {
+  height: 100%; display: grid; place-items: center;
+  background: var(--ground);
+}
+
+.login {
+  min-height: 100%; display: grid; place-items: center;
+  padding: 32px 20px; background: var(--ground);
+}
+
+.login__card {
+  width: 100%; max-width: 384px; padding: 30px 28px 28px;
+}
+
+.login__mark {
+  width: 38px; height: 38px; border-radius: 10px;
+  background: var(--bone); color: #0B1315;
+  display: grid; place-items: center;
+  font-weight: 700; font-size: 17px; font-variation-settings: "wdth" 112;
+  margin-bottom: 18px;
+}
+
+.login__error {
+  margin: 0 0 14px; padding: 10px 13px;
+  background: var(--halt-bg); border: 1px solid rgba(242,102,111,.32);
+  border-radius: var(--r-ctl); color: #F8A3A9; font-size: 12.5px; line-height: 1.5;
+}
+
+.login .field:last-of-type { margin-bottom: 18px; }
+
+/* ============================================================
+   Session-Viewer
+   ============================================================ */
+
+.viewer { position: fixed; inset: 0; background: var(--ground); }
+
+.viewer__frame {
+  width: 100%; height: 100%; border: 0; display: block; background: var(--well);
+}
+
+/* Standardmässig eingeklappt: die Anwendung bekommt den ganzen Platz. */
+.viewer__handle {
+  position: fixed; top: 50%; right: 0; transform: translateY(-50%);
+  width: 22px; height: 64px; z-index: 20;
+  background: var(--bay-2); color: var(--label);
+  border: 1px solid var(--edge); border-right: 0;
+  border-radius: 7px 0 0 7px;
+  cursor: pointer; font-size: 10px;
+  transition: background .14s var(--ease), color .14s var(--ease);
+}
+.viewer__handle:hover { background: var(--bay); color: var(--text); }
+.viewer__handle.is-open { right: 340px; }
+
+.viewer__bar {
+  position: fixed; top: 0; right: 0; bottom: 0; width: 340px; z-index: 19;
+  background: var(--bay); border-left: 1px solid var(--edge);
+  box-shadow: var(--shadow-drawer);
+  display: flex; flex-direction: column; gap: 0;
+  overflow-y: auto;
+  animation: slide .2s var(--ease);
+}
+
+.viewer__head {
+  padding: 16px 18px; border-bottom: 1px solid var(--edge);
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+}
+.viewer__head .led { margin-top: 5px; }
+
+.viewer__group { padding: 16px 18px; border-bottom: 1px solid var(--edge); }
+.viewer__row { display: flex; gap: 7px; flex-wrap: wrap; }
+
+.viewer__clip {
+  width: 100%; min-height: 92px; margin: 10px 0 9px; padding: 9px 11px;
+  background: var(--well); border: 1px solid var(--edge);
+  border-radius: 6px; color: var(--text);
+  font-family: "IBM Plex Mono", monospace; font-size: 12px;
+  resize: vertical; outline: none;
+}
+.viewer__clip:focus { border-color: var(--edge-lit); }
+
+@media (max-width: 620px) {
+  .viewer__bar { width: 100%; }
+  .viewer__handle.is-open { right: 0; }
+}
+
+/* ============================================================
+   Fehler-Toast
+   ============================================================ */
+
+.toast--bad { border-color: rgba(242,102,111,.42); }
+
+/* Der Griff ist der verlässliche Weg zur Kontrollleiste — der ferne Desktop
+   beansprucht die Tastatur, ein Kürzel greift im Stream nicht. Deshalb ist er
+   dauerhaft sichtbar und nicht nur beim Überfahren. */
+.viewer__handle {
+  box-shadow: -2px 0 10px rgba(0,0,0,.4);
+}
+.viewer__handle::after {
+  content: ""; position: absolute; left: 4px; top: 50%; transform: translateY(-50%);
+  width: 2px; height: 18px; border-radius: 1px; background: var(--bone-dim); opacity: .5;
+}
+.viewer__handle:hover::after { opacity: 1; }
+
+/* Anzeige, während eine App im Arbeitsplatz startet */
+.strip__wait {
+  width: 9px; height: 9px; border-radius: 50%;
+  border: 1.5px solid var(--edge-lit); border-top-color: var(--bone);
+  animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.strip__app:disabled { opacity: .5; cursor: not-allowed; }

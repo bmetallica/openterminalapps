@@ -1,0 +1,11 @@
+http:
+  serversTransports:
+    # KasmVNC liefert HTTPS mit einem eigenen, selbstsignierten Zertifikat
+    # aus, das sich beim Containerstart ändert. Es zu prüfen wäre nicht
+    # möglich; die Verbindung läuft ausschließlich über das interne
+    # Docker-Netz und verlässt den Host nie.
+    ota-insecure:
+      insecureSkipVerify: true
+      # Sessions halten lange offene Verbindungen — Leerlauf großzügig setzen.
+      forwardingTimeouts:
+        idleConnTimeout: 300s
