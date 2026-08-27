@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Led } from '../components/controls'
 import { ApiError, api, type AdminSession, type AuditEntry } from '../lib/api'
+import { Backups } from './Backups'
 import { ago, duration, gb } from '../lib/format'
 
-type Tab = 'Sessions' | 'Protokoll'
+type Tab = 'Sessions' | 'Protokoll' | 'Sicherung'
 
 /* Technische Vorgangsnamen in Klartext. Wer ins Protokoll schaut, will
    wissen was passiert ist — nicht, wie der Endpunkt heisst. */
@@ -89,17 +90,21 @@ export function Monitor({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad')
       </header>
 
       <div className="seg" role="radiogroup" aria-label="Ansicht" style={{ marginBottom: 20 }}>
-        {(['Sessions', 'Protokoll'] as Tab[]).map((x) => (
+        {(['Sessions', 'Protokoll', 'Sicherung'] as Tab[]).map((x) => (
           <button key={x} type="button" role="radio" aria-checked={tab === x}
             className={`seg__opt${tab === x ? ' is-on' : ''}`} onClick={() => setTab(x)}>
-            {x} <span className="data" style={{ opacity: .6 }}>
-              {x === 'Sessions' ? sessions.length : audit.length}
-            </span>
+            {x}{x !== 'Sicherung' && (
+              <span className="data" style={{ opacity: .6 }}>
+                {' '}{x === 'Sessions' ? sessions.length : audit.length}
+              </span>
+            )}
           </button>
         ))}
       </div>
 
-      {tab === 'Sessions' ? (
+      {tab === 'Sicherung' ? (
+        <Backups onToast={onToast} />
+      ) : tab === 'Sessions' ? (
         sessions.length === 0 ? (
           <div className="empty">
             <p className="empty__title">Zurzeit läuft nichts</p>

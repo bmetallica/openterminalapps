@@ -22,14 +22,15 @@ früh. Die Einbindung vorhandener **Kasm-Images und -Registries** ist ein Featur
 | **M4** | **Der Arbeitsplatz** | Ein Linux je Nutzer, Apps einzeln gestreamt | ✅ **Grundfunktion steht** |
 | **M5** | Golden Images | Build-Pipeline, Versionen, App-Katalog, Skeleton | 2–3 Wochen |
 | **M6** | Identität & Netzlaufwerke | AD/LDAP, Kerberos, Shares im Arbeitsplatz | 2–3 Wochen |
-| **M7** | Migration & Produktivgang | `bmetallica` umgezogen, Härtung, Kasm abgelöst | 2–3 Wochen |
+| **M7** | Migration & Produktivgang | `bmetallica` umgezogen, Härtung, Kasm abgelöst | 2–3 Wochen · Sicherung ✅ |
 | **M8** | Kasm-Kompatibilität | Einzelimages und ganze Registries einbinden | 1–2 Wochen |
 | **M9** | Optionale Erweiterungen | OIDC, Guacamole, WebAuthn, code-server | 2–3 Wochen |
 | **M10** | Skalierung | Mehrere Hosts, Pools | offen |
 
 Bis zum produktiven Ersatz (M5–M7): **realistisch 6–9 Wochen** in Teilzeit.
 
-**Stand 2026-08-27**: M0 bis M4 laufen. Ein Nutzer meldet sich an, startet seinen
+**Stand 2026-08-27**: M0 bis M4 laufen, dazu die Build-Pipeline aus M5 und die
+Sicherung aus M7. Ein Nutzer meldet sich an, startet seinen
 Arbeitsplatz und öffnet darin VS Code, ein Terminal und den Dateimanager — jedes
 formatfüllend auf eigenem Display, alle im selben Container mit gemeinsamem
 `/home`. Geprüft durch 20 Autorisierungs- und 33 Oberflächentests
@@ -222,8 +223,15 @@ Erst mit dem Arbeitsplatz sinnvoll (`plan.md` §9.4).
 - [ ] Container-Härtung: `no-new-privileges`, Capabilities gedroppt, seccomp, `pids_limit`, `shm_size`
 - [ ] Netzsegmentierung final; `ota_sessions` ohne Zugriff auf `ota-db`
 - [ ] Security-Review der Auth- und Autorisierungspfade
-- [ ] Backup: Postgres-Dump und Profil-Tarballs, Rotation 7 täglich / 4 wöchentlich
-- [ ] **Restore mindestens einmal vollständig testen**
+- [x] **Sicherung und Wiederherstellung** (`plan.md` §11.2): ein Wurzelverzeichnis für
+      alles, damit später ein NFS ohne Änderung an OTA darunterpasst. Profile ohne
+      Caches, Container nur als Differenz, Zeitplan mit Nachholen, Aufbewahrung
+      täglich und wöchentlich. Wiederherstellung lehnt bei laufender Session ab und
+      legt den bisherigen Stand beiseite statt ihn zu löschen.
+      Geprüft durch `scripts/test-backup.sh`
+- [ ] **Datenbanksicherung in den Zeitplan aufnehmen** — läuft bisher nur über `make backup`
+- [ ] **Wiederherstellung der Datenbank mindestens einmal vollständig durchspielen**
+- [ ] Container-Sicherungen über die Oberfläche zurückspielen
 - [ ] Monitoring: `/healthz`, Prometheus-Metriken
 - [ ] Storage-Quotas, Kapazitäts-Preflight statt OOM-Kill
 - [ ] **HSTS einschalten**, sobald die CA verteilt oder ein echtes Zertifikat aktiv ist

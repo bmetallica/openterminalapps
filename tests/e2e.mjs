@@ -384,8 +384,29 @@ try {
       (els) => els.map((e) => e.textContent))
     check(appNames.length > 0, `App-Leiste zeigt ${appNames.length} Anwendungen: ${appNames.join(', ')}`)
 
-    const openCount = await page.$$eval('.bay .strip__app.is-on', (els) => els.length)
-    check(openCount > 0, `${openCount} Anwendung(en) laufen bereits im Container`)
+    let openCount = await page.$$eval('.bay .strip__app.is-on', (els) => els.length)
+    if (openCount === 0) {
+      // Frischer Arbeitsplatz: eine Anwendung starten, damit der Abschnitt
+      // unabhängig vom Vorzustand prüfbar bleibt.
+      await page.click('.bay .strip__app:not(:disabled)')
+      await page.waitForSelector('.viewer__frame', { timeout: 90000 })
+      await page.evaluate(() => {
+        const b = [...document.querySelectorAll('.btn')]
+          .find((x) => x.textContent?.includes('Zurück zum Dashboard'))
+        b?.click()
+      }).catch(() => {})
+      await page.click('.viewer__handle').catch(() => {})
+      await new Promise((r) => setTimeout(r, 500))
+      await page.evaluate(() => {
+        const b = [...document.querySelectorAll('.btn')]
+          .find((x) => x.textContent?.includes('Zurück zum Dashboard'))
+        b?.click()
+      })
+      await page.waitForSelector('.bay .strip__app.is-on', { timeout: 30000 })
+      openCount = await page.$$eval('.bay .strip__app.is-on', (els) => els.length)
+      ok('Anwendung im Arbeitsplatz für den Test gestartet')
+    }
+    check(openCount > 0, `${openCount} Anwendung(en) laufen im Container`)
 
     const facts = await page.$$eval('.bay__fact b', (els) => els.map((e) => e.textContent))
     check(facts.some((f) => f?.includes('von')), `Zähler "Apps offen": ${facts.find((f) => f?.includes('von'))}`)

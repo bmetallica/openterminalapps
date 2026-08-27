@@ -18,6 +18,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, status
 from pydantic import BaseModel, Field
 
 from . import apps as app_scripts
+from . import backup as backup_ops
 from . import builder
 from . import clipboard as clip_scripts
 
@@ -426,3 +427,97 @@ def image_exists(ref: str) -> dict[str, Any]:
     except ImageNotFound:
         return {"exists": False}
     return {"exists": True, "size_bytes": image.attrs.get("Size", 0)}
+
+
+# --------------------------------------------------------------------------
+# Sicherung und Wiederherstellung (plan.md §11.2)
+# --------------------------------------------------------------------------
+
+class ProfileBackupRequest(BaseModel):
+    username: str
+    scope: str = "user"
+
+
+class ProfileRestoreRequest(BaseModel):
+    username: str
+    archive: str
+    scope: str = "user"
+
+
+class ContainerBackupRequest(BaseModel):
+    container_id: str
+    username: str
+    template_slug: str
+
+
+class ContainerRestoreRequest(BaseModel):
+    container_id: str
+    archive: str
+
+
+@app.get("/backups/root", dependencies=[Depends(require_token)])
+def backup_root() -> dict[str, Any]:
+    return backup_ops.root_info()
+
+
+@app.get("/backups/files", dependencies=[Depends(require_token)])
+def backup_files() -> list[dict[str, Any]]:
+    return backup_ops.list_files()
+
+
+@app.post("/backups/profile", dependencies=[Depends(require_token)])
+def backup_profile(req: ProfileBackupRequest) -> dict[str, Any]:
+    try:
+        return backup_ops.backup_profile(req.username, req.scope)
+    except FileNotFoundError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR,
+                            f"Sicherung fehlgeschlagen: {exc}") from exc
+
+
+@app.post("/backups/profile/restore", dependencies=[Depends(require_token)])
+def restore_profile(req: ProfileRestoreRequest) -> dict[str, Any]:
+    try:
+        return backup_ops.restore_profile(req.username, req.archive, req.scope)
+    except (FileNotFoundError, ValueError) as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR,
+                            f"Wiederherstellung fehlgeschlagen: {exc}") from exc
+
+
+@app.post("/backups/container", dependencies=[Depends(require_token)])
+def backup_container(req: ContainerBackupRequest) -> dict[str, Any]:
+    try:
+        container = dc().containers.get(req.container_id)
+    except NotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Container nicht gefunden")
+    try:
+        return backup_ops.backup_container(container, req.username, req.template_slug)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR,
+                            f"Sicherung fehlgeschlagen: {exc}") from exc
+
+
+@app.post("/backups/container/restore", dependencies=[Depends(require_token)])
+def restore_container(req: ContainerRestoreRequest) -> dict[str, Any]:
+    try:
+        container = dc().containers.get(req.container_id)
+    except NotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Container nicht gefunden")
+    try:
+        return backup_ops.restore_container(container, req.archive)
+    except (FileNotFoundError, ValueError) as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR,
+                            f"Wiederherstellung fehlgeschlagen: {exc}") from exc
+
+
+@app.delete("/backups/file", dependencies=[Depends(require_token)])
+def delete_backup(path: str) -> dict[str, str]:
+    try:
+        return backup_ops.delete_file(path)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc

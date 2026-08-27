@@ -13,7 +13,7 @@ from sqlalchemy import select
 from . import agent_client
 from .db import Base, SessionLocal, engine
 from .models import Session as SessionModel
-from .routers import admin, auth, builds, internal, sessions, templates
+from .routers import admin, auth, backups, builds, internal, sessions, templates
 
 log = logging.getLogger("ota")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -85,6 +85,51 @@ def _reap_once() -> None:
         db.commit()
 
 
+def _backup_due() -> bool:
+    """Steht ein geplanter Sicherungslauf an?
+
+    Es genuegt, minuetlich zu pruefen: Der Lauf gilt als erledigt, sobald
+    ``last_run_at`` am selben Tag nach der geplanten Zeit liegt. Damit holt
+    der Zeitplan einen Lauf auch nach, wenn der Dienst zur geplanten Minute
+    gerade neu gestartet wurde.
+    """
+    from .models import BackupPolicy
+
+    now = datetime.now()
+    with SessionLocal() as db:
+        policy = db.scalar(select(BackupPolicy))
+        if policy is None or not policy.is_enabled:
+            return False
+        if policy.weekdays and now.weekday() not in policy.weekdays:
+            return False
+
+        planned = now.replace(hour=policy.hour, minute=policy.minute,
+                              second=0, microsecond=0)
+        if now < planned:
+            return False
+        if policy.last_run_at is not None:
+            last = policy.last_run_at
+            if last.tzinfo is not None:
+                last = last.astimezone().replace(tzinfo=None)
+            if last >= planned:
+                return False
+        return True
+
+
+async def _scheduler() -> None:
+    from .routers.backups import run_scheduled
+
+    while True:
+        await asyncio.sleep(60)
+        try:
+            if await asyncio.to_thread(_backup_due):
+                log.info("Geplante Sicherung startet")
+                counts = await asyncio.to_thread(run_scheduled)
+                log.info("Geplante Sicherung fertig: %s", counts)
+        except Exception as exc:  # noqa: BLE001 — der Zeitplaner darf nie sterben
+            log.warning("Geplante Sicherung fehlgeschlagen: %s", exc)
+
+
 async def _reaper() -> None:
     while True:
         await asyncio.sleep(REAP_INTERVAL)
@@ -100,13 +145,15 @@ async def lifespan(_: FastAPI):
     Base.metadata.create_all(bind=engine)
     log.info("Schema bereit")
 
-    task = asyncio.create_task(_reaper())
+    tasks = [asyncio.create_task(_reaper()), asyncio.create_task(_scheduler())]
     try:
         yield
     finally:
-        task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await task
+        for task in tasks:
+            task.cancel()
+        for task in tasks:
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
 
 
 app = FastAPI(
@@ -122,6 +169,7 @@ app = FastAPI(
 app.include_router(auth.router)
 app.include_router(templates.router)
 app.include_router(builds.router)
+app.include_router(backups.router)
 app.include_router(sessions.router)
 app.include_router(admin.router)
 app.include_router(internal.router)

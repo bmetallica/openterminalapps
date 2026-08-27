@@ -1041,7 +1041,78 @@ Fall 8 und 12 sind die, die erfahrungsgemäß durchrutschen.
 - `user` — **ein** Home für alle Templates (Kasm-kompatibles Verhalten, aktuelle Einstellung von `bmetallica`)
 - `template` — getrenntes Home je Workspace-Typ (verhindert, dass GIMP-Configs den VS-Code-Desktop stören)
 
-### 11.2 Regeln
+### 11.2 Sicherung und Wiederherstellung
+
+**Umsetzungsstand (2026-08-27): gebaut und geprüft.** Endpunkte unter `/api/backups`,
+Oberfläche unter *Betrieb → Sicherung*, Tests in `scripts/test-backup.sh`.
+
+#### Ein Wurzelverzeichnis, damit NFS später nichts kostet
+
+Alles landet unter **einem** Pfad, `OTA_BACKUP_ROOT` (Vorgabe `/srv/ota/backups`):
+
+```
+/srv/ota/backups/
+  profiles/<nutzer>/<zeitstempel>.tar.zst
+  containers/<nutzer>/<vorlage>-<zeitstempel>.tar.zst
+```
+
+Das ist der ganze Trick: Wer später ein NFS unter diesen Pfad hängt, ändert an OTA
+**nichts** — die Anwendung sieht weiterhin nur ein Verzeichnis. Die Oberfläche zeigt
+an, ob dort bereits ein Netzlaufwerk liegt (`nfs`, `cifs`) oder noch die lokale Platte,
+damit man es nicht raten muss.
+
+#### Was gesichert wird, und warum nicht mehr
+
+Am laufenden System gemessen: Das Profil eines Nutzers ist **326 MB**, die Schreibschicht
+seines Containers **340 MB**, ein vollständiger Container-Export wäre **4,8 GB**. Von den
+326 MB Profil sind 306 MB ein heruntergeladener SDK-Cache, den niemand sichern will.
+
+| Art | Inhalt | Grösse im Test |
+|---|---|---|
+| **`profile`** | Das Home ohne Caches. Projekte, Einstellungen, Schlüssel — die eigentliche Arbeit | 327 KB aus 326 MB Rohdaten |
+| `container` | Nur was `docker diff` ausserhalb des Home meldet | meist wenige MB |
+| `database` | Nutzer, Gruppen, Vorlagen, Zuweisungen, Audit | klein |
+
+Ein voller Container-Export bestünde fast nur aus dem Basisimage, das aus dem Golden
+Image ohnehin reproduzierbar ist. Ihn zu sichern hiesse, dieselben Gigabyte pro Nutzer
+und pro Lauf erneut abzulegen. Deshalb nur die Differenz — und auch die nur auf
+ausdrücklichen Wunsch.
+
+Ausgeschlossen sind Browser- und Editor-Caches, `node_modules`, `__pycache__`, Sockets
+und Sperrdateien. Im Test schrumpfte das Archiv dadurch von 6.754 auf 355 Einträge, ohne
+dass eine einzige Nutzerdatei fehlte.
+
+#### Wiederherstellung — zwei Regeln, beide nicht verhandelbar
+
+1. **Nicht bei laufender Session.** Ein Profil unter einem geöffneten Editor
+   auszutauschen führt auf beiden Seiten zu Datenverlust. Die API lehnt ab und nennt
+   die Zahl der offenen Sessions.
+2. **Der bisherige Stand wird nicht gelöscht, sondern beiseitegelegt** als
+   `user.vor-wiederherstellung-<zeitstempel>`. Eine Wiederherstellung, die im Fehlerfall
+   nichts übriglässt, ist keine. Schlägt das Entpacken fehl, wird der alte Stand
+   automatisch zurückgeschoben.
+
+Nach dem Entpacken wird die Eigentümerschaft auf **UID/GID 1000** gesetzt — sonst kann
+der Container nicht in sein eigenes Home schreiben.
+
+#### Zeitplan und Aufbewahrung
+
+Ein Lauf je Tag zur eingestellten Uhrzeit, wahlweise nur an bestimmten Wochentagen. Der
+Zeitplaner prüft minütlich und **holt einen Lauf nach**, wenn der Dienst zur geplanten
+Minute gerade neu gestartet wurde.
+
+Aufbewahrt werden die letzten *n* täglichen Stände je Nutzer und Art, dazu aus den
+älteren je Kalenderwoche der neueste — bis zur eingestellten Zahl. Fehlgeschlagene Läufe
+verschwinden nach 30 Tagen; sie belegen nichts, verstellen aber die Sicht.
+
+#### Was noch fehlt
+
+- Die Datenbanksicherung läuft bisher nur über `make backup`, nicht über den Zeitplan
+- Container-Sicherungen lassen sich anlegen, aber noch nicht über die Oberfläche
+  zurückspielen
+- Eine geprüfte Wiederherstellung der Datenbank ist Abnahmekriterium für M7
+
+### 11.3 Regeln
 - Eigentümerschaft **UID/GID 1000** (Kasm-Images laufen als User 1000) — der Agent korrigiert das beim Anlegen
 - Quota pro Nutzer (Default 20 GB), Warnung ab 80 %, Sperre neuer Sessions bei 100 % mit klarer Meldung
 - Nächtliches Backup: `tar --zstd` der Profile, 7 tägliche + 4 wöchentliche Stände, `.cache`, `core.*`, `*.sock`, Browser-Caches ausgeschlossen

@@ -236,6 +236,60 @@ class BuildOut(BaseModel):
     finished_at: datetime | None
 
 
+class BackupOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    kind: str
+    username: str | None
+    template_slug: str | None
+    path: str | None
+    size_bytes: int
+    file_count: int
+    status: str
+    error: str | None
+    log: str
+    trigger: str
+    actor: str | None
+    started_at: datetime
+    finished_at: datetime | None
+
+
+class BackupRunIn(BaseModel):
+    # Ohne Namen werden alle aktiven Nutzer gesichert.
+    username: str | None = None
+    include_container: bool = False
+
+
+class BackupPolicyIn(BaseModel):
+    is_enabled: bool = False
+    hour: int = Field(default=3, ge=0, le=23)
+    minute: int = Field(default=30, ge=0, le=59)
+    weekdays: list[int] = []
+    include_profiles: bool = True
+    include_containers: bool = False
+    include_database: bool = True
+    keep_daily: int = Field(default=7, ge=1, le=90)
+    keep_weekly: int = Field(default=4, ge=0, le=52)
+
+
+class BackupPolicyOut(BackupPolicyIn):
+    model_config = ConfigDict(from_attributes=True)
+    last_run_at: datetime | None = None
+    last_result: str | None = None
+
+
+class BackupStorageOut(BaseModel):
+    path: str
+    writable: bool
+    # Liegt hier bereits ein Netzlaufwerk (NFS, CIFS) oder noch die lokale Platte?
+    is_network: bool = False
+    fstype: str = ""
+    source: str = ""
+    disk_total: int
+    disk_free: int
+    used_by_backups: int
+
+
 class HostOut(BaseModel):
     cores: int
     memory_total: int

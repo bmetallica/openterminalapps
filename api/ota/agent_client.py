@@ -90,3 +90,38 @@ def remove_image(ref: str) -> dict[str, Any]:
 
 def image_exists(ref: str) -> dict[str, Any]:
     return _call("GET", f"/images/exists/{ref}")
+
+
+# --- Sicherung ---------------------------------------------------------
+
+def backup_root() -> dict[str, Any]:
+    return _call("GET", "/backups/root")
+
+
+def backup_files() -> list[dict[str, Any]]:
+    return _call("GET", "/backups/files")
+
+
+def backup_profile(username: str, scope: str = "user") -> dict[str, Any]:
+    return _call("POST", "/backups/profile",
+                 json={"username": username, "scope": scope})
+
+
+def restore_profile(username: str, archive: str, scope: str = "user") -> dict[str, Any]:
+    return _call("POST", "/backups/profile/restore",
+                 json={"username": username, "archive": archive, "scope": scope})
+
+
+def backup_container(container_id: str, username: str, template_slug: str) -> dict[str, Any]:
+    return _call("POST", "/backups/container",
+                 json={"container_id": container_id, "username": username,
+                       "template_slug": template_slug})
+
+
+def restore_container(container_id: str, archive: str) -> dict[str, Any]:
+    return _call("POST", "/backups/container/restore",
+                 json={"container_id": container_id, "archive": archive})
+
+
+def delete_backup_file(path: str) -> dict[str, Any]:
+    return _call("DELETE", "/backups/file", params={"path": path})

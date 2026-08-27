@@ -116,11 +116,16 @@ services:
       OTA_PROFILES_ROOT: "${OTA_PROFILES_ROOT:-/srv/ota/profiles}"
       OTA_SESSION_NETWORK: ota_sessions
       OTA_PUBLIC_NETWORK: ota_public
+      OTA_BACKUP_ROOT: "${OTA_BACKUP_ROOT:-/srv/ota/backups}"
     volumes:
       # Der einzige Dienst mit Schreibzugriff auf den Docker-Socket.
       # Die API bekommt ihn bewusst nicht — sie verarbeitet Nutzereingaben.
       - /var/run/docker.sock:/var/run/docker.sock
       - ${OTA_PROFILES_ROOT:-/srv/ota/profiles}:${OTA_PROFILES_ROOT:-/srv/ota/profiles}
+      # Ein einziges Wurzelverzeichnis für alle Sicherungen. Genau deshalb
+      # lässt es sich später ohne Änderung an OTA durch einen NFS-Mount
+      # ersetzen — die Anwendung sieht weiterhin nur diesen Pfad.
+      - ${OTA_BACKUP_ROOT:-/srv/ota/backups}:${OTA_BACKUP_ROOT:-/srv/ota/backups}
     networks:
       # Kein "public": Von aussen ist der Agent nicht erreichbar.
       - internal

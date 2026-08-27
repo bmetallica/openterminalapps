@@ -86,6 +86,20 @@ echo "Fremde Session"
 SID=$(api "$TMP/admin.jar" "$BASE/api/sessions" \
   | python3 -c 'import sys,json;d=json.load(sys.stdin);print(d[0]["id"] if d else "")')
 
+# Ohne laufende Session lässt sich der wichtigste Teil nicht prüfen. Statt
+# ihn zu überspringen, stellt der Test den Zustand selbst her — sonst hängt
+# das Ergebnis davon ab, was ein vorheriger Test hinterlassen hat.
+if [ -z "$SID" ]; then
+  TPL=$(api "$TMP/admin.jar" "$BASE/api/templates" \
+    | python3 -c 'import sys,json;d=json.load(sys.stdin);print(next((t["id"] for t in d if t["is_enabled"]), ""))')
+  if [ -n "$TPL" ]; then
+    SID=$(api "$TMP/admin.jar" -X POST "$BASE/api/sessions" \
+      -H 'Content-Type: application/json' -d "{\"template_id\":\"$TPL\"}" \
+      | python3 -c 'import sys,json;print(json.load(sys.stdin).get("id",""))')
+    [ -n "$SID" ] && { echo "  (Session für die Prüfung gestartet)"; sleep 18; }
+  fi
+fi
+
 if [ -n "$SID" ]; then
   expect "200" "$(code "$TMP/admin.jar" "$BASE/s/$SID/")" "Eigentümer erreicht seine Session"
   expect "403" "$(code "$TMP/user.jar"  "$BASE/s/$SID/")" "Fremder Nutzer wird abgewiesen"

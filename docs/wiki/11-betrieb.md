@@ -52,7 +52,13 @@ docker compose exec ota-api alembic upgrade head    # 🔨 ab M5
 
 Migrationen werden beim Start geprüft und nie automatisch destruktiv ausgeführt.
 
-## Backup 🔨 M7
+## Backup ✅
+
+Sicherung und Wiederherstellung haben ein eigenes Kapitel:
+**[Kapitel 14](14-sicherung.md)** — dort steht auch, wie die Ablage auf ein
+NFS umzieht.
+
+### Von Hand, ohne Oberfläche
 
 Zwei Dinge sind zu sichern:
 

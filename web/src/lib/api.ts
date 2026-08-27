@@ -116,6 +116,48 @@ export type AuditEntry = {
   detail: Record<string, unknown>
 }
 
+export type Backup = {
+  id: string
+  kind: 'profile' | 'container' | 'database'
+  username: string | null
+  template_slug: string | null
+  path: string | null
+  size_bytes: number
+  file_count: number
+  status: 'running' | 'ok' | 'failed'
+  error: string | null
+  log: string
+  trigger: 'manual' | 'schedule' | 'pre_restore'
+  actor: string | null
+  started_at: string
+  finished_at: string | null
+}
+
+export type BackupPolicy = {
+  is_enabled: boolean
+  hour: number
+  minute: number
+  weekdays: number[]
+  include_profiles: boolean
+  include_containers: boolean
+  include_database: boolean
+  keep_daily: number
+  keep_weekly: number
+  last_run_at?: string | null
+  last_result?: string | null
+}
+
+export type BackupStorage = {
+  path: string
+  writable: boolean
+  is_network: boolean
+  fstype: string
+  source: string
+  disk_total: number
+  disk_free: number
+  used_by_backups: number
+}
+
 export type Host = {
   cores: number
   memory_total: number
@@ -222,6 +264,18 @@ export const api = {
   audit: (limit = 100) => call<AuditEntry[]>(`/admin/audit?limit=${limit}`),
   permissions: () => call<Permission[]>('/admin/permissions'),
   adminSessions: () => call<AdminSession[]>('/admin/sessions'),
+
+  backups: () => call<Backup[]>('/backups'),
+  backupStorage: () => call<BackupStorage>('/backups/storage'),
+  backupPolicy: () => call<BackupPolicy>('/backups/policy'),
+  saveBackupPolicy: (body: BackupPolicy) =>
+    call<BackupPolicy>('/backups/policy', { method: 'PUT', body: JSON.stringify(body) }),
+  runBackup: (body: { username?: string | null; include_container?: boolean }) =>
+    call<{ status: string }>('/backups/run', { method: 'POST', body: JSON.stringify(body) }),
+  restoreBackup: (id: string) =>
+    call<{ status: string }>(`/backups/${id}/restore`, { method: 'POST' }),
+  deleteBackup: (id: string) =>
+    call<{ status: string }>(`/backups/${id}`, { method: 'DELETE' }),
   createUser: (body: unknown) =>
     call<User>('/admin/users', { method: 'POST', body: JSON.stringify(body) }),
   updateUser: (id: string, body: unknown) =>

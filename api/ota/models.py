@@ -368,6 +368,77 @@ class RegistryEntry(Base):
     registry: Mapped[Registry] = relationship(back_populates="entries")
 
 
+class Backup(Base):
+    """Eine einzelne Sicherung (plan.md §11.2).
+
+    Drei Arten, bewusst getrennt:
+
+    ``profile``   Das Home des Nutzers — seine eigentliche Arbeit. Der Regelfall.
+    ``container`` Nur die Aenderungen ausserhalb des Home, ermittelt ueber
+                  ``docker diff``. Ein voller Container-Export waere um ein
+                  Vielfaches groesser und bestuende fast nur aus dem
+                  Basisimage, das ohnehin reproduzierbar ist.
+    ``database``  Nutzer, Gruppen, Vorlagen, Zuweisungen, Audit.
+    """
+
+    __tablename__ = "backups"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    kind: Mapped[str] = mapped_column(String(16), index=True)
+
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    # Auch nach dem Loeschen eines Kontos muss noch erkennbar sein, wessen
+    # Sicherung das war.
+    username: Mapped[str | None] = mapped_column(String(128), index=True)
+    template_slug: Mapped[str | None] = mapped_column(String(128))
+
+    path: Mapped[str | None] = mapped_column(String(1024))
+    size_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
+    file_count: Mapped[int] = mapped_column(Integer, default=0)
+
+    # running | ok | failed
+    status: Mapped[str] = mapped_column(String(16), default="running", index=True)
+    error: Mapped[str | None] = mapped_column(Text)
+    log: Mapped[str] = mapped_column(Text, default="")
+
+    # manual | schedule | pre_restore
+    trigger: Mapped[str] = mapped_column(String(16), default="manual")
+    actor: Mapped[str | None] = mapped_column(String(128))
+
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class BackupPolicy(Base):
+    """Zeitplan und Aufbewahrung fuer automatische Sicherungen."""
+
+    __tablename__ = "backup_policies"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    is_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    # Uhrzeit im 24-Stunden-Format, Ortszeit des Servers.
+    hour: Mapped[int] = mapped_column(Integer, default=3)
+    minute: Mapped[int] = mapped_column(Integer, default=30)
+    # Leere Liste = jeden Tag. Sonst 0=Montag .. 6=Sonntag.
+    weekdays: Mapped[list] = mapped_column(JSONB, default=list)
+
+    include_profiles: Mapped[bool] = mapped_column(Boolean, default=True)
+    include_containers: Mapped[bool] = mapped_column(Boolean, default=False)
+    include_database: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    keep_daily: Mapped[int] = mapped_column(Integer, default=7)
+    keep_weekly: Mapped[int] = mapped_column(Integer, default=4)
+
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_result: Mapped[str | None] = mapped_column(String(255))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+
 class AuditLog(Base):
     __tablename__ = "audit_log"
 

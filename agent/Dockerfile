@@ -20,7 +20,7 @@ RUN apt-get update \
       > /etc/apt/sources.list.d/docker.list \
  && apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-      docker-ce-cli docker-buildx-plugin \
+      docker-ce-cli docker-buildx-plugin zstd \
  && apt-get purge -y gnupg && apt-get autoremove -y \
  && apt-get clean && rm -rf /var/lib/apt/lists/*
 

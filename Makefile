@@ -18,7 +18,7 @@ help:
 	@echo "  make ps        Zustand aller Dienste"
 	@echo "  make admin     Ersten Administrator anlegen (NAME=... setzen)"
 	@echo "  make test      Autorisierungs- und Oberflächentests"
-	@echo "  make backup    Datenbank und Profile sichern"
+	@echo "  make backup    Datenbank und Profile von Hand sichern"
 	@echo "  make cert      Serverzertifikat erneuern (CA bleibt)"
 	@echo
 
@@ -73,6 +73,10 @@ test:
 	  echo "  (übersprungen — dafür muss ein Arbeitsplatz mit zwei Apps laufen)"
 	@echo
 	@cd tests && npm install --silent --no-audit --no-fund && node e2e.mjs
+	@echo
+	@# Zuletzt, weil dieser Test Sessions beendet, um die Wiederherstellung
+	@# überhaupt prüfen zu können.
+	@./scripts/test-backup.sh
 
 .PHONY: backup
 backup:

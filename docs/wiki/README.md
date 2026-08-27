@@ -34,9 +34,10 @@ heute schon funktioniert.
 
 **Betrieb**
 10. [Zertifikate und HTTPS](10-zertifikate-und-https.md)
-11. [Betrieb, Backup und Updates](11-betrieb.md)
+11. [Betrieb und Updates](11-betrieb.md)
 12. [Fehlersuche](12-fehlersuche.md)
 13. [Lizenzen](13-lizenzen.md)
+14. [Sicherung und Wiederherstellung](14-sicherung.md)
 
 ## Wo was steht
 
