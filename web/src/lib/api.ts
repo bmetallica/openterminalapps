@@ -270,8 +270,13 @@ export const api = {
   backupPolicy: () => call<BackupPolicy>('/backups/policy'),
   saveBackupPolicy: (body: BackupPolicy) =>
     call<BackupPolicy>('/backups/policy', { method: 'PUT', body: JSON.stringify(body) }),
-  runBackup: (body: { username?: string | null; include_container?: boolean }) =>
-    call<{ status: string }>('/backups/run', { method: 'POST', body: JSON.stringify(body) }),
+  runBackup: (body: {
+    username?: string | null
+    include_container?: boolean
+    database_only?: boolean
+  }) => call<{ status: string }>('/backups/run', { method: 'POST', body: JSON.stringify(body) }),
+  restoreIntoSession: (id: string) =>
+    call<{ status: string }>(`/backups/${id}/restore-into-session`, { method: 'POST' }),
   restoreBackup: (id: string) =>
     call<{ status: string }>(`/backups/${id}/restore`, { method: 'POST' }),
   deleteBackup: (id: string) =>

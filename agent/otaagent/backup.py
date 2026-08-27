@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import io
 import os
+import posixpath
 import shutil
 import subprocess
 import tarfile
@@ -87,7 +88,7 @@ def root_info() -> dict[str, Any]:
     network = fstype.lower() in {"nfs", "nfs4", "cifs", "smb3", "smbfs", "fuse.sshfs"}
 
     total = 0
-    for path in BACKUP_ROOT.rglob("*.tar.zst"):
+    for path in [*BACKUP_ROOT.rglob("*.tar.zst"), *BACKUP_ROOT.rglob("*.sql.zst")]:
         try:
             total += path.stat().st_size
         except OSError:
@@ -231,16 +232,24 @@ def backup_container(container, username: str, template_slug: str) -> dict[str, 
     target.parent.mkdir(parents=True, exist_ok=True)
 
     changes = container.diff() or []
-    wanted = [
+
+    # Kind 0 = geaendert, 1 = hinzugefuegt, 2 = geloescht.
+    candidates = [
         c["Path"] for c in changes
-        if c.get("Kind") in (0, 1)  # 0 = geaendert, 1 = hinzugefuegt
+        if c.get("Kind") in (0, 1)
         and not any(c["Path"].startswith(skip) for skip in CONTAINER_SKIP)
     ]
 
-    if not wanted:
-        return {"path": None, "size_bytes": 0, "file_count": 0,
-                "log": "Ausserhalb des Home hat sich nichts geändert — "
-                       "keine Sicherung nötig."}
+    # Elternverzeichnisse aussortieren. Wird eine Datei geaendert, meldet
+    # docker diff auch jedes Verzeichnis darueber als geaendert. Wer die
+    # ungefiltert einsammelt, zieht ganze Baeume mit — bei /dockerstartup
+    # waren das im Test 269 MB unveraenderter Binaerdateien fuer eine
+    # einzige geaenderte Logdatei.
+    wanted = [
+        path for path in candidates
+        if not any(other != path and other.startswith(path.rstrip("/") + "/")
+                   for other in candidates)
+    ]
 
     tmp = target.with_suffix(target.suffix + ".part")
     written = 0
@@ -255,14 +264,20 @@ def backup_container(container, username: str, template_slug: str) -> dict[str, 
                     stream, _ = container.get_archive(path)
                 except Exception:  # noqa: BLE001 — einzelne Pfade duerfen fehlen
                     continue
+
+                # get_archive liefert die Eintraege relativ zum ELTERN-
+                # verzeichnis: "/etc/datei" kommt als "datei" zurueck, "/etc"
+                # als "etc/...". Der Praefix ist deshalb der Elternpfad, nicht
+                # der Pfad selbst — sonst entsteht "etc/etc/...".
+                prefix = posixpath.dirname(path).lstrip("/")
                 buf = io.BytesIO(b"".join(stream))
                 try:
                     with tarfile.open(fileobj=buf, mode="r|") as inner:
                         for member in inner:
                             if not (member.isfile() or member.isdir() or member.issym()):
                                 continue
-                            member.name = path.lstrip("/") if member.name == "." \
-                                else f"{path.lstrip('/')}/{member.name}"
+                            member.name = (f"{prefix}/{member.name}" if prefix
+                                           else member.name)
                             data = inner.extractfile(member) if member.isfile() else None
                             tar.addfile(member, data)
                             written += 1
@@ -275,8 +290,10 @@ def backup_container(container, username: str, template_slug: str) -> dict[str, 
     return {
         "path": str(target), "size_bytes": target.stat().st_size,
         "file_count": written,
-        "log": (f"{len(changes)} Änderungen im Container, davon {len(wanted)} "
-                f"ausserhalb des Home gesichert.\nZiel: {target}"),
+        "log": (f"{len(changes)} Änderungen im Container gemeldet, davon "
+                f"{len(candidates)} ausserhalb des Home, nach Abzug der "
+                f"Elternverzeichnisse {len(wanted)} tatsächlich gesichert "
+                f"({written} Einträge).\nZiel: {target}"),
     }
 
 
@@ -294,10 +311,55 @@ def restore_container(container, archive: str) -> dict[str, Any]:
     return {"log": f"{src.name} in den Container zurückgespielt."}
 
 
+def backup_database(container, db_user: str, db_name: str) -> dict[str, Any]:
+    """Sichert die Datenbank ueber ``pg_dump`` im Datenbank-Container.
+
+    Bewusst ueber ``docker exec`` statt mit einem eigenen Client: Dann braucht
+    der Agent weder ``postgresql-client`` noch die Zugangsdaten — beides waere
+    zusaetzliche Angriffsflaeche fuer einen Dienst, der ohnehin schon den
+    Docker-Socket haelt.
+
+    ``--clean --if-exists`` erzeugt einen Dump, der sich in eine bestehende
+    Datenbank zurueckspielen laesst, ohne sie vorher von Hand zu leeren.
+    """
+    ensure_root()
+    target = BACKUP_ROOT / "database" / f"{stamp()}.sql.zst"
+    target.parent.mkdir(parents=True, exist_ok=True)
+
+    cmd = ["pg_dump", "-U", db_user, "-d", db_name,
+           "--clean", "--if-exists", "--no-owner", "--no-privileges"]
+    exit_code, output = container.exec_run(cmd, demux=True)
+    stdout, stderr = output if isinstance(output, tuple) else (output, b"")
+
+    if exit_code != 0:
+        raise RuntimeError(
+            f"pg_dump endete mit {exit_code}: "
+            f"{(stderr or b'').decode('utf-8', 'replace')[:300]}"
+        )
+    if not stdout:
+        raise RuntimeError("pg_dump lieferte keine Daten.")
+
+    tmp = target.with_suffix(target.suffix + ".part")
+    proc = subprocess.run(["zstd", "-q", "-3", "-c"], input=stdout,
+                          capture_output=True, check=True)
+    tmp.write_bytes(proc.stdout)
+    tmp.replace(target)
+
+    lines = stdout.count(b"\n")
+    return {
+        "path": str(target), "size_bytes": target.stat().st_size,
+        "file_count": lines,
+        "log": (f"pg_dump aus {db_name}\n"
+                f"{lines} Zeilen SQL, komprimiert {target.stat().st_size / 1024:.0f} KB\n"
+                f"Ziel: {target}"),
+    }
+
+
 def list_files() -> list[dict[str, Any]]:
     ensure_root()
     out = []
-    for path in sorted(BACKUP_ROOT.rglob("*.tar.zst")):
+    for path in sorted([*BACKUP_ROOT.rglob("*.tar.zst"),
+                        *BACKUP_ROOT.rglob("*.sql.zst")]):
         try:
             st = path.stat()
         except OSError:

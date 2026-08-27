@@ -23,6 +23,11 @@ class Settings(BaseSettings):
     # Wohin die persistenten Profile gemountet werden.
     profiles_root: str = "/srv/ota/profiles"
 
+    # Fuer die Datenbanksicherung: Der Agent ruft pg_dump im DB-Container auf.
+    db_container: str = "ota-db"
+    db_user: str = "ota"
+    db_name: str = "ota"
+
     # Standardwerte, wenn ein Template nichts anderes sagt.
     default_idle_minutes: int = 60
     session_limit_per_user: int = 5

@@ -515,6 +515,28 @@ def restore_container(req: ContainerRestoreRequest) -> dict[str, Any]:
                             f"Wiederherstellung fehlgeschlagen: {exc}") from exc
 
 
+class DatabaseBackupRequest(BaseModel):
+    db_container: str
+    db_user: str
+    db_name: str
+
+
+@app.post("/backups/database", dependencies=[Depends(require_token)])
+def backup_database(req: DatabaseBackupRequest) -> dict[str, Any]:
+    try:
+        container = dc().containers.get(req.db_container)
+    except NotFound:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            f"Der Datenbank-Container {req.db_container} läuft nicht.",
+        )
+    try:
+        return backup_ops.backup_database(container, req.db_user, req.db_name)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR,
+                            f"Datenbanksicherung fehlgeschlagen: {exc}") from exc
+
+
 @app.delete("/backups/file", dependencies=[Depends(require_token)])
 def delete_backup(path: str) -> dict[str, str]:
     try:

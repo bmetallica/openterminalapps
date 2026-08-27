@@ -47,9 +47,14 @@ zeigt der Browser keine Warnung mehr — auch nach jedem Zertifikatswechsel.
 make test
 ```
 
-Prüft, dass ein normaler Nutzer beweisbar nichts Administratives tun und keine
-fremde Session sehen kann, und fährt die Oberfläche in einem echten Browser
-durch — inklusive der Frage, ob der Stream wirklich verbindet.
+**102 Prüfungen in vier Suiten**, alle stellen ihren Vorzustand selbst her:
+
+| Suite | Prüft |
+|---|---|
+| `test-authz.sh` | Ein normaler Nutzer kann beweisbar nichts Administratives tun und keine fremde Session sehen |
+| `test-clipboard-bridge.sh` | Kopieren zwischen zwei Apps im selben Arbeitsplatz, beide Richtungen, mit Umlauten |
+| `tests/e2e.mjs` | Die Oberfläche in einem echten Browser — bis zur Frage, ob der Stream wirklich verbindet |
+| `test-backup.sh` | Sicherung und Wiederherstellung von Profil, Container und Datenbank |
 
 ## Lizenzhinweis
 

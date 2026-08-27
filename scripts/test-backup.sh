@@ -79,6 +79,69 @@ PATHV=$(api "$BASE/api/backups" | jqp "d[0]['path'] or ''")
                                    || bad "Archiv fehlt: $PATHV"
 tar --zstd -tf "$PATHV" >/dev/null 2>&1 && ok "Archiv ist lesbar" || bad "Archiv beschädigt"
 
+# ---------------------------------------------------------- Container
+echo
+# Für die Container-Prüfungen braucht es einen laufenden Arbeitsplatz. Statt
+# ihn vorauszusetzen, stellt der Test ihn selbst her — sonst hängt das
+# Ergebnis davon ab, was ein vorheriger Test hinterlassen hat.
+CN=$(docker ps --filter "label=ota.session_id" --format '{{.Names}}' | head -1)
+if [ -z "$CN" ]; then
+  TPL=$(api "$BASE/api/templates" \
+    | jqp "next((t['id'] for t in d if t['mode']=='workspace' and t['is_enabled']), '')")
+  if [ -n "$TPL" ]; then
+    api -X POST "$BASE/api/sessions" -H 'Content-Type: application/json' \
+        -d "{\"template_id\":\"$TPL\"}" >/dev/null
+    echo "  (Arbeitsplatz für die Prüfung gestartet)"
+    sleep 20
+    CN=$(docker ps --filter "label=ota.session_id" --format '{{.Names}}' | head -1)
+  fi
+fi
+if [ -n "$CN" ]; then
+  MARKER="/etc/ota-pruefmarke-$$.txt"
+  docker exec -u 0 "$CN" sh -c "echo pruefmarke > $MARKER" 2>/dev/null \
+    && ok "Markierung ausserhalb des Home im Container angelegt" \
+    || bad "Markierung liess sich nicht anlegen"
+
+  api -X POST "$BASE/api/backups/run" -H 'Content-Type: application/json' \
+      -d "{\"username\":\"$USER_NAME\",\"include_container\":true}" >/dev/null
+  sleep 2
+
+  CB=$(api "$BASE/api/backups" | jqp "next((b for b in d if b['kind']=='container' and b['status']=='ok'), {})")
+  CSIZE=$(api "$BASE/api/backups" | jqp "next((b['size_bytes'] for b in d if b['kind']=='container' and b['status']=='ok'), 0)")
+  CFILES=$(api "$BASE/api/backups" | jqp "next((b['file_count'] for b in d if b['kind']=='container' and b['status']=='ok'), 0)")
+  CBID=$(api "$BASE/api/backups" | jqp "next((b['id'] for b in d if b['kind']=='container' and b['status']=='ok'), '')")
+
+  [ "${CFILES:-0}" -gt 0 ] && ok "Container-Sicherung angelegt: $CFILES Einträge, $((CSIZE/1024)) KB" \
+                           || bad "Container-Sicherung leer"
+
+  # Der wichtigste Punkt: Es dürfen NICHT ganze Verzeichnisbäume mitkommen.
+  # docker diff meldet auch jedes Elternverzeichnis als geändert; wer die
+  # ungefiltert einsammelt, sichert hunderte MB unveränderter Dateien.
+  [ "${CSIZE:-0}" -lt 5242880 ] \
+    && ok "Archiv bleibt klein ($((CSIZE/1024)) KB) — keine Elternverzeichnisse mitgesichert" \
+    || bad "Archiv ist $((CSIZE/1024/1024)) MB gross — vermutlich ganze Bäume mitgesichert"
+
+  CPATH=$(api "$BASE/api/backups" | jqp "next((b['path'] for b in d if b['kind']=='container' and b['status']=='ok'), '')")
+  if [ -n "$CPATH" ] && [ -f "$CPATH" ]; then
+    tar --zstd -tf "$CPATH" 2>/dev/null | grep -q "^etc/ota-pruefmarke-$$" \
+      && ok "Markierung liegt unter dem richtigen Pfad im Archiv" \
+      || bad "Pfad im Archiv stimmt nicht"
+    tar --zstd -tf "$CPATH" 2>/dev/null | grep -qE "^(etc/etc|dockerstartup/dockerstartup)/" \
+      && bad "Pfade im Archiv sind verdoppelt" \
+      || ok "Keine verdoppelten Pfade im Archiv"
+  fi
+
+  docker exec -u 0 "$CN" rm -f "$MARKER" 2>/dev/null
+  MSG=$(api -X POST "$BASE/api/backups/$CBID/restore-into-session" | jqp "d.get('status') or d.get('detail','')")
+  echo "$MSG" | grep -qi "zurückgespielt" && ok "Container-Sicherung zurückgespielt" \
+                                          || bad "Zurückspielen: $MSG"
+  docker exec "$CN" test -f "$MARKER" 2>/dev/null \
+    && ok "Markierung ist wieder im Container" || bad "Markierung fehlt nach dem Zurückspielen"
+  docker exec -u 0 "$CN" rm -f "$MARKER" 2>/dev/null
+else
+  ok "Kein Container offen — Container-Prüfungen übersprungen"
+fi
+
 # ------------------------------------- Schutz: keine Wiederherstellung bei Session
 PROFILE="/srv/ota/profiles/$USER_NAME/user"
 SESSIONS=$(api "$BASE/api/sessions" | jqp "len(d)")
@@ -118,6 +181,66 @@ OWNER=$(stat -c '%u:%g' "$PROFILE" 2>/dev/null)
 
 # Aufräumen: die Sicherheitsstände des Tests wieder entfernen.
 rm -rf "/srv/ota/profiles/$USER_NAME"/user.vor-wiederherstellung-* 2>/dev/null
+
+# ---------------------------------------------------------- Datenbank
+echo
+DB_BEFORE=$(api "$BASE/api/backups" | jqp "sum(1 for b in d if b['kind']=='database')")
+api -X POST "$BASE/api/backups/run" -H 'Content-Type: application/json' \
+    -d '{"database_only":true}' >/dev/null
+sleep 2
+DB_AFTER=$(api "$BASE/api/backups" | jqp "sum(1 for b in d if b['kind']=='database')")
+[ "$DB_AFTER" -gt "$DB_BEFORE" ] && ok "Datenbanksicherung angelegt" \
+                                 || bad "Keine Datenbanksicherung entstanden"
+
+DBPATH=$(api "$BASE/api/backups" | jqp "next((b['path'] for b in d if b['kind']=='database' and b['status']=='ok'), '')")
+[ -n "$DBPATH" ] && [ -f "$DBPATH" ] && ok "Datenbank-Archiv liegt auf der Platte" \
+                                     || bad "Datenbank-Archiv fehlt"
+# Erst in eine Variable, dann prüfen: Mit "| head" bekäme zstd ein SIGPIPE,
+# und unter "set -o pipefail" kippt dadurch der Rückgabewert der ganzen Kette.
+# In eine Datei statt in eine Variable: Der Dump beginnt mit einer Zeile aus
+# zwei Bindestrichen, und "echo" fasst die als Optionen auf.
+DUMP_TMP=$(mktemp)
+zstd -dq -c "$DBPATH" > "$DUMP_TMP" 2>/dev/null || true
+grep -q "PostgreSQL database dump" "$DUMP_TMP" \
+  && ok "Archiv enthält einen gültigen pg_dump" || bad "Archiv ist kein pg_dump"
+grep -q "DROP TABLE IF EXISTS" "$DUMP_TMP" \
+  && ok "Dump räumt vor dem Einspielen auf (--clean --if-exists)" \
+  || bad "Dump ohne --clean — liesse sich nicht über eine bestehende Datenbank legen"
+grep -q "COPY public.users" "$DUMP_TMP" \
+  && ok "Nutzerdaten sind im Dump enthalten" || bad "Nutzertabelle fehlt im Dump"
+rm -f "$DUMP_TMP"
+
+DBID=$(api "$BASE/api/backups" | jqp "next((b['id'] for b in d if b['kind']=='database' and b['status']=='ok'), '')")
+MSG=$(api -X POST "$BASE/api/backups/$DBID/restore" | jqp "d.get('detail','')")
+echo "$MSG" | grep -qi "restore-db" \
+  && ok "Datenbank-Wiederherstellung verweist auf das Skript statt es zu versuchen" \
+  || bad "Unerwartete Antwort: $MSG"
+
+"$ROOT/scripts/restore-db.sh" --list >/dev/null 2>&1 \
+  && ok "restore-db.sh findet die Sicherungen" || bad "restore-db.sh findet nichts"
+
+# ------------------------------------------------ Aufräumen und Robustheit
+echo
+# Nutzer ohne Profil dürfen keinen Fehlereintrag hinterlassen — sie sind der
+# Normalfall bei frisch angelegten Konten und würden die Liste zustellen.
+api -X POST "$BASE/api/backups/run" -H 'Content-Type: application/json' -d '{}' >/dev/null
+sleep 8
+NOPROFILE=$(api "$BASE/api/backups" | jqp "sum(1 for b in d if 'noch kein Profil' in (b['error'] or ''))")
+[ "${NOPROFILE:-0}" -eq 0 ] && ok "Nutzer ohne Profil erzeugen keinen Fehlereintrag" \
+                            || bad "$NOPROFILE Fehlereinträge für Konten ohne Profil"
+
+RESULT=$(api "$BASE/api/backups/policy" | jqp "d.get('last_result') or ''")
+echo "$RESULT" | grep -q "ohne Profil" && ok "Lauf meldet übersprungene Konten: $RESULT" \
+                                       || bad "Lauf ohne Angabe der übersprungenen Konten"
+
+# Ein Lauf, der beim Neustart des Dienstes abgebrochen ist, stünde sonst für
+# immer auf "läuft".
+docker exec ota-db psql -U ota -d ota -q -c \
+  "INSERT INTO backups (id, kind, status, trigger, started_at)
+   VALUES (gen_random_uuid(), 'database', 'running', 'manual', now() - interval '5 hours');" >/dev/null 2>&1
+STUCK=$(api "$BASE/api/backups" | jqp "sum(1 for b in d if b['status']=='running')")
+[ "${STUCK:-1}" -eq 0 ] && ok "Hängengebliebener Lauf wird beim Hinsehen abgeschlossen" \
+                        || bad "$STUCK Läufe stehen weiterhin auf 'läuft'"
 
 # ------------------------------------------------------------------ Zeitplan
 POL=$(api "$BASE/api/backups/policy")

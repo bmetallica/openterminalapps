@@ -1070,17 +1070,45 @@ seines Containers **340 MB**, ein vollständiger Container-Export wäre **4,8 GB
 | Art | Inhalt | Grösse im Test |
 |---|---|---|
 | **`profile`** | Das Home ohne Caches. Projekte, Einstellungen, Schlüssel — die eigentliche Arbeit | 327 KB aus 326 MB Rohdaten |
-| `container` | Nur was `docker diff` ausserhalb des Home meldet | meist wenige MB |
-| `database` | Nutzer, Gruppen, Vorlagen, Zuweisungen, Audit | klein |
+| `container` | Nur was `docker diff` ausserhalb des Home meldet | **4 KB** im Test |
+| `database` | Nutzer, Gruppen, Vorlagen, Zuweisungen, Audit | 17 KB |
 
 Ein voller Container-Export bestünde fast nur aus dem Basisimage, das aus dem Golden
 Image ohnehin reproduzierbar ist. Ihn zu sichern hiesse, dieselben Gigabyte pro Nutzer
 und pro Lauf erneut abzulegen. Deshalb nur die Differenz — und auch die nur auf
 ausdrücklichen Wunsch.
 
+**Eine Falle bei der Differenz, die im Test 269 MB kostete:** `docker diff` meldet nicht
+nur die geänderte Datei, sondern **jedes Verzeichnis darüber** als geändert. Wer die
+ungefiltert einsammelt, zieht ganze Bäume mit — für eine einzige geänderte Logdatei kamen
+so 269 MB unveränderter Binärdateien aus `/dockerstartup` mit. OTA sortiert deshalb alle
+Pfade aus, die Präfix eines anderen gemeldeten Pfades sind. Danach: 4 KB statt 269 MB.
+
+Der zweite Stolperstein: `get_archive("/etc/datei")` liefert die Einträge relativ zum
+**Elternverzeichnis**. Wer den Pfad selbst als Präfix nimmt, erzeugt `etc/etc/datei`.
+
 Ausgeschlossen sind Browser- und Editor-Caches, `node_modules`, `__pycache__`, Sockets
 und Sperrdateien. Im Test schrumpfte das Archiv dadurch von 6.754 auf 355 Einträge, ohne
 dass eine einzige Nutzerdatei fehlte.
+
+#### Die Datenbank läuft über die Kommandozeile, nicht über einen Knopf
+
+`pg_dump` läuft über `docker exec` **im Datenbank-Container**. Damit braucht der Agent
+weder einen Postgres-Client noch die Zugangsdaten — beides wäre zusätzliche
+Angriffsfläche für einen Dienst, der ohnehin den Docker-Socket hält. Der Dump entsteht
+mit `--clean --if-exists`, lässt sich also über eine bestehende Datenbank legen.
+
+Die **Wiederherstellung** ist bewusst kein Knopf in der Oberfläche: Die Datenbank trägt
+die Anmeldung, mit der man gerade in dieser Oberfläche steht. Sie unter der laufenden
+Anwendung auszutauschen bricht jede offene Verbindung mittendrin. `scripts/restore-db.sh`
+macht es richtig — Sicherheitskopie anlegen, API und Agent anhalten, offene Verbindungen
+beenden, einspielen, Dienste starten, Gesundheit prüfen. Schlägt das Einspielen fehl,
+nennt es den Weg zurück. Die Oberfläche zeigt den fertigen Befehl an.
+
+**Ein Nebeneffekt, der dokumentiert gehört:** Nach einer Wiederherstellung kann ein
+Session-Container laufen, den die zurückgespielte Datenbank nicht kennt. Der
+Waisen-Aufräumer (§7) entfernt ihn beim nächsten Durchlauf — das ist gewollt, sollte
+aber niemanden überraschen.
 
 #### Wiederherstellung — zwei Regeln, beide nicht verhandelbar
 
@@ -1105,12 +1133,32 @@ Aufbewahrt werden die letzten *n* täglichen Stände je Nutzer und Art, dazu aus
 älteren je Kalenderwoche der neueste — bis zur eingestellten Zahl. Fehlgeschlagene Läufe
 verschwinden nach 30 Tagen; sie belegen nichts, verstellen aber die Sicht.
 
-#### Was noch fehlt
+#### Container-Sicherungen gehen den umgekehrten Weg
 
-- Die Datenbanksicherung läuft bisher nur über `make backup`, nicht über den Zeitplan
-- Container-Sicherungen lassen sich anlegen, aber noch nicht über die Oberfläche
-  zurückspielen
-- Eine geprüfte Wiederherstellung der Datenbank ist Abnahmekriterium für M7
+Beim Profil gilt: **keine Wiederherstellung bei laufender Session**. Bei Container-
+Sicherungen ist es genau andersherum — die Dateien werden in den **laufenden** Container
+gelegt (`put_archive`). Läuft keiner, lehnt die API ab und sagt, dass der Arbeitsplatz
+zuerst zu starten ist.
+
+Weil die zurückgespielten Dateien ausserhalb des Home liegen, lesen bereits geöffnete
+Anwendungen sie nicht mehr. Die Rückmeldung sagt das ausdrücklich.
+
+#### Geprüft
+
+`scripts/test-backup.sh` deckt alle drei Arten ab — 31 Prüfungen, darunter:
+
+- Ein normaler Nutzer sieht die Sicherungen nicht und kann keine auslösen (403)
+- Profil: Markierung anlegen, sichern, wiederherstellen, Markierung ist weg und liegt
+  im beiseitegelegten Stand
+- Container: Markierung ausserhalb des Home, Archiv bleibt unter 5 MB, keine
+  verdoppelten Pfade, Markierung ist nach dem Zurückspielen wieder da
+- Datenbank: gültiger `pg_dump` mit `--clean`, Nutzertabelle enthalten, die
+  Wiederherstellung verweist auf das Skript statt sie zu versuchen
+- Wiederherstellung bei laufender Session wird abgelehnt
+
+Die **Datenbank-Wiederherstellung selbst wurde am 2026-08-27 einmal vollständig
+durchgespielt**: Markierungsnutzer angelegt, zurückgespielt, Nutzer verschwunden,
+Anmeldung und alle übrigen Daten unversehrt.
 
 ### 11.3 Regeln
 - Eigentümerschaft **UID/GID 1000** (Kasm-Images laufen als User 1000) — der Agent korrigiert das beim Anlegen

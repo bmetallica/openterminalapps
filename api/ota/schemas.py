@@ -258,6 +258,8 @@ class BackupRunIn(BaseModel):
     # Ohne Namen werden alle aktiven Nutzer gesichert.
     username: str | None = None
     include_container: bool = False
+    # Nur die Datenbank sichern, ohne Profile.
+    database_only: bool = False
 
 
 class BackupPolicyIn(BaseModel):

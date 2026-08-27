@@ -229,9 +229,13 @@ Erst mit dem Arbeitsplatz sinnvoll (`plan.md` §9.4).
       täglich und wöchentlich. Wiederherstellung lehnt bei laufender Session ab und
       legt den bisherigen Stand beiseite statt ihn zu löschen.
       Geprüft durch `scripts/test-backup.sh`
-- [ ] **Datenbanksicherung in den Zeitplan aufnehmen** — läuft bisher nur über `make backup`
-- [ ] **Wiederherstellung der Datenbank mindestens einmal vollständig durchspielen**
-- [ ] Container-Sicherungen über die Oberfläche zurückspielen
+- [x] **Datenbanksicherung im Zeitplan** — `pg_dump` über `docker exec` im DB-Container,
+      damit der Agent weder Client noch Zugangsdaten braucht
+- [x] **Wiederherstellung der Datenbank vollständig durchgespielt** (2026-08-27):
+      Markierungsnutzer angelegt, zurückgespielt, Nutzer verschwunden, alles Übrige
+      unversehrt. `scripts/restore-db.sh` legt vorher eine Sicherheitskopie an
+- [x] **Container-Sicherungen zurückspielen** über die Oberfläche, in den laufenden
+      Arbeitsplatz
 - [ ] Monitoring: `/healthz`, Prometheus-Metriken
 - [ ] Storage-Quotas, Kapazitäts-Preflight statt OOM-Kill
 - [ ] **HSTS einschalten**, sobald die CA verteilt oder ein echtes Zertifikat aktiv ist

@@ -125,3 +125,9 @@ def restore_container(container_id: str, archive: str) -> dict[str, Any]:
 
 def delete_backup_file(path: str) -> dict[str, Any]:
     return _call("DELETE", "/backups/file", params={"path": path})
+
+
+def backup_database(db_container: str, db_user: str, db_name: str) -> dict[str, Any]:
+    return _call("POST", "/backups/database",
+                 json={"db_container": db_container, "db_user": db_user,
+                       "db_name": db_name})

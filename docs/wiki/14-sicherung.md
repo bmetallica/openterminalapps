@@ -8,7 +8,7 @@
 |---|---|---|
 | **Profile** | Das Home jedes Nutzers ohne Caches: Projekte, Einstellungen, SSH-Schlüssel, Git-Konfiguration | **an** |
 | **Container** | Nur was ausserhalb des Home verändert wurde, ermittelt über `docker diff` | aus |
-| **Datenbank** | Nutzer, Gruppen, Workspaces, Zuweisungen, Audit-Log | über `make backup` |
+| **Datenbank** | Nutzer, Gruppen, Workspaces, Zuweisungen, Audit-Log | **an** |
 
 **Warum nicht der ganze Container?** Am laufenden System gemessen: Das Profil eines
 Nutzers sind 326 MB, die Schreibschicht seines Containers 340 MB — ein vollständiger
@@ -64,7 +64,50 @@ unbegrenzt wächst.
 Fehlgeschlagene Läufe verschwinden nach 30 Tagen. Sie belegen keinen Platz, verstellen
 aber die Sicht.
 
-## Wiederherstellen
+## Die Datenbank wiederherstellen
+
+Dafür gibt es bewusst **keinen Knopf**. Die Datenbank trägt die Anmeldung, mit der du
+gerade in der Oberfläche stehst — sie unter der laufenden Anwendung auszutauschen bricht
+jede offene Verbindung mittendrin.
+
+Die Oberfläche zeigt beim Klick auf *Wiederherstellen* den fertigen Befehl. Auf dem
+Server:
+
+```bash
+cd /opt/openterminalapps
+./scripts/restore-db.sh --list          # vorhandene Sicherungen
+./scripts/restore-db.sh                 # die neueste
+./scripts/restore-db.sh <pfad>          # eine bestimmte
+```
+
+Das Skript geht in fünf Schritten vor und sagt bei jedem, was es tut:
+
+1. **Sicherheitskopie** des jetzigen Standes anlegen
+2. **API und Agent anhalten** — Datenbank und Traefik laufen weiter, damit weiterhin
+   eine verständliche Seite ausgeliefert wird
+3. **Offene Verbindungen beenden**
+4. **Einspielen**. Schlägt es fehl, bricht es ab, zeigt die letzten Logzeilen und nennt
+   den Befehl für den Weg zurück
+5. **Dienste starten** und auf Gesundheit prüfen
+
+Zur Bestätigung ist der Datenbankname einzutippen — ein versehentliches Enter reicht nicht.
+
+**Danach müssen sich alle neu anmelden.** Profile auf der Platte sind nicht betroffen.
+Läuft eine Session, die die zurückgespielte Datenbank nicht kennt, entfernt der
+Aufräumer ihren Container beim nächsten Durchlauf.
+
+## Container-Sicherungen zurückspielen
+
+Hier ist es **umgekehrt** als beim Profil: Die Dateien werden in den **laufenden**
+Container gelegt. Der Arbeitsplatz des Nutzers muss also offen sein — läuft keiner,
+lehnt OTA ab und sagt es.
+
+In der Liste bei der Container-Sicherung auf **In Session zurückspielen**.
+
+> Die zurückgespielten Dateien liegen ausserhalb des Home. Bereits geöffnete Anwendungen
+> lesen sie nicht mehr — schliesse und öffne sie neu.
+
+## Profile wiederherstellen
 
 In der Liste bei der gewünschten Sicherung auf **Wiederherstellen**. Der Dialog nennt
 Nutzer und Zeitpunkt und sagt, was verloren geht.
@@ -138,9 +181,21 @@ die Wiederherstellung bei laufender Session abgelehnt wird.
 > Das gilt auch für die Datenbank — deren Wiederherstellung ist noch nicht automatisiert
 > und gehört einmal von Hand durchgespielt.
 
-## Was noch fehlt
+## Zwei Dinge, die die Liste sauber halten
 
-- Die **Datenbanksicherung** läuft bisher nur über `make backup`, nicht über den Zeitplan
-- **Container-Sicherungen** lassen sich anlegen, aber noch nicht über die Oberfläche
-  zurückspielen
-- Eine geprüfte **Wiederherstellung der Datenbank** ist Abnahmekriterium für M7
+**Konten ohne Profil erzeugen keinen Fehlereintrag.** Wer noch nie eine Session hatte,
+hat kein Home — das ist der Normalfall bei frisch angelegten Konten und kein Fehler. Der
+Lauf zählt sie getrennt („2 ohne Profil"), statt die Liste mit roten Zeilen zuzustellen.
+
+**Hängengebliebene Läufe werden aufgeräumt.** Startet der Dienst mitten in einer
+Sicherung neu, stünde der Eintrag sonst für immer auf *läuft*. OTA schliesst solche Läufe
+ab, sobald jemand die Liste öffnet — mit dem Vermerk, dass der Dienst zwischendurch neu
+gestartet ist. Dasselbe greift nach einer Wiederherstellung der Datenbank, die den Stand
+auf einen Zeitpunkt zurückdreht, an dem ein Lauf noch offen war.
+
+## Alles geprüft
+
+```bash
+./scripts/test-backup.sh      # 34 Prüfungen
+make test                     # alle Suiten, 102 Prüfungen
+```
