@@ -69,7 +69,9 @@ def create_template(
         slug = f"{slug}-{uuid.uuid4().hex[:6]}"
 
     tpl = Template(slug=slug, **body.model_dump(exclude={"group_ids"}))
-    tpl.groups = list(db.scalars(select(Group).where(Group.id.in_(body.group_ids))).all())
+    tpl.groups = list(
+        db.scalars(select(Group).where(Group.id.in_(body.group_ids or []))).all()
+    )
     db.add(tpl)
     audit.record(db, "template.created", actor=actor, object_type="template",
                  object_id=slug, request=request, name=body.friendly_name)
@@ -103,7 +105,12 @@ def update_template(
 
     for key, value in body.model_dump(exclude={"group_ids"}).items():
         setattr(tpl, key, value)
-    tpl.groups = list(db.scalars(select(Group).where(Group.id.in_(body.group_ids))).all())
+    # Nur anfassen, wenn die Zuweisung mitgeschickt wurde. Siehe `TemplateIn`:
+    # Ein PUT, das sie nicht erwaehnt, soll sie nicht loeschen.
+    if body.group_ids is not None:
+        tpl.groups = list(
+            db.scalars(select(Group).where(Group.id.in_(body.group_ids))).all()
+        )
 
     audit.record(db, "template.updated", actor=actor, object_type="template",
                  object_id=tpl.slug, request=request)
@@ -317,6 +324,8 @@ def discover_apps(
             # Eine schon gesetzte Sichtbarkeit ueberlebt das Durchsehen. Sonst
             # waere jede Einschraenkung nach dem naechsten Build wieder weg.
             "group_ids": (current.group_ids or []) if current else [],
+            "x_res": current.x_res if current else None,
+            "y_res": current.y_res if current else None,
             "missing": False,
             # Name und Zeichen aus dem Katalog haben Vorrang: Wer sie
             # angepasst hat, will das nicht bei jedem Durchsehen verlieren.
@@ -335,6 +344,7 @@ def discover_apps(
             "in_catalog": True, "is_enabled": app.is_enabled,
             "fixed_display": app.fixed_display, "missing": True,
             "group_ids": app.group_ids or [],
+            "x_res": app.x_res, "y_res": app.y_res,
         })
 
     return sorted(out, key=lambda a: (a["missing"], str(a["name"]).lower()))

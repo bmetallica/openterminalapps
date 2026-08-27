@@ -873,4 +873,12 @@ export const EN: Record<string, string> = {
     'Until you clear some space, no workspace will start.',
   'Downloads, Caches und alte Abbilder sind meist die Größten.':
     'Downloads, caches and old images are usually the biggest.',
+  'VS-Code-Erweiterungen': 'VS Code extensions',
+  'Kennungen wie ms-python.python, durch Leerzeichen oder Komma getrennt. Sie werden beim Bauen installiert, nicht beim Start — sonst wartet jeder Nutzer bei jedem Start auf Downloads.':
+    'Identifiers like ms-python.python, separated by spaces or commas. They are installed at build time, not at start — otherwise every user waits for downloads at every start.',
+  'Erweiterungen mitbauen': 'Build in extensions',
+  'Sie landen ausschliesslich in Microsofts VS Code. VSCodium hat seinen eigenen Satz aus Open VSX und sieht diese hier nicht — dieselbe Kennung ist dort nicht dieselbe Installation.':
+    'They land in Microsoft VS Code only. VSCodium has its own set from Open VSX and does not see these — the same identifier is not the same installation there.',
+  'Breite von {app}': 'Width of {app}',
+  'Höhe von {app}': 'Height of {app}',
 }

@@ -1272,3 +1272,20 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .gate-note b { color: var(--text); font-weight: 600; }
 .gate-note span { color: var(--label); }
 .gate-note .btn { margin-left: auto; }
+
+/* Auflösung je Anwendung. Leere Felder zeigen die des Arbeitsplatzes als
+   Platzhalter — so steht der geerbte Wert da, ohne gesetzt zu sein. */
+.applist__res { margin-top: 4px; }
+.applist__res label {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11.5px; color: var(--mute);
+}
+.applist__res input {
+  width: 62px; padding: 3px 6px;
+  background: var(--well); border: 1px solid var(--edge); border-radius: 5px;
+  color: var(--text); font: inherit; font-size: 11.5px;
+  font-variant-numeric: tabular-nums; text-align: right;
+}
+.applist__res input::placeholder { color: var(--mute); opacity: .7; }
+.applist__res input:hover { border-color: var(--edge-lit); }
+.applist__res input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }

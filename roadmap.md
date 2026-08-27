@@ -35,7 +35,7 @@ die Sicherung aus M7. Ein Nutzer meldet sich an, startet seinen Arbeitsplatz und
 öffnet darin VS Code, ein Terminal und den Dateimanager — jedes formatfüllend auf
 eigenem Display, alle im selben Container mit gemeinsamem `/home`. Ein
 Administrator baut Software ins Image, bindet fremde Kataloge ein und stellt
-Sicherungen wieder her. Geprüft durch **150 automatische Prüfungen in vier
+Sicherungen wieder her. Geprüft durch **198 automatische Prüfungen in vier
 Suiten**, davon 76 in einem echten Browser (`make test`).
 
 ---
@@ -99,7 +99,13 @@ Suiten**, davon 76 in einem echten Browser (`make test`).
       (`/api/help/extension/firefox`)
 - [ ] **Offen**: Signatur oder Unternehmensrichtlinie für die dauerhafte Installation der
       Erweiterung. Beides liegt ausserhalb von OTA; die Wege stehen im Handbuch Kapitel 4
-- [ ] **Offen**: die restliche Abnahmematrix (`plan.md` §10.5, Fälle 3, 5, 6, 7, 9, 10, 11, 12)
+- [x] **Abnahmematrix zu zehn Zwölfteln automatisiert** (`plan.md` §10.5): 5 (1 MB, vollständig),
+      6 (Bild — die Brücke trägt jetzt auch `image/png`), 9 (PRIMARY, und die Prüfung, dass es die
+      Displaygrenze **nicht** überschreitet), 10 (abgeschaltet heisst abgeschaltet) und 11 (nach
+      Pause und Fortsetzen) sind dazugekommen
+- [ ] **Offen**: Fall 3 (zwischen zwei Sessions — zwei Container gleichzeitig im Browser), Fall 7
+      (IntelliJ, Java/AWT — der Start dauert Minuten) und Fall 12 (Firefox ohne `readText()` — der
+      Testbrowser ist Chromium)
       in Chrome **und** Firefox von Hand durchgehen
 - [x] Heartbeat, Idle-Reaper, Orphan-GC
 
@@ -170,7 +176,11 @@ Der Entwurf steht bereits (`web/`, `plan.md` §13). Hier wird er verkabelt.
       Websocket-Port, App darin formatfüllend; Abbau bei Schliessen oder Leerlauf
 - [x] Routing `/s/<sid>/a/<app-slug>` → `690N`, abgesichert über dasselbe `forwardAuth`
 - [x] Einzelnes Display neu startbar, ohne den Container zu verlieren
-- [ ] Klassischer XFCE-Desktop zusätzlich als Ansicht auf `:0`
+- [x] **Klassischer XFCE-Desktop zusätzlich als Ansicht** — auf `:1` und nicht auf `:0`: Das
+      Kasm-Basisimage macht `:1` selbst auf, und ein zweites Display daneben wäre ein zweiter
+      Desktop ohne Zweck. Fenstermanager, Leiste und Schreibtisch laufen dort; geprüft in
+      `scripts/test-clipboard-bridge.sh`, weil genau das einmal fehlte — `xfce4-panel` war aus dem
+      gebauten Image gefallen, und übrig blieb ein schwarzes Bild mit Mauszeiger
 - [x] App-Umschalter im Viewer; laufende und nicht gestartete Apps unterscheidbar
 
 **Zwischenablage** — der kritische Teil dieses Meilensteins
@@ -290,9 +300,18 @@ Session-Prozesse, und die ereignisgesteuerte statt abfragende Brücke (braucht e
       lieferten den falschen Aufruf (`thunar --bulk-rename` statt `thunar`) — es gewinnt jetzt der
       schlichteste. Und die Displaynummer kam aus der Katalogposition, wodurch die Grenze von sechs
       für die Kataloggrösse galt statt für gleichzeitig offene Anwendungen
-- [ ] Live-Log per SSE in der Oberfläche (derzeit über Abfrage)
-- [ ] App-Katalog um **Skeleton-Teilbaum und Auflösung je App** ergänzen.
-      Startbefehl, Icon, Sperrgrund und festes Display stehen bereits
+- [x] **Live-Log per SSE** (`/builds/{id}/stream`). Was sich ändert und was nicht: Der Server fragt
+      den Agent weiterhin im Zwei-Sekunden-Takt ab — anders kommt man an den Fortschritt von
+      `docker build` nicht heran. Weg ist die Abfrage des *Browsers*: Er bekommt nur noch den
+      Zuwachs, und zwar sobald er da ist. Bei einem Protokoll von mehreren hundert Kilobyte ist das
+      der Unterschied zwischen einem ruhigen Fenster und einem, das ruckelt. Fällt der Strom aus,
+      übernimmt die alte Abfrage — lieber langsam als blind
+- [x] **Auflösung je App** im Katalog: NULL erbt die des Arbeitsplatzes. Sie gilt ab dem
+      **nächsten** Start dieser Anwendung — ein laufendes Display wird nicht umgestellt, wie bei
+      allen Ressourcen in OTA. Geprüft in `scripts/test-clipboard-bridge.sh`: setzen, Anwendung neu
+      starten, im Container nachmessen, zurückstellen
+- [ ] App-Katalog um **Skeleton-Teilbaum** ergänzen. Startbefehl, Icon, Sperrgrund, festes Display,
+      Sichtbarkeit und Auflösung stehen bereits
 - [x] Extensions beim **Build** installieren, nicht beim Start
 - [x] **Sichtbarkeit je App und Gruppe** — für den Fall, dass eine Lizenz nicht für alle reicht.
       Leer heisst „für alle", sonst wäre jeder bestehende Katalog mit dem Einführen der Regel
@@ -316,7 +335,10 @@ Session-Prozesse, und die ereignisgesteuerte statt abfragende Brücke (braucht e
 - [ ] **„Session einfrieren"**: `docker commit`, Home-Diff, Secret-Filter (`.ssh/id_*`, `.gnupg`,
       `*token*`, `*.pem`, `.aws`, `.docker/config.json`, `krb5cc_*`, `.smbcredentials`, `keytab`)
 - [ ] **Eigenes Basisimage** `ota/base-xfce` (Ubuntu + XFCE + KasmVNC aus offiziellem Release)
-- [ ] UI benennt, dass Extensions nicht zwischen VS Code, VSCodium und Cursor wandern
+- [x] **Erweiterungen in der Oberfläche**, mit dem Hinweis daneben, dass sie ausschliesslich in
+      Microsofts VS Code landen: VSCodium hat seinen eigenen Satz aus Open VSX, und dieselbe
+      Kennung ist dort nicht dieselbe Installation. Vorher nahm die Schnittstelle die Liste
+      entgegen, die Oberfläche bot sie aber nicht an — der Hinweis hatte gar keinen Ort
 
 **Vorher zu klären**
 - [x] ~~Cursor-Lizenz klären~~ — Cursor bleibt draussen (`plan.md` §17.10)
@@ -380,6 +402,9 @@ Erst mit dem Arbeitsplatz sinnvoll (`plan.md` §9.4).
       3. **Ein unbekanntes Konto antwortete schneller als ein bekanntes.** Die Meldung war schon
          gleich, die Dauer nicht: ohne Argon2-Durchlauf war die Antwort messbar früher da. Jetzt
          läuft ein Leerlauf gegen einen Blindhash
+      4. **Ein `PUT` ohne Gruppenzuweisung nahm sie allen weg** — der Workspace verschwand wortlos
+         von jedem Dashboard. `group_ids` ist jetzt `None`-fähig: nicht mitgeschickt heisst „lass
+         stehen", eine leere Liste heisst „niemand mehr"
 - [x] **Sicherung und Wiederherstellung** (`plan.md` §11.2): ein Wurzelverzeichnis für
       alles, damit später ein NFS ohne Änderung an OTA darunterpasst. Profile ohne
       Caches, Container nur als Differenz, Zeitplan mit Nachholen, Aufbewahrung

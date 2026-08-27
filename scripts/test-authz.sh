@@ -237,6 +237,23 @@ d = json.load(sys.stdin)
 print(sum(1 for a in d["apps"] if a["slug"] == os.environ["APP"]))')
   expect "1" "$ADMIN_SEES" "Der Administrator sieht sie weiterhin"
 
+  # Ein PUT, das die Gruppenzuweisung nicht erwaehnt, darf sie nicht
+  # loeschen. Am 2026-08-28 tat es das — und der Arbeitsplatz verschwand
+  # wortlos von jedem Dashboard, weil ein anderer Test eine Einstellung
+  # geaendert und die Zuweisung dabei nicht mitgeschickt hatte.
+  GROUPS_BEFORE=$(api "$TMP/admin.jar" "$BASE/api/templates/$WS" | jqp "len(d['group_ids'])")
+  api "$TMP/admin.jar" -X PUT "$BASE/api/templates/$WS" -H 'Content-Type: application/json' \
+    -d "$(api "$TMP/admin.jar" "$BASE/api/templates/$WS" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+keep = ("friendly_name","description","icon","categories","mode","image_ref","cores",
+        "memory_bytes","x_res","y_res","idle_minutes","idle_action","persistence_scope",
+        "rights","env","start_script","is_enabled")
+print(json.dumps({k: d[k] for k in keep if k in d}))')" >/dev/null
+  GROUPS_AFTER=$(api "$TMP/admin.jar" "$BASE/api/templates/$WS" | jqp "len(d['group_ids'])")
+  expect "$GROUPS_BEFORE" "$GROUPS_AFTER" \
+    "Ein PUT ohne Zuweisung lässt sie stehen"
+
   # Und jetzt der Teil, der zaehlt: eine eigene, laufende Session des
   # Testnutzers, und ein Aufruf mit dem gesperrten Kuerzel.
   USID=$(api "$TMP/user.jar" -X POST "$BASE/api/sessions" \
@@ -349,6 +366,35 @@ if [ -n "$ACNAME" ]; then
 fi
 
 [ -n "${USID:-}" ] && api "$TMP/user.jar" -X DELETE "$BASE/api/sessions/$USID" >/dev/null
+
+# ------------------------------------------------- Ereignisstrom des Builds
+echo
+echo "Ereignisstrom des Builds"
+
+WS_B=$(api "$TMP/admin.jar" "$BASE/api/templates" | jqp "
+next((t['id'] for t in d if t['mode'] == 'workspace'), '')")
+LAST_B=$(api "$TMP/admin.jar" "$BASE/api/templates/$WS_B/builds" | jqp "d[0]['id'] if d else ''")
+
+if [ -n "$LAST_B" ]; then
+  # Ein abgeschlossener Build: Der Strom muss das gesammelte Protokoll
+  # nachliefern und sich dann von selbst schliessen, statt offen zu bleiben.
+  OUT=$(timeout 20 curl -s --cacert "$CA" -b "$TMP/admin.jar" -N \
+    "$BASE/api/templates/$WS_B/builds/$LAST_B/stream")
+  echo "$OUT" | grep -q "^event: end" \
+    && ok "Der Strom schliesst sich nach einem fertigen Build" \
+    || bad "Kein Schlussereignis — die Verbindung bliebe offen"
+  echo "$OUT" | grep -q '^data: {"chunk"' \
+    && ok "Das Protokoll kommt als Zuwachs statt als Ganzes" \
+    || bad "Keine Protokoll-Ereignisse im Strom"
+  echo "$OUT" | grep -q "^event: status" \
+    && ok "Der Zustand wird gemeldet" \
+    || bad "Kein Zustandsereignis im Strom"
+
+  expect "403" "$(code "$TMP/user.jar" "$BASE/api/templates/$WS_B/builds/$LAST_B/stream")" \
+    "Der Strom ist für einen normalen Nutzer gesperrt"
+else
+  ok "Kein Build vorhanden — Strom-Prüfung übersprungen"
+fi
 
 # ------------------------------------------------- Zustand und Kennzahlen
 echo

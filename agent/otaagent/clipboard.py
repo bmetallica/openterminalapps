@@ -5,7 +5,15 @@ Kopieren in VS Code auf :1 und Einfuegen in IntelliJ auf :3 funktioniert ohne
 Gegenmassnahme nicht — obwohl beide im selben Container laufen. Genau das
 erwartet niemand.
 
-Die Bruecke spiegelt die CLIPBOARD-Auswahl zwischen allen offenen Displays.
+Die Bruecke spiegelt die CLIPBOARD-Auswahl zwischen allen offenen Displays —
+Text und Bilder (``image/png``). Bilder brauchen eine eigene Behandlung: Ein
+Bild kommt nicht als Text heraus, und wer nur ``xclip -o`` fragt, haelt die
+Zwischenablage faelschlich fuer leer. Ein Screenshot waere dann in der
+Nachbaranwendung unerreichbar, ohne dass irgendwo etwas dazu stuende.
+
+PRIMARY wird **nicht** gespiegelt, und das ist Absicht: Das ist die
+fluechtige Markierung, nicht die Zwischenablage. Wer in einer Anwendung Text
+markiert, wuerde sonst die Markierung in jeder anderen ueberschreiben.
 
 Warum Abfragen statt XFIXES-Ereignissen: Das Basisimage bringt weder
 ``clipnotify`` noch python-xlib mit. Ein Intervall von einer halben Sekunde
@@ -41,14 +49,36 @@ displays() {
   done
 }
 
-read_clip() {   # read_clip <display>
-  timeout 2 xclip -d ":$1" -selection clipboard -o 2>/dev/null || true
+# Welche Art Inhalt gerade auf der Zwischenablage liegt. Ein Bild kommt
+# nicht als Text heraus — wer nur `xclip -o` fragt, bekommt nichts und haelt
+# die Zwischenablage fuer leer. Ein Screenshot aus einer Anwendung waere dann
+# in der Nachbaranwendung unerreichbar, ohne dass irgendwo etwas dazu stuende.
+clip_type() {   # clip_type <display> -> "image/png" oder "text"
+  if timeout 2 xclip -d ":$1" -selection clipboard -t TARGETS -o 2>/dev/null \
+     | grep -qx "image/png"; then
+    echo "image/png"
+  else
+    echo "text"
+  fi
 }
 
-write_clip() {  # write_clip <display> <datei>
+read_clip() {   # read_clip <display> <typ> <datei>
+  if [ "$2" = "image/png" ]; then
+    timeout 4 xclip -d ":$1" -selection clipboard -t image/png -o > "$3" 2>/dev/null
+  else
+    timeout 2 xclip -d ":$1" -selection clipboard -o > "$3" 2>/dev/null
+  fi
+  [ -s "$3" ]
+}
+
+write_clip() {  # write_clip <display> <datei> <typ>
   # xclip haelt die Auswahl, bis eine andere Anwendung sie uebernimmt.
   # Deshalb im Hintergrund und ohne auf das Ende zu warten.
-  timeout 2 xclip -d ":$1" -selection clipboard -i < "$2" 2>/dev/null &
+  if [ "$3" = "image/png" ]; then
+    timeout 4 xclip -d ":$1" -selection clipboard -t image/png -i < "$2" 2>/dev/null &
+  else
+    timeout 2 xclip -d ":$1" -selection clipboard -i < "$2" 2>/dev/null &
+  fi
 }
 
 while true; do
@@ -59,17 +89,23 @@ while true; do
 
   # Wer hat etwas Neues? Das erste Display mit abweichendem Inhalt gewinnt.
   source_display=""
+  source_type=""
   for d in $ds; do
-    content=$(read_clip "$d")
-    [ -z "$content" ] && continue
-    h=$(printf '%s' "$content" | md5sum | cut -d' ' -f1)
+    t=$(clip_type "$d")
+    read_clip "$d" "$t" "$STATE.neu" || continue
+    h=$(md5sum < "$STATE.neu" | cut -d' ' -f1)
+    # Der Typ gehoert in die Pruefsumme: Sonst gaelte ein Bild, das zufaellig
+    # dieselben Bytes hat wie der letzte Text, als schon bekannt.
+    h="$t:$h"
     if [ "$h" != "$last_hash" ]; then
       source_display="$d"
-      printf '%s' "$content" > "$STATE"
+      source_type="$t"
+      mv -f "$STATE.neu" "$STATE"
       last_hash="$h"
       break
     fi
   done
+  rm -f "$STATE.neu"
 
   [ -z "$source_display" ] && continue
 
@@ -78,7 +114,7 @@ while true; do
   # Durchlauf als bekannt und loest keine weitere Runde aus.
   for d in $ds; do
     [ "$d" = "$source_display" ] && continue
-    write_clip "$d" "$STATE"
+    write_clip "$d" "$STATE" "$source_type"
   done
 done
 '''

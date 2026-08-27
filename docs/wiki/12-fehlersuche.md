@@ -452,6 +452,66 @@ docker info | grep -i snapshotter
 OTA baut deshalb über `docker buildx build --load`. Wer eigene Build-Skripte schreibt,
 sollte dasselbe tun — `DOCKER_BUILDKIT=0` oder das Python-SDK reichen hier nicht.
 
+## Ein Workspace ist plötzlich bei niemandem mehr im Dashboard
+
+**Symptom.** Der Workspace steht in der Verwaltung, ist eingeschaltet, das Image liegt da — und
+trotzdem sieht ihn kein Nutzer mehr. Auch kein Fehler, nirgends.
+
+**Ursache.** Seine Gruppenzuweisung ist leer. Bis zum 2026-08-28 reichte dafür ein
+`PUT /api/templates/{id}`, das `group_ids` gar nicht erwähnte: Ein fehlendes Feld galt als leere
+Liste, und wer nur eine Einstellung ändern wollte, nahm dabei allen die Zuweisung weg.
+
+**Nachsehen.**
+
+```bash
+curl -sk -b cookies.txt https://<host>:8443/api/templates \
+  | python3 -c 'import sys,json;[print(t["slug"], t["group_ids"]) for t in json.load(sys.stdin)]'
+```
+
+Steht dort `[]`, ist es das.
+
+**Reparatur.** Im Workspace-Editor unter *Zuteilung* die Gruppe wieder setzen.
+
+**Behoben.** `group_ids` ist jetzt `None`-fähig: nicht mitgeschickt heißt „lass stehen", eine leere
+Liste heißt „niemand mehr". Eine Prüfung in `scripts/test-authz.sh` hält das fest.
+
+## Firefox meldet „CanCreateUserNamespace() clone() failure: EPERM"
+
+**Symptom.** Im Protokoll unter `/tmp/ota-app-firefox.log` steht diese Zeile. Firefox startet
+trotzdem und funktioniert.
+
+**Das ist kein Fehler**, sondern die Folge einer bewussten Entscheidung: Der Arbeitsplatz-Container
+bekommt seit dem 2026-08-27 kein `CAP_SYS_ADMIN` mehr. Der Standard-seccomp-Filter von Docker lässt
+eigene User-Namespaces nur mit dieser Fähigkeit zu, und ohne sie fällt Firefox auf eine schwächere
+interne Sandbox zurück.
+
+Der Tausch ist bewusst: Firefox' Sandbox schützt vor einer bösartigen Webseite, und die landet im
+schlimmsten Fall in genau dem Container, in dem der Nutzer ohnehin ein Terminal hat. `SYS_ADMIN`
+dagegen ist ein Weg **aus** dem Container heraus ([Kapitel 11](11-betrieb.md)).
+
+## Ein AppImage startet nicht mehr
+
+**Symptom.** Ein per Rezept eingebautes AppImage bricht ab, oft mit einer Meldung über FUSE oder
+`/dev/fuse`.
+
+**Ursache.** Dieselbe wie oben: kein `CAP_SYS_ADMIN`. Ein AppImage hängt sich beim Start
+normalerweise selbst per FUSE ein, und das braucht diese Fähigkeit.
+
+**Reparatur.** Das AppImage-Rezept legt seit dem 2026-08-27 einen Starter an, der
+`APPIMAGE_EXTRACT_AND_RUN=1` setzt — das AppImage entpackt sich und startet daraus. Wer ein älteres
+Rezept hat, ergänzt in seinem Skript:
+
+```bash
+cat > /usr/local/bin/<name> <<'RUN'
+#!/bin/sh
+export APPIMAGE_EXTRACT_AND_RUN=1
+exec /opt/<name>.AppImage "$@"
+RUN
+chmod +x /usr/local/bin/<name>
+```
+
+Kostet einen Moment beim Start und sonst nichts.
+
 ## Nützliche Befehle
 
 ```bash

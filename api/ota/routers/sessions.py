@@ -556,7 +556,12 @@ def start_app(
         "slug": slug,
         "command": f"{app.exec_cmd} {app.exec_args}".strip(),
         "display": display,
-        "geometry": f"{sess.template.x_res}x{sess.template.y_res}",
+        # Die Aufloesung der Anwendung, sonst die des Arbeitsplatzes. Der
+        # Strom passt sich anschliessend ohnehin dem Browserfenster an
+        # (`resize=remote`) — das hier ist der Anfangswert, und der
+        # entscheidet, wie eine Anwendung ihre Oberflaeche zuerst aufbaut.
+        "geometry": (f"{app.x_res or sess.template.x_res}"
+                     f"x{app.y_res or sess.template.y_res}"),
         "title": app.name,
         "send_primary": bool(rights.get("clipboardPrimary")),
     })

@@ -1,7 +1,7 @@
 # 7 · Golden Images
 
-*Für Administratoren.* ✅ Build-Pipeline, Versionen und Aktivierung ·
-🔨 Skeleton-Verwaltung und „Session einfrieren" (M5)
+*Für Administratoren.* ✅ Build-Pipeline mit Live-Protokoll, Rezepte, App-Erkennung, Versionen,
+Aktivierung und Rückrollen · 🔨 Skeleton-Verwaltung und „Session einfrieren" (M5)
 
 > **Kasm auf demselben Host stört nicht mehr.** Sein Agent löschte anfangs jedes
 > gebaute Golden Image, weil es das Label `com.kasmweb.image=true` vom Basisimage
@@ -62,7 +62,8 @@ Reihenfolge passieren.
 
 ### 1 · Einbauen
 
-Pakete anklicken oder eintippen, dann **Image bauen**. Das Protokoll läuft mit; der Build dauert je
+Pakete anklicken oder eintippen, dann **Image bauen**. Das Protokoll läuft **live** mit — es kommt
+als Ereignisstrom, Zeile für Zeile, sobald sie entsteht. Der Build dauert je
 nach Paket ein paar Minuten. Danach steht die neue Fassung unter *Fassungen* und wird mit
 **Aktivieren** in Betrieb genommen. Laufende Sessions bleiben unberührt — die neue Fassung gilt ab
 dem nächsten Start.
@@ -76,6 +77,19 @@ Eine zweite Prüfung ist unauffälliger und wichtiger: **Ubuntu 22.04 führt `fi
 Verweis auf ein Snap.** In einem Container läuft kein Snap; installiert würde ein Platzhalter ohne
 Programm — der Build meldete Erfolg, und erst der Nutzer merkte, dass nichts da ist. OTA erkennt das
 und sagt es.
+
+> **Warum das Protokoll live läuft.** Der Server fragt den Agent weiterhin im Zwei-Sekunden-Takt
+> ab; anders kommt man an den Fortschritt von `docker build` nicht heran. Was wegfällt, ist die
+> Abfrage des Browsers: Er bekommt nur noch den Zuwachs. Bei einem Protokoll, das auf mehrere
+> hundert Kilobyte anwächst, ist das der Unterschied zwischen einem ruhigen Fenster und einem, das
+> ruckelt. Lässt ein Zwischenstück den Strom nicht durch, fällt die Oberfläche auf die alte Abfrage
+> zurück — lieber langsam als blind.
+
+**Nach dem Bauen prüft OTA, wohin die Editoren zeigen.** Am Ende des Protokolls steht, aus welchem
+Marktplatz VS Code, VSCodium oder Code-OSS ihre Erweiterungen holen. Zeigt ein Nicht-Microsoft-Editor
+auf Microsofts Marktplatz, steht dort eine Warnung — das wäre ein Lizenzverstoss
+([Kapitel 13](13-lizenzen.md)). Der Build scheitert deswegen nicht; die Entscheidung, ein solches
+Image zu verteilen, gehört einem Menschen.
 
 ### Rezepte ✅
 
@@ -139,6 +153,21 @@ Zwei Hinweise erscheinen von selbst:
 **Die Reihenfolge ist bedeutsam.** Aus ihr leitet sich ab, welches Display eine Anwendung bekommt.
 Wer sie ändert, muss laufende Arbeitsplätze neu starten.
 
+### Auflösung je Anwendung ✅
+
+Unter jeder Anwendung stehen zwei Zahlenfelder. Bleiben sie leer, gilt die Auflösung des
+Arbeitsplatzes — sie steht als Platzhalter darin, damit der geerbte Wert sichtbar ist, ohne gesetzt
+zu sein.
+
+Gedacht ist das für den Fall, dass eine Anwendung mehr Fläche braucht als die übrigen: eine
+Entwicklungsumgebung neben einem Terminal. Der Strom passt sich anschliessend ohnehin dem
+Browserfenster an — die Auflösung ist der **Anfangswert**, und der entscheidet, wie eine Anwendung
+ihre Oberfläche zuerst aufbaut. Manche Programme merken sich diese erste Aufteilung.
+
+**Sie gilt ab dem nächsten Start dieser Anwendung.** Ein laufendes Display wird nicht umgestellt —
+wie bei allen Ressourcen in OTA. Wer die Wirkung sofort sehen will, schliesst die Anwendung im
+Viewer und öffnet sie erneut.
+
 ### Sichtbarkeit je Gruppe ✅
 
 Unter jeder Anwendung steht, wer sie bekommt. Im Normalfall **„Sichtbar für alle"** — gemeint ist:
@@ -166,7 +195,7 @@ Beim Arbeitsplatz enthält das Golden Image mehrere Anwendungen. Je App wird hin
 
 ```
 Anzeigename · Icon · Startbefehl und Argumente
-bevorzugte Auflösung
+bevorzugte Auflösung ✅
 Skeleton-Teilbaum   .config/Code/User/       für VS Code
                     .config/JetBrains/        für IntelliJ
                     .config/VSCodium/User/    für VSCodium
@@ -175,7 +204,13 @@ Sichtbarkeit        je Gruppe zuschaltbar ✅
 ```
 
 **Extensions gehören in den Build, nicht in den Start.** Sonst wartet jeder Nutzer bei jedem Start
-auf Downloads, und ein Ausfall des Marketplace legt den Arbeitsplatz lahm.
+auf Downloads, und ein Ausfall des Marketplace legt den Arbeitsplatz lahm. Die Liste steht unter
+*Software → VS-Code-Erweiterungen*.
+
+> **Sie landen ausschliesslich in Microsofts VS Code.** VSCodium hat seinen eigenen Satz aus
+> Open VSX und sieht sie nicht — dieselbe Kennung ist dort nicht dieselbe Installation, und manche
+> Erweiterung gibt es nur auf einem der beiden Marktplätze. Wer beide Editoren anbietet, pflegt
+> zwei Sätze ([Kapitel 13](13-lizenzen.md)).
 
 ### Einzelinstanz-Anwendungen
 

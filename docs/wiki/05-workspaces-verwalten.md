@@ -88,6 +88,12 @@ Zwei Teile: welche **Gruppen** den Workspace sehen, und welche **Ressourcen je N
 Änderungen an der Gruppenzuweisung zeigen sofort ihre Folge („2 Gruppen kommen hinzu. Betroffene
 Nutzer sehen den Workspace nach dem Speichern.").
 
+> **Für alle, die die Schnittstelle direkt benutzen:** In einem `PUT /api/templates/{id}` bedeutet
+> ein **fehlendes** `group_ids`, dass die Zuweisung bleibt, wie sie ist. Eine **leere Liste**
+> bedeutet, dass sie niemand mehr hat. Der Unterschied zwischen *nichts gesagt* und *nichts gewollt*
+> ist hier wichtig: Bis zum 2026-08-28 galt beides als „niemand mehr", und ein Aufruf, der nur eine
+> Einstellung ändern wollte, liess den Workspace wortlos von allen Dashboards verschwinden.
+
 ## Änderungen an laufenden Sessions
 
 Ressourcenänderungen wirken auf die **nächste** Session. Laufende bleiben unberührt — niemandem wird

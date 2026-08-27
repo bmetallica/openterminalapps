@@ -15,7 +15,7 @@ key, the same clipboard.
 Alongside that, single applications can run as throwaway containers, and existing Kasm images and
 whole registries can be attached — as an addition, not as the foundation.
 
-> **Status:** running and in use. 150 automated checks, 76 of them in a real browser. What is still
+> **Status:** running and in use. 198 automated checks, 76 of them in a real browser. What is still
 > missing is listed openly in [roadmap.md](roadmap.md) — nothing there is dressed up.
 >
 > The documentation is written in German. This file is the exception.
@@ -47,6 +47,10 @@ after any later certificate change.
 
 **Administration**
 - Resources **per user and workspace**: user A gets 2 cores, user B gets one
+- **A quota per home directory** and a floor for free disk space — a comprehensible refusal instead
+  of a container that stalls mid-work on a write
+- **Visibility per application and group**, for when a licence does not cover everyone
+- **Two-factor enforceable per group**; `/healthz` and `/metrics` for monitoring
 - Users, groups and permissions; administrators are `root` inside their own container
 - Sign-in limit configurable (30 min to 48 h), rolling — nobody working is ever signed out
 - Interface in German and English, switchable before signing in as well
@@ -114,12 +118,12 @@ were.
 make test
 ```
 
-**150 checks in four suites**, each one setting up its own preconditions:
+**198 checks in four suites**, each one setting up its own preconditions:
 
 | Suite | Checks |
 |---|---|
-| `test-authz.sh` | An ordinary user provably cannot do anything administrative and cannot see anyone else's session |
-| `test-clipboard-bridge.sh` | Copying between two applications in one workspace, both directions, with umlauts |
+| `test-authz.sh` | An ordinary user provably cannot do anything administrative and cannot sit at anyone else's screen; plus container hardening, metrics, quotas and two-factor |
+| `test-clipboard-bridge.sh` | Copying between two applications in one workspace: both directions, umlauts, an image, a megabyte, after a pause, and switched off |
 | `tests/e2e.mjs` | The interface in a real browser — down to whether the stream actually connects |
 | `test-backup.sh` | Backup and restore of profile, container and database |
 

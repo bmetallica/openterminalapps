@@ -15,7 +15,7 @@ Projekte, denselben SSH-Schlüssel, dieselbe Zwischenablage.
 Daneben lassen sich einzelne Anwendungen als Wegwerf-Container starten und vorhandene Kasm-Images
 sowie ganze Registries einbinden — als Zusatz, nicht als Fundament.
 
-> **Stand:** läuft und wird benutzt. 150 automatische Prüfungen, davon 76 in einem echten Browser.
+> **Stand:** läuft und wird benutzt. 198 automatische Prüfungen, davon 76 in einem echten Browser.
 > Was noch fehlt, steht offen in [roadmap.md](roadmap.md) — nichts davon ist beschönigt.
 
 ---
@@ -45,6 +45,10 @@ nicht mehr — auch nach jedem späteren Zertifikatswechsel.
 
 **Verwaltung**
 - Ressourcen **je Nutzer und Workspace**: Nutzer A bekommt 2 Kerne, Nutzer B einen
+- **Kontingent je Zuhause** und eine Untergrenze für den freien Plattenplatz — eine verständliche
+  Ablehnung statt eines Containers, der mitten in der Arbeit beim Schreiben stehenbleibt
+- **Sichtbarkeit je Anwendung und Gruppe**, für den Fall, dass eine Lizenz nicht für alle reicht
+- **Zwei-Faktor je Gruppe erzwingbar**; `/healthz` und `/metrics` für die Überwachung
 - Nutzer, Gruppen und Rechte; Administratoren sind in ihrem eigenen Container `root`
 - Anmeldefrist einstellbar (30 min bis 48 h), rollend — wer arbeitet, wird nicht abgemeldet
 - Oberfläche auf Deutsch und Englisch, umschaltbar auch vor der Anmeldung
@@ -111,12 +115,12 @@ aussahen, als sie waren.
 make test
 ```
 
-**150 Prüfungen in vier Suiten**, jede stellt ihren Vorzustand selbst her:
+**198 Prüfungen in vier Suiten**, jede stellt ihren Vorzustand selbst her:
 
 | Suite | Prüft |
 |---|---|
-| `test-authz.sh` | Ein normaler Nutzer kann beweisbar nichts Administratives tun und keine fremde Session sehen |
-| `test-clipboard-bridge.sh` | Kopieren zwischen zwei Anwendungen im selben Arbeitsplatz, beide Richtungen, mit Umlauten |
+| `test-authz.sh` | Ein normaler Nutzer kann beweisbar nichts Administratives tun und an keinem fremden Bildschirm sitzen; dazu Container-Härtung, Kennzahlen, Kontingente und zweiter Faktor |
+| `test-clipboard-bridge.sh` | Kopieren zwischen zwei Anwendungen im selben Arbeitsplatz: beide Richtungen, Umlaute, ein Bild, ein Megabyte, nach Pause, und abgeschaltet |
 | `tests/e2e.mjs` | Die Oberfläche in einem echten Browser — bis zur Frage, ob der Stream wirklich verbindet |
 | `test-backup.sh` | Sicherung und Wiederherstellung von Profil, Container und Datenbank |
 

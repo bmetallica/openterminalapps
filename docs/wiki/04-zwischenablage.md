@@ -6,7 +6,7 @@ fällt. Deshalb bekommt sie ein eigenes Kapitel.
 ## Für Anwender
 
 **Der Normalfall**: Strg+C und Strg+V funktionieren in beide Richtungen — vom Browser in die Session
-und zurück. Auch Bilder, nicht nur Text.
+und zurück, **und zwischen zwei Anwendungen im selben Arbeitsplatz**. Auch Bilder, nicht nur Text.
 
 **Wenn es nicht geht**, in dieser Reihenfolge prüfen:
 
@@ -77,8 +77,18 @@ Geprüft wird das mit:
 ./scripts/test-clipboard-bridge.sh
 ```
 
-Der Test kopiert in beide Richtungen zwischen zwei Displays, mit Umlauten und mehrzeiligem Code
-mit Tabulatoren.
+Sechzehn Prüfungen: beide Richtungen, Umlaute, mehrzeiliger Code mit Tabulatoren, **ein Bild**,
+**ein Megabyte Text**, das Verhalten **nach Pause und Fortsetzen** und der Fall, dass die
+Zwischenablage im Workspace **abgeschaltet** ist.
+
+**Auch Bilder gehen über die Brücke** — seit dem 2026-08-28. Vorher nicht, und das fiel niemandem
+auf, weil es nichts dazu zu sehen gab: Ein Bild kommt nicht als Text aus der Zwischenablage. Wer sie
+nur nach Text fragt, bekommt nichts und hält sie für leer. Ein Screenshot war damit in der
+Nachbaranwendung unerreichbar, ohne jede Meldung.
+
+**Die Markierung wandert nicht mit.** Was man mit der Maus markiert (die X-PRIMARY-Auswahl), bleibt
+auf seinem Display. Das ist Absicht: Sonst überschriebe jede Markierung in einer Anwendung die
+Markierung in allen anderen.
 
 ## Für Administratoren
 
@@ -125,9 +135,20 @@ Diese Punkte scheitern in Eigenbauten regelmäßig, und zwar **lautlos**:
 durchrutschen: IntelliJ (Java behandelt X11-Zwischenablage eigenwillig) und der Weg zwischen zwei
 Apps im selben Arbeitsplatz.
 
-Vier Fälle laufen bei jedem Testlauf automatisch mit: Browser → Session, Session → Browser und
-mehrzeiliger Text mit Umlauten in `tests/e2e.mjs`, der Weg zwischen zwei Apps in
-`scripts/test-clipboard-bridge.sh`. Beides startet `make test`.
+**Zehn von zwölf Fällen laufen bei jedem Testlauf automatisch mit** (`make test`):
+
+| | |
+|---|---|
+| Browser → Session, Session → Browser, mehrzeiliger Text mit Umlauten | `tests/e2e.mjs`, im echten iframe |
+| Zwischen zwei Apps, beide Richtungen | `scripts/test-clipboard-bridge.sh` |
+| Ein Bild (`image/png`) | dito — seit dem 2026-08-28 |
+| Ein Megabyte Text, vollständig und nicht abgeschnitten | dito |
+| PRIMARY auf demselben Display, **und** dass es die Displaygrenze nicht überschreitet | dito |
+| Nach Pause und Fortsetzen | dito |
+| Abgeschaltet heisst abgeschaltet, und kommt beim Wiedereinschalten zurück | dito |
+
+Offen bleiben drei: zwischen **zwei Sessions** (zwei Container gleichzeitig im Browser), **IntelliJ**
+(der Start dauert Minuten) und **Firefox ohne `readText()`** — der Testbrowser ist Chromium.
 
 ## Dateien
 

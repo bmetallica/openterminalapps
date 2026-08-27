@@ -1,6 +1,6 @@
 # 8 · Nutzer, Gruppen und Rechte
 
-*Für Administratoren.* 🔨 M2, AD-Anbindung 🔨 M6
+*Für Administratoren.* AD-Anbindung 🔨 M6
 
 ## Grundsatz
 

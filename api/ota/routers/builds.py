@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session as DbSession
 
@@ -196,6 +198,70 @@ def build_detail(
     if not build or build.template_id != template_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Build nicht gefunden")
     return _out(build)
+
+
+@router.get("/{template_id}/builds/{build_id}/stream", dependencies=[Depends(manage)])
+async def build_stream(template_id: uuid.UUID, build_id: uuid.UUID) -> StreamingResponse:
+    """Das Build-Protokoll als Ereignisstrom.
+
+    Was sich damit aendert und was nicht: Der Server fragt den Agent weiterhin
+    im Zwei-Sekunden-Takt ab — anders kommt man an den Fortschritt von
+    `docker build` nicht heran. Was wegfaellt, ist die Abfrage des *Browsers*.
+    Er bekommt nur noch das, was dazugekommen ist, und zwar sobald es da ist,
+    statt alle 2,5 Sekunden das ganze Protokoll neu zu holen. Bei einem Build,
+    dessen Protokoll auf mehrere hundert Kilobyte anwaechst, ist das der
+    Unterschied zwischen einem ruhigen Fenster und einem, das ruckelt.
+
+    Drei Ereignisarten: `log` mit dem Zuwachs, `status` bei jedem Wechsel,
+    `end` zum Schluss. Danach schliesst der Server; der Browser soll nicht
+    wieder verbinden.
+    """
+    async def events():
+        seen = 0
+        last_status = ""
+        # Eine Obergrenze, damit ein haengender Build nicht dauerhaft eine
+        # Verbindung bindet. Der Client faellt danach auf die Abfrage zurueck.
+        deadline = asyncio.get_event_loop().time() + 3600
+
+        while asyncio.get_event_loop().time() < deadline:
+            with SessionLocal() as db:
+                build = db.get(ImageBuild, build_id)
+                if build is None or build.template_id != template_id:
+                    yield "event: end\ndata: {\"status\": \"weg\"}\n\n"
+                    return
+                log, current = build.log or "", build.status
+
+            if current != last_status:
+                last_status = current
+                yield f"event: status\ndata: {json.dumps({'status': current})}\n\n"
+
+            if len(log) > seen:
+                # Nur der Zuwachs. Ihn als JSON zu verpacken erspart die Frage,
+                # was mit Zeilenumbruechen im Protokoll passiert — im
+                # SSE-Format ist der Umbruch das Trennzeichen.
+                chunk = log[seen:]
+                seen = len(log)
+                yield f"data: {json.dumps({'chunk': chunk})}\n\n"
+
+            if current not in ("queued", "building"):
+                yield f"event: end\ndata: {json.dumps({'status': current})}\n\n"
+                return
+
+            await asyncio.sleep(1)
+
+        yield "event: end\ndata: {\"status\": \"abgelaufen\"}\n\n"
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            # Fuer den Fall, dass irgendwann ein nginx davorsteht: Ohne diesen
+            # Kopf puffert es den Strom und die Ereignisse kommen im Block.
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.post("/{template_id}/builds/{build_id}/activate", dependencies=[Depends(manage)])

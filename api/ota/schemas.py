@@ -107,6 +107,9 @@ class AppOut(BaseModel):
     is_enabled: bool = True
     fixed_display: int | None = None
     group_ids: list[uuid.UUID] = []
+    # NULL heisst: die Aufloesung des Arbeitsplatzes.
+    x_res: int | None = None
+    y_res: int | None = None
 
 
 class TemplateOut(BaseModel):
@@ -155,7 +158,12 @@ class TemplateIn(BaseModel):
     env: dict = {}
     start_script: str = ""
     is_enabled: bool = True
-    group_ids: list[uuid.UUID] = []
+    # `None` heisst „nicht mitgeschickt" und laesst die Zuweisung stehen; eine
+    # leere Liste heisst „niemand mehr". Ohne diese Unterscheidung nimmt ein
+    # PUT, das die Zuweisung gar nicht erwaehnt, sie allen weg — und der
+    # Workspace verschwindet wortlos von jedem Dashboard. Genau das ist am
+    # 2026-08-28 passiert.
+    group_ids: list[uuid.UUID] | None = None
 
 
 class OverrideIn(BaseModel):
@@ -205,6 +213,9 @@ class AppIn(BaseModel):
     fixed_display: int | None = None
     # Leer heisst: fuer alle, die den Arbeitsplatz sehen.
     group_ids: list[uuid.UUID] = []
+    # NULL heisst: die Aufloesung des Arbeitsplatzes.
+    x_res: int | None = Field(default=None, ge=640, le=7680)
+    y_res: int | None = Field(default=None, ge=480, le=4320)
 
 
 class SessionOut(BaseModel):

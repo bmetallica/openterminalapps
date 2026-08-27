@@ -137,6 +137,9 @@ export type DiscoveredApp = {
   fixed_display: number | null
   /** Leer heisst: für alle sichtbar, die den Arbeitsplatz sehen. */
   group_ids: string[]
+  /** null heisst: die Auflösung des Arbeitsplatzes. */
+  x_res: number | null
+  y_res: number | null
   /** Im Katalog, aber im Image nicht mehr vorhanden. */
   missing: boolean
 }

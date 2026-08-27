@@ -1238,10 +1238,33 @@ dort aussah, und wenn sich die Brücke in der Praxis als zickig erweist, ist Xpr
 
 Fall 8 und 12 sind die, die erfahrungsgemäß durchrutschen.
 
-**Stand 2026-08-27:** Die Fälle 1, 2, 4 und 8 laufen automatisiert mit — 1, 2 und 4 in
-`tests/e2e.mjs` gegen den Viewer im iframe, 8 in `scripts/test-clipboard-bridge.sh` zwischen zwei
-Displays desselben Containers. Alle grün. Offen bleiben 3, 5, 6, 7, 9, 10, 11 und 12; 6 (Bilder) und
-7 (IntelliJ) hängen an Roadmap-Punkten, die noch nicht dran sind.
+**Stand 2026-08-28:** Zehn der zwölf Fälle laufen automatisiert mit.
+
+| Fall | Wo | Stand |
+|---|---|---|
+| 1, 2, 4 | `tests/e2e.mjs`, gegen den Viewer im iframe | ✅ |
+| 5 (1 MB) | `test-clipboard-bridge.sh` | ✅ vollständig, nicht abgeschnitten. `DLP_ClipSendMax` und `DLP_ClipAcceptMax` stehen auf 0, also ohne Grenze |
+| 6 (Bild) | `test-clipboard-bridge.sh` | ✅ — die Brücke trägt seit dem 2026-08-28 auch `image/png` |
+| 8 (Modus B) | `test-clipboard-bridge.sh` | ✅ |
+| 9 (PRIMARY) | `test-clipboard-bridge.sh` | ✅ auf demselben Display; **nicht** über Displays hinweg, und das mit Absicht |
+| 10 (abgeschaltet) | `test-clipboard-bridge.sh` | ✅ Brücke läuft nicht, und kommt beim Wiedereinschalten zurück |
+| 11 (nach Pause) | `test-clipboard-bridge.sh` | ✅ |
+| 3, 7, 12 | — | offen |
+
+**Zu Fall 6.** Ein Bild kommt nicht als Text aus der Zwischenablage. Wer nur `xclip -o` fragt,
+bekommt nichts und hält sie für leer — ein Screenshot wäre in der Nachbaranwendung unerreichbar,
+ohne dass irgendwo etwas dazu stünde. Die Brücke prüft deshalb erst die angebotenen `TARGETS` und
+liest dann mit dem passenden Typ. Der Typ geht in die Prüfsumme ein; sonst gälte ein Bild, das
+zufällig dieselben Bytes hat wie der letzte Text, als schon bekannt.
+
+**Zu Fall 9.** PRIMARY wird bewusst **nicht** über Displays gespiegelt. Das ist die flüchtige
+Markierung, nicht die Zwischenablage: Wer in einer Anwendung Text markiert, würde sonst die
+Markierung in jeder anderen überschreiben. Der Test prüft beides — dass PRIMARY auf demselben
+Display funktioniert, und dass es die Displaygrenze nicht überschreitet.
+
+**Was noch offen ist.** Fall 3 (zwischen zwei Sessions) braucht zwei Container gleichzeitig im
+Browser; Fall 7 (IntelliJ, Java/AWT) braucht einen Start, der Minuten dauert; Fall 12 (Firefox ohne
+`readText()`) braucht einen echten Firefox, und der Testbrowser ist Chromium.
 
 ## 11. Persistenz und Storage
 
@@ -1746,7 +1769,7 @@ dort hat jeder Container sein eigenes Home.
 ### 15.4 Was ein Durchsehen der Anmeldepfade zutage brachte
 
 Am 2026-08-27 sind die Authentifizierungs- und Autorisierungspfade einmal von Hand durchgesehen
-worden. Vier Befunde, alle behoben, alle mit einer Prüfung in `scripts/test-authz.sh` festgenagelt —
+worden. Fünf Befunde, alle behoben, alle mit einer Prüfung in `scripts/test-authz.sh` festgenagelt —
 denn ein Befund ohne Prüfung kommt wieder.
 
 **1 · `SYS_ADMIN` für jeden Arbeitsplatz.** Die Fähigkeit stand vom ersten Tag an im Code, ohne
@@ -1772,6 +1795,13 @@ Einwilligung wäre der richtige Weg dafür; die gibt es noch nicht.
 **3 · Fehlversuche beim zweiten Faktor zählten nicht mit.** Nur das Passwort führte zur Sperre. Bei
 bekanntem Passwort war ein sechsstelliger Code damit beliebig oft ratbar — und drei davon sind zu
 jedem Zeitpunkt gültig (`valid_window=1`). Dasselbe galt für die Rückfallcodes.
+
+**5 · Ein `PUT` ohne Gruppenzuweisung nahm sie allen weg.** Aufgefallen am 2026-08-28, als ein Test
+eine Einstellung am Arbeitsplatz änderte und die Zuweisung nicht mitschickte: Der Workspace
+verschwand daraufhin wortlos von jedem Dashboard — für die Nutzer sah es aus, als sei er gelöscht.
+`group_ids` ist jetzt `None`-fähig: nicht mitgeschickt heißt „lass stehen", eine leere Liste heißt
+„niemand mehr". Der Unterschied zwischen *nichts gesagt* und *nichts gewollt* muss in einer
+Schnittstelle ausdrückbar sein.
 
 **4 · Ein unbekanntes Konto antwortete schneller.** Die Meldung war schon gleich, die Dauer nicht:
 ohne Argon2-Durchlauf war die Antwort messbar früher da. Damit ließe sich die Nutzerliste abfragen,

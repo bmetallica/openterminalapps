@@ -54,6 +54,8 @@ export function Software({ tpl, onToast, onChanged }: {
   const [custom, setCustom] = useState('')
   const [script, setScript] = useState('')
   const [scriptOpen, setScriptOpen] = useState(false)
+  const [extensions, setExtensions] = useState('')
+  const [extOpen, setExtOpen] = useState(false)
   const [builds, setBuilds] = useState<Build[] | null>(null)
   const [watching, setWatching] = useState<Build | null>(null)
   const [apps, setApps] = useState<DiscoveredApp[] | null>(null)
@@ -85,24 +87,81 @@ export function Software({ tpl, onToast, onChanged }: {
     }).catch(() => setBuilds([]))
   }, [tpl.id])
 
-  /* Ein laufender Build wird abgefragt, nicht gemeldet: Er dauert Minuten,
-     und ein Ereignisstrom dafür wäre mehr Technik als Nutzen. */
+  /* Ein laufender Build meldet sich, statt abgefragt zu werden.
+     Der Server fragt den Agent weiterhin ab — anders kommt man an den
+     Fortschritt von `docker build` nicht heran —, aber hierher kommt nur der
+     Zuwachs, und zwar sobald er da ist. Bei einem Protokoll von mehreren
+     hundert Kilobyte ist das der Unterschied zwischen einem ruhigen Fenster
+     und einem, das ruckelt.
+
+     Fällt der Strom aus — ein Zwischenstück, das ihn nicht durchlässt, ein
+     Browser ohne EventSource —, übernimmt die alte Abfrage. Lieber langsam
+     als blind. */
+  const buildId = watching && BUSY.has(watching.status) ? watching.id : null
+
+  const finish = useCallback((b: Build) => {
+    void api.builds(tpl.id).then(setBuilds)
+    onToast(b.status === 'ok'
+      ? tr('Fassung {n} ist gebaut. Jetzt aktivieren.', { n: b.version })
+      : tr('Der Build ist gescheitert. Das Protokoll sagt, woran.'),
+      b.status === 'ok' ? 'ok' : 'bad')
+  }, [tpl.id, onToast])
+
   useEffect(() => {
-    if (!watching || !BUSY.has(watching.status)) return
-    const timer = setInterval(() => {
-      void api.build(tpl.id, watching.id).then((b) => {
-        setWatching(b)
-        if (!BUSY.has(b.status)) {
-          void api.builds(tpl.id).then(setBuilds)
-          onToast(b.status === 'ok'
-            ? tr('Fassung {n} ist gebaut. Jetzt aktivieren.', { n: b.version })
-            : tr('Der Build ist gescheitert. Das Protokoll sagt, woran.'),
-            b.status === 'ok' ? 'ok' : 'bad')
-        }
-      }).catch(() => {})
-    }, 2500)
-    return () => clearInterval(timer)
-  }, [watching, tpl.id, onToast])
+    if (!buildId) return
+    let live = true
+    let poll: ReturnType<typeof setInterval> | null = null
+
+    const startPolling = () => {
+      if (poll || !live) return
+      poll = setInterval(() => {
+        void api.build(tpl.id, buildId).then((b) => {
+          if (!live) return
+          setWatching(b)
+          if (!BUSY.has(b.status)) finish(b)
+        }).catch(() => {})
+      }, 2500)
+    }
+
+    let source: EventSource | null = null
+    try {
+      source = new EventSource(`/api/templates/${tpl.id}/builds/${buildId}/stream`)
+    } catch {
+      startPolling()
+    }
+
+    if (source) {
+      source.onmessage = (ev) => {
+        const { chunk } = JSON.parse(ev.data) as { chunk: string }
+        setWatching((w) => (w && w.id === buildId ? { ...w, log: w.log + chunk } : w))
+      }
+      source.addEventListener('status', (ev) => {
+        const data = JSON.parse((ev as MessageEvent).data) as { status: Build['status'] }
+        const status = data.status
+        setWatching((w) => (w && w.id === buildId ? { ...w, status } : w))
+      })
+      source.addEventListener('end', () => {
+        source?.close()
+        // Zum Schluss einmal den ganzen Datensatz holen: Grösse, Adresse und
+        // Prüfsumme stehen nicht im Protokoll.
+        void api.build(tpl.id, buildId).then((b) => {
+          if (!live) return
+          setWatching(b)
+          if (!BUSY.has(b.status)) finish(b)
+        }).catch(() => {})
+      })
+      source.onerror = () => {
+        source?.close()
+        startPolling()
+      }
+    }
+
+    return () => {
+      live = false
+      source?.close()
+      if (poll) clearInterval(poll)
+    }
+  }, [buildId, tpl.id, finish])
 
   // Beim Wachsen des Protokolls unten bleiben — sonst muss man mitscrollen.
   useEffect(() => {
@@ -180,6 +239,7 @@ export function Software({ tpl, onToast, onChanged }: {
     try {
       const started = await api.startBuild(tpl.id, {
         apt_packages: packages,
+        vscode_extensions: extensions.split(/[\s,]+/).filter(Boolean),
         setup_script: script,
         comment: packages.join(', ').slice(0, 240),
       })
@@ -235,6 +295,7 @@ export function Software({ tpl, onToast, onChanged }: {
         is_enabled: true,
         fixed_display: a.fixed_display,
         group_ids: a.group_ids ?? [],
+        x_res: a.x_res, y_res: a.y_res,
       })))
       onChanged()
       onToast(tr('{n} Anwendungen freigegeben.', { n: apps.filter((a) => a.is_enabled).length }))
@@ -368,6 +429,20 @@ export function Software({ tpl, onToast, onChanged }: {
         </div>
       )}
 
+      <Field label={tr('VS-Code-Erweiterungen')}
+        hint={tr('Kennungen wie ms-python.python, durch Leerzeichen oder Komma getrennt. Sie werden beim Bauen installiert, nicht beim Start — sonst wartet jeder Nutzer bei jedem Start auf Downloads.')}>
+        <Toggle on={extOpen} name={tr('Erweiterungen mitbauen')}
+          note={tr('Sie landen ausschliesslich in Microsofts VS Code. VSCodium hat seinen eigenen Satz aus Open VSX und sieht diese hier nicht — dieselbe Kennung ist dort nicht dieselbe Installation.')}
+          onChange={setExtOpen} />
+        {extOpen && (
+          <textarea className="viewer__clip" style={{ marginTop: 10, minHeight: 70 }}
+            value={extensions} spellCheck={false}
+            placeholder={'ms-python.python\nesbenp.prettier-vscode'}
+            aria-label={tr('VS-Code-Erweiterungen')}
+            onChange={(e) => setExtensions(e.target.value)} />
+        )}
+      </Field>
+
       <Field label={tr('Eigene Schritte')}
         hint={tr('Für alles, was apt nicht kann. Läuft als root im Image, nach den Paketen.')}>
         <Toggle on={scriptOpen} name={tr('Eigenes Skript verwenden')}
@@ -497,6 +572,33 @@ export function Software({ tpl, onToast, onChanged }: {
                   {a.needs_terminal && !a.missing && (
                     <span className="applist__block">
                       {tr('Braucht ein Terminal — startet allein auf leerem Bildschirm.')}
+                    </span>
+                  )}
+
+                  {/* Auflösung. Der Strom passt sich anschliessend dem
+                      Browserfenster an — das hier ist der Anfangswert, und der
+                      entscheidet, wie eine Anwendung ihre Oberfläche zuerst
+                      aufbaut. Steht nichts da, gilt die des Arbeitsplatzes. */}
+                  {a.is_enabled && !a.missing && (
+                    <span className="applist__res">
+                      <label>
+                        {tr('Auflösung')}
+                        <input type="number" min={640} max={7680} step={80}
+                          placeholder={String(tpl.x_res)}
+                          aria-label={tr('Breite von {app}', { app: a.name })}
+                          value={a.x_res ?? ''}
+                          onChange={(e) => setApps(apps.map((x, j) => j === i
+                            ? { ...x, x_res: e.target.value ? Number(e.target.value) : null }
+                            : x))} />
+                        <span aria-hidden="true">×</span>
+                        <input type="number" min={480} max={4320} step={60}
+                          placeholder={String(tpl.y_res)}
+                          aria-label={tr('Höhe von {app}', { app: a.name })}
+                          value={a.y_res ?? ''}
+                          onChange={(e) => setApps(apps.map((x, j) => j === i
+                            ? { ...x, y_res: e.target.value ? Number(e.target.value) : null }
+                            : x))} />
+                      </label>
                     </span>
                   )}
 

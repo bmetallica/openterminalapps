@@ -51,3 +51,7 @@ heute schon funktioniert.
 Dieses Handbuch erklärt **Bedienung und Betrieb**. Die Begründungen hinter den Entscheidungen — warum
 eine Engine gewählt wurde, wie das Datenmodell aussieht, welche Alternativen verworfen wurden — stehen
 in [`plan.md`](../../plan.md). Die zeitliche Planung in [`roadmap.md`](../../roadmap.md).
+
+Für die wenigen Entscheidungen, die teuer rückgängig zu machen sind und in einem Jahr die Frage
+„warum eigentlich?" auslösen, gibt es eigene Einträge in
+[`docs/adr/`](../adr/README.md) — jeweils mit den Alternativen, die nicht getragen hätten.

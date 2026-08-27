@@ -214,6 +214,12 @@ class TemplateApp(Base):
     fixed_display: Mapped[int | None] = mapped_column(Integer)
     is_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    # Bevorzugte Aufloesung dieser Anwendung. NULL heisst: die des
+    # Arbeitsplatzes. Gedacht fuer den Fall, dass eine Anwendung mehr Flaeche
+    # braucht als die uebrigen — eine Entwicklungsumgebung neben einem
+    # Terminal — oder weniger, weil sie sonst unnoetig Bandbreite kostet.
+    x_res: Mapped[int | None] = mapped_column(Integer)
+    y_res: Mapped[int | None] = mapped_column(Integer)
     # Sichtbarkeit je Gruppe. **Leer heisst: fuer alle**, die den Arbeitsplatz
     # ueberhaupt sehen — sonst wuerde das Einfuehren dieser Spalte jeden
     # bestehenden Katalog auf einen Schlag leerraeumen.
