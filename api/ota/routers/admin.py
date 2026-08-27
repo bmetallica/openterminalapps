@@ -7,10 +7,15 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session as DbSession
 
 from .. import agent_client, audit
+import re
 from ..db import get_db
 from ..deps import current_user, require_permission
-from ..models import AuditLog, Group, GroupMember, User
-from ..schemas import GroupOut, HostOut, UserIn, UserOut
+from ..models import (
+    PERMISSIONS, AuditLog, Group, GroupMember, Session as SessionModel, User,
+)
+from ..schemas import (
+    GroupIn, GroupOut, HostOut, SessionAdminOut, UserIn, UserOut,
+)
 from ..security import hash_password, password_problem
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -165,6 +170,137 @@ def list_groups(db: DbSession = Depends(get_db)) -> list[GroupOut]:
         data.member_count = counts.get(g.id, 0)
         out.append(data)
     return out
+
+
+PROTECTED_SLUGS = {"admins", "users"}
+
+
+@router.post("/groups", dependencies=[Depends(manage_groups)],
+             status_code=status.HTTP_201_CREATED)
+def create_group(
+    body: GroupIn,
+    request: Request,
+    actor: User = Depends(current_user),
+    db: DbSession = Depends(get_db),
+) -> GroupOut:
+    slug = re.sub(r"[^a-z0-9]+", "-", body.name.lower()).strip("-") or "gruppe"
+    if db.scalar(select(Group).where(Group.slug == slug)):
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            f"Eine Gruppe mit der Kennung {slug} gibt es schon.")
+
+    unknown = set(body.permissions) - set(PERMISSIONS)
+    if unknown:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            f"Unbekannte Rechte: {', '.join(sorted(unknown))}")
+
+    group = Group(slug=slug, **body.model_dump())
+    db.add(group)
+    audit.record(db, "group.created", actor=actor, object_type="group",
+                 object_id=slug, request=request)
+    db.commit()
+    data = GroupOut.model_validate(group)
+    data.member_count = 0
+    return data
+
+
+@router.put("/groups/{group_id}", dependencies=[Depends(manage_groups)])
+def update_group(
+    group_id: uuid.UUID,
+    body: GroupIn,
+    request: Request,
+    actor: User = Depends(current_user),
+    db: DbSession = Depends(get_db),
+) -> GroupOut:
+    group = db.get(Group, group_id)
+    if not group:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Gruppe nicht gefunden")
+
+    unknown = set(body.permissions) - set(PERMISSIONS)
+    if unknown:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            f"Unbekannte Rechte: {', '.join(sorted(unknown))}")
+
+    # Den Systemgruppen darf ihre Rolle nicht genommen werden — sonst steht
+    # niemand mehr in der Verwaltung.
+    if group.slug in PROTECTED_SLUGS:
+        if group.slug == "admins" and "admin" not in body.permissions:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "Der Gruppe admins kann das Verwaltungsrecht nicht entzogen werden. "
+                "Ohne sie käme niemand mehr in die Verwaltung.",
+            )
+        group.description = body.description
+        group.permissions = body.permissions
+    else:
+        group.name = body.name
+        group.description = body.description
+        group.priority = body.priority
+        group.permissions = body.permissions
+
+    audit.record(db, "group.updated", actor=actor, object_type="group",
+                 object_id=group.slug, request=request)
+    db.commit()
+    data = GroupOut.model_validate(group)
+    data.member_count = len(group.members)
+    return data
+
+
+@router.delete("/groups/{group_id}", dependencies=[Depends(manage_groups)])
+def delete_group(
+    group_id: uuid.UUID,
+    request: Request,
+    actor: User = Depends(current_user),
+    db: DbSession = Depends(get_db),
+) -> dict[str, str]:
+    group = db.get(Group, group_id)
+    if not group:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Gruppe nicht gefunden")
+    if group.is_system or group.slug in PROTECTED_SLUGS:
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            f"{group.name} ist eine Systemgruppe und bleibt bestehen.")
+
+    members = len(group.members)
+    name = group.name
+    db.delete(group)
+    audit.record(db, "group.deleted", actor=actor, object_type="group",
+                 object_id=group.slug, request=request, members=members)
+    db.commit()
+    return {"status": f"{name} gelöscht. {members} Mitgliedschaft(en) sind entfallen."}
+
+
+@router.get("/permissions", dependencies=[Depends(manage_groups)])
+def list_permissions() -> list[dict[str, str]]:
+    """Die vergebbaren Rechte, mit Klartext fuer die Oberflaeche."""
+    texts = {
+        "admin": "Vollzugriff auf alles",
+        "templates.manage": "Workspaces anlegen und ändern",
+        "images.manage": "Golden Images bauen und aktivieren",
+        "users.manage": "Nutzer anlegen und ändern",
+        "groups.manage": "Gruppen anlegen und ändern",
+        "sessions.view_all": "Alle Sessions sehen und beenden",
+        "settings.manage": "Globale Einstellungen ändern",
+        "audit.view": "Audit-Log einsehen",
+        "registries.manage": "Registries einbinden",
+    }
+    return [{"key": k, "text": texts.get(k, k)} for k in PERMISSIONS]
+
+
+# --------------------------------------------------------------------------
+# Alle Sessions
+# --------------------------------------------------------------------------
+
+@router.get("/sessions", dependencies=[Depends(require_permission("sessions.view_all"))])
+def all_sessions(db: DbSession = Depends(get_db)) -> list[SessionAdminOut]:
+    rows = db.scalars(select(SessionModel).where(
+        SessionModel.status.in_(("starting", "running", "paused"))
+    ).order_by(SessionModel.started_at.desc())).all()
+    return [SessionAdminOut(
+        id=s.id, username=s.user.username,
+        template_name=s.template.friendly_name, template_icon=s.template.icon,
+        status=s.status, cores=s.cores, memory_bytes=s.memory_bytes,
+        started_at=s.started_at, last_seen_at=s.last_seen_at,
+        app_count=len(s.streams),
+    ) for s in rows]
 
 
 # --------------------------------------------------------------------------

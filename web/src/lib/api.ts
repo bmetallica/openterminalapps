@@ -91,6 +91,31 @@ export type User = {
   group_ids: string[]
 }
 
+export type Permission = { key: string; text: string }
+
+export type AdminSession = {
+  id: string
+  username: string
+  template_name: string
+  template_icon: string
+  status: string
+  cores: number
+  memory_bytes: number
+  started_at: string
+  last_seen_at: string
+  app_count: number
+}
+
+export type AuditEntry = {
+  ts: string
+  actor: string | null
+  action: string
+  object_type: string | null
+  object_id: string | null
+  ip: string | null
+  detail: Record<string, unknown>
+}
+
 export type Host = {
   cores: number
   memory_total: number
@@ -194,5 +219,19 @@ export const api = {
   images: () => call<{ ref: string; size_bytes: number }[]>('/admin/images'),
   users: () => call<User[]>('/admin/users'),
   groups: () => call<Group[]>('/admin/groups'),
-  audit: (limit = 100) => call<Record<string, unknown>[]>(`/admin/audit?limit=${limit}`),
+  audit: (limit = 100) => call<AuditEntry[]>(`/admin/audit?limit=${limit}`),
+  permissions: () => call<Permission[]>('/admin/permissions'),
+  adminSessions: () => call<AdminSession[]>('/admin/sessions'),
+  createUser: (body: unknown) =>
+    call<User>('/admin/users', { method: 'POST', body: JSON.stringify(body) }),
+  updateUser: (id: string, body: unknown) =>
+    call<User>(`/admin/users/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  deleteUser: (id: string) =>
+    call<{ status: string }>(`/admin/users/${id}`, { method: 'DELETE' }),
+  createGroup: (body: unknown) =>
+    call<Group>('/admin/groups', { method: 'POST', body: JSON.stringify(body) }),
+  updateGroup: (id: string, body: unknown) =>
+    call<Group>(`/admin/groups/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  deleteGroup: (id: string) =>
+    call<{ status: string }>(`/admin/groups/${id}`, { method: 'DELETE' }),
 }

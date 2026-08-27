@@ -265,6 +265,115 @@ try {
     ok('Rückkehr zum Dashboard funktioniert')
   }
 
+  // ------------------------------------------------- Nutzer und Gruppen
+  console.log('\nNutzer und Gruppen')
+  await page.evaluate(() => {
+    const b = [...document.querySelectorAll('.rail__btn')]
+      .find((x) => x.textContent?.includes('Nutzer'))
+    b?.click()
+  })
+  await page.waitForSelector('.tbl', { timeout: 15000 })
+  const userRows = await page.$$eval('.tbl tbody tr', (els) => els.length)
+  check(userRows > 0, `${userRows} Nutzer in der Liste`)
+  await shot(page, '11-nutzer')
+
+  // Nutzer anlegen — bis M3 ging das nur über die API.
+  await page.evaluate(() => {
+    const b = [...document.querySelectorAll('.topbar .btn--primary')]
+      .find((x) => x.textContent?.includes('Nutzer anlegen'))
+    b?.click()
+  })
+  await page.waitForSelector('.drawer', { timeout: 10000 })
+  const testName = `pruef-${Date.now().toString().slice(-6)}`
+  await page.type('.drawer input[aria-label="Benutzername"]', testName)
+  await page.type('.drawer input[aria-label="Passwort"]', 'PruefKonto2026!xy')
+  await page.evaluate(() => {
+    const chip = [...document.querySelectorAll('.drawer .chip')]
+      .find((x) => x.textContent?.trim() === 'users')
+    chip?.click()
+  })
+  await page.evaluate(() => {
+    const b = [...document.querySelectorAll('.drawer__foot .btn--primary')]
+      .find((x) => x.textContent?.includes('anlegen'))
+    b?.click()
+  })
+  await new Promise((r) => setTimeout(r, 2000))
+  const afterCreate = await page.$$eval('.tbl tbody tr', (els) => els.length)
+  check(afterCreate === userRows + 1, `Nutzer über die Oberfläche angelegt (${userRows} → ${afterCreate})`)
+
+  // Wieder aufräumen — ein Test, der Spuren hinterlässt, verfälscht den nächsten.
+  await page.evaluate((name) => {
+    const row = [...document.querySelectorAll('.tbl tbody tr')]
+      .find((x) => x.textContent?.includes(name))
+    row?.click()
+  }, testName)
+  await page.waitForSelector('.drawer', { timeout: 10000 })
+  await page.evaluate(() => {
+    const b = [...document.querySelectorAll('.drawer__foot .btn--halt')]
+      .find((x) => x.textContent?.includes('Löschen'))
+    b?.click()
+  })
+  await new Promise((r) => setTimeout(r, 1800))
+  const afterDelete = await page.$$eval('.tbl tbody tr', (els) => els.length)
+  check(afterDelete === userRows, `Testnutzer wieder entfernt (${afterCreate} → ${afterDelete})`)
+
+  // Gruppen-Reiter
+  await page.evaluate(() => {
+    const b = [...document.querySelectorAll('.seg__opt')]
+      .find((x) => x.textContent?.includes('Gruppen'))
+    b?.click()
+  })
+  await new Promise((r) => setTimeout(r, 700))
+  const groupRows = await page.$$eval('.tbl tbody tr', (els) => els.length)
+  check(groupRows >= 2, `${groupRows} Gruppen sichtbar`)
+  await shot(page, '12-gruppen')
+
+  // Systemgruppe: der Löschknopf darf gar nicht erst erscheinen.
+  await page.evaluate(() => {
+    const row = [...document.querySelectorAll('.tbl tbody tr')]
+      .find((x) => x.textContent?.includes('admins'))
+    row?.click()
+  })
+  await page.waitForSelector('.drawer', { timeout: 10000 })
+  const hasDelete = await page.$$eval('.drawer__foot .btn--halt', (els) => els.length)
+  check(hasDelete === 0, 'Systemgruppe admins bietet kein Löschen an')
+  await page.keyboard.press('Escape')
+  await new Promise((r) => setTimeout(r, 500))
+
+  // ------------------------------------------------------------- Betrieb
+  console.log('\nBetrieb')
+  await page.evaluate(() => {
+    const b = [...document.querySelectorAll('.rail__btn')]
+      .find((x) => x.textContent?.includes('Betrieb'))
+    b?.click()
+  })
+  await page.waitForSelector('.tbl, .empty', { timeout: 15000 })
+  await new Promise((r) => setTimeout(r, 800))
+  const sessRows = await page.$$eval('.tbl tbody tr', (els) => els.length).catch(() => 0)
+  check(sessRows > 0, `${sessRows} laufende Session(en) in der Betriebsübersicht`)
+  await shot(page, '13-betrieb')
+
+  await page.evaluate(() => {
+    const b = [...document.querySelectorAll('.seg__opt')]
+      .find((x) => x.textContent?.includes('Protokoll'))
+    b?.click()
+  })
+  await new Promise((r) => setTimeout(r, 800))
+  const auditRows = await page.$$eval('.tbl tbody tr', (els) => els.length)
+  check(auditRows > 0, `${auditRows} Einträge im Protokoll`)
+  const actions = await page.$$eval('.tbl tbody tr td:nth-child(3)',
+    (els) => els.map((e) => e.textContent))
+  check(actions.some((a) => a === 'Anmeldung' || a === 'Nutzer angelegt'),
+    `Vorgänge stehen in Klartext (z. B. „${actions[0]}")`)
+  await shot(page, '14-protokoll')
+
+  // Zurück zum Dashboard für den nächsten Abschnitt.
+  await page.evaluate(() => {
+    const b = [...document.querySelectorAll('.rail__btn')]
+      .find((x) => x.textContent?.includes('Start'))
+    b?.click()
+  })
+
   // ------------------------------------------------------- Arbeitsplatz
   console.log('\nArbeitsplatz (mehrere Apps in einem Container)')
   await page.waitForSelector('.bay, .tiles', { timeout: 15000 })

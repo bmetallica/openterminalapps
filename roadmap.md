@@ -164,16 +164,27 @@ Session-Prozesse, und die ereignisgesteuerte statt abfragende Brücke (braucht e
 
 ## M5 — Golden Images · 2–3 Wochen
 
-- [ ] `image_builds` mit Versionen, Digest, Größe, Build-Log, `is_current`
-- [ ] Build-Runner im Agent, serialisiert, Timeout 45 min, abbrechbar, Live-Log per SSE
-- [ ] Deklarativer Build-Layer: APT/PIP/NPM, **Extension-Listen je Editor**, freies Setup-Skript
+> **Voraussetzung, die zuerst geklärt werden muss:** Kasms Agent löscht im Modus
+> „Aggressive" alle 30 Sekunden jedes Image, das er nicht kennt — auch unsere Golden
+> Images (`plan.md` §8.4b). Entweder die Einstellung in Kasm ändern
+> (*Infrastructure → Servers*) oder M5 hinter M7 schieben. Alles Übrige am
+> Parallelbetrieb ist davon nicht betroffen.
+
+- [x] `image_builds` mit Versionen, Digest, Größe, Build-Log, `is_current`
+- [x] Build-Runner im Agent über **`docker buildx build --load`**, serialisiert,
+      Timeout 45 min. Der klassische Builder legt auf einem Host mit
+      containerd-Image-Store bei Multi-Plattform-Basisimages kein benutzbares Image ab
+- [x] Nachprüfung 45 s nach dem Build, ob das Image noch im Store liegt — sonst
+      gilt der Build als fehlgeschlagen und erklärt den Grund
+- [x] Deklarativer Build-Layer: APT-Pakete, **VS-Code-Extension-Listen**, freies Setup-Skript
+- [x] Version aktivieren und Rollback über die API; laufende Sessions bleiben unberührt
+- [ ] Live-Log per SSE in der Oberfläche (derzeit über Abfrage)
 - [ ] **App-Katalog im Blueprint**: Startbefehl, Icon, Auflösung, Skeleton-Teilbaum je App
 - [ ] Extensions beim **Build** installieren, nicht beim Start
 - [ ] Sichtbarkeit je App und Gruppe (`group_template_apps`)
 - [ ] Skeleton-Profile: Kopie beim ersten Start, Datei-Browser, „Enforce"-Pfade
 - [ ] **„Session einfrieren"**: `docker commit`, Home-Diff, Secret-Filter (`.ssh/id_*`, `.gnupg`,
       `*token*`, `*.pem`, `.aws`, `.docker/config.json`, `krb5cc_*`, `.smbcredentials`, `keytab`)
-- [ ] Version aktivieren und Rollback per Klick; laufende Sessions bleiben unberührt
 - [ ] **Eigenes Basisimage** `ota/base-xfce` (Ubuntu + XFCE + KasmVNC aus offiziellem Release)
 - [ ] UI benennt, dass Extensions nicht zwischen VS Code, VSCodium und Cursor wandern
 

@@ -18,6 +18,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, status
 from pydantic import BaseModel, Field
 
 from . import apps as app_scripts
+from . import builder
 from . import clipboard as clip_scripts
 
 AGENT_TOKEN = os.environ.get("OTA_AGENT_TOKEN", "")
@@ -356,3 +357,72 @@ def clipboard_bridge(cid: str, req: BridgeRequest) -> dict[str, str]:
             f"Die Zwischenablage-Brücke liess sich nicht starten: {out[-200:]}",
         )
     return {"status": "läuft"}
+
+
+# --------------------------------------------------------------------------
+# Golden Images bauen (plan.md §8)
+# --------------------------------------------------------------------------
+
+class BuildRequest(BaseModel):
+    tag: str
+    base_image: str
+    apt_packages: list[str] = []
+    vscode_extensions: list[str] = []
+    setup_script: str = ""
+
+
+@app.post("/builds", dependencies=[Depends(require_token)])
+def start_build(req: BuildRequest) -> dict[str, Any]:
+    if builder.busy():
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Es läuft bereits ein Build. Sie laufen bewusst nacheinander, damit "
+            "der Host die Sessions weiter bedienen kann.",
+        )
+    try:
+        dc().images.get(req.base_image)
+    except ImageNotFound:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"Das Basisimage {req.base_image} liegt nicht auf diesem Host.",
+        )
+    return builder.start(
+        req.tag, req.base_image, req.apt_packages,
+        req.vscode_extensions, req.setup_script,
+    )
+
+
+@app.get("/builds/{build_id}", dependencies=[Depends(require_token)])
+def build_status(build_id: str) -> dict[str, Any]:
+    state = builder.status(build_id)
+    if state is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Build nicht gefunden")
+    return state
+
+
+@app.delete("/images/{ref:path}", dependencies=[Depends(require_token)])
+def remove_image(ref: str) -> dict[str, str]:
+    """Entfernt eine alte Golden-Image-Version."""
+    try:
+        dc().images.remove(ref, force=False)
+    except ImageNotFound:
+        return {"status": "war nicht vorhanden"}
+    except APIError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            f"Image nicht entfernbar: {exc}")
+    return {"status": "entfernt"}
+
+
+@app.get("/images/exists/{ref:path}", dependencies=[Depends(require_token)])
+def image_exists(ref: str) -> dict[str, Any]:
+    """Liegt dieses Image im Image-Store?
+
+    Gebraucht fuer die Nachpruefung nach einem Build: Auf einem Host, auf dem
+    ein anderes System Images aufraeumt, kann ein erfolgreich gebautes Image
+    Sekunden spaeter wieder verschwunden sein.
+    """
+    try:
+        image = dc().images.get(ref)
+    except ImageNotFound:
+        return {"exists": False}
+    return {"exists": True, "size_bytes": image.attrs.get("Size", 0)}

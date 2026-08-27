@@ -28,6 +28,26 @@ class GroupOut(BaseModel):
     is_system: bool = False
 
 
+class GroupIn(BaseModel):
+    name: str = Field(min_length=2, max_length=128)
+    description: str | None = None
+    priority: int = Field(default=100, ge=1, le=9999)
+    permissions: list[str] = []
+
+
+class SessionAdminOut(BaseModel):
+    id: uuid.UUID
+    username: str
+    template_name: str
+    template_icon: str
+    status: str
+    cores: float
+    memory_bytes: int
+    started_at: datetime
+    last_seen_at: datetime
+    app_count: int = 0
+
+
 class MeOut(BaseModel):
     id: uuid.UUID
     username: str
@@ -186,6 +206,34 @@ class UserIn(BaseModel):
     password: str | None = None
     is_active: bool = True
     group_ids: list[uuid.UUID] = []
+
+
+class BuildIn(BaseModel):
+    # Leer bedeutet: das derzeitige Image der Vorlage als Basis nehmen.
+    base_image: str = ""
+    apt_packages: list[str] = []
+    vscode_extensions: list[str] = []
+    setup_script: str = ""
+    comment: str = ""
+
+
+class BuildOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    version: int
+    base_image: str
+    apt_packages: list[str]
+    vscode_extensions: list[str]
+    setup_script: str
+    comment: str
+    status: str
+    log: str
+    image_ref: str | None
+    size_bytes: int
+    is_current: bool
+    built_by: str | None
+    started_at: datetime
+    finished_at: datetime | None
 
 
 class HostOut(BaseModel):

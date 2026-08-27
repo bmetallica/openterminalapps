@@ -2,17 +2,21 @@ import { useCallback, useEffect, useState } from 'react'
 import { Dashboard } from './screens/Dashboard'
 import { Login } from './screens/Login'
 import { SessionViewer } from './screens/SessionViewer'
+import { Monitor } from './screens/Monitor'
+import { People } from './screens/People'
 import { Workspaces } from './screens/Workspaces'
 import { ApiError, api, type Host, type Me, type Session, type Stream, type Template } from './lib/api'
 import { gb } from './lib/format'
 import './styles/app.css'
 
-type View = 'dashboard' | 'workspaces'
+type View = 'dashboard' | 'workspaces' | 'people' | 'monitor'
 type Toast = { id: number; msg: string; tone: 'ok' | 'bad' }
 
 const NAV: { id: View; glyph: string; cap: string; adminOnly: boolean }[] = [
   { id: 'dashboard', glyph: '▣', cap: 'Start', adminOnly: false },
   { id: 'workspaces', glyph: '⬡', cap: 'Workspaces', adminOnly: true },
+  { id: 'people', glyph: '◔', cap: 'Nutzer', adminOnly: true },
+  { id: 'monitor', glyph: '◈', cap: 'Betrieb', adminOnly: true },
 ]
 
 export default function App() {
@@ -130,6 +134,8 @@ export default function App() {
           <Dashboard me={me} onOpen={openSession} onToast={toast} />
         )}
         {current === 'workspaces' && <Workspaces onToast={toast} />}
+        {current === 'people' && <People onToast={toast} />}
+        {current === 'monitor' && <Monitor onToast={toast} />}
       </main>
 
       <Toasts items={toasts} />

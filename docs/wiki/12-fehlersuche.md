@@ -198,6 +198,48 @@ und Buchstabentasten nicht mehr.
 ist der eigentliche Weg zur Kontrollleiste; das Kürzel ist die Abkürzung für
 alles ausserhalb des Streams.
 
+## Golden Image ist nach dem Bau wieder verschwunden
+
+Der Build läuft durch, meldet Erfolg — und beim ersten Sessionstart heisst es
+„Image liegt nicht auf diesem Host".
+
+```bash
+docker logs kasm_agent --since 5m | grep -i prune
+# "Searching for images to prune with mode: (Aggressive)"
+# "Docker image id (...): with tags (['ota/...']): is not needed."
+# "Successfully pruned unneeded Docker image id (...)"
+```
+
+**Ursache**: Läuft Kasm Workspaces auf demselben Docker-Host, räumt dessen Agent
+im Modus **„Aggressive"** etwa alle 30 Sekunden auf und löscht **jedes Image, das
+er nicht kennt** — auch unsere Golden Images.
+
+OTA erkennt das inzwischen selbst: 45 Sekunden nach einem erfolgreichen Build wird
+nachgesehen, ob das Image noch da ist. Fehlt es, wird der Build auf *fehlgeschlagen*
+gesetzt und das Log erklärt den Grund.
+
+**Abhilfe, eine von beiden:**
+- In Kasm unter *Infrastructure → Servers* die Aufräum-Einstellung von „Aggressive"
+  auf eine mildere Stufe setzen.
+- Golden Images erst bauen, nachdem Kasm abgelöst ist.
+
+Alles andere am Parallelbetrieb ist davon **nicht** betroffen: Sessions, Streams,
+Nutzer und Zuweisungen laufen unbeeinträchtigt nebeneinander.
+
+## Build meldet Erfolg, das Image taucht nie in `docker images` auf
+
+Anderes Symptom, andere Ursache: Auf einem Host mit **containerd-Image-Store** legt
+der klassische Docker-Builder bei Multi-Plattform-Basisimages kein benutzbares Image
+im Store ab.
+
+```bash
+docker info | grep -i snapshotter
+#   driver-type: io.containerd.snapshotter.v1
+```
+
+OTA baut deshalb über `docker buildx build --load`. Wer eigene Build-Skripte schreibt,
+sollte dasselbe tun — `DOCKER_BUILDKIT=0` oder das Python-SDK reichen hier nicht.
+
 ## Nützliche Befehle
 
 ```bash

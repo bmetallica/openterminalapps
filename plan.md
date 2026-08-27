@@ -514,8 +514,49 @@ Das ist die Funktion, die in Kasm am meisten fehlt, und sie ist der Hauptgrund, 
 - Admin: Reset für einzelne Nutzer oder ganze Gruppen erzwingen
 - „Enforce"-Modus pro Template: Bestimmte Dateien werden bei **jedem** Start aus dem Skeleton überschrieben (z. B. Firmen-CA, Proxy-Config), der Rest bleibt persistent
 
+### 8.4b Kasm und OTA vertragen sich beim Bauen nicht
+
+**Gemessen am 2026-08-27, und es kostet sonst viel Zeit:** Kasms Agent räumt
+Docker-Images auf. Im Modus **„Aggressive"** — der Voreinstellung — läuft er etwa alle
+30 Sekunden und **löscht jedes Image, das er nicht kennt**. Auch unsere Golden Images.
+
+```
+[DEBUG] Searching for images to prune with mode: (Aggressive)
+[DEBUG] Docker image id (sha256:8956eb…): with tags (['ota/arbeitsplatz:v1']): is not needed.
+[INFO]  Successfully pruned unneeded Docker image id (sha256:8956eb…)
+```
+
+Das Fehlerbild ist tückisch, weil nichts schiefzugehen scheint: Der Build läuft durch,
+meldet Erfolg, das Image ist sofort danach abfragbar — und Sekunden später weg. Der
+erste Sessionstart scheitert dann mit „Image liegt nicht auf diesem Host", und im
+Build-Log steht kein Fehler.
+
+**OTA erkennt das inzwischen selbst.** 45 Sekunden nach einem erfolgreichen Build wird
+nachgesehen, ob das Image noch im Store liegt. Ist es verschwunden, wird der Build auf
+`failed` gesetzt und das Log erklärt Ursache und Abhilfe im Klartext, statt einen
+rätselhaften Erfolg stehenzulassen.
+
+**Abhilfe, eine von beiden:**
+1. In Kasm unter *Infrastructure → Servers* die Aufräum-Einstellung
+   (`servers.prune_images_mode`, derzeit auf allen drei Einträgen `Aggressive`) auf eine
+   mildere Stufe setzen. Die gültigen Alternativwerte ließen sich aus der laufenden
+   Installation nicht ableiten — sie stehen in Kasms Oberfläche zur Auswahl.
+2. Golden Images erst bauen, **nachdem** Kasm abgelöst ist (Roadmap M7).
+
+**Was das für den Plan bedeutet:** Der Parallelbetrieb aus §16 gilt weiterhin für alles
+Übrige — Sessions, Streams, Nutzer, Zuweisungen laufen unbeeinträchtigt nebeneinander.
+Nur das **Bauen** von Golden Images ist blockiert, solange Kasm aggressiv aufräumt. Das
+verschiebt M5 hinter eine Entscheidung, die dir gehört (§17.12).
+
 ### 8.5 Build-Ausführung
-- Builds laufen im `ota-agent` über die Docker-Build-API, mit Live-Log-Stream ins UI (SSE)
+- Builds laufen im `ota-agent` über **`docker buildx build --load`**, nicht über die
+  klassische Build-API des Python-SDK. Auf einem Host mit **containerd-Image-Store** legt
+  der klassische Builder bei Multi-Plattform-Basisimages — und das sind die Kasm-Images —
+  kein benutzbares Image im Store ab. Er meldet Erfolg, `images.get()` findet das Image
+  noch, `docker images` listet es nie. Der Agent bringt dafür `docker-ce-cli` und
+  `docker-buildx-plugin` mit
+- Erfolg gilt erst, wenn das Image **nachweislich im Store liegt** — nicht schon, wenn der
+  Builder Erfolg meldet
 - Serialisiert (max. 1 paralleler Build), damit die 4-Core-Maschine nicht kollabiert
 - Timeout 45 min, abbrechbar
 - Optional: nächtlicher Rebuild zur Aufnahme von Sicherheitsupdates, mit Diff-Benachrichtigung
@@ -1227,4 +1268,5 @@ Diese Punkte brauchen deine Entscheidung; sie ändern den Aufwand spürbar:
 9. **AD-Durchreichung: welcher Weg?** Standard wäre Kerberos-Ticket-Injektion (§9.4, Weg 2). Passwort-Durchreichung (Weg 4) bleibt aus, solange du sie nicht ausdrücklich willst — sie macht OTA zum Passwortspeicher.
 10. **Cursor im Katalog?** Proprietär, Lizenzlage für Mehrbenutzerbetrieb ungeklärt (§9.6). Bis zur Klärung deaktiviert. Die anderen vier Editoren sind unbedenklich.
 11. **Registry-Signatur prüfen?** Der Kasm-Katalog trägt ein ES256-JWT (§9.8). Wollen wir die Signatur validieren — was den öffentlichen Schlüssel von Kasm und eine Abhängigkeit davon bedeutet — oder behandeln wir Registries schlicht als Vertrauensentscheidung des Admins mit deutlichem Hinweis im UI? Vorschlag: zunächst Letzteres.
-12. **Kasm-Abschaltung.** Ab wann darf OTA Port 443 übernehmen? Vorschlag: erst nach erfolgreicher Abnahme von Punkt 12.1 durch dich.
+12. **Kasms Image-Aufräumen abschalten oder M5 verschieben?** Kasm löscht im Modus „Aggressive" alle 30 Sekunden jedes Image, das es nicht kennt — auch unsere Golden Images (§8.4b). Entweder du stellst das in Kasm um (*Infrastructure → Servers*), oder M5 wartet, bis Kasm abgelöst ist. Ich habe an deinem laufenden Kasm bewusst nichts geändert. Alles andere am Parallelbetrieb ist davon nicht betroffen.
+13. **Kasm-Abschaltung.** Ab wann darf OTA Port 443 übernehmen? Vorschlag: erst nach erfolgreicher Abnahme von Punkt 12.1 durch dich.

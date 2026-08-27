@@ -13,7 +13,7 @@ from sqlalchemy import select
 from . import agent_client
 from .db import Base, SessionLocal, engine
 from .models import Session as SessionModel
-from .routers import admin, auth, internal, sessions, templates
+from .routers import admin, auth, builds, internal, sessions, templates
 
 log = logging.getLogger("ota")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -121,6 +121,7 @@ app = FastAPI(
 
 app.include_router(auth.router)
 app.include_router(templates.router)
+app.include_router(builds.router)
 app.include_router(sessions.router)
 app.include_router(admin.router)
 app.include_router(internal.router)

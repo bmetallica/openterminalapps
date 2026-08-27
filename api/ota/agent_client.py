@@ -74,3 +74,19 @@ def stop_app(cid: str, display: int) -> dict[str, Any]:
 def clipboard_bridge(cid: str, enabled: bool, interval: float = 0.5) -> dict[str, Any]:
     return _call("POST", f"/containers/{cid}/clipboard-bridge",
                  json={"enabled": enabled, "interval": interval})
+
+
+def start_build(payload: dict[str, Any]) -> dict[str, Any]:
+    return _call("POST", "/builds", json=payload)
+
+
+def build_status(build_id: str) -> dict[str, Any]:
+    return _call("GET", f"/builds/{build_id}")
+
+
+def remove_image(ref: str) -> dict[str, Any]:
+    return _call("DELETE", f"/images/{ref}")
+
+
+def image_exists(ref: str) -> dict[str, Any]:
+    return _call("GET", f"/images/exists/{ref}")

@@ -1,6 +1,13 @@
 # 7 · Golden Images
 
-*Für Administratoren.* 🔨 M5
+*Für Administratoren.* ✅ Build-Pipeline, Versionen und Aktivierung ·
+🔨 Skeleton-Verwaltung und „Session einfrieren" (M5)
+
+> **Solange Kasm auf demselben Host läuft, funktioniert das Bauen nicht.**
+> Kasms Agent löscht im Modus „Aggressive" alle 30 Sekunden jedes Image, das er
+> nicht kennt — auch unsere. OTA erkennt das und sagt es im Build-Log. Abhilfe:
+> die Einstellung in Kasm unter *Infrastructure → Servers* ändern, oder erst nach
+> der Ablösung bauen. Siehe [Kapitel 12](12-fehlersuche.md).
 
 ## Was ein Golden Image ist
 

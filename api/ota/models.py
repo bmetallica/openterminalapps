@@ -165,6 +165,10 @@ class Template(Base):
         back_populates="template", cascade="all, delete-orphan", lazy="selectin"
     )
     groups: Mapped[list[Group]] = relationship(secondary="group_templates", lazy="selectin")
+    builds: Mapped[list[ImageBuild]] = relationship(
+        back_populates="template", cascade="all, delete-orphan",
+        lazy="selectin", order_by="ImageBuild.version.desc()",
+    )
 
 
 class TemplateApp(Base):
@@ -279,6 +283,44 @@ class AppStream(Base):
     last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     session: Mapped[Session] = relationship(back_populates="streams")
+
+
+class ImageBuild(Base):
+    """Eine Version eines Golden Image (plan.md §8.2).
+
+    Genau eine Version je Vorlage ist ``is_current`` — neue Sessions nutzen
+    sie. Laufende Sessions bleiben unberuehrt, und ein Rueckfall auf eine
+    aeltere Version ist ein Klick.
+    """
+
+    __tablename__ = "image_builds"
+    __table_args__ = (UniqueConstraint("template_id", "version"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    template_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("templates.id", ondelete="CASCADE"), index=True
+    )
+    version: Mapped[int] = mapped_column(Integer)
+
+    base_image: Mapped[str] = mapped_column(String(512))
+    apt_packages: Mapped[list] = mapped_column(JSONB, default=list)
+    vscode_extensions: Mapped[list] = mapped_column(JSONB, default=list)
+    setup_script: Mapped[str] = mapped_column(Text, default="")
+    comment: Mapped[str] = mapped_column(String(512), default="")
+
+    # queued | building | ok | failed | cancelled
+    status: Mapped[str] = mapped_column(String(16), default="queued", index=True)
+    log: Mapped[str] = mapped_column(Text, default="")
+    image_ref: Mapped[str | None] = mapped_column(String(512))
+    size_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
+    digest: Mapped[str | None] = mapped_column(String(128))
+    is_current: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    built_by: Mapped[str | None] = mapped_column(String(128))
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    template: Mapped[Template] = relationship(back_populates="builds")
 
 
 class Registry(Base):
