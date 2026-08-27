@@ -139,6 +139,27 @@ Zwei Hinweise erscheinen von selbst:
 **Die Reihenfolge ist bedeutsam.** Aus ihr leitet sich ab, welches Display eine Anwendung bekommt.
 Wer sie ändert, muss laufende Arbeitsplätze neu starten.
 
+### Sichtbarkeit je Gruppe ✅
+
+Unter jeder Anwendung steht, wer sie bekommt. Im Normalfall **„Sichtbar für alle"** — gemeint ist:
+alle, die diesen Arbeitsplatz überhaupt sehen. Ein Klick öffnet die Gruppen, und sobald eine gewählt
+ist, sehen nur deren Mitglieder die Anwendung.
+
+Der Fall, für den das gedacht ist: Eine Lizenz reicht nicht für alle. Die Anwendung ist im Image —
+sie muss es sein, es ist ein Image für alle —, aber im Dashboard erscheint sie nur bei denen, die
+sie benutzen dürfen.
+
+> **Die Liste im Dashboard ist gefiltert, aber sie ist nicht die Absicherung.**
+> Geprüft wird beim Start: Ein Aufruf der Startadresse mit dem Kürzel einer gesperrten Anwendung
+> wird abgewiesen, auch wenn der Arbeitsplatz dem Aufrufer gehört. Beides steht als Prüfung in
+> `scripts/test-authz.sh`.
+
+**Administratoren sehen immer alles.** Sonst könnten sie einen Katalog verwalten, den sie nicht
+sehen.
+
+**Eine gelöschte Gruppe verschwindet aus den Katalogen.** Die Anwendung ist danach wieder für alle
+da — die Alternative wäre eine Anwendung, die niemandem mehr gehört und die niemand mehr sieht.
+
 ## Der App-Katalog
 
 Beim Arbeitsplatz enthält das Golden Image mehrere Anwendungen. Je App wird hinterlegt:
@@ -150,7 +171,7 @@ Skeleton-Teilbaum   .config/Code/User/       für VS Code
                     .config/JetBrains/        für IntelliJ
                     .config/VSCodium/User/    für VSCodium
 Extension-Liste     wird beim BUILD installiert, nicht beim Start
-Sichtbarkeit        je Gruppe zuschaltbar
+Sichtbarkeit        je Gruppe zuschaltbar ✅
 ```
 
 **Extensions gehören in den Build, nicht in den Start.** Sonst wartet jeder Nutzer bei jedem Start

@@ -120,11 +120,42 @@ export type DiscoveredApp = {
   in_catalog: boolean
   is_enabled: boolean
   fixed_display: number | null
+  /** Leer heisst: für alle sichtbar, die den Arbeitsplatz sehen. */
+  group_ids: string[]
   /** Im Katalog, aber im Image nicht mehr vorhanden. */
   missing: boolean
 }
 
 /** Was das Image über einen Paketnamen weiss. */
+export type Registry = {
+  id: string
+  name: string
+  url: string
+  schema_version: string
+  icon_url: string | null
+  is_enabled: boolean
+  auto_update: boolean
+  last_fetched_at: string | null
+  workspace_count: number
+  fetch_error: string | null
+  entry_count: number
+  imported_count: number
+}
+
+export type RegistryEntry = {
+  sha: string
+  friendly_name: string
+  description: string
+  categories: string[]
+  architectures: string[]
+  icon_url: string | null
+  image_ref: string
+  available_tags: string[]
+  uncompressed_size_mb: number
+  /** Gesetzt, sobald daraus eine Vorlage entstanden ist. */
+  imported_template_id: string | null
+}
+
 export type TotpSetup = { secret: string; uri: string; qr_svg: string }
 
 export type RecipeKind = 'apt_repo' | 'deb_url' | 'tarball' | 'appimage' | 'script'
@@ -406,6 +437,22 @@ export const api = {
     }),
   sharedRemove: (path: string) =>
     call<{ status: string }>(`/shared?path=${encodeURIComponent(path)}`, { method: 'DELETE' }),
+
+  registries: () => call<Registry[]>('/admin/registries'),
+  suggestedRegistries: () =>
+    call<{ name: string; url: string }[]>('/admin/registries/suggested'),
+  addRegistry: (url: string) =>
+    call<Registry>('/admin/registries', { method: 'POST', body: JSON.stringify({ url }) }),
+  refreshRegistry: (id: string) =>
+    call<Registry>(`/admin/registries/${id}/refresh`, { method: 'POST' }),
+  removeRegistry: (id: string) =>
+    call<{ status: string }>(`/admin/registries/${id}`, { method: 'DELETE' }),
+  registryEntries: (id: string) =>
+    call<RegistryEntry[]>(`/admin/registries/${id}/entries`),
+  importRegistryEntry: (id: string, sha: string, tag?: string) =>
+    call<{ template_id: string; slug: string; image_ref: string; status: string }>(
+      `/admin/registries/${id}/import`,
+      { method: 'POST', body: JSON.stringify({ sha, tag }) }),
 
   recipes: () => call<Recipe[]>('/admin/recipes'),
   previewRecipe: (kind: string, params: Record<string, unknown>) =>

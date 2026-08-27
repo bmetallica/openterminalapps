@@ -798,4 +798,51 @@ export const EN: Record<string, string> = {
     'You do not have to set a resolution: the remote screen follows the size of your browser window.',
   'Sechs Ziffern aus der App — oder einer deiner Rückfallcodes.':
     'Six digits from the app — or one of your recovery codes.',
+
+  // --------------------------------------------------------- Registries
+  'Registries': 'Registries',
+  'Registry': 'Registry',
+  'Registry eintragen': 'Add a registry',
+  'Eintragen': 'Add',
+  'Eintragen fehlgeschlagen': 'Adding failed',
+  'Wird gelesen…': 'Reading…',
+  'Adresse der Registry': 'Registry address',
+  'Die Adresse ohne Schema-Pfad. OTA liest dort {schema}.':
+    'The address without the schema path. OTA reads {schema} there.',
+  'Fremde Kataloge mit fertigen Anwendungen. Eintragen liest nur den Katalog — heruntergeladen wird erst, was du übernimmst und startest.':
+    'Third-party catalogues of ready-made applications. Adding one only reads the catalogue — nothing is downloaded until you take something over and start it.',
+  'Noch keine Registry eingetragen': 'No registry added yet',
+  'Trage eine Adresse ein oder nimm einen der Vorschläge oben.':
+    'Enter an address, or take one of the suggestions above.',
+  'Anwendungen': 'Applications',
+  'Übernommen': 'Taken over',
+  'übernommen': 'taken over',
+  'Zuletzt gelesen': 'Last read',
+  'Auffrischen': 'Refresh',
+  'Auffrischen fehlgeschlagen': 'Refreshing failed',
+  '{name} aufgefrischt.': '{name} refreshed.',
+  '{name} eingetragen — {n} Anwendungen im Katalog.':
+    '{name} added — {n} applications in the catalogue.',
+  '„{name}" entfernen? Bereits übernommene Workspaces bleiben.':
+    'Remove “{name}”? Workspaces already taken over are kept.',
+  'Eine Registry ist eine Vertrauensentscheidung. Ihr Katalog trägt zwar eine Signatur, aber der Schlüssel dafür liegt beim Betreiber — OTA prüft sie nicht. Was du übernimmst, läuft anschliessend in deinem Netz.':
+    'A registry is a matter of trust. Its catalogue carries a signature, but the key for it belongs to the operator — OTA does not verify it. Whatever you take over then runs in your network.',
+
+  'Katalog': 'Catalogue',
+  'Katalog durchsuchen': 'Search the catalogue',
+  '{n} von {total} Anwendungen': '{n} of {total} applications',
+  'Übernehmen': 'Take over',
+  'Wird übernommen…': 'Taking over…',
+  'Übernehmen fehlgeschlagen': 'Taking over failed',
+  'Nichts passt zu dieser Suche.': 'Nothing matches that search.',
+  'Das ist ein grosser Teil der freien {free} GB auf diesem Host.':
+    'That is a large share of the {free} GB free on this host.',
+  'Übernehmen legt nur eine Vorlage an — abgeschaltet, ohne Gruppe. Das Image wird erst beim ersten Start geholt. Die Lizenz der Anwendung gilt unverändert; dass ein Katalog sie listet, sagt darüber nichts.':
+    'Taking over only creates a workspace — switched off, with no group. The image is fetched at the first start. The application’s own licence still applies; a catalogue listing it says nothing about that.',
+  'Nur für {archs} — dieser Host ist {here}.': 'Only for {archs} — this host is {here}.',
+  'Läuft auf dieser Architektur nicht.': 'Does not run on this architecture.',
+  'Sichtbar für alle': 'Visible to everyone',
+  'Nur für: {names}': 'Only for: {names}',
+  'gelöschte Gruppe': 'deleted group',
+  'Sichtbar für welche Gruppen': 'Visible to which groups',
 }

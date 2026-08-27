@@ -15,7 +15,7 @@ Projekte, denselben SSH-Schlüssel, dieselbe Zwischenablage.
 Daneben lassen sich einzelne Anwendungen als Wegwerf-Container starten und vorhandene Kasm-Images
 sowie ganze Registries einbinden — als Zusatz, nicht als Fundament.
 
-> **Stand:** läuft und wird benutzt. 135 automatische Prüfungen, davon 67 in einem echten Browser.
+> **Stand:** läuft und wird benutzt. 150 automatische Prüfungen, davon 76 in einem echten Browser.
 > Was noch fehlt, steht offen in [roadmap.md](roadmap.md) — nichts davon ist beschönigt.
 
 ---
@@ -97,6 +97,8 @@ nicht — dieselbe Trennung gilt für das Dateisystem des Hosts.
 
 - **[Handbuch](docs/wiki/README.md)** — Bedienung, Verwaltung, Betrieb, Fehlersuche (17 Kapitel)
 - **[plan.md](plan.md)** — Architektur **und die Begründungen dahinter**, samt der Sackgassen
+- **[docs/adr/](docs/adr/README.md)** — Entscheidungen, die teuer rückgängig zu machen sind, mit den
+  Alternativen, die nicht getragen hätten
 - **[roadmap.md](roadmap.md)** — Umsetzungsstand, ehrlich
 
 Ein Hinweis zur Fehlersuche: [Kapitel 12](docs/wiki/12-fehlersuche.md) beschreibt echte Fehler aus
@@ -109,7 +111,7 @@ aussahen, als sie waren.
 make test
 ```
 
-**135 Prüfungen in vier Suiten**, jede stellt ihren Vorzustand selbst her:
+**150 Prüfungen in vier Suiten**, jede stellt ihren Vorzustand selbst her:
 
 | Suite | Prüft |
 |---|---|

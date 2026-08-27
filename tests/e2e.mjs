@@ -189,6 +189,48 @@ try {
   const allocRows = await page.$$eval('.alloc__row', (els) => els.length).catch(() => 0)
   ok(`Zuteilung je Nutzer: ${allocRows} Zeile(n)`)
 
+  // Sichtbarkeit je Anwendung. Der Normalfall ist „für alle" — die Zeile
+  // steht trotzdem da, weil sonst niemand ahnt, dass sich das einschränken
+  // lässt.
+  await page.evaluate(() => {
+    const t = [...document.querySelectorAll('.wb__tab')]
+      .find((x) => x.textContent?.includes('Software'))
+    t?.click()
+  })
+  await page.waitForSelector('.applist__row, .btn', { timeout: 15000 })
+  await page.evaluate(() => {
+    const b = [...document.querySelectorAll('button')]
+      .find((x) => /Im Image nachsehen/.test(x.textContent ?? ''))
+    b?.click()
+  })
+  const appRows = await page.waitForSelector('.applist__row', { timeout: 90000 })
+    .then(() => page.$$eval('.applist__row', (els) => els.length))
+    .catch(() => 0)
+  if (appRows > 0) {
+    check(appRows > 0, `App-Katalog zeigt ${appRows} Anwendung(en)`)
+
+    const vis = await page.$eval('.applist__vis', (e) => e.textContent?.trim() ?? '')
+      .catch(() => '')
+    check(/alle|everyone/i.test(vis), `Ohne Einschränkung steht dort „${vis}"`)
+
+    await page.click('.applist__vis')
+    await new Promise((r) => setTimeout(r, 300))
+    const chips = await page.$$eval('.applist__chips .chip', (els) => els.length)
+    check(chips > 0, `${chips} Gruppe(n) zur Auswahl`)
+
+    await page.click('.applist__chips .chip')
+    await new Promise((r) => setTimeout(r, 300))
+    const picked = await page.$eval('.applist__vis', (e) => e.textContent?.trim() ?? '')
+    check(/Nur für|Only for/.test(picked), `Nach der Wahl: „${picked}"`)
+    await shot(page, '07-app-sichtbarkeit')
+
+    // Wieder abwählen — der Test hinterlässt keinen eingeschränkten Katalog.
+    await page.click('.applist__chips .chip')
+    await new Promise((r) => setTimeout(r, 300))
+  } else {
+    ok('Kein Image zum Durchsehen — Abschnitt übersprungen')
+  }
+
   await page.keyboard.press('Escape')
 
   // ------------------------------------------------------------ Session
@@ -606,6 +648,67 @@ try {
 
   const sw = await page.evaluate(() => navigator.serviceWorker?.controller !== undefined)
   check(sw, 'Service Worker ist eingerichtet')
+
+  // ------------------------------------------------------- Registries
+  console.log('\nRegistries')
+  await page.evaluate(() => {
+    const b = [...document.querySelectorAll('.rail__btn')]
+      .find((x) => x.textContent?.includes('Registries'))
+    b?.click()
+  })
+  await page.waitForSelector('.chip--add, .tbl tbody tr', { timeout: 15000 })
+
+  const regRows = await page.$$eval('.tbl tbody tr', (els) => els.length).catch(() => 0)
+  if (regRows > 0) {
+    await page.click('.tbl tbody tr')
+    await page.waitForSelector('.catalog__item', { timeout: 20000 })
+    const items = await page.$$eval('.catalog__item', (els) => els.length)
+    check(items > 20, `Katalog zeigt ${items} Anwendungen`)
+
+    // Die Grösse ist der Grund, warum das eine Liste und keine Kachelwand ist:
+    // Ein Eintrag wiegt 5 bis 10 GB, und das muss vor dem Klick dastehen.
+    const sizes = await page.$$eval('.catalog__size', (els) => els.map((e) => e.textContent))
+    check(sizes.every((s) => /GB|MB/.test(s ?? '')),
+      `Jeder Eintrag nennt seine Grösse (z. B. ${sizes[0]})`)
+
+    // Symbole laufen über die eigene API — die Inhaltsregel lässt keine
+    // fremden Bildquellen zu.
+    const iconSrc = await page.$eval('.catalog__item img', (e) => e.getAttribute('src'))
+      .catch(() => null)
+    check(iconSrc?.startsWith('/api/'),
+      `Symbole kommen aus der eigenen Herkunft (${iconSrc?.slice(0, 34) ?? '—'}…)`)
+
+    // Ein arm64-Image auf diesem Host liesse sich uebernehmen und wuerde erst
+    // beim Start scheitern — mit einer Meldung, die niemand mit dem Katalog in
+    // Verbindung bringt. Geprueft wird gegen den Katalog selbst, nicht gegen
+    // eine Annahme: Wie viele Eintraege passen nicht, wie viele sind gesperrt?
+    const arch = await page.evaluate(async () => {
+      const regs = await (await fetch('/api/admin/registries')).json()
+      const list = await (await fetch(`/api/admin/registries/${regs[0].id}/entries`)).json()
+      const host = await (await fetch('/api/admin/host')).json()
+      const map = { x86_64: 'amd64', aarch64: 'arm64' }
+      const here = map[host.architecture] ?? host.architecture
+      return {
+        here,
+        fremd: list.filter((e) => e.architectures.length && !e.architectures.includes(here)).length,
+      }
+    })
+    const blocked = await page.$$eval('.catalog__item button[disabled]', (e) => e.length)
+    check(blocked === arch.fremd,
+      `Fremde Architektur gesperrt: ${blocked} von ${items} (Host ist ${arch.here})`)
+
+    await page.type('input[aria-label="Katalog durchsuchen"]', 'firefox')
+    await new Promise((r) => setTimeout(r, 600))
+    const found = await page.$$eval('.catalog__item .catalog__head b', (e) => e.map((x) => x.textContent))
+    check(found.length > 0 && found.every((n) => /firefox/i.test(n ?? '')),
+      `Suche filtert den Katalog (${found.join(', ')})`)
+    await shot(page, '19-registry')
+
+    await page.evaluate(() => document.querySelector('.wb__up')?.click())
+    await page.waitForSelector('.tbl tbody tr', { timeout: 10000 })
+  } else {
+    ok('Keine Registry eingetragen — Abschnitt übersprungen')
+  }
 
   // --------------------------------------------------------- Mein Konto
   console.log('\nMein Konto')

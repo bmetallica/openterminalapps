@@ -102,6 +102,7 @@ class AppOut(BaseModel):
     blocked_reason: str | None = None
     is_enabled: bool = True
     fixed_display: int | None = None
+    group_ids: list[uuid.UUID] = []
 
 
 class TemplateOut(BaseModel):
@@ -198,6 +199,8 @@ class AppIn(BaseModel):
     is_enabled: bool = True
     # Fuer Einzelinstanz-Anwendungen, die das Image schon selbst startet.
     fixed_display: int | None = None
+    # Leer heisst: fuer alle, die den Arbeitsplatz sehen.
+    group_ids: list[uuid.UUID] = []
 
 
 class SessionOut(BaseModel):
@@ -396,3 +399,47 @@ class RecipeOut(BaseModel):
 class SharedDirIn(BaseModel):
     path: str = ""
     name: str
+
+
+class RegistryIn(BaseModel):
+    url: str
+    schema_version: str = "1.1"
+    auto_update: bool = False
+
+
+class RegistryOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    name: str
+    url: str
+    schema_version: str
+    icon_url: str | None
+    is_enabled: bool
+    auto_update: bool
+    last_fetched_at: datetime | None
+    workspace_count: int
+    fetch_error: str | None
+    entry_count: int = 0
+    imported_count: int = 0
+
+
+class RegistryEntryOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    sha: str
+    friendly_name: str
+    description: str
+    categories: list
+    architectures: list
+    icon_url: str | None
+    image_ref: str
+    available_tags: list
+    uncompressed_size_mb: int
+    imported_template_id: uuid.UUID | None
+
+
+class RegistryImportIn(BaseModel):
+    sha: str
+    # Leer heisst: die Fassung nehmen, die der Katalog vorschlaegt.
+    tag: str | None = None
+    cores: float = Field(default=2.0, gt=0, le=64)
+    memory_bytes: int = Field(default=2 * 1024**3, gt=0)

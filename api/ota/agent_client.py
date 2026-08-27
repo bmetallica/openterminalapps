@@ -100,6 +100,24 @@ def remove_image(ref: str) -> dict[str, Any]:
     return _call("DELETE", f"/images/{ref}")
 
 
+def registry_fetch(url: str, schema_version: str = "1.1") -> dict[str, Any]:
+    return _call("POST", "/registry/fetch",
+                 json={"url": url, "schema_version": schema_version})
+
+
+def registry_icon(url: str, base: str) -> tuple[bytes, str]:
+    """Das Symbol und sein Typ. Kein JSON, deshalb der eigene Weg."""
+    import httpx
+
+    endpoint = f"{settings().agent_url.rstrip('/')}/registry/icon"
+    with httpx.Client(timeout=30.0) as client:
+        resp = client.get(endpoint, headers=_headers(),
+                          params={"url": url, "base": base})
+    if resp.status_code >= 400:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Symbol nicht verfügbar")
+    return resp.content, resp.headers.get("content-type", "image/png")
+
+
 # --- Gemeinsame Ablage ---------------------------------------------------
 
 def shared_list(path: str = "") -> dict[str, Any]:

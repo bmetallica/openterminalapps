@@ -60,6 +60,26 @@ bzw. eigene Registries.
 2. VSCodium und Cursor dürfen **nicht** per Konfiguration auf den MS-Marketplace umgebogen werden.
    Das ist technisch möglich und lizenzrechtlich unzulässig.
 
+**OTA prüft das nach jedem Build.** Sobald ein Image im Store liegt, liest der Build die
+`product.json` jedes gefundenen Editors und schreibt ins Protokoll, wohin er seine Erweiterungen
+holt. Zeigt ein Nicht-Microsoft-Editor auf `marketplace.visualstudio.com`, steht dort eine Warnung.
+Der Build scheitert deswegen nicht — das Image ist gebaut und benutzbar; die Entscheidung, es so zu
+verteilen, gehört einem Menschen.
+
+Im aktuellen Arbeitsplatz-Image sieht das so aus:
+
+```
+Erweiterungs-Marktplatz der gefundenen Editoren:
+  VS Code (Microsoft): https://marketplace.visualstudio.com/_apis/public/gallery
+  VSCodium: https://open-vsx.org/vscode/gallery
+```
+
+Also korrekt. Ein Hinweis zur Fehlersuche: Ein einfaches `grep` nach
+`marketplace.visualstudio.com` in der `product.json` von VSCodium **findet einen Treffer** und ist
+trotzdem kein Befund — der Name steht dort unter `extensionAllowedBadgeProviders`, also in der
+Liste der Hosts, von denen Abzeichen in einer README geladen werden dürfen. Entscheidend ist allein
+`extensionsGallery.serviceUrl`.
+
 ### Telemetrie
 
 VS Code sendet Telemetrie an Microsoft (EULA §2). Bei betrieblicher Nutzung ist das ein

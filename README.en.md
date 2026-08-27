@@ -15,7 +15,7 @@ key, the same clipboard.
 Alongside that, single applications can run as throwaway containers, and existing Kasm images and
 whole registries can be attached — as an addition, not as the foundation.
 
-> **Status:** running and in use. 135 automated checks, 67 of them in a real browser. What is still
+> **Status:** running and in use. 150 automated checks, 76 of them in a real browser. What is still
 > missing is listed openly in [roadmap.md](roadmap.md) — nothing there is dressed up.
 >
 > The documentation is written in German. This file is the exception.
@@ -100,6 +100,8 @@ the same separation applies to the host filesystem.
 - **[Handbook](docs/wiki/README.md)** — use, administration, operations, troubleshooting (17
   chapters, German)
 - **[plan.md](plan.md)** — architecture **and the reasoning behind it**, dead ends included
+- **[docs/adr/](docs/adr/README.md)** — decisions that are expensive to reverse, with the
+  alternatives that would not have held (German)
 - **[roadmap.md](roadmap.md)** — what is done and what is not
 
 One pointer: [chapter 12](docs/wiki/12-fehlersuche.md) documents real failures from operation with
@@ -112,7 +114,7 @@ were.
 make test
 ```
 
-**135 checks in four suites**, each one setting up its own preconditions:
+**150 checks in four suites**, each one setting up its own preconditions:
 
 | Suite | Checks |
 |---|---|

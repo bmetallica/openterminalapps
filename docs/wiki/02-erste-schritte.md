@@ -82,9 +82,9 @@ Der Nutzer landet in den Gruppen `admins` und `users`.
 | **Arbeitsplatz mit mehreren Apps** | ✅ Grundfunktion |
 | **Zwischenablage-Brücke zwischen den Apps** | ✅ |
 | Leerlauf-Aufräumer, Waisen-Aufräumer | ✅ |
-| Golden Images mit Build-Pipeline | 🔨 M5 |
+| Golden Images mit Build-Pipeline, Rezepte, App-Erkennung | ✅ |
 | LDAP/AD und Netzlaufwerke | 🔨 M6 |
-| Kasm-Registries einbinden | 🔨 M8 |
+| Kasm-Registries einbinden | ✅ |
 
 Prüfen, ob alles läuft:
 

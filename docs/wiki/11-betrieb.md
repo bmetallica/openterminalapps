@@ -121,7 +121,7 @@ git pull
 cd web && npm install && npm run build && cd ../deploy
 docker compose pull
 docker compose up -d
-docker compose exec ota-api alembic upgrade head    # 🔨 ab M5
+docker compose exec ota-api alembic upgrade head    # läuft beim Start automatisch
 ```
 
 Migrationen werden beim Start geprüft und nie automatisch destruktiv ausgeführt.

@@ -24,18 +24,19 @@ früh. Die Einbindung vorhandener **Kasm-Images und -Registries** ist ein Featur
 | **M5** | Golden Images | Build-Pipeline, Versionen, App-Katalog, Skeleton | 2–3 Wochen |
 | **M6** | Identität & Netzlaufwerke | AD/LDAP, Kerberos, Shares im Arbeitsplatz | 2–3 Wochen |
 | **M7** | Migration & Härtung | Profil umgezogen ✅, Härtung, Monitoring | 1–2 Wochen |
-| **M8** | Kasm-Kompatibilität | Einzelimages und ganze Registries einbinden | 1–2 Wochen |
+| **M8** | Kasm-Kompatibilität | Einzelimages und ganze Registries einbinden | ✅ **erledigt** |
 | **M9** | Optionale Erweiterungen | OIDC, Guacamole, WebAuthn, code-server | 2–3 Wochen |
 | **M10** | Skalierung | Mehrere Hosts, Pools | offen |
 
 Bis zum produktiven Einsatz (M5–M7): **realistisch 4–6 Wochen** in Teilzeit.
 
-**Stand 2026-08-27**: M0 bis M4 laufen, dazu die Build-Pipeline aus M5 und die
-Sicherung aus M7. Ein Nutzer meldet sich an, startet seinen
-Arbeitsplatz und öffnet darin VS Code, ein Terminal und den Dateimanager — jedes
-formatfüllend auf eigenem Display, alle im selben Container mit gemeinsamem
-`/home`. Geprüft durch 20 Autorisierungs- und 33 Oberflächentests
-(`make test`).
+**Stand 2026-08-27**: M0 bis M4 und M8 laufen, dazu die Build-Pipeline aus M5 und
+die Sicherung aus M7. Ein Nutzer meldet sich an, startet seinen Arbeitsplatz und
+öffnet darin VS Code, ein Terminal und den Dateimanager — jedes formatfüllend auf
+eigenem Display, alle im selben Container mit gemeinsamem `/home`. Ein
+Administrator baut Software ins Image, bindet fremde Kataloge ein und stellt
+Sicherungen wieder her. Geprüft durch **150 automatische Prüfungen in vier
+Suiten**, davon 76 in einem echten Browser (`make test`).
 
 ---
 
@@ -56,7 +57,11 @@ formatfüllend auf eigenem Display, alle im selben Container mit gemeinsamem
       Gegen eine leere Datenbank erzeugt, damit sie wirklich alles aufbaut — nachgewiesen: 18
       Tabellen aus dem Nichts. Eine bestehende Anlage wird auf den Ausgangsstand gestempelt statt
       migriert. `create_all` und `schema_sync` bleiben als Netz fürs Weiterbauen, nicht als Ersatz
-- [ ] ADR-Format und ADR-001 dokumentieren
+- [x] **ADR-Format und die ersten vier ADRs** (`docs/adr/`): Format, wann überhaupt eines fällig
+      ist, und die Entscheidungen, die ein Leser am ehesten hinterfragt — Arbeitsplatz statt
+      Einzel-Container, Docker nur im Agent, KasmVNC mit einem Display je Anwendung, keine
+      Signaturprüfung für Registries. Ein ADR wird nicht überschrieben, wenn die Entscheidung
+      fällt; es bekommt einen Nachfolger
 
 **Erreicht**: `https://<host>:8443/` liefert die Oberfläche mit gültiger Kette, Kasm läuft unbeeinträchtigt.
 
@@ -286,7 +291,14 @@ Session-Prozesse, und die ereignisgesteuerte statt abfragende Brücke (braucht e
 - [ ] App-Katalog um **Skeleton-Teilbaum und Auflösung je App** ergänzen.
       Startbefehl, Icon, Sperrgrund und festes Display stehen bereits
 - [x] Extensions beim **Build** installieren, nicht beim Start
-- [ ] Sichtbarkeit je App und Gruppe (`group_template_apps`)
+- [x] **Sichtbarkeit je App und Gruppe** — für den Fall, dass eine Lizenz nicht für alle reicht.
+      Leer heisst „für alle", sonst wäre jeder bestehende Katalog mit dem Einführen der Regel
+      leergeräumt worden. Die Liste im Dashboard ist gefiltert, **die Absicherung sitzt beim
+      Start**: Ein Aufruf mit fremdem Kürzel wird abgewiesen, auch am eigenen Arbeitsplatz.
+      Nicht als `group_template_apps`-Tabelle, sondern als Liste an der App: `set_apps` ersetzt
+      den ganzen Katalog, die Zeilen bekämen bei jedem Speichern neue Kennungen, und eine daran
+      hängende Zuordnung wäre jedes Mal weg. Beim Löschen einer Gruppe wird ihre Kennung aus den
+      Katalogen genommen
 - [x] **Gemeinsame Ablage** (`agent/otaagent/shared.py`, Verwaltung → Ablage): ein Ort für
       Dateien, die in jeden Arbeitsplatz sollen. Liegt dort unter `/mnt/ota` **am Einhängepunkt
       schreibgeschützt** und als Verweis `~/Gemeinsam`. Hochladen per Ziehen und Ablegen, nur für
@@ -305,7 +317,12 @@ Session-Prozesse, und die ereignisgesteuerte statt abfragende Brücke (braucht e
 
 **Vorher zu klären**
 - [x] ~~Cursor-Lizenz klären~~ — Cursor bleibt draussen (`plan.md` §17.10)
-- [ ] Sicherstellen, dass VSCodium **nicht** auf den MS-Marketplace zeigt
+- [x] **Sicherstellen, dass VSCodium nicht auf den MS-Marketplace zeigt** — geprüft und dauerhaft
+      abgesichert: Jeder Build liest nach dem Bauen die `product.json` der gefundenen Editoren und
+      protokolliert deren `extensionsGallery.serviceUrl`; zeigt ein Nicht-Microsoft-Editor auf
+      Microsofts Marktplatz, steht eine Warnung im Protokoll. Im aktuellen Image zeigt VSCodium auf
+      `open-vsx.org`. Ein `grep` allein taugt dafür nicht — der Name steht auch unter
+      `extensionAllowedBadgeProviders` und ist dort harmlos
 
 ---
 
@@ -358,20 +375,34 @@ Erst mit dem Arbeitsplatz sinnvoll (`plan.md` §9.4).
 
 ---
 
-## M8 — Kasm-Kompatibilität · 1–2 Wochen
+## M8 — Kasm-Kompatibilität · ✅ erledigt
 
-Das Feature aus `plan.md` §1.2 und §9.8. Schema und Adressen sind verifiziert.
+Das Feature aus `plan.md` §1.2 und §9.8. Gegen alle drei echten Registries geprüft.
 
-- [ ] `registries` und `registry_entries` nach `plan.md` §9.7
-- [ ] Katalog von `{url}/{schema}/list.json` laden, cachen, per `modified` aktualisieren
-- [ ] Durchsuchbarer Katalog im Admin-UI mit Kategorien und Icons
-- [ ] Import erzeugt ein Template mit `mode: single_app`
-- [ ] **Architektur des Hosts prüfen** — nur passende Einträge anbieten
-- [ ] **`uncompressed_size_mb` anzeigen und warnen**, bevor gezogen wird
-- [ ] Hinweis im Import-Dialog: Registries sind eine Vertrauensentscheidung; Lizenz des Images
+- [x] `registries` und `registry_entries` nach `plan.md` §9.7
+- [x] Katalog von `{url}/{schema}/list.json` laden, ablegen, per `modified` aktualisieren.
+      Gelesen wird im Agent — es ist ein Griff nach draussen, dieselbe Trennung wie bei Docker
+- [x] Durchsuchbarer Katalog im Admin-UI mit Kategorien und Icons
+- [x] **Icons über einen eigenen Umweg** — `img-src 'self'` lässt keine fremde Bildquelle zu, und
+      sie je Registry aufzuweichen wäre für ein Symbol ein schlechter Tausch. Der Umweg holt nur,
+      was unterhalb der Adresse dieser Registry liegt, und nur Bilder
+- [x] Import erzeugt ein Template mit `mode: single_app`, abgeschaltet, mit eigenem Profil
+- [x] **Nicht die neueste Fassung, sondern die neueste stabile** — bei AlmaLinux 8 zeigen die
+      beiden neuesten auf `:develop`, die letzte davon mit Grösse 0
+- [x] **Architektur des Hosts prüfen** — unpassende Einträge werden gezeigt, aber nicht zum
+      Übernehmen angeboten; sie zu verschweigen erzeugt nur die Frage, warum sie fehlen
+- [x] **`uncompressed_size_mb` anzeigen und warnen**, bevor gezogen wird
+- [x] Hinweis im Import-Dialog: Registries sind eine Vertrauensentscheidung; Lizenz des Images
       gilt unverändert (`plan.md` §3)
-- [ ] Vorkonfiguriert, aber abschaltbar: Kasm Technologies (86), Kasm AI (11), LinuxServer.io (2)
-- [x] ~~Signaturprüfung~~ — entschieden: keine, Registries sind eine Vertrauensentscheidung
+- [x] **Vorgeschlagen statt vorkonfiguriert**: Kasm Technologies (86), Kasm AI (11),
+      LinuxServer.io (2). Eingetragen wird keine von selbst — das ist eine Entscheidung
+- [x] Fehler beim Aktualisieren bleiben an der Registry stehen, statt nur einmal zu blinken
+- [x] Registry entfernen lässt übernommene Vorlagen bestehen
+- [x] ~~Signaturprüfung~~ — entschieden: keine. Der Schlüssel liegt bei Kasm; ohne ihn wäre die
+      Prüfung Theater. Registries sind eine Vertrauensentscheidung
+
+**Offen bleibt:** Beim Import eine andere Fassung wählen. Die Schnittstelle kann es
+(`available_tags`), die Oberfläche bietet es noch nicht an.
 
 ---
 
@@ -402,7 +433,8 @@ Erst mit Hardware für die Zielgröße (`plan.md` §17.1).
 - **Tests**: je Endpunkt ein Autorisierungstest; Integrationstest „Session starten → verbinden →
   stoppen" gegen echtes Docker; CI vor jedem Merge
 - **Wiki**: `docs/wiki/` wird mit jedem Meilenstein fortgeschrieben und im Admin-Bereich ausgeliefert
-- **ADRs** in `docs/adr/`
+- **ADRs** in [`docs/adr/`](docs/adr/README.md) — für Entscheidungen, die umstritten waren, teuer
+  rückgängig zu machen sind und in einem Jahr die Frage „warum eigentlich?" auslösen
 - **`plan.md` aktuell halten**: Weicht die Realität ab, gewinnt die Realität
 
 ---

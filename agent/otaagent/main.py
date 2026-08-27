@@ -27,6 +27,7 @@ from . import backup as backup_ops
 from . import builder
 from . import clipboard as clip_scripts
 from . import discover
+from . import registry as registry_reader
 from . import shared as shared_store
 
 AGENT_TOKEN = os.environ.get("OTA_AGENT_TOKEN", "")
@@ -210,6 +211,31 @@ def shared_read(path: str) -> Response:
         content=data, media_type="application/octet-stream",
         headers={"Content-Disposition": f'attachment; filename="{name}"'},
     )
+
+
+class RegistryRequest(BaseModel):
+    url: str
+    schema_version: str = "1.1"
+
+
+@app.post("/registry/fetch", dependencies=[Depends(require_token)])
+def registry_fetch(req: RegistryRequest) -> dict[str, Any]:
+    """Liest den Katalog einer Kasm-Registry. Siehe registry.py."""
+    try:
+        return registry_reader.fetch(req.url, req.schema_version)
+    except registry_reader.RegistryError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+
+@app.get("/registry/icon", dependencies=[Depends(require_token)])
+def registry_icon(url: str, base: str) -> Response:
+    """Reicht ein Symbol der Registry durch. Siehe registry.icon."""
+    try:
+        raw, kind = registry_reader.icon(url, base)
+    except registry_reader.RegistryError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    return Response(content=raw, media_type=kind,
+                    headers={"Cache-Control": "public, max-age=86400"})
 
 
 @app.get("/images/applications", dependencies=[Depends(require_token)])

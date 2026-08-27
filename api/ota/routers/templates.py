@@ -16,7 +16,7 @@ from ..models import (
 from ..schemas import (
     AllocationOut, AppIn, OverrideIn, OverrideOut, TemplateIn, TemplateOut,
 )
-from ..security import effective_resources, user_can_see_template
+from ..security import effective_resources, user_can_see_app, user_can_see_template
 
 router = APIRouter(prefix="/api/templates", tags=["templates"])
 manage = require_permission("templates.manage")
@@ -31,6 +31,13 @@ def _out(tpl: Template, user: User | None = None) -> TemplateOut:
     data = TemplateOut.model_validate(tpl)
     data.group_ids = [g.id for g in tpl.groups]
     if user is not None:
+        # Was der Nutzer nicht sehen darf, taucht hier gar nicht erst auf.
+        # Der Start prueft es noch einmal — diese Liste ist Anzeige, nicht
+        # Absicherung.
+        data.apps = [
+            a for a, orig in zip(data.apps, tpl.apps)
+            if user_can_see_app(orig, user)
+        ]
         cores, mem, _, _ = effective_resources(tpl, user)
         data.effective_cores = cores
         data.effective_memory_bytes = mem
@@ -307,6 +314,9 @@ def discover_apps(
             "in_catalog": current is not None,
             "is_enabled": current.is_enabled if current else False,
             "fixed_display": current.fixed_display if current else None,
+            # Eine schon gesetzte Sichtbarkeit ueberlebt das Durchsehen. Sonst
+            # waere jede Einschraenkung nach dem naechsten Build wieder weg.
+            "group_ids": (current.group_ids or []) if current else [],
             "missing": False,
             # Name und Zeichen aus dem Katalog haben Vorrang: Wer sie
             # angepasst hat, will das nicht bei jedem Durchsehen verlieren.
@@ -324,6 +334,7 @@ def discover_apps(
             "binary": app.exec_cmd.rsplit("/", 1)[-1],
             "in_catalog": True, "is_enabled": app.is_enabled,
             "fixed_display": app.fixed_display, "missing": True,
+            "group_ids": app.group_ids or [],
         })
 
     return sorted(out, key=lambda a: (a["missing"], str(a["name"]).lower()))
@@ -361,10 +372,17 @@ def set_apps(
                                 f"Die Kennung {entry.slug} kommt doppelt vor.")
         seen.add(entry.slug)
 
+    known_groups = set(db.scalars(select(Group.id)).all())
+
     tpl.apps.clear()
     db.flush()
     for order, entry in enumerate(body):
-        tpl.apps.append(TemplateApp(sort_order=order, **entry.model_dump()))
+        fields = entry.model_dump()
+        # JSONB nimmt keine UUID-Objekte. Und Gruppen, die es nicht gibt,
+        # sollen gar nicht erst gespeichert werden — sonst steht in der
+        # Oberfläche gleich wieder eine Auswahl, die niemand getroffen hat.
+        fields["group_ids"] = [str(g) for g in fields.get("group_ids") or [] if g in known_groups]
+        tpl.apps.append(TemplateApp(sort_order=order, **fields))
 
     audit.record(db, "template.apps_set", actor=actor, object_type="template",
                  object_id=tpl.slug, request=request, count=len(body))

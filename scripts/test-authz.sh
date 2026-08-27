@@ -28,6 +28,10 @@ expect() {  # expect <erwartet> <ist> <beschreibung>
   if [ "$2" = "$1" ]; then ok "$3 ($2)"; else bad "$3 — erwartet $1, bekommen $2"; fi
 }
 
+jqp() {  # jqp <python-ausdruck ueber d> — liest JSON von stdin
+  python3 -c "import sys,json;d=json.load(sys.stdin);print($1)" 2>/dev/null
+}
+
 echo "OTA Autorisierungstests gegen $BASE"
 echo
 
@@ -113,6 +117,124 @@ else
   bad "Keine laufende Session zum Prüfen vorhanden"
 fi
 
+# ------------------------------------------ Sichtbarkeit einer Anwendung
+# Eine Anwendung im Arbeitsplatz kann auf Gruppen eingeschraenkt werden — etwa
+# eine, fuer die nur ein Teil der Belegschaft eine Lizenz hat. Geprueft wird
+# beides: dass sie aus der Liste verschwindet, **und** dass ein direkter Aufruf
+# sie nicht startet. Nur das zweite ist die Absicherung.
+echo
+echo "Sichtbarkeit einer Anwendung"
+
+WS=$(api "$TMP/admin.jar" "$BASE/api/templates" | python3 -c '
+import sys, json
+d = json.load(sys.stdin)
+print(next((t["id"] for t in d if t["mode"] == "workspace" and t["apps"]), ""))')
+
+if [ -z "$WS" ]; then
+  bad "Kein Arbeitsplatz mit Anwendungen zum Prüfen vorhanden"
+else
+  CATALOG=$(api "$TMP/admin.jar" "$BASE/api/templates/$WS")
+  APP=$(echo "$CATALOG" | jqp "d['apps'][0]['slug']")
+
+  # Eine Gruppe, in der niemand ist. Damit ist die Anwendung fuer den
+  # Testnutzer gesperrt, ohne dass sonst jemand etwas davon merkt.
+  LOCK=$(api "$TMP/admin.jar" -X POST "$BASE/api/admin/groups" \
+    -H 'Content-Type: application/json' \
+    -d '{"name":"OTA-Prüfung Lizenz","permissions":[]}' | jqp "d.get('id','')")
+  if [ -z "$LOCK" ]; then
+    LOCK=$(api "$TMP/admin.jar" "$BASE/api/admin/groups" \
+      | jqp "next((g['id'] for g in d if g['name'] == 'OTA-Prüfung Lizenz'), '')")
+  fi
+
+  # Katalog unveraendert zurueckschreiben, nur mit Gruppe an der ersten App.
+  # Die Reihenfolge bleibt, sonst wandern die Displaynummern.
+  BODY=$(echo "$CATALOG" | LOCK="$LOCK" APP="$APP" python3 -c '
+import json, os, sys
+d = json.load(sys.stdin)
+out = []
+for a in d["apps"]:
+    out.append({
+        "slug": a["slug"], "name": a["name"], "icon": a["icon"],
+        "exec_cmd": a.get("exec_cmd", ""), "exec_args": a.get("exec_args", ""),
+        "is_enabled": a["is_enabled"], "fixed_display": a.get("fixed_display"),
+        "group_ids": [os.environ["LOCK"]] if a["slug"] == os.environ["APP"] else [],
+    })
+print(json.dumps(out))')
+
+  # exec_cmd steht nicht in AppOut — aus der Erkennung nachziehen.
+  BODY=$(api "$TMP/admin.jar" "$BASE/api/templates/$WS/apps/discover" \
+    | BODY="$BODY" python3 -c '
+import json, os, sys
+found = {a["slug"]: a for a in json.load(sys.stdin)}
+out = []
+for a in json.loads(os.environ["BODY"]):
+    src = found.get(a["slug"], {})
+    a["exec_cmd"] = a["exec_cmd"] or src.get("exec_cmd", "/bin/true")
+    a["exec_args"] = a["exec_args"] or src.get("exec_args", "")
+    out.append(a)
+print(json.dumps(out))')
+
+  api "$TMP/admin.jar" -X PUT "$BASE/api/templates/$WS/apps" \
+    -H 'Content-Type: application/json' -d "$BODY" >/dev/null
+
+  SEES=$(api "$TMP/user.jar" "$BASE/api/templates" | APP="$APP" python3 -c '
+import json, os, sys
+d = json.load(sys.stdin)
+print(sum(1 for t in d for a in t["apps"] if a["slug"] == os.environ["APP"]))')
+  expect "0" "$SEES" "Eingeschränkte Anwendung steht nicht mehr in der Liste"
+
+  ADMIN_SEES=$(api "$TMP/admin.jar" "$BASE/api/templates/$WS" | APP="$APP" python3 -c '
+import json, os, sys
+d = json.load(sys.stdin)
+print(sum(1 for a in d["apps"] if a["slug"] == os.environ["APP"]))')
+  expect "1" "$ADMIN_SEES" "Der Administrator sieht sie weiterhin"
+
+  # Und jetzt der Teil, der zaehlt: eine eigene, laufende Session des
+  # Testnutzers, und ein Aufruf mit dem gesperrten Kuerzel.
+  USID=$(api "$TMP/user.jar" -X POST "$BASE/api/sessions" \
+    -H 'Content-Type: application/json' -d "{\"template_id\":\"$WS\"}" \
+    | jqp "d.get('id','')")
+  if [ -n "$USID" ]; then
+    for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do
+      ST=$(api "$TMP/user.jar" "$BASE/api/sessions/$USID" | jqp "d.get('status','')")
+      [ "$ST" = "running" ] && break
+      sleep 3
+    done
+    expect "403" "$(code "$TMP/user.jar" -X POST "$BASE/api/sessions/$USID/apps/$APP")" \
+      "Direkter Start der gesperrten Anwendung wird abgewiesen"
+
+    OTHER=$(echo "$CATALOG" | APP="$APP" python3 -c '
+import json, os, sys
+d = json.load(sys.stdin)
+print(next((a["slug"] for a in d["apps"]
+            if a["slug"] != os.environ["APP"] and a["is_enabled"]
+            and not a.get("blocked_reason")), ""))')
+    if [ -n "$OTHER" ]; then
+      RC=$(code "$TMP/user.jar" -X POST "$BASE/api/sessions/$USID/apps/$OTHER")
+      [ "$RC" != "403" ] && ok "Eine freie Anwendung bleibt startbar ($OTHER, HTTP $RC)" \
+                         || bad "Auch die freie Anwendung $OTHER wurde abgewiesen"
+    fi
+    api "$TMP/user.jar" -X DELETE "$BASE/api/sessions/$USID" >/dev/null
+  else
+    bad "Testnutzer konnte keine eigene Session starten"
+  fi
+
+  # Aufräumen: Gruppe löschen. Dabei muss die Kennung aus dem Katalog
+  # verschwinden — sonst stünde dort dauerhaft eine Gruppe, die es nicht gibt.
+  api "$TMP/admin.jar" -X DELETE "$BASE/api/admin/groups/$LOCK" >/dev/null
+  FREED=$(api "$TMP/admin.jar" "$BASE/api/templates/$WS" | APP="$APP" python3 -c '
+import json, os, sys
+d = json.load(sys.stdin)
+print(next((len(a["group_ids"]) for a in d["apps"] if a["slug"] == os.environ["APP"]), -1))')
+  expect "0" "$FREED" "Gelöschte Gruppe verschwindet aus dem Katalog"
+
+  SEES=$(api "$TMP/user.jar" "$BASE/api/templates" | APP="$APP" python3 -c '
+import json, os, sys
+d = json.load(sys.stdin)
+print(sum(1 for t in d for a in t["apps"] if a["slug"] == os.environ["APP"]))')
+  expect "1" "$SEES" "Danach ist die Anwendung wieder für alle da"
+fi
+
 # ----------------------------------------------------------- Zwischenablage
 echo
 echo "Zwischenablage-Voraussetzungen"
@@ -134,10 +256,6 @@ echo "$HDRS" | grep -qi "frame-ancestors 'self'" \
 # Menschen anfasst, waere ein Test, den niemand zweimal laufen laesst.
 # --------------------------------------------------------------------------
 echo
-
-jqp() {  # jqp <python-ausdruck ueber d> — liest JSON von stdin
-  python3 -c "import sys,json;d=json.load(sys.stdin);print($1)" 2>/dev/null
-}
 
 otp() {  # otp <geheimnis> -> aktueller Zeitcode
   docker compose -f "$ROOT/deploy/docker-compose.yml" exec -T -e S="$1" api \

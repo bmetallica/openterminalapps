@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Field, Toggle } from '../components/controls'
 import {
   ApiError, api,
-  type Build, type DiscoveredApp, type PackageCheck, type Recipe, type Template,
+  type Build, type DiscoveredApp, type Group, type PackageCheck, type Recipe,
+  type Template,
 } from '../lib/api'
 import { RecipeBuilder } from './RecipeBuilder'
 import { ago, gb } from '../lib/format'
@@ -64,7 +65,13 @@ export function Software({ tpl, onToast, onChanged }: {
   // Browser: Sie sollen sich anlegen und ändern lassen.
   const [recipes, setRecipes] = useState<Recipe[]>([])
   const [editing, setEditing] = useState<Recipe | null | undefined>()
+  // Für die Sichtbarkeit je Anwendung. Ohne Gruppen gibt es nichts zu wählen,
+  // und die Zeile bleibt aus.
+  const [groups, setGroups] = useState<Group[]>([])
+  const [visFor, setVisFor] = useState<string | null>(null)
   const logBox = useRef<HTMLPreElement>(null)
+
+  useEffect(() => { api.groups().then(setGroups).catch(() => {}) }, [])
 
   const loadRecipes = useCallback(() => {
     api.recipes().then(setRecipes).catch(() => {})
@@ -227,6 +234,7 @@ export function Software({ tpl, onToast, onChanged }: {
         exec_args: a.exec_args,
         is_enabled: true,
         fixed_display: a.fixed_display,
+        group_ids: a.group_ids ?? [],
       })))
       onChanged()
       onToast(tr('{n} Anwendungen freigegeben.', { n: apps.filter((a) => a.is_enabled).length }))
@@ -490,6 +498,45 @@ export function Software({ tpl, onToast, onChanged }: {
                     <span className="applist__block">
                       {tr('Braucht ein Terminal — startet allein auf leerem Bildschirm.')}
                     </span>
+                  )}
+
+                  {/* Sichtbarkeit. Nur eine Zeile, solange nichts eingeschränkt
+                      ist — die meisten Anwendungen sind für alle da, und dafür
+                      soll niemand durch eine Gruppenliste blättern. */}
+                  {groups.length > 0 && a.is_enabled && !a.missing && (
+                    <>
+                      <button type="button" className="applist__vis"
+                        aria-expanded={visFor === a.slug}
+                        onClick={() => setVisFor(visFor === a.slug ? null : a.slug)}>
+                        {(a.group_ids ?? []).length === 0
+                          ? tr('Sichtbar für alle')
+                          : tr('Nur für: {names}', {
+                            names: groups
+                              .filter((g) => (a.group_ids ?? []).includes(g.id))
+                              .map((g) => g.name).join(', ') || tr('gelöschte Gruppe'),
+                          })}
+                      </button>
+                      {visFor === a.slug && (
+                        <span className="chips applist__chips" role="group"
+                          aria-label={tr('Sichtbar für welche Gruppen')}>
+                          {groups.map((g) => {
+                            const on = (a.group_ids ?? []).includes(g.id)
+                            return (
+                              <button key={g.id} type="button" aria-pressed={on}
+                                className={`chip${on ? ' is-on' : ''}`}
+                                onClick={() => setApps(apps.map((x, j) => j === i ? {
+                                  ...x,
+                                  group_ids: on
+                                    ? (x.group_ids ?? []).filter((id) => id !== g.id)
+                                    : [...(x.group_ids ?? []), g.id],
+                                } : x))}>
+                                {g.name}
+                              </button>
+                            )
+                          })}
+                        </span>
+                      )}
+                    </>
                   )}
                 </span>
                 <Toggle on={a.is_enabled} name=""

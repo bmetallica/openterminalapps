@@ -892,6 +892,40 @@ Kein einziger Eintrag verlangt eine GPU.
 Dass eine Registry ein Image listet, ist keine Aussage über dessen Lizenz. Der Import-Dialog verlinkt
 deshalb auf §3 und markiert Images, die eine Einzelprüfung brauchen.
 
+**Umgesetzt (2026-08-27).** Vier Dinge sind beim Bauen anders entschieden worden, als es hier stand:
+
+*Gelesen wird im Agent, nicht in der API.* Es ist ein Griff nach draußen ins Netz — dieselbe
+Trennung wie bei Docker und beim Dateisystem. Nebenbei kennt nur der Agent die Architektur des Hosts.
+
+*Vorgeschlagen statt vorkonfiguriert.* Die drei bekannten Registries stehen als Vorschlag bereit,
+eingetragen wird keine von selbst. Wenn eine Registry eine Vertrauensentscheidung ist, kann sie
+nicht die Voreinstellung sein. Der Katalog wird beim Eintragen sofort gelesen — lässt er sich nicht
+laden, entsteht kein Eintrag.
+
+*Nicht die neueste Fassung, sondern die neueste stabile.* Punkt 2 oben („passend zur gewählten
+Kanalversion") war zu naiv: Bei AlmaLinux 8 zeigen die beiden neuesten `compatibility`-Einträge auf
+`kasmweb/almalinux-8-desktop:develop`, der letzte davon mit `uncompressed_size_mb: 0` — also noch
+gar nicht gebaut. Vorgeschlagen wird deshalb die neueste Fassung, die kein `develop` ist und eine
+echte Größe hat.
+
+*Icons laufen über die API.* Die Inhaltsregel der Anwendung lässt keine fremde Bildquelle zu
+(`img-src 'self'`), und sie je eingetragener Registry aufzuweichen wäre für ein Symbol ein
+schlechter Tausch. Der Umweg ist gefesselt: Geholt wird nur, was unterhalb der Adresse **dieser**
+Registry liegt, und nur, wenn ein Bild zurückkommt — sonst wäre er ein Werkzeug, mit dem sich über
+OTA beliebige Adressen im internen Netz abrufen ließen. Dabei ist auch die Adresse der Symbole
+korrigiert worden: Sie liegen nicht in der Wurzel der Registry, sondern neben dem Katalog unter
+`{schema}/icons/`. Am echten Katalog nachgesehen — `registry.kasmweb.com/almalinux.svg` gibt 404,
+`registry.kasmweb.com/1.1/icons/almalinux.svg` gibt das Bild.
+
+Zu Punkt 6: **Entschieden — OTA prüft die Signatur nicht.** Der öffentliche Schlüssel liegt bei
+Kasm; ohne ihn wäre die Prüfung Theater, und Theater ist schlechter als ein ehrlicher Hinweis.
+
+Ein importiertes Template ist **abgeschaltet** und bekommt ein **eigenes Profil**
+(`persistence_scope: template`): Ein Import soll nicht ungefragt auf allen Dashboards auftauchen,
+und ein fremdes Image bekommt nicht den Schlüssel zum gemeinsamen `/home` des Arbeitsplatzes. Beim
+Entfernen einer Registry bleiben übernommene Templates bestehen — der Katalog war nur der Weg, wie
+sie entstanden sind.
+
 ### 9.9 Ein Arbeitsplatz startet nichts von selbst
 
 Kasm-Images für einzelne Anwendungen bringen ein `/dockerstartup/custom_startup.sh` mit, das „ihre"

@@ -210,6 +210,14 @@ class TemplateApp(Base):
     fixed_display: Mapped[int | None] = mapped_column(Integer)
     is_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    # Sichtbarkeit je Gruppe. **Leer heisst: fuer alle**, die den Arbeitsplatz
+    # ueberhaupt sehen — sonst wuerde das Einfuehren dieser Spalte jeden
+    # bestehenden Katalog auf einen Schlag leerraeumen.
+    #
+    # Als Liste an der App und nicht als eigene Tabelle, weil `set_apps` den
+    # ganzen Katalog ersetzt: Die Zeilen bekaemen bei jedem Speichern neue
+    # Kennungen, und eine daran haengende Zuordnung waere jedes Mal weg.
+    group_ids: Mapped[list] = mapped_column(JSONB, default=list)
 
     template: Mapped[Template] = relationship(back_populates="apps")
 

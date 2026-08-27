@@ -21,8 +21,8 @@ from ..deps import current_user
 from ..models import AppStream, Session as SessionModel, Template, TemplateApp, User
 from ..schemas import SessionOut, SessionStartIn, StreamOut
 from ..security import (
-    effective_resources, owns_session, profile_path, user_can_see_template,
-    vnc_secret,
+    effective_resources, owns_session, profile_path, user_can_see_app,
+    user_can_see_template, vnc_secret,
 )
 
 router = APIRouter(prefix="/api/sessions", tags=["sessions"])
@@ -454,6 +454,12 @@ def start_app(
     if not app.is_enabled:
         raise HTTPException(status.HTTP_409_CONFLICT,
                             f"{app.name} ist für diesen Workspace abgeschaltet.")
+    # Die Liste im Dashboard ist schon gefiltert. Das hier ist die Stelle, die
+    # zaehlt: Ein Aufruf dieser Adresse mit fremdem Kuerzel darf nicht starten,
+    # nur weil der Arbeitsplatz demselben Nutzer gehoert.
+    if not user_can_see_app(app, user):
+        raise HTTPException(status.HTTP_403_FORBIDDEN,
+                            f"{app.name} ist für dich nicht freigegeben.")
 
     # Vor dem fruehen Ruecksprung: Auch wenn die Anwendung schon laeuft, muss
     # die Bruecke stehen — etwa nach einem Neustart der Dienste.

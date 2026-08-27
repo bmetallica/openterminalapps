@@ -171,6 +171,27 @@ def user_can_see_template(tpl: Template, user: User) -> bool:
     return any(g.id in user_groups for g in tpl.groups)
 
 
+def user_can_see_app(app, user: User) -> bool:
+    """Darf dieser Nutzer diese Anwendung im Arbeitsplatz sehen und starten?
+
+    Voraussetzung ist immer, dass er den Arbeitsplatz selbst sehen darf; das
+    entscheidet `user_can_see_template`. Hier geht es nur um die Anwendung
+    darin — etwa eine Lizenz, die nur ein Teil der Belegschaft hat.
+
+    **Eine Anwendung ohne Gruppen ist fuer alle da.** Andersherum waere jeder
+    bestehende Katalog mit dem Einfuehren dieser Regel unsichtbar geworden.
+    """
+    if user.is_admin:
+        return True
+    if not app.is_enabled:
+        return False
+    wanted = app.group_ids or []
+    if not wanted:
+        return True
+    mine = {str(g.id) for g in user.groups}
+    return any(str(g) in mine for g in wanted)
+
+
 def owns_session(sess: SessionModel, user: User) -> bool:
     return sess.user_id == user.id or "sessions.view_all" in user.permissions or user.is_admin
 

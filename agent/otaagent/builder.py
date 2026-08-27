@@ -13,6 +13,7 @@ nebenher Sessions bedient, wuerde ein paralleler Build die Nutzer ausbremsen.
 
 from __future__ import annotations
 
+import json
 import os
 import shlex
 import subprocess
@@ -226,6 +227,8 @@ def _run_build(build_id: str, tag: str, dockerfile: str, setup_script: str,
             state["digest"] = (image.id or "")[:71]
             _append(state, f"\nImage im Store: {tag} ({state['size_bytes'] / 1024**3:.2f} GB)\n")
 
+            _gallery_note(state, tag)
+
             # In die eigene Registry, falls es eine gibt — **vor** dem Setzen
             # von "ok". Die API hoert auf zuzusehen, sobald der Zustand nicht
             # mehr "building" ist; stuende das Hochladen danach, fehlte es im
@@ -257,6 +260,59 @@ def _run_build(build_id: str, tag: str, dockerfile: str, setup_script: str,
                 _resume(paused)
                 _append(state, f"\nWieder gestartet: {', '.join(paused)}\n")
             state["finished_at"] = datetime.now(timezone.utc).isoformat()
+
+
+# Wo die Editoren der VS-Code-Familie ihre Erweiterungen holen. Nicht kosmetisch:
+# Der Marktplatz von Microsoft darf laut seinen Bedingungen nur von Microsofts
+# eigenem VS Code benutzt werden. Ein VSCodium, das dorthin zeigt, waere ein
+# Lizenzproblem — und es faellt niemandem auf, weil es einfach funktioniert.
+_PRODUCT_JSON = (
+    ("VS Code (Microsoft)", "/usr/share/code/resources/app/product.json"),
+    ("VSCodium", "/usr/share/codium/resources/app/product.json"),
+    ("Code - OSS", "/usr/lib/code/product.json"),
+)
+_MS_GALLERY = "marketplace.visualstudio.com"
+
+
+def _gallery_note(state: dict[str, Any], tag: str) -> None:
+    """Haelt im Protokoll fest, wohin die gebauten Editoren zeigen.
+
+    Bricht nichts ab. Das Image ist gebaut und benutzbar; hier steht nur, was
+    ein Mensch wissen muss, bevor er es verteilt.
+    """
+    script = "; ".join(
+        f'if [ -f {path} ]; then echo "@@{name}"; cat {path}; echo; fi'
+        for name, path in _PRODUCT_JSON
+    )
+    try:
+        raw = subprocess.run(
+            ["docker", "run", "--rm", "--entrypoint", "sh", tag, "-c", script],
+            capture_output=True, text=True, timeout=120,
+        ).stdout
+    except (subprocess.SubprocessError, OSError):
+        return
+    if "@@" not in raw:
+        return
+
+    lines = ["\nErweiterungs-Marktplatz der gefundenen Editoren:"]
+    for block in raw.split("@@")[1:]:
+        name, _, body = block.partition("\n")
+        name = name.strip()
+        try:
+            gallery = json.loads(body).get("extensionsGallery") or {}
+        except json.JSONDecodeError:
+            continue
+        url = str(gallery.get("serviceUrl") or "—")
+        lines.append(f"  {name}: {url}")
+        # Nur der Microsoft-Marktplatz in einem Nicht-Microsoft-Editor ist ein
+        # Befund. Der umgekehrte Fall ist der Normalzustand.
+        if _MS_GALLERY in url and not name.startswith("VS Code"):
+            lines.append(
+                f"  ACHTUNG: {name} zeigt auf den Marktplatz von Microsoft. "
+                "Dessen Bedingungen erlauben das nur Microsofts eigenem "
+                "VS Code. Siehe Handbuch, Kapitel 13."
+            )
+    _append(state, "\n".join(lines) + "\n")
 
 
 def _push(state: dict[str, Any], client: docker.DockerClient, tag: str) -> str | None:

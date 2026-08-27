@@ -13,7 +13,7 @@ from ..db import get_db
 from ..deps import current_user, require_permission
 from ..models import (
     PERMISSIONS, AuditLog, Group, GroupMember, Session as SessionModel,
-    Template, User,
+    Template, TemplateApp, User,
 )
 from ..schemas import (
     GroupIn, GroupOut, HostOut, ImagePullIn, SessionAdminOut, SettingsIn,
@@ -370,11 +370,23 @@ def delete_group(
 
     members = len(group.members)
     name = group.name
+
+    # Sichtbarkeiten in den App-Katalogen zeigen als JSONB-Liste hierher und
+    # haben keinen Fremdschluessel, der mitraeumt. Eine verwaiste Kennung
+    # spraeche in der Oberflaeche von einer Gruppe, die es nicht mehr gibt.
+    freed = 0
+    for app in db.scalars(select(TemplateApp)).all():
+        if str(group_id) in (app.group_ids or []):
+            app.group_ids = [g for g in app.group_ids if g != str(group_id)]
+            freed += 1
+
     db.delete(group)
     audit.record(db, "group.deleted", actor=actor, object_type="group",
-                 object_id=group.slug, request=request, members=members)
+                 object_id=group.slug, request=request, members=members,
+                 apps_freed=freed)
     db.commit()
-    return {"status": f"{name} gelöscht. {members} Mitgliedschaft(en) sind entfallen."}
+    tail = f" {freed} Anwendung(en) sind wieder für alle sichtbar." if freed else ""
+    return {"status": f"{name} gelöscht. {members} Mitgliedschaft(en) sind entfallen.{tail}"}
 
 
 @router.get("/permissions", dependencies=[Depends(manage_groups)])

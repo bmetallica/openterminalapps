@@ -9,6 +9,7 @@ import { Settings } from './screens/Settings'
 import { Images } from './screens/Images'
 import { Storage } from './screens/Storage'
 import { Account } from './screens/Account'
+import { Registries } from './screens/Registries'
 import { StandaloneViewer } from './screens/StandaloneViewer'
 import { openInTab, parseRoute, viewPath, type Route } from './lib/routes'
 import { ApiError, api, type Host, type Me, type Session, type Stream, type Template } from './lib/api'
@@ -16,14 +17,15 @@ import { gb } from './lib/format'
 import { setLang, t, useLang, type Lang } from './lib/i18n'
 import './styles/app.css'
 
-type View = 'dashboard' | 'workspaces' | 'images' | 'storage' | 'people'
-  | 'monitor' | 'settings' | 'account' | 'help'
+type View = 'dashboard' | 'workspaces' | 'images' | 'registries' | 'storage'
+  | 'people' | 'monitor' | 'settings' | 'account' | 'help'
 type Toast = { id: number; msg: string; tone: 'ok' | 'bad' }
 
 const NAV: { id: View; glyph: string; cap: string; adminOnly: boolean }[] = [
   { id: 'dashboard', glyph: '▣', cap: 'Start', adminOnly: false },
   { id: 'workspaces', glyph: '⬡', cap: 'Workspaces', adminOnly: true },
   { id: 'images', glyph: '⬢', cap: 'Images', adminOnly: true },
+  { id: 'registries', glyph: '◇', cap: 'Registries', adminOnly: true },
   // Die Ablage sehen alle: Sie liegt ohnehin in jedem Container. Nur
   // schreiben darf, wer darf — das entscheidet die API, nicht dieses Menü.
   { id: 'storage', glyph: '▦', cap: 'Ablage', adminOnly: false },
@@ -186,6 +188,7 @@ export default function App() {
         )}
         {current === 'workspaces' && <Workspaces onToast={toast} />}
         {current === 'images' && <Images onToast={toast} />}
+        {current === 'registries' && <Registries onToast={toast} />}
         {current === 'storage' && (
           <Storage onToast={toast}
             canWrite={me.is_admin || me.permissions.includes('images.manage')
