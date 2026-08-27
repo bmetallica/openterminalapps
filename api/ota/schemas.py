@@ -274,6 +274,14 @@ class BuildIn(BaseModel):
     pause_foreign_cleanup: bool = True
 
 
+class FreezeIn(BaseModel):
+    comment: str = ""
+    # Ausdrueckliche Bestaetigung, dass die als Geheimnis markierten Dateien
+    # ins Image duerfen. Ohne sie wird abgelehnt — eine Vorschau, die man
+    # uebergehen kann, ist Dekoration.
+    trotz_geheimnissen: bool = False
+
+
 class BuildOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID

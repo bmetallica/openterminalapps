@@ -1,7 +1,7 @@
 # 7 · Golden Images
 
 *Für Administratoren.* ✅ Build-Pipeline mit Live-Protokoll, Rezepte, App-Erkennung, Versionen,
-Aktivierung und Rückrollen · 🔨 Skeleton-Verwaltung und „Session einfrieren" (M5)
+Aktivierung und Rückrollen · ✅ Session einfrieren · 🔨 Skeleton-Verwaltung (M5)
 
 > **Kasm auf demselben Host stört nicht mehr.** Sein Agent löschte anfangs jedes
 > gebaute Golden Image, weil es das Label `com.kasmweb.image=true` vom Basisimage
@@ -19,30 +19,71 @@ Ein vorkonfigurierter Arbeitsplatz, den alle Nutzer identisch bekommen. Er beste
 | **Skeleton-Profil** | Was beim *ersten* Start ins Home kopiert wird: `settings.json`, Git-Vorlage, Zertifikate, Desktop-Verknüpfungen |
 | **Laufzeit-Richtlinie** | Ressourcen, Auflösung, Rechte, Timeouts |
 
-## Der übliche Weg: Session einfrieren
+## Session einfrieren ✅
 
 Golden Images entstehen selten am Reißbrett. Der praktische Weg:
 
-1. Arbeitsplatz starten
-2. Alles interaktiv einrichten — Extensions installieren, Einstellungen setzen, Werkzeuge
-   konfigurieren
-3. **„Als Golden Image speichern"**
+1. **Den eigenen Arbeitsplatz starten** und darin einrichten, was alle bekommen sollen — Pakete
+   nachinstallieren, Werkzeuge konfigurieren
+2. Unter *Software → Session einfrieren* auf **„Ansehen, was mitkäme"**
+3. Die Liste durchgehen
+4. **„Als neue Fassung einfrieren"** — danach wie jede andere Fassung aktivieren
 
-OTA nimmt dann ein Abbild des Containers, vergleicht das Home mit dem bisherigen Skeleton und schlägt
-die Änderungen vor.
+Eingefroren wird **die eigene** Session. Eine fremde einzufangen wäre etwas anderes und bräuchte
+eine eigene Begründung.
+
+### Was mitkommt — und was nicht
+
+**Das Zuhause kommt nicht mit.** `docker commit` nimmt das Dateisystem des Containers, aber keine
+Bind-Mounts, und das Home liegt genau dort. Das ist die richtige Grenze und kein Zufall: Ein
+Zuhause gehört einem Menschen und enthält seine Schlüssel. Es in ein Image zu legen, das alle
+bekommen, wäre ein Datenleck mit Ansage.
+
+Mit kommt alles ausserhalb: nachinstallierte Pakete, Änderungen in `/etc`, Dateien in `/opt`.
+
+Nicht in der Liste stehen die Verzeichnisse, die sich in jedem Container ändern und niemanden
+interessieren — `/tmp`, `/var/log`, `/var/cache`, `/proc`. Ohne diese Kürzung bestünde die Vorschau
+zu neun Zehnteln aus Rauschen, und dann läse sie niemand. Womit auch niemand die Warnung darin läse.
 
 ### Der Geheimnis-Filter
 
-Vor dem Speichern werden Zugangsdaten **automatisch aussortiert**:
+Auch ausserhalb des Home landen Zugangsdaten: `/etc/ssh`, eine `.netrc` unter `/root`, ein
+Kerberos-Ticket. Was danach aussieht, steht **oben in der Liste und farbig**:
 
 ```
-.ssh/id_*      .gnupg/       *token*        *.pem
+.ssh/id_*      .gnupg/       *token*        *.pem   *.key
 .aws/          .docker/config.json          krb5cc_*
-.smbcredentials              keytab         Browser-Cookies
+.netrc         .git-credentials             *.keytab
+/etc/ssh/ssh_host_*           /etc/shadow
 ```
 
-Was gefunden wurde, wird angezeigt. Trotzdem gilt: **Ein Golden Image sollte nie aus einer Session
-entstehen, in der mit echten Zugangsdaten gearbeitet wurde.** Der Filter ist ein Netz, keine Garantie.
+**Ohne ausdrückliche Bestätigung wird nicht eingefroren.** Eine Vorschau, die sich übergehen lässt,
+ist Dekoration — die Schaltfläche heißt dann „Trotz der Funde einfrieren", und das Protokoll der
+Fassung nennt jede einzelne Datei namentlich.
+
+Trotzdem gilt: **Ein Golden Image sollte nie aus einer Session entstehen, in der mit echten
+Zugangsdaten gearbeitet wurde.** Der Filter ist ein Netz, keine Garantie.
+
+### Eine Datei wird immer entfernt
+
+`/etc/sudoers.d/ota-admin` — die Datei, die einem Administrator in **seinem** Container `sudo`
+erlaubt ([Kapitel 8](08-nutzer-und-gruppen.md)). Bliebe sie im Image, bekäme **jeder** Nutzer des
+neuen Golden Image passwortloses root: Aus einer Ausnahme für eine Person wäre stillschweigend die
+Voreinstellung für alle geworden.
+
+Sie wird vor dem Einfrieren entfernt und **danach im laufenden Container wieder hingelegt**. Wer
+ein Image baut, soll dabei nicht sein eigenes `sudo` verlieren. Für jede weitere Session eines
+Administrators wird sie ohnehin neu geschrieben.
+
+### Was danach passiert
+
+Die neue Fassung ist **nicht aktiv**. Erst ein Klick auf *Aktivieren* stellt sie scharf — dieselbe
+Reihenfolge wie beim Bauen, und aus demselben Grund: Was alle bekommen, soll niemand versehentlich
+ausrollen. Laufende Sessions bleiben unberührt.
+
+Das Kasm-Label wird dabei gelöscht und das Startskript überschrieben, genau wie beim Bauen: Sonst
+räumte Kasms Aufräumdienst das Image weg, und der eingefrorene Container brächte das Startskript
+mit, das gerade in ihm lief.
 
 ## Versionen
 
@@ -51,7 +92,13 @@ Jeder Build erzeugt `ota/<name>:v<N>` mit Digest, Größe und vollständigem Log
 - Genau eine Version ist **aktiv** — neue Sessions nutzen sie
 - **Laufende Sessions bleiben unberührt**
 - **Rollback** ist ein Klick: eine andere Version aktiv setzen
-- Alte Versionen werden nach Regel aufgeräumt (Vorgabe: die letzten drei)
+- Alte Versionen werden aufgeräumt: **die letzten drei bleiben**, dazu immer die aktive, auch wenn
+  sie älter ist. Eine Fassung, auf die man zurückfallen könnte, ist der halbe Sinn der Versionierung
+
+> Das Aufräumen lief bis zum 2026-08-28 gar nicht — die Regel stand im Code und wurde nie
+> angewendet. Aufgefallen ist es erst, als das Einfrieren dazukam und Fassungen schneller wuchsen
+> als beim Bauen. Jede belegt Platz, und auf einem Host mit 25 GB frei ist das nach ein paar Wochen
+> das Ende des Betriebs.
 
 Empfehlenswert ist ein **Testlauf**: neue Version zuerst einer kleinen Gruppe zuweisen, dann global.
 

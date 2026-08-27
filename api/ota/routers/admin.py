@@ -240,6 +240,46 @@ def _admin_count(db: DbSession) -> int:
     return total
 
 
+@router.post("/users/{user_id}/reset-totp", dependencies=[Depends(manage_users)])
+def reset_totp(
+    user_id: uuid.UUID,
+    request: Request,
+    actor: User = Depends(current_user),
+    db: DbSession = Depends(get_db),
+) -> dict[str, str]:
+    """Nimmt einem Konto den zweiten Faktor ab.
+
+    Der Fall, fuer den es das gibt: Telefon weg **und** Rueckfallcodes weg.
+    Ohne diesen Weg kaeme der Mensch nie wieder herein, und das Konto waere
+    nur noch zu loeschen und neu anzulegen — mitsamt allem, was daran haengt.
+
+    Dass ein Administrator das kann, ist eine bewusste Schwaechung: Wer Konten
+    verwaltet, kann damit den zweiten Faktor eines anderen aushebeln. Deshalb
+    steht es im Protokoll, mit Namen. Die Alternative — niemand kann helfen —
+    ist schlechter, und sie fuehrt in der Praxis dazu, dass niemand den
+    zweiten Faktor einschaltet.
+
+    Alle Sitzungen des Kontos werden dabei beendet: Wer den zweiten Faktor
+    verloren hat, hat vielleicht mehr verloren.
+    """
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Nutzer nicht gefunden")
+    if not user.totp_secret:
+        return {"status": f"{user.username} hat keinen zweiten Faktor eingerichtet."}
+
+    user.totp_secret = None
+    user.totp_recovery = []
+    user.token_epoch = (user.token_epoch or 0) + 1
+    audit.record(db, "user.totp_reset", actor=actor, object_type="user",
+                 object_id=user.username, request=request)
+    db.commit()
+    return {
+        "status": (f"Der zweite Faktor von {user.username} ist entfernt und alle "
+                   "Sitzungen sind beendet. Das steht im Protokoll."),
+    }
+
+
 @router.get("/users/{username}/usage", dependencies=[Depends(manage_users)])
 def user_usage(username: str, db: DbSession = Depends(get_db)) -> dict:
     """Wie viel Platz das Zuhause dieses Nutzers belegt.

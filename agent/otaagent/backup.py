@@ -45,6 +45,12 @@ EXCLUDE_PREFIXES = ("core.", ".X11-unix", ".vnc/", "krb5cc_")
 CONTAINER_SKIP = (
     "/tmp", "/proc", "/sys", "/dev", "/run", "/var/run", "/var/tmp",
     "/var/log", "/var/cache",
+    # Paketlisten. Ein einziges `apt-get update` legt hier rund 60 MB ab, und
+    # in einer Sicherung ist davon nichts wert: Sie sind in Sekunden wieder
+    # geholt und beim Zurueckspielen ohnehin veraltet. Gemessen am
+    # 2026-08-28, als eine Container-Sicherung ohne erkennbaren Grund von
+    # 2 MB auf 68 MB sprang — jemand hatte im Container etwas nachinstalliert.
+    "/var/lib/apt/lists", "/var/lib/dpkg/info",
     # Eingehaengte Verzeichnisse. Sie gehoeren nicht in eine Container-
     # Sicherung — sie liegen auf dem Host und werden getrennt gesichert.
     #

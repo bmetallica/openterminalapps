@@ -2,8 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Field, Toggle } from '../components/controls'
 import {
   ApiError, api,
-  type Build, type DiscoveredApp, type Group, type PackageCheck, type Recipe,
-  type Template,
+  type Build, type DiscoveredApp, type FreezePreview, type Group,
+  type PackageCheck, type Recipe, type Template,
 } from '../lib/api'
 import { RecipeBuilder } from './RecipeBuilder'
 import { ago, gb } from '../lib/format'
@@ -71,6 +71,9 @@ export function Software({ tpl, onToast, onChanged }: {
   // und die Zeile bleibt aus.
   const [groups, setGroups] = useState<Group[]>([])
   const [visFor, setVisFor] = useState<string | null>(null)
+  // Vorschau aufs Einfrieren. Erst ansehen, dann entscheiden.
+  const [frost, setFrost] = useState<FreezePreview | null>(null)
+  const [frostFehler, setFrostFehler] = useState<string | null>(null)
   const logBox = useRef<HTMLPreElement>(null)
 
   useEffect(() => { api.groups().then(setGroups).catch(() => {}) }, [])
@@ -279,6 +282,38 @@ export function Software({ tpl, onToast, onChanged }: {
     }
   }
 
+  async function frostVorschau() {
+    setBusy(true)
+    setFrostFehler(null)
+    try {
+      setFrost(await api.freezePreview(tpl.id))
+    } catch (err) {
+      setFrost(null)
+      setFrostFehler(err instanceof ApiError ? err.message : tr('Vorschau fehlgeschlagen'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function einfrieren() {
+    if (!frost) return
+    setBusy(true)
+    try {
+      const b = await api.freeze(tpl.id, {
+        comment: tr('Eingefroren aus der laufenden Session'),
+        trotz_geheimnissen: (frost.geheimnisse ?? []).length > 0,
+      })
+      setFrost(null)
+      setBuilds(await api.builds(tpl.id))
+      onChanged()
+      onToast(tr('Fassung {n} eingefroren. Jetzt aktivieren.', { n: b.version }))
+    } catch (err) {
+      onToast(err instanceof ApiError ? err.message : tr('Einfrieren fehlgeschlagen'), 'bad')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function saveApps() {
     if (!apps) return
     setBusy(true)
@@ -478,6 +513,81 @@ export function Software({ tpl, onToast, onChanged }: {
           <pre ref={logBox} className="build__log">{watching.log || tr('Wird vorbereitet…')}</pre>
         </div>
       )}
+
+      {/* ------------------------------------------ Session einfrieren */}
+      <div className="section__head" style={{ marginBottom: 10 }}>
+        <span className="silk">{tr('Session einfrieren')}</span>
+        <span className="section__rule" />
+      </div>
+
+      <div className="panel" style={{ padding: '16px 20px', marginBottom: 22 }}>
+        <p className="sub" style={{ marginBottom: 12 }}>
+          {tr('Der kurze Weg: In deinem eigenen Arbeitsplatz einrichten, was alle bekommen sollen — und daraus eine neue Fassung machen. Was ausserhalb deines Home passiert ist, kommt mit; dein Home selbst nicht, dort liegen deine Schlüssel.')}
+        </p>
+
+        {!frost ? (
+          <>
+            <button className="btn" disabled={busy} onClick={() => void frostVorschau()}>
+              {busy ? tr('Wird verglichen…') : tr('Ansehen, was mitkäme')}
+            </button>
+            {frostFehler && (
+              <p className="note-warn" style={{ marginTop: 10 }}>{frostFehler}</p>
+            )}
+          </>
+        ) : (
+          <>
+            <p className="sub" style={{ marginBottom: 10 }}>
+              {tr('{n} Änderung(en) ausserhalb des Home, {skip} übersprungen.', {
+                n: String(frost.gesamt), skip: String(frost.uebersprungen),
+              })}
+            </p>
+
+            {(frost.entfernt ?? []).length > 0 && (
+              <p className="note-info" style={{ marginBottom: 10 }}>
+                {tr('Wird vorher entfernt: {list} — sonst bekäme jeder Nutzer des Images root.',
+                  { list: frost.entfernt.join(', ') })}
+              </p>
+            )}
+
+            {(frost.geheimnisse ?? []).length > 0 && (
+              <p className="note-warn" style={{ marginBottom: 10 }}>
+                <b>{tr('{n} Datei(en) sehen nach einem Geheimnis aus.', {
+                  n: String(frost.geheimnisse.length),
+                })}</b>{' '}
+                {tr('Sie kämen ins Image und damit zu jedem, der es benutzt: {list}', {
+                  list: frost.geheimnisse.slice(0, 6).join(', '),
+                })}
+              </p>
+            )}
+
+            <div className="build__log" style={{ maxHeight: 220 }}>
+              {frost.aenderungen.map((a) => (
+                <div key={a.pfad} className={a.geheimnis ? 'frost__row is-secret' : 'frost__row'}>
+                  <span className="frost__kind">{a.art}</span> {a.pfad}
+                </div>
+              ))}
+              {frost.gekuerzt && (
+                <div className="frost__row" style={{ color: 'var(--mute)' }}>
+                  {tr('… und weitere. Insgesamt {n}.', { n: String(frost.gesamt) })}
+                </div>
+              )}
+            </div>
+
+            <div className="viewer__row" style={{ marginTop: 12 }}>
+              <button className="btn btn--primary" disabled={busy}
+                onClick={() => void einfrieren()}>
+                {busy
+                  ? tr('Wird eingefroren…')
+                  : (frost.geheimnisse ?? []).length > 0
+                    ? tr('Trotz der Funde einfrieren')
+                    : tr('Als neue Fassung einfrieren')}
+              </button>
+              <button className="btn btn--ghost" disabled={busy}
+                onClick={() => setFrost(null)}>{tr('Abbrechen')}</button>
+            </div>
+          </>
+        )}
+      </div>
 
       {/* ---------------------------------------------- Fassungen */}
       {builds && builds.length > 0 && (

@@ -12,7 +12,7 @@ from sqlalchemy import select
 
 from . import agent_client, migrate, recipes, schema_sync
 from .db import Base, SessionLocal, engine
-from .models import Session as SessionModel
+from .models import ImageBuild, Session as SessionModel
 from .routers import (
     admin, auth, backups, builds, help as help_router, internal, monitoring,
     pwa, recipes as recipes_router, registries as registries_router,
@@ -33,10 +33,26 @@ def _reap_once() -> None:
             SessionModel.status.in_(("running", "paused", "starting"))
         )).all()
 
+        # Vorlagen, an denen gerade gebaut oder eingefroren wird. Deren
+        # Sessions bleiben in Ruhe: `docker commit` haengt unbegrenzt, wenn der
+        # Container mittendrin pausiert wird — ohne Fehler, ohne Meldung. Ein
+        # Aufraeumer, der eine laufende Aufnahme abwuergt, ist schlimmer als
+        # eine Session, die zehn Minuten laenger steht.
+        beschaeftigt = {
+            tid for (tid,) in db.execute(
+                select(ImageBuild.template_id).where(
+                    ImageBuild.status.in_(("queued", "building"))
+                )
+            ).all()
+        }
+
         known: set[str] = set()
         for sess in live:
             if sess.container_id:
                 known.add(sess.container_id)
+
+            if sess.template_id in beschaeftigt:
+                continue
 
             idle_minutes = sess.template.idle_minutes if sess.template else 60
             if idle_minutes >= 100_000:

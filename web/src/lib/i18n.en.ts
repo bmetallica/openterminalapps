@@ -881,4 +881,29 @@ export const EN: Record<string, string> = {
     'They land in Microsoft VS Code only. VSCodium has its own set from Open VSX and does not see these — the same identifier is not the same installation there.',
   'Breite von {app}': 'Width of {app}',
   'Höhe von {app}': 'Height of {app}',
+  'Session einfrieren': 'Freeze the session',
+  'Der kurze Weg: In deinem eigenen Arbeitsplatz einrichten, was alle bekommen sollen — und daraus eine neue Fassung machen. Was ausserhalb deines Home passiert ist, kommt mit; dein Home selbst nicht, dort liegen deine Schlüssel.':
+    'The short way: set up what everyone should get inside your own workspace, then turn it into a new version. Whatever happened outside your home directory comes along; the home directory itself does not — your keys live there.',
+  'Ansehen, was mitkäme': 'See what would come along',
+  'Wird verglichen…': 'Comparing…',
+  'Vorschau fehlgeschlagen': 'Preview failed',
+  '{n} Änderung(en) ausserhalb des Home, {skip} übersprungen.':
+    '{n} change(s) outside the home directory, {skip} skipped.',
+  'Wird vorher entfernt: {list} — sonst bekäme jeder Nutzer des Images root.':
+    'Removed first: {list} — otherwise every user of the image would get root.',
+  '{n} Datei(en) sehen nach einem Geheimnis aus.': '{n} file(s) look like a secret.',
+  'Sie kämen ins Image und damit zu jedem, der es benutzt: {list}':
+    'They would go into the image and thus to everyone who uses it: {list}',
+  '… und weitere. Insgesamt {n}.': '… and more. {n} in total.',
+  'Trotz der Funde einfrieren': 'Freeze despite the findings',
+  'Als neue Fassung einfrieren': 'Freeze as a new version',
+  'Wird eingefroren…': 'Freezing…',
+  'Einfrieren fehlgeschlagen': 'Freezing failed',
+  'Eingefroren aus der laufenden Session': 'Frozen from the running session',
+  'Fassung {n} eingefroren. Jetzt aktivieren.': 'Version {n} frozen. Activate it now.',
+  'Zweiter Faktor': 'Second factor',
+  'Für den Fall, dass Telefon und Rückfallcodes verloren sind. Ohne diesen Weg käme der Mensch nie wieder herein. Alle Sitzungen des Kontos werden dabei beendet, und es steht mit deinem Namen im Protokoll.':
+    'For when both the phone and the recovery codes are gone. Without this, the person could never get back in. All sessions of the account are ended, and it is logged under your name.',
+  'Zweiten Faktor abnehmen': 'Remove the second factor',
+  'Abnehmen fehlgeschlagen': 'Removal failed',
 }

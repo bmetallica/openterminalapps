@@ -110,6 +110,22 @@ Bei der Anmeldung wird ein Rückfallcode einfach statt der sechs Ziffern eingeti
 
 Gehen sie zur Neige, erzeugt *Codes erneuern* zehn neue; die alten gelten dann nicht mehr.
 
+### Wenn Telefon und Rückfallcodes weg sind ✅
+
+Dann kommt der Mensch nicht mehr herein — und niemand könnte helfen. Deshalb kann ein Administrator
+im Nutzer-Editor unter **Zweiter Faktor** auf *„Zweiten Faktor abnehmen"* klicken. Danach genügt
+wieder das Passwort, und der Nutzer richtet den Faktor neu ein.
+
+**Das ist eine bewusste Schwächung, und sie steht so im Protokoll.** Wer Konten verwaltet, kann
+damit den zweiten Faktor eines anderen aushebeln. Die Alternative — niemand kann helfen — ist
+schlechter: Sie führt in der Praxis dazu, dass niemand den zweiten Faktor einschaltet.
+
+Zwei Dinge machen es nachvollziehbar:
+
+- **Alle Sitzungen des Kontos werden beendet.** Wer den zweiten Faktor verloren hat, hat vielleicht
+  mehr verloren.
+- Der Vorgang steht mit **Namen des Administrators** im Audit-Log.
+
 ### Abschalten
 
 Verlangt **Passwort und einen gültigen Code**. Wer nur das Passwort hat — etwa an einem

@@ -35,8 +35,10 @@ die Sicherung aus M7. Ein Nutzer meldet sich an, startet seinen Arbeitsplatz und
 öffnet darin VS Code, ein Terminal und den Dateimanager — jedes formatfüllend auf
 eigenem Display, alle im selben Container mit gemeinsamem `/home`. Ein
 Administrator baut Software ins Image, bindet fremde Kataloge ein und stellt
-Sicherungen wieder her. Geprüft durch **198 automatische Prüfungen in vier
-Suiten**, davon 76 in einem echten Browser (`make test`).
+Sicherungen wieder her. Geprüft durch **210 automatische Prüfungen in vier
+Suiten**, davon 76 in einem echten Browser (`make test`). Ein voller Lauf
+dauert rund eine halbe Stunde — er baut Container, friert ein Image ein und
+misst im Browser nach.
 
 ---
 
@@ -136,6 +138,11 @@ Siehe Handbuch, Kapitel 12.
       Rückfallcodes. Gespeichert wird erst nach bestandener Probe; abschalten verlangt Passwort
       **und** Code. Niemand kann den zweiten Faktor eines anderen entfernen — deshalb sind die
       Rückfallcodes Pflicht und nicht Zubehör. Acht Prüfungen in `test-authz.sh`
+- [x] **Ein Administrator kann den zweiten Faktor abnehmen.** Der Fall dafür: Telefon **und**
+      Rückfallcodes weg — ohne diesen Weg käme der Mensch nie wieder herein, und das Konto wäre nur
+      noch zu löschen. Aufgefallen ist die Lücke beim Testen, nicht beim Entwerfen: Ein
+      abgebrochener Lauf liess den zweiten Faktor am Prüfkonto stehen, und es gab keinen Weg
+      zurück. Alle Sitzungen des Kontos werden dabei beendet, und es steht mit Namen im Protokoll
 - [x] **Zwei-Faktor je Gruppe erzwingen** (`groups.require_totp`). Durchgesetzt beim **Start einer
       Session**, nicht bei der Anmeldung: Wer sich nicht anmelden kann, kommt nicht an „Mein Konto"
       und kann den Faktor gar nicht erst einrichten — eine Sperre an der Anmeldung wäre eine Sperre
@@ -332,8 +339,33 @@ Session-Prozesse, und die ereignisgesteuerte statt abfragende Brücke (braucht e
       Tabellen an, aber keine Spalten — eine neue Spalte legte am 2026-08-27 eine laufende Anlage
       lahm. Ergänzt wird nur; Löschen, Umbenennen und Typwechsel bleiben Alembic vorbehalten
 - [ ] Skeleton-Profile: Kopie beim ersten Start, Datei-Browser, „Enforce"-Pfade
-- [ ] **„Session einfrieren"**: `docker commit`, Home-Diff, Secret-Filter (`.ssh/id_*`, `.gnupg`,
-      `*token*`, `*.pem`, `.aws`, `.docker/config.json`, `krb5cc_*`, `.smbcredentials`, `keytab`)
+- [x] **Alte Fassungen werden wirklich aufgeräumt.** `KEEP_VERSIONS = 3` stand seit dem ersten Tag
+      im Code und wurde nie angewendet; aufgefallen ist das erst, als das Einfrieren dazukam und
+      Fassungen schneller wuchsen als beim Bauen. Die aktive bleibt immer, auch wenn sie älter ist.
+      Nebenbei ein Fehler um genau eine Fassung: Über die geladene Beziehung `tpl.builds` gerechnet
+      kennt die Liste die eben angelegte Fassung noch nicht — jetzt wird ausdrücklich abgefragt
+- [x] **Paketlisten fliegen aus der Container-Sicherung** (`/var/lib/apt/lists`,
+      `/var/lib/dpkg/info`). Ein einziges `apt-get update` legte dort 60 MB ab, und in einer
+      Sicherung ist davon nichts wert: in Sekunden wieder geholt, beim Zurückspielen ohnehin
+      veraltet. Aufgefallen, weil eine Container-Sicherung ohne erkennbaren Grund von 2 MB auf
+      68 MB sprang, nachdem jemand im Container etwas nachinstalliert hatte
+- [x] **„Session einfrieren"** (`agent/otaagent/freeze.py`): Im eigenen Arbeitsplatz einrichten,
+      Vorschau ansehen, als neue Fassung einfrieren. Drei Dinge sind dabei wichtiger als der
+      `docker commit` selbst:
+      1. **Das Zuhause kommt nicht mit** — es ist ein Bind-Mount, und `docker commit` nimmt keine.
+         Das ist die richtige Grenze: Ein Zuhause enthält Schlüssel, und ein Image bekommen alle
+      2. **Der Geheimnis-Filter warnt, und ohne ausdrückliche Bestätigung wird abgelehnt.** Eine
+         Vorschau, die sich übergehen lässt, ist Dekoration. Verdächtige Pfade stehen oben und
+         farbig; das Protokoll der Fassung nennt jeden einzeln
+      3. **Ein pausierter Container laesst `docker commit` unbegrenzt haengen** — ohne Fehler,
+         ohne Meldung. Zwei Wege dorthin, beide gemessen: vorher pausiert (der Leerlauf-Aufräumer),
+         oder mittendrin pausiert. Behoben an zwei Stellen: Der Agent prüft den Zustand selbst und
+         weckt den Container — er traut der Sicht der API nicht ([ADR-002](docs/adr/002-nur-der-agent-fasst-docker-an.md)) —,
+         und der Aufräumer lässt Sessions in Ruhe, an deren Workspace gerade gebaut wird
+      4. **`/etc/sudoers.d/ota-admin` wird immer entfernt** — sonst bekäme jeder Nutzer des Images
+         root, und aus einer Ausnahme für eine Person wäre die Voreinstellung für alle geworden.
+         Danach wird sie im laufenden Container wieder hingelegt: Wer ein Image baut, soll dabei
+         nicht sein eigenes `sudo` verlieren
 - [ ] **Eigenes Basisimage** `ota/base-xfce` (Ubuntu + XFCE + KasmVNC aus offiziellem Release)
 - [x] **Erweiterungen in der Oberfläche**, mit dem Hinweis daneben, dass sie ausschliesslich in
       Microsofts VS Code landen: VSCodium hat seinen eigenen Satz aus Open VSX, und dieselbe

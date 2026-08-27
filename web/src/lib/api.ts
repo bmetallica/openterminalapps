@@ -249,6 +249,17 @@ export type Build = {
   finished_at: string | null
 }
 
+export type FreezePreview = {
+  aenderungen: { art: string; pfad: string; geheimnis: boolean }[]
+  gesamt: number
+  gekuerzt: boolean
+  uebersprungen: number
+  geheimnisse: string[]
+  /** Wird vor dem Einfrieren aus dem Container entfernt. */
+  entfernt: string[]
+  session_id: string
+}
+
 export type HelpChapter = { slug: string; title: string; section: string }
 export type HelpPage = { slug: string; title: string; markdown: string }
 
@@ -489,6 +500,12 @@ export const api = {
       `/templates/${templateId}/packages?names=${encodeURIComponent(names.join(','))}`),
 
   builds: (templateId: string) => call<Build[]>(`/templates/${templateId}/builds`),
+  freezePreview: (templateId: string) =>
+    call<FreezePreview>(`/templates/${templateId}/freeze/preview`),
+  freeze: (templateId: string, body: { comment?: string; trotz_geheimnissen?: boolean }) =>
+    call<Build>(`/templates/${templateId}/freeze`, {
+      method: 'POST', body: JSON.stringify(body),
+    }),
   build: (templateId: string, id: string) =>
     call<Build>(`/templates/${templateId}/builds/${id}`),
   startBuild: (templateId: string, body: {
@@ -520,6 +537,9 @@ export const api = {
   permissions: () => call<Permission[]>('/admin/permissions'),
   settings: () => call<GlobalSettings>('/admin/settings'),
   myStorage: () => call<MyStorage>('/auth/storage'),
+
+  resetTotp: (userId: string) =>
+    call<{ status: string }>(`/admin/users/${userId}/reset-totp`, { method: 'POST' }),
 
   profileUsage: (username: string) =>
     call<{ username: string; bytes: number; gemessen: string }>(

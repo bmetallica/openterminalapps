@@ -28,6 +28,7 @@ from pydantic import BaseModel, Field
 from . import apps as app_scripts
 from . import backup as backup_ops
 from . import builder
+from . import freeze as freeze_ops
 from . import clipboard as clip_scripts
 from . import discover
 from . import registry as registry_reader
@@ -750,6 +751,43 @@ def start_build(req: BuildRequest) -> dict[str, Any]:
         req.tag, req.base_image, req.apt_packages,
         req.vscode_extensions, req.setup_script, req.pause_containers, req.mode,
     )
+
+
+class FreezeRequest(BaseModel):
+    container_id: str
+    tag: str
+    comment: str = ""
+
+
+@app.get("/freeze/{container_id}/preview", dependencies=[Depends(require_token)])
+def freeze_preview(container_id: str) -> dict[str, Any]:
+    """Was ein Einfrieren mitnehmen wuerde — bevor es passiert."""
+    try:
+        return freeze_ops.preview(container_id)
+    except RuntimeError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+
+
+@app.post("/freeze", dependencies=[Depends(require_token)])
+def freeze_commit(req: FreezeRequest) -> dict[str, Any]:
+    try:
+        result = freeze_ops.commit(req.container_id, req.tag, req.comment)
+    except RuntimeError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+
+    # Wie beim Bauen: erst in die eigene Registry, dann gilt es als fertig.
+    # Ohne das liegt das Image nur auf diesem Host.
+    if builder.REGISTRY:
+        state: dict[str, Any] = {"log": ""}
+        pushed = builder._push(state, dc(), req.tag)  # noqa: SLF001
+        result["push_log"] = state["log"]
+        if pushed:
+            result["image_ref"] = pushed
+    try:
+        result["size_bytes"] = dc().images.get(result["image_ref"]).attrs.get("Size", 0)
+    except (ImageNotFound, APIError):
+        result["size_bytes"] = 0
+    return result
 
 
 @app.get("/builds/{build_id}", dependencies=[Depends(require_token)])

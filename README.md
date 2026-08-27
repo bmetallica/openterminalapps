@@ -15,7 +15,7 @@ Projekte, denselben SSH-Schlüssel, dieselbe Zwischenablage.
 Daneben lassen sich einzelne Anwendungen als Wegwerf-Container starten und vorhandene Kasm-Images
 sowie ganze Registries einbinden — als Zusatz, nicht als Fundament.
 
-> **Stand:** läuft und wird benutzt. 198 automatische Prüfungen, davon 76 in einem echten Browser.
+> **Stand:** läuft und wird benutzt. 210 automatische Prüfungen, davon 76 in einem echten Browser.
 > Was noch fehlt, steht offen in [roadmap.md](roadmap.md) — nichts davon ist beschönigt.
 
 ---
@@ -115,7 +115,7 @@ aussahen, als sie waren.
 make test
 ```
 
-**198 Prüfungen in vier Suiten**, jede stellt ihren Vorzustand selbst her:
+**210 Prüfungen in vier Suiten**, jede stellt ihren Vorzustand selbst her:
 
 | Suite | Prüft |
 |---|---|
@@ -125,6 +125,9 @@ make test
 | `test-backup.sh` | Sicherung und Wiederherstellung von Profil, Container und Datenbank |
 
 Die Zugangsdaten der Prüfung stehen in `deploy/.env` als `OTA_TEST_ADMIN_PW`, nicht im Quelltext.
+
+Ein voller Lauf dauert **rund eine halbe Stunde**: Er startet Container, friert ein Image ein und
+misst im Browser nach. Jede Suite lässt sich einzeln starten (`bash scripts/test-authz.sh`).
 
 ## Lizenz
 

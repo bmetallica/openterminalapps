@@ -512,6 +512,31 @@ chmod +x /usr/local/bin/<name>
 
 Kostet einen Moment beim Start und sonst nichts.
 
+## Das Einfrieren hängt und kommt nie zurück
+
+**Symptom.** *Session einfrieren* läuft und läuft. Kein Fehler, keine Meldung, kein Fortschritt.
+`docker ps` zeigt den Container als **Paused**.
+
+**Ursache.** `docker commit` hält den Container für die Dauer der Aufnahme selbst an — und ein
+bereits angehaltener Container lässt sich nicht ein zweites Mal anhalten. Der Aufruf wartet dann auf
+etwas, das nie passiert.
+
+Zwei Wege führten dorthin, beide am 2026-08-28 gemessen:
+
+1. Der Container war **vorher schon** pausiert — meist durch den Leerlauf-Aufräumer.
+2. Der Aufräumer pausierte ihn **mitten in der Aufnahme**.
+
+**Behoben, an zwei Stellen:** Der Agent prüft vor dem Einfrieren den Zustand des Containers und
+weckt ihn — er verlässt sich dabei nicht auf das, was die API über den Container zu wissen glaubt.
+Und der Aufräumer lässt Sessions in Ruhe, an deren Workspace gerade gebaut oder eingefroren wird.
+
+**Wenn es doch einmal hängt:**
+
+```bash
+docker ps --filter "name=ota-s-" --format '{{.Names}} {{.Status}}'
+docker unpause <container>     # die Aufnahme läuft dann weiter
+```
+
 ## Nützliche Befehle
 
 ```bash

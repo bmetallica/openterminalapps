@@ -18,7 +18,7 @@ def _call(method: str, path: str, **kw: Any) -> Any:
     url = f"{settings().agent_url.rstrip('/')}{path}"
     # Grosszuegig, weil hier auch Dateien durchgehen: Ein Gigabyte in die
     # gemeinsame Ablage braucht laenger als eine Minute.
-    timeout = 300.0 if "files" in kw else 60.0
+    timeout = kw.pop("timeout", None) or (300.0 if "files" in kw else 60.0)
     try:
         with httpx.Client(timeout=timeout) as client:
             resp = client.request(method, url, headers=_headers(), **kw)
@@ -40,6 +40,16 @@ def _call(method: str, path: str, **kw: Any) -> Any:
 
 def host_info() -> dict[str, Any]:
     return _call("GET", "/host")
+
+
+def freeze_preview(container_id: str) -> dict[str, Any]:
+    return _call("GET", f"/freeze/{container_id}/preview")
+
+
+def freeze_commit(body: dict[str, Any]) -> dict[str, Any]:
+    # Ein Container mit fuenf Gigabyte braucht fuer `docker commit` und das
+    # anschliessende Ablegen in der Registry Minuten, nicht Sekunden.
+    return _call("POST", "/freeze", json=body, timeout=1800.0)
 
 
 def profile_usage(username: str, fresh: bool = False) -> dict[str, Any]:

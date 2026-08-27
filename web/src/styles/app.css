@@ -1289,3 +1289,13 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .applist__res input::placeholder { color: var(--mute); opacity: .7; }
 .applist__res input:hover { border-color: var(--edge-lit); }
 .applist__res input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* Vorschau aufs Einfrieren. Die verdächtigen Zeilen stehen oben und sind
+   farbig — sie sind der Grund, warum es diese Liste gibt. */
+.frost__row { font-size: 11.5px; line-height: 1.6; white-space: nowrap; }
+.frost__row.is-secret { color: var(--caution); font-weight: 500; }
+.frost__kind {
+  display: inline-block; width: 1.2em;
+  color: var(--mute); font-weight: 600;
+}
+.frost__row.is-secret .frost__kind { color: var(--caution); }

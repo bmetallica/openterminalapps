@@ -51,6 +51,19 @@ function UserEditor({ user, groups, onSaved, onClose, onToast }: {
     }
   }
 
+  async function resetTotp() {
+    if (!user) return
+    setBusy(true)
+    try {
+      const res = await api.resetTotp(user.id)
+      onToast(res.status)
+    } catch (err) {
+      onToast(err instanceof ApiError ? err.message : tr('Abnehmen fehlgeschlagen'), 'bad')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function remove() {
     if (!user) return
     setBusy(true)
@@ -127,6 +140,16 @@ function UserEditor({ user, groups, onSaved, onClose, onToast }: {
                          : tr('Anmeldung gesperrt, Daten bleiben erhalten.')}
           onChange={setIsActive} />
       </Field>
+
+      {!isNew && (
+        <Field label={tr('Zweiter Faktor')}
+          hint={tr('Für den Fall, dass Telefon und Rückfallcodes verloren sind. Ohne diesen Weg käme der Mensch nie wieder herein. Alle Sitzungen des Kontos werden dabei beendet, und es steht mit deinem Namen im Protokoll.')}>
+          <button className="btn btn--sm" disabled={busy}
+            onClick={() => void resetTotp()}>
+            {tr('Zweiten Faktor abnehmen')}
+          </button>
+        </Field>
+      )}
     </Drawer>
   )
 }

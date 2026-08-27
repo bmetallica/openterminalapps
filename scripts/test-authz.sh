@@ -87,7 +87,16 @@ else
   api "$TMP/admin.jar" -X POST "$BASE/api/admin/users" -H 'Content-Type: application/json' \
     -d "{\"username\":\"$TEST_USER\",\"password\":\"$TEST_PW\",\"group_ids\":[\"$USERS_GID\"]}" >/dev/null
 fi
-ok "Testnutzer $TEST_USER steht bereit (nur Gruppe users)"
+# Ein zweiter Faktor aus einem frueheren Lauf wuerde die Anmeldung mit blossem
+# Passwort abweisen — und der ganze Rest scheiterte an einem 401, das nichts
+# mit dem zu tun haette, was gerade geprueft wird. Der Test stellt seinen
+# Vorzustand selbst her.
+TEST_UID=$(api "$TMP/admin.jar" "$BASE/api/admin/users" \
+  | jqp "next((u['id'] for u in d if u['username'] == '$TEST_USER'), '')")
+[ -n "$TEST_UID" ] && api "$TMP/admin.jar" -X POST \
+  "$BASE/api/admin/users/$TEST_UID/reset-totp" >/dev/null
+
+ok "Testnutzer $TEST_USER steht bereit (nur Gruppe users, ohne zweiten Faktor)"
 
 login "$TMP/user.jar" "$TEST_USER" "$TEST_PW"
 # Wechsel des Passworts ist erzwungen, blockiert die Anmeldung aber nicht.
@@ -367,6 +376,90 @@ fi
 
 [ -n "${USID:-}" ] && api "$TMP/user.jar" -X DELETE "$BASE/api/sessions/$USID" >/dev/null
 
+# ------------------------------------------------- Session einfrieren
+# Der kurze Weg zu einem Golden Image: im eigenen Arbeitsplatz einrichten,
+# dann einfrieren. Geprüft wird vor allem, was dabei **nicht** mitkommt.
+echo
+echo "Session einfrieren"
+
+WS_F=$(api "$TMP/admin.jar" "$BASE/api/templates" | jqp "
+next((t['id'] for t in d if t['mode'] == 'workspace' and t['apps']), '')")
+SID_F=$(api "$TMP/admin.jar" "$BASE/api/sessions" | jqp "
+next((s['id'] for s in d if s['template_id'] == '$WS_F' and s['status'] == 'running'), '')")
+
+if [ -z "$SID_F" ]; then
+  ok "Kein eigener Arbeitsplatz am Laufen — Einfrieren übersprungen"
+else
+  CN_F="ota-s-$(echo "$SID_F" | cut -c1-12)"
+
+  # Etwas, das nach einem Geheimnis aussieht. Die Vorschau muss es finden.
+  docker exec -u 0 "$CN_F" sh -c 'mkdir -p /root/.ssh && echo x > /root/.ssh/id_pruef' \
+    >/dev/null 2>&1
+
+  # Und die sudo-Ausnahme. Sie steht normalerweise dort, weil der Container
+  # einem Administrator gehoert — aber der Test soll nicht davon abhaengen,
+  # was ein vorheriger Lauf hinterlassen hat.
+  docker exec -u 0 "$CN_F" sh -c \
+    'mkdir -p /etc/sudoers.d && echo "# OTA" > /etc/sudoers.d/ota-admin' >/dev/null 2>&1
+
+  VOR=$(api "$TMP/admin.jar" "$BASE/api/templates/$WS_F/freeze/preview")
+  echo "$VOR" | grep -q "id_pruef" \
+    && ok "Die Vorschau findet eine Datei, die nach einem Geheimnis aussieht" \
+    || bad "Die Vorschau übersah /root/.ssh/id_pruef"
+
+  echo "$VOR" | grep -q "/etc/sudoers.d/ota-admin" \
+    && ok "Die sudo-Ausnahme steht als „wird entfernt“ in der Vorschau" \
+    || bad "Die sudo-Ausnahme fehlt in der Vorschau"
+
+  # Das Zuhause ist ein Bind-Mount und darf gar nicht erst auftauchen.
+  echo "$VOR" | grep -q "/home/kasm-user" \
+    && bad "Das Zuhause steht in der Vorschau — es gehört nicht ins Image" \
+    || ok "Das Zuhause taucht in der Vorschau nicht auf"
+
+  # Und ohne ausdrückliche Bestätigung wird abgelehnt. Eine Vorschau, die man
+  # übergehen kann, ist Dekoration.
+  OUT=$(api "$TMP/admin.jar" -X POST "$BASE/api/templates/$WS_F/freeze" \
+    -H 'Content-Type: application/json' -d '{"comment":"Prüfung"}')
+  echo "$OUT" | grep -q "nach einem Geheimnis aus" \
+    && ok "Ohne ausdrückliche Bestätigung wird nicht eingefroren" \
+    || bad "Es wurde trotz Fund eingefroren: $(echo "$OUT" | head -c 120)"
+
+  # Der Container wird hinter OTAs Rücken pausiert: Die Datenbank sagt „läuft",
+  # der Container nicht. `docker commit` haengt auf einem pausierten Container
+  # unbegrenzt — ohne Fehler, ohne Meldung, einfach Stillstand. Der Agent muss
+  # das selbst merken; er darf der Sicht der API nicht trauen.
+  docker pause "$CN_F" >/dev/null 2>&1
+
+  # Einmal richtig einfrieren und nachsehen, dass die sudo-Ausnahme **nicht**
+  # im Image landet, aber danach im laufenden Container wieder da ist. Wer ein
+  # Image baut, soll dabei nicht sein eigenes `sudo` verlieren.
+  OUT=$(api "$TMP/admin.jar" -X POST "$BASE/api/templates/$WS_F/freeze" \
+    -H 'Content-Type: application/json' \
+    -d '{"comment":"Prüflauf","trotz_geheimnissen":true}')
+  IMG=$(echo "$OUT" | jqp "d.get('image_ref') or ''")
+  docker unpause "$CN_F" >/dev/null 2>&1   # falls es doch scheiterte
+  if [ -n "$IMG" ]; then
+    ok "Eingefroren als $IMG"
+    echo "$OUT" | grep -q "pausiert und wurde dafür aufgeweckt" \
+      && ok "Der pausierte Container wurde erkannt und aufgeweckt" \
+      || bad "Die Pause blieb unbemerkt — das hätte hängen müssen"
+    docker run --rm --entrypoint test "$IMG" -f /etc/sudoers.d/ota-admin \
+      && bad "Die sudo-Ausnahme ist mit eingefroren — jeder bekäme root" \
+      || ok "Die sudo-Ausnahme ist nicht im Image"
+    docker exec "$CN_F" test -f /etc/sudoers.d/ota-admin \
+      && ok "Im laufenden Container liegt sie wieder da" \
+      || bad "Dem Administrator wurde sein sudo genommen"
+    docker rmi -f "$IMG" >/dev/null 2>&1
+  else
+    bad "Einfrieren schlug fehl: $(echo "$OUT" | head -c 160)"
+  fi
+
+  docker exec -u 0 "$CN_F" rm -rf /root/.ssh >/dev/null 2>&1
+
+  expect "403" "$(code "$TMP/user.jar" "$BASE/api/templates/$WS_F/freeze/preview")" \
+    "Einfrieren ist für einen normalen Nutzer gesperrt"
+fi
+
 # ------------------------------------------------- Ereignisstrom des Builds
 echo
 echo "Ereignisstrom des Builds"
@@ -622,6 +715,35 @@ expect "False" "$FLAG" "Ohne Zwang ist der Hinweis wieder weg"
 ZWANG_UID=$(api "$TMP/admin.jar" "$BASE/api/admin/users" \
   | jqp "next((u['id'] for u in d if u['username'] == '$ZWANG'), '')")
 [ -n "$ZWANG_UID" ] && api "$TMP/admin.jar" -X DELETE "$BASE/api/admin/users/$ZWANG_UID" >/dev/null
+
+# Der Weg fuer den Fall, dass Telefon **und** Rueckfallcodes weg sind: Ein
+# Administrator nimmt den zweiten Faktor ab. Ohne das kaeme der Mensch nie
+# wieder herein.
+OUT=$(api "$TMP/admin.jar" -X POST "$BASE/api/admin/users/$TEST_UID/reset-totp")
+echo "$OUT" | grep -q "entfernt" \
+  && ok "Ein Administrator kann den zweiten Faktor abnehmen" \
+  || bad "Der zweite Faktor liess sich nicht abnehmen: $(echo "$OUT" | head -c 120)"
+STATE=$(api "$TMP/user2.jar" -X POST "$BASE/api/auth/login" \
+  -H 'Content-Type: application/json' \
+  -d "{\"username\":\"$TEST_USER\",\"password\":\"$TEST_PW\"}" \
+  | jqp "d.get('totp_enabled')")
+expect "False" "$STATE" "Danach genügt wieder das Passwort"
+# Ausdruecklich mit dem frischen Merkmal: Das Abnehmen beendet alle Sitzungen
+# des Kontos, und die alte Kekstuete ist danach wertlos — was ein 401 gaebe
+# statt des 403, um das es hier geht.
+expect "403" "$(code "$TMP/user2.jar" -X POST "$BASE/api/admin/users/$TEST_UID/reset-totp")" \
+  "Ein normaler Nutzer kann das nicht"
+
+# Den zweiten Faktor fuer die folgenden Pruefungen wieder einrichten und
+# danach frisch anmelden — mit Code, denn ab jetzt verlangt das Konto einen.
+SETUP=$(api "$TMP/user2.jar" -X POST "$BASE/api/auth/totp/setup")
+SECRET=$(echo "$SETUP" | jqp "d.get('secret','')")
+api "$TMP/user2.jar" -X POST "$BASE/api/auth/totp/activate" -H 'Content-Type: application/json' \
+  -d "{\"secret\":\"$SECRET\",\"code\":\"$(otp "$SECRET")\"}" >/dev/null
+rm -f "$TMP/user.jar"
+api "$TMP/user.jar" -X POST "$BASE/api/auth/login" -H 'Content-Type: application/json' \
+  -d "{\"username\":\"$TEST_USER\",\"password\":\"$TEST_PW\",\"totp\":\"$(otp "$SECRET")\"}" \
+  >/dev/null
 
 # Abschalten verlangt Passwort UND Code.
 OUT=$(curl -s --cacert "$CA" -b "$TMP/user.jar" -X DELETE "$BASE/api/auth/totp" \
