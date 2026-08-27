@@ -152,12 +152,22 @@ async def start_build(
     db.add(build)
     db.flush()
 
+    from ..config import settings
+
+    # Fremde Container, die waehrend des Builds stoeren. Der Agent startet sie
+    # in jedem Fall wieder — auch wenn der Build scheitert.
+    pause = [
+        name.strip() for name in settings().build_pause_containers.split(",")
+        if name.strip()
+    ] if body.pause_foreign_cleanup else []
+
     result = agent_client.start_build({
         "tag": tag,
         "base_image": base,
         "apt_packages": body.apt_packages,
         "vscode_extensions": body.vscode_extensions,
         "setup_script": body.setup_script,
+        "pause_containers": pause,
     })
 
     build.log = f"Build gestartet als {tag}\n\n"

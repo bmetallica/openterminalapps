@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     db_user: str = "ota"
     db_name: str = "ota"
 
+    # Container, die waehrend eines Golden-Image-Builds angehalten werden.
+    # Hintergrund: Kasms Agent raeumt im Modus "Aggressive" alle 30 Sekunden
+    # jedes ihm unbekannte Image weg — auch frisch gebaute. Komma-getrennt.
+    build_pause_containers: str = "kasm_agent"
+
     # Standardwerte, wenn ein Template nichts anderes sagt.
     default_idle_minutes: int = 60
     session_limit_per_user: int = 5

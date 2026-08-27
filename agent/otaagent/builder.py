@@ -41,6 +41,21 @@ def render_dockerfile(base_image: str, apt_packages: list[str],
     lines = [
         f"FROM {base_image}",
         "",
+        "# Das Kasm-Label loeschen, das von einem Kasm-Basisimage geerbt wird.",
+        "#",
+        "# Gemessen am 2026-08-27: Kasms Agent raeumt im Modus \"Aggressive\" alle",
+        "# 30 Sekunden auf und loescht dabei GENAU die Images, die",
+        "# com.kasmweb.image=true tragen und nicht in seiner Datenbank stehen.",
+        "# Ein abgeleitetes Image erbt das Label und wird deshalb als verwaiste",
+        "# Kasm-Workspace-Version eingestuft — der Build meldet Erfolg, und",
+        "# Sekunden spaeter ist das Image weg. Images ohne dieses Label",
+        "# betrachtet Kasm gar nicht erst.",
+        "#",
+        "# Damit laufen OTA und Kasm auf demselben Host nebeneinander, ohne",
+        "# dass an Kasm etwas umgestellt werden muss.",
+        "LABEL com.kasmweb.image=\"\" \\",
+        "      org.opencontainers.image.title=\"OpenTerminalApps Golden Image\"",
+        "",
         "# Der Bau laeuft als root; die Session laeuft spaeter wieder als 1000.",
         "USER root",
         "",
@@ -84,12 +99,56 @@ def _append(state: dict[str, Any], text: str) -> None:
     state["log"] = (state["log"] + text)[-_MAX_LOG:]
 
 
-def _run_build(build_id: str, tag: str, dockerfile: str, setup_script: str) -> None:
+def _pause(names: list[str]) -> list[str]:
+    """Haelt fremde Container fuer die Dauer des Builds an.
+
+    Gebraucht, weil ein zweites System auf demselben Docker-Host Images
+    aufraeumen kann, waehrend hier eines entsteht — Kasm tut das im Modus
+    "Aggressive" alle 30 Sekunden mit allem, was es nicht kennt. Bewusst als
+    Liste von Containernamen und nicht fest auf Kasm verdrahtet: Die Regel
+    ist "diese Container stoeren beim Bauen", nicht "Kasm ist besonders".
+    """
+    client = docker.from_env()
+    stopped: list[str] = []
+    for name in names:
+        try:
+            container = client.containers.get(name)
+        except docker.errors.NotFound:
+            continue
+        if container.status != "running":
+            continue
+        container.stop(timeout=20)
+        stopped.append(name)
+    return stopped
+
+
+def _resume(names: list[str]) -> None:
+    """Startet die angehaltenen Container wieder.
+
+    Laeuft im finally-Zweig: Auch ein abgestuerzter oder abgebrochener Build
+    darf fremde Dienste nicht dauerhaft ausschalten.
+    """
+    client = docker.from_env()
+    for name in names:
+        try:
+            client.containers.get(name).start()
+        except Exception:  # noqa: BLE001 — jeder Container fuer sich
+            pass
+
+
+def _run_build(build_id: str, tag: str, dockerfile: str, setup_script: str,
+               pause_containers: list[str]) -> None:
     state = _builds[build_id]
+    paused: list[str] = []
 
     with _lock:
         state["status"] = "building"
         try:
+            if pause_containers:
+                paused = _pause(pause_containers)
+                if paused:
+                    _append(state, f"Angehalten für die Dauer des Builds: "
+                                   f"{', '.join(paused)}\n\n")
             with tempfile.TemporaryDirectory(prefix="ota-build-") as ctx:
                 with open(os.path.join(ctx, "Dockerfile"), "w") as fh:
                     fh.write(dockerfile)
@@ -140,11 +199,15 @@ def _run_build(build_id: str, tag: str, dockerfile: str, setup_script: str) -> N
             state["status"] = "failed"
             _append(state, f"\nUnerwarteter Fehler: {exc}\n")
         finally:
+            if paused:
+                _resume(paused)
+                _append(state, f"\nWieder gestartet: {', '.join(paused)}\n")
             state["finished_at"] = datetime.now(timezone.utc).isoformat()
 
 
 def start(tag: str, base_image: str, apt_packages: list[str],
-          vscode_extensions: list[str], setup_script: str) -> dict[str, Any]:
+          vscode_extensions: list[str], setup_script: str,
+          pause_containers: list[str] | None = None) -> dict[str, Any]:
     dockerfile = render_dockerfile(base_image, apt_packages, vscode_extensions, setup_script)
     build_id = uuid.uuid4().hex
 
@@ -160,7 +223,9 @@ def start(tag: str, base_image: str, apt_packages: list[str],
     }
 
     threading.Thread(
-        target=_run_build, args=(build_id, tag, dockerfile, setup_script), daemon=True,
+        target=_run_build,
+        args=(build_id, tag, dockerfile, setup_script, pause_containers or []),
+        daemon=True,
     ).start()
     return {"build_id": build_id, "dockerfile": dockerfile}
 

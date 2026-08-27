@@ -203,28 +203,44 @@ alles ausserhalb des Streams.
 Der Build läuft durch, meldet Erfolg — und beim ersten Sessionstart heisst es
 „Image liegt nicht auf diesem Host".
 
+**Ursache**: Läuft Kasm Workspaces auf demselben Docker-Host, räumt dessen Agent
+im Modus „Aggressive" alle 30 Sekunden auf. Er löscht dabei **genau die Images,
+die das Label `com.kasmweb.image=true` tragen** und nicht in seiner Datenbank
+stehen. Ein von einem Kasm-Image abgeleitetes Golden Image **erbt dieses Label**
+und wird deshalb als verwaiste Workspace-Version eingestuft.
+
 ```bash
 docker logs kasm_agent --since 5m | grep -i prune
-# "Searching for images to prune with mode: (Aggressive)"
 # "Docker image id (...): with tags (['ota/...']): is not needed."
 # "Successfully pruned unneeded Docker image id (...)"
 ```
 
-**Ursache**: Läuft Kasm Workspaces auf demselben Docker-Host, räumt dessen Agent
-im Modus **„Aggressive"** etwa alle 30 Sekunden auf und löscht **jedes Image, das
-er nicht kennt** — auch unsere Golden Images.
+**Behoben.** OTAs Builder löscht das Label in jedem erzeugten Dockerfile:
 
-OTA erkennt das inzwischen selbst: 45 Sekunden nach einem erfolgreichen Build wird
-nachgesehen, ob das Image noch da ist. Fehlt es, wird der Build auf *fehlgeschlagen*
-gesetzt und das Log erklärt den Grund.
+```dockerfile
+LABEL com.kasmweb.image="" \
+      org.opencontainers.image.title="OpenTerminalApps Golden Image"
+```
 
-**Abhilfe, eine von beiden:**
-- In Kasm unter *Infrastructure → Servers* die Aufräum-Einstellung von „Aggressive"
-  auf eine mildere Stufe setzen.
-- Golden Images erst bauen, nachdem Kasm abgelöst ist.
+Images ohne dieses Label betrachtet Kasm gar nicht erst. Damit laufen OTA und
+Kasm dauerhaft nebeneinander, **ohne dass an Kasm etwas umgestellt werden muss**.
 
-Alles andere am Parallelbetrieb ist davon **nicht** betroffen: Sessions, Streams,
-Nutzer und Zuweisungen laufen unbeeinträchtigt nebeneinander.
+Prüfen lässt sich das am gebauten Image:
+
+```bash
+docker image inspect ota/<name>:v1 \
+  --format '{{index .Config.Labels "com.kasmweb.image"}}'
+# leer = richtig.  "true" = das Image wird gelöscht werden.
+```
+
+OTA merkt es ausserdem selbst: 45 Sekunden nach einem erfolgreichen Build wird
+nachgesehen, ob das Image noch da ist. Fehlt es, gilt der Build als
+fehlgeschlagen und das Log nennt den Grund.
+
+**Rückfallebene**, falls ein anderes System nach anderen Regeln aufräumt: Ein
+Build kann fremde Aufräumdienste für seine Dauer anhalten
+(`pause_foreign_cleanup`, Vorgabe `kasm_agent`). Sie werden in jedem Fall wieder
+gestartet — auch wenn der Build scheitert.
 
 ## Build meldet Erfolg, das Image taucht nie in `docker images` auf
 

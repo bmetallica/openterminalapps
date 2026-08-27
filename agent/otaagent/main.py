@@ -370,6 +370,8 @@ class BuildRequest(BaseModel):
     apt_packages: list[str] = []
     vscode_extensions: list[str] = []
     setup_script: str = ""
+    # Container, die waehrend des Builds angehalten werden. Siehe builder._pause.
+    pause_containers: list[str] = []
 
 
 @app.post("/builds", dependencies=[Depends(require_token)])
@@ -389,7 +391,7 @@ def start_build(req: BuildRequest) -> dict[str, Any]:
         )
     return builder.start(
         req.tag, req.base_image, req.apt_packages,
-        req.vscode_extensions, req.setup_script,
+        req.vscode_extensions, req.setup_script, req.pause_containers,
     )
 
 

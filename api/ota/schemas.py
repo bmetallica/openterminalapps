@@ -215,6 +215,9 @@ class BuildIn(BaseModel):
     vscode_extensions: list[str] = []
     setup_script: str = ""
     comment: str = ""
+    # Fremde Aufräumdienste für die Dauer des Builds anhalten. Standardmässig
+    # an, weil ein Golden Image sonst auf diesem Host keine Minute überlebt.
+    pause_foreign_cleanup: bool = True
 
 
 class BuildOut(BaseModel):

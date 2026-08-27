@@ -38,6 +38,7 @@ heute schon funktioniert.
 12. [Fehlersuche](12-fehlersuche.md)
 13. [Lizenzen](13-lizenzen.md)
 14. [Sicherung und Wiederherstellung](14-sicherung.md)
+15. [Ein Profil aus Kasm übernehmen](15-migration-aus-kasm.md)
 
 ## Wo was steht
 

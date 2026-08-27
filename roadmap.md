@@ -4,7 +4,8 @@ Ergänzt [`plan.md`](./plan.md) um die zeitliche Umsetzung.
 Bezugsdatum: 2026-08-27 · Annahme: ein Entwickler, Teilzeit.
 
 **Leitprinzip**: Nach jedem Meilenstein ist das System benutzbar. Kein Big-Bang.
-Kasm bleibt bis M7 parallel lauffähig und ist jederzeit die Rückfallebene.
+Kasm läuft dauerhaft daneben weiter — OTA auf 8443, Kasm auf 443. Der letzte
+Konflikt zwischen beiden ist beseitigt (`plan.md` §17.12).
 
 **Reihenfolge folgt der Neuausrichtung** (`plan.md` §1): Der **Arbeitsplatz** ist der Kern und kommt
 früh. Die Einbindung vorhandener **Kasm-Images und -Registries** ist ein Feature und kommt später.
@@ -22,12 +23,12 @@ früh. Die Einbindung vorhandener **Kasm-Images und -Registries** ist ein Featur
 | **M4** | **Der Arbeitsplatz** | Ein Linux je Nutzer, Apps einzeln gestreamt | ✅ **Grundfunktion steht** |
 | **M5** | Golden Images | Build-Pipeline, Versionen, App-Katalog, Skeleton | 2–3 Wochen |
 | **M6** | Identität & Netzlaufwerke | AD/LDAP, Kerberos, Shares im Arbeitsplatz | 2–3 Wochen |
-| **M7** | Migration & Produktivgang | `bmetallica` umgezogen, Härtung, Kasm abgelöst | 2–3 Wochen · Sicherung ✅ |
+| **M7** | Migration & Härtung | Profil umgezogen ✅, Härtung, Monitoring | 1–2 Wochen |
 | **M8** | Kasm-Kompatibilität | Einzelimages und ganze Registries einbinden | 1–2 Wochen |
 | **M9** | Optionale Erweiterungen | OIDC, Guacamole, WebAuthn, code-server | 2–3 Wochen |
 | **M10** | Skalierung | Mehrere Hosts, Pools | offen |
 
-Bis zum produktiven Ersatz (M5–M7): **realistisch 6–9 Wochen** in Teilzeit.
+Bis zum produktiven Einsatz (M5–M7): **realistisch 4–6 Wochen** in Teilzeit.
 
 **Stand 2026-08-27**: M0 bis M4 laufen, dazu die Build-Pipeline aus M5 und die
 Sicherung aus M7. Ein Nutzer meldet sich an, startet seinen
@@ -51,7 +52,8 @@ formatfüllend auf eigenem Display, alle im selben Container mit gemeinsamem
 - [x] Sicherheits-Header inklusive `Permissions-Policy` für die Zwischenablage; **HSTS bewusst aus**,
       solange die CA nicht verteilt ist
 - [x] Oberflächenentwurf lauffähig (`web/`), Design-System nach `plan.md` §13
-- [ ] Postgres und erste Alembic-Migration — **offen**, gehört zu M1
+- [ ] Erste **Alembic-Migration** erzeugen. Postgres läuft; das Schema entsteht
+      derzeit über `create_all`, Schemaänderungen laufen von Hand
 - [ ] ADR-Format und ADR-001 dokumentieren
 
 **Erreicht**: `https://<host>:8443/` liefert die Oberfläche mit gültiger Kette, Kasm läuft unbeeinträchtigt.
@@ -99,7 +101,8 @@ Siehe Handbuch, Kapitel 12.
 - [x] `template_overrides` (Ressourcen je Gruppe und je Nutzer) samt Auflösung nach `plan.md` §5;
       Referenz ist `effectiveResources()` aus dem Oberflächenentwurf
 - [x] Aufgelöste Werte beim Session-Start festschreiben und als `--cpus`/`--memory` setzen
-- [ ] TOTP-2FA, Recovery-Codes
+- [ ] **TOTP-Einrichtung im UI** samt Recovery-Codes. Die *Prüfung* beim Login
+      steht bereits — es fehlt der Weg, einen zweiten Faktor zu hinterlegen
 - [x] Seed-Skript für den ersten Admin
 - [x] **Autorisierungstests**: je Admin-Endpunkt ein Test, der mit Nutzer-Token 403 erwartet
 
@@ -118,8 +121,8 @@ Der Entwurf steht bereits (`web/`, `plan.md` §13). Hier wird er verkabelt.
       Upload/Download, Ton, Verbindungsqualität, `Strg+Alt+Shift`
 - [x] Startvorgang mit echten Phasen statt Spinner
 - [ ] Eigene Einstellungen: Passwort, 2FA, Sprache, Auflösung
-- [ ] Admin: Nutzer, Gruppen, Sessions, Audit-Log
-- [ ] Entwurfsleiste („Mock-Daten") entfernen
+- [x] Admin: Nutzer, Gruppen, Sessions, Audit-Log — inklusive Anlegen und Ändern
+- [x] Entwurfsleiste entfernt
 
 ---
 
@@ -144,7 +147,7 @@ Der Entwurf steht bereits (`web/`, `plan.md` §13). Hier wird er verkabelt.
       weder `clipnotify` noch python-xlib mit; mit eigenem Basisimage (M5) wird die Schleife
       ereignisgesteuert
 - [ ] `xsel`, `xdotool`, `autocutsel` ins eigene Basisimage — im Kasm-Image fehlen sie
-- [ ] Abnahmefall 8: VS Code `:1` → IntelliJ `:2` in beide Richtungen
+- [x] Abnahmefall 8: Kopieren zwischen zwei Apps im Container, beide Richtungen
 
 **Ressourcen**
 - [x] Grenzen gelten für den Container als Ganzes (`plan.md` §9.3); Spitzenlast-Dimensionierung
@@ -165,11 +168,10 @@ Session-Prozesse, und die ereignisgesteuerte statt abfragende Brücke (braucht e
 
 ## M5 — Golden Images · 2–3 Wochen
 
-> **Voraussetzung, die zuerst geklärt werden muss:** Kasms Agent löscht im Modus
-> „Aggressive" alle 30 Sekunden jedes Image, das er nicht kennt — auch unsere Golden
-> Images (`plan.md` §8.4b). Entweder die Einstellung in Kasm ändern
-> (*Infrastructure → Servers*) oder M5 hinter M7 schieben. Alles Übrige am
-> Parallelbetrieb ist davon nicht betroffen.
+> **Gelöst am 2026-08-27.** Kasm löschte unsere Golden Images, weil sie das Label
+> `com.kasmweb.image=true` vom Basisimage erbten. Der Builder löscht das Label jetzt —
+> damit laufen OTA und Kasm nebeneinander, ohne dass an Kasm etwas umgestellt wird
+> (`plan.md` §17.12).
 
 - [x] `image_builds` mit Versionen, Digest, Größe, Build-Log, `is_current`
 - [x] Build-Runner im Agent über **`docker buildx build --load`**, serialisiert,
@@ -180,8 +182,9 @@ Session-Prozesse, und die ereignisgesteuerte statt abfragende Brücke (braucht e
 - [x] Deklarativer Build-Layer: APT-Pakete, **VS-Code-Extension-Listen**, freies Setup-Skript
 - [x] Version aktivieren und Rollback über die API; laufende Sessions bleiben unberührt
 - [ ] Live-Log per SSE in der Oberfläche (derzeit über Abfrage)
-- [ ] **App-Katalog im Blueprint**: Startbefehl, Icon, Auflösung, Skeleton-Teilbaum je App
-- [ ] Extensions beim **Build** installieren, nicht beim Start
+- [ ] App-Katalog um **Skeleton-Teilbaum und Auflösung je App** ergänzen.
+      Startbefehl, Icon, Sperrgrund und festes Display stehen bereits
+- [x] Extensions beim **Build** installieren, nicht beim Start
 - [ ] Sichtbarkeit je App und Gruppe (`group_template_apps`)
 - [ ] Skeleton-Profile: Kopie beim ersten Start, Datei-Browser, „Enforce"-Pfade
 - [ ] **„Session einfrieren"**: `docker commit`, Home-Diff, Secret-Filter (`.ssh/id_*`, `.gnupg`,
@@ -190,9 +193,8 @@ Session-Prozesse, und die ereignisgesteuerte statt abfragende Brücke (braucht e
 - [ ] UI benennt, dass Extensions nicht zwischen VS Code, VSCodium und Cursor wandern
 
 **Vorher zu klären**
-- [ ] **Cursor-Lizenz** (`plan.md` §9.6): Mehrbenutzerbetrieb erlaubt? Named-User nötig?
-      Bis dahin im Katalog deaktiviert
-- [ ] Sicherstellen, dass Cursor und VSCodium **nicht** auf den MS-Marketplace zeigen
+- [x] ~~Cursor-Lizenz klären~~ — Cursor bleibt draussen (`plan.md` §17.10)
+- [ ] Sicherstellen, dass VSCodium **nicht** auf den MS-Marketplace zeigt
 
 ---
 
@@ -214,12 +216,12 @@ Erst mit dem Arbeitsplatz sinnvoll (`plan.md` §9.4).
 
 ---
 
-## M7 — Migration & Produktivgang · 2–3 Wochen
+## M7 — Migration & Härtung · 1–2 Wochen
 
-- [ ] Nutzer `bmetallica` in `admins` + `users`, Initialpasswort mit Wechselzwang
-- [ ] `scripts/migrate_kasm_profile.sh` nach `plan.md` §14.1, idempotent, mit Dry-Run
-- [ ] Profil in einen **Arbeitsplatz** überführen, nicht in einen Ein-App-Container
-- [ ] Abnahme nach `plan.md` §14.1: Extensions, `settings.json`, SSH/GPG, XFCE-Layout, Zwischenablage
+- [x] Nutzer `bmetallica` in `admins` + `users` (über `make admin`)
+- [x] `scripts/migrate-kasm-profile.sh` — idempotent, mit Probelauf und Abnahmemodus
+- [x] Profil in einen **Arbeitsplatz** überführt (805 MB Rohdaten → 63 MB)
+- [x] Abnahme bestanden: Einstellungen, Extensions, SSH- und GPG-Schlüssel, XFCE-Layout
 - [ ] Container-Härtung: `no-new-privileges`, Capabilities gedroppt, seccomp, `pids_limit`, `shm_size`
 - [ ] Netzsegmentierung final; `ota_sessions` ohne Zugriff auf `ota-db`
 - [ ] Security-Review der Auth- und Autorisierungspfade
@@ -238,9 +240,10 @@ Erst mit dem Arbeitsplatz sinnvoll (`plan.md` §9.4).
       Arbeitsplatz
 - [ ] Monitoring: `/healthz`, Prometheus-Metriken
 - [ ] Storage-Quotas, Kapazitäts-Preflight statt OOM-Kill
-- [ ] **HSTS einschalten**, sobald die CA verteilt oder ein echtes Zertifikat aktiv ist
-- [ ] **Umzug auf 443**, Kasm stoppen (Container behalten), Daten archivieren
-- [ ] Rollback-Plan schriftlich: Wie kommt Kasm binnen 15 Minuten zurück?
+- [x] ~~HSTS~~ — entfällt, solange es bei der lokalen CA bleibt (`plan.md` §17.2)
+- [x] ~~Umzug auf 443~~ — entfällt. OTA bleibt auf 8443, der Port ist frei
+      einstellbar, und Kasm läuft dauerhaft daneben weiter (`plan.md` §17.13)
+- [x] ~~Rollback-Plan~~ — entfällt, weil Kasm gar nicht erst abgeschaltet wird
 
 ---
 
@@ -257,7 +260,7 @@ Das Feature aus `plan.md` §1.2 und §9.8. Schema und Adressen sind verifiziert.
 - [ ] Hinweis im Import-Dialog: Registries sind eine Vertrauensentscheidung; Lizenz des Images
       gilt unverändert (`plan.md` §3)
 - [ ] Vorkonfiguriert, aber abschaltbar: Kasm Technologies (86), Kasm AI (11), LinuxServer.io (2)
-- [ ] Signaturprüfung entscheiden (`plan.md` §17.11)
+- [x] ~~Signaturprüfung~~ — entschieden: keine, Registries sind eine Vertrauensentscheidung
 
 ---
 

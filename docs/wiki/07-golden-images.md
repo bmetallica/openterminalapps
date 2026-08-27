@@ -3,11 +3,10 @@
 *Für Administratoren.* ✅ Build-Pipeline, Versionen und Aktivierung ·
 🔨 Skeleton-Verwaltung und „Session einfrieren" (M5)
 
-> **Solange Kasm auf demselben Host läuft, funktioniert das Bauen nicht.**
-> Kasms Agent löscht im Modus „Aggressive" alle 30 Sekunden jedes Image, das er
-> nicht kennt — auch unsere. OTA erkennt das und sagt es im Build-Log. Abhilfe:
-> die Einstellung in Kasm unter *Infrastructure → Servers* ändern, oder erst nach
-> der Ablösung bauen. Siehe [Kapitel 12](12-fehlersuche.md).
+> **Kasm auf demselben Host stört nicht mehr.** Sein Agent löschte anfangs jedes
+> gebaute Golden Image, weil es das Label `com.kasmweb.image=true` vom Basisimage
+> erbte. Der Builder löscht dieses Label jetzt — Images ohne es betrachtet Kasm
+> gar nicht erst. Details in [Kapitel 12](12-fehlersuche.md).
 
 ## Was ein Golden Image ist
 

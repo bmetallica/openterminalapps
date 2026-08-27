@@ -27,6 +27,15 @@ EXCLUDE_NAMES = {
     "ShaderCache", "GrShaderCache", "DawnCache", "blob_storage",
     "CachedProfilesData", "CachedExtensionVSIXs", "Crash Reports",
     "__pycache__", "node_modules", ".Trash",
+    # Service-Worker-Cache der Editor-Erweiterungen. In einem gewachsenen
+    # Profil der groesste Posten ueberhaupt (gemessen: 193 MB) und
+    # vollstaendig nachladbar. Der Rest von WebStorage kommt mit — dort
+    # steht echter Zustand von Erweiterungen.
+    "CacheStorage",
+    # Von Chrome nachgeladene Modelle und Listen
+    "component_crx_cache", "WasmTtsEngine", "Safe Browsing",
+    "OnDeviceHeadSuggestModel", "optimization_guide_model_store",
+    "Dictionaries",
 }
 EXCLUDE_SUFFIXES = (".sock", ".lock", ".pid", ".Xauthority", ".ICEauthority")
 EXCLUDE_PREFIXES = ("core.", ".X11-unix", ".vnc/", "krb5cc_")

@@ -1371,21 +1371,124 @@ Vor dem Produktivgang: ein Sicherheitsreview der Auth- und Autorisierungspfade (
 
 ---
 
-## 17. Offene Entscheidungen
+## 17. Entscheidungen
 
-Diese Punkte brauchen deine Entscheidung; sie ändern den Aufwand spürbar:
+Stand 2026-08-27. Was hier steht, ist entschieden — die Begründung bleibt dokumentiert,
+damit später nachvollziehbar ist, warum es so aussieht wie es aussieht.
 
-1. **Hardware für den Zielbetrieb.** 20 parallele Sessions passen nicht auf diesen Host (4 Cores / 15 GB / 60 GB frei). Entweder Zielgröße auf ~4 Sessions korrigieren, oder eine größere Maschine (≥16 Cores, ≥64 GB RAM, ≥1 TB NVMe) einplanen. Multi-Host-Support ist im Datenmodell (`sessions.host_id`) vorgesehen, aber erst M8.
-2. **Domain und Zertifikat.** `home-bmetallica.de` scheint verfügbar. Let's Encrypt via DNS-01 wäre deutlich angenehmer als das aktuelle self-signed `CN=RAG`.
-3. **Eigene Basisimages oder `kasmweb/*` erben?** Erben ist schneller (M1 lauffähig), eigene Images sind lizenzrechtlich sauberer und unabhängig. Vorschlag: erben für den Piloten, eigene Basis ab M5.
-4. ~~**Lizenz-Check `kasmtech/workspaces-images`.**~~ **Erledigt am 2026-08-26**: MIT, verifiziert im Branch `release/1.18.0`. Siehe §3.2. Der MIT-Copyright-Vermerk muss in abgeleiteten Dockerfiles erhalten bleiben.
-4b. **Bleibt OTA rein intern?** Das ist die einzige Frage, die die rechtliche Bewertung noch kippen könnte. Solange die Plattform ausschließlich eigene Mitarbeiter im Firmennetz bedient, ist alles gedeckt (§3.1). Sobald Dritte — Kunden, Partnerfirmen, externe Freelancer mit eigenem Arbeitgeber — Zugang bekommen sollen, muss VS Code für diese Nutzer durch **VSCodium** (MIT, Extensions über Open VSX) ersetzt werden. Das ist im Template-Modell vorgesehen: zwei Golden Images, eines intern mit MS-Build, eines extern mit VSCodium.
-5. **Projektname und Domain.** „OpenTerminalApps"/OTA ist aus dem Verzeichnisnamen abgeleitet — falls du etwas anderes willst, jetzt festlegen (steckt in Paketnamen, Image-Präfixen und URLs).
-6. **JetBrains-Strategie.** Nur Community-Editionen ausrollen (lizenzfrei) oder Ultimate mit Named-User-Aktivierung durch die Entwickler?
-7. **Multi-App-Container: bauen wir ihn?** Modus B (§9) ist ein eigenständiges Stück Arbeit von 3–4 Wochen und setzt M5 voraus. Er lohnt sich vor allem wegen des gemeinsamen Zuhauses und der AD-Identität, weniger wegen des Speichers (§9.3). Vorschlag: nach M6 entscheiden, wenn der Basisbetrieb steht.
-8. **Streaming-Engine für Modus B.** Empfehlung ist KasmVNC mit einem Display je App, weil beide Betriebsmodi dann dieselbe Strecke nutzen (§9.2). Xpra seamless wäre eleganter für echte Einzelfenster, kostet aber dauerhaft eine zweite Engine. Falls du echte Fenster statt formatfüllender Apps willst, kehrt sich die Empfehlung um.
-9. **AD-Durchreichung: welcher Weg?** Standard wäre Kerberos-Ticket-Injektion (§9.4, Weg 2). Passwort-Durchreichung (Weg 4) bleibt aus, solange du sie nicht ausdrücklich willst — sie macht OTA zum Passwortspeicher.
-10. **Cursor im Katalog?** Proprietär, Lizenzlage für Mehrbenutzerbetrieb ungeklärt (§9.6). Bis zur Klärung deaktiviert. Die anderen vier Editoren sind unbedenklich.
-11. **Registry-Signatur prüfen?** Der Kasm-Katalog trägt ein ES256-JWT (§9.8). Wollen wir die Signatur validieren — was den öffentlichen Schlüssel von Kasm und eine Abhängigkeit davon bedeutet — oder behandeln wir Registries schlicht als Vertrauensentscheidung des Admins mit deutlichem Hinweis im UI? Vorschlag: zunächst Letzteres.
-12. **Kasms Image-Aufräumen abschalten oder M5 verschieben?** Kasm löscht im Modus „Aggressive" alle 30 Sekunden jedes Image, das es nicht kennt — auch unsere Golden Images (§8.4b). Entweder du stellst das in Kasm um (*Infrastructure → Servers*), oder M5 wartet, bis Kasm abgelöst ist. Ich habe an deinem laufenden Kasm bewusst nichts geändert. Alles andere am Parallelbetrieb ist davon nicht betroffen.
-13. **Kasm-Abschaltung.** Ab wann darf OTA Port 443 übernehmen? Vorschlag: erst nach erfolgreicher Abnahme von Punkt 12.1 durch dich.
+### 17.1 Zielgröße — geklärt: Teststellung
+
+Dieser Host ist eine **Teststellung**, keine Produktionsmaschine. Zwei bis drei parallele
+Arbeitsplätze sind hier realistisch, und das genügt. Die Dimensionierung für ~20
+Entwickler (≥ 16 Kerne, ≥ 64 GB, ≥ 1 TB) ist eine Frage der späteren Produktionsmaschine,
+nicht dieser. Mehrere Hosts sind im Datenmodell vorgesehen (`sessions.host_id`), bleiben
+aber M10.
+
+### 17.2 Zertifikat — bleibt selbstsigniert
+
+Es bleibt bei der lokalen CA. Ein echtes Zertifikat kommt später über einen vorgelagerten
+Reverse Proxy, falls überhaupt. Der Weg dafür ist in Kapitel 10 des Handbuchs beschrieben
+und braucht keine Änderung an OTA.
+
+**Folge:** HSTS bleibt aus. Solange die CA nicht in jedem Browser importiert ist, würde es
+den „trotzdem fortfahren"-Ausweg entfernen und Nutzer aussperren statt schützen.
+
+### 17.3 Basisimages — erben, eigenes ab M5
+
+Für den Piloten weiter von `kasmweb/*` erben. Ein eigenes `ota/base-xfce` ab M5 — es macht
+nicht nur lizenzrechtlich unabhängig, sondern bringt auch `clipnotify` und `xsel` mit, ohne
+die die Zwischenablage-Brücke bei Abfrage statt Ereignissen bleibt (§10.4).
+
+### 17.4 Lizenzen — geprüft
+
+Kasms Image-Repository ist MIT, KasmVNC GPL-2.0, die MS-VS-Code-EULA erlaubt internes
+Deployment ausdrücklich. Am Originaltext verifiziert, siehe §3.
+
+### 17.4b Reichweite — rein intern
+
+OTA bedient ausschließlich eigene Mitarbeiter im Firmennetz. Damit greift die Einschränkung
+der Microsoft-EULA nicht und der MS-Build von VS Code ist zulässig (§3.1). Sobald echte
+Dritte Zugang bekämen, bräuchten diese ein Golden Image mit VSCodium.
+
+### 17.5 Name — bleibt OpenTerminalApps
+
+### 17.6 JetBrains — nur Community
+
+Nur die Community-Editionen (Apache-2.0, kommerziell kostenfrei). Ultimate wird nicht
+ausgerollt; damit entfällt die Frage nach Named-User-Lizenzen, und OTA speichert keine
+Lizenzschlüssel.
+
+### 17.7 Arbeitsplatz — der Kern des Produkts
+
+Nicht ein Zusatz neben Ein-App-Containern, sondern das Modell, für das OTA gebaut wird
+(§1.1). Grundfunktion steht und ist geprüft.
+
+### 17.8 Streaming-Engine — KasmVNC, ein Display je App
+
+Beide Betriebsarten nutzen damit dieselbe Strecke. Der eine Nachteil — jedes Display hat
+seine eigene Zwischenablage — ist durch die Brücke aus §10.4 ausgeglichen.
+
+### 17.9 AD-Anmeldedaten — Kerberos, keine Passwort-Durchreichung
+
+Standardweg wird die **Kerberos-Ticket-Injektion** (§9.4, Weg 2). Der Weg „Nutzer verbindet
+selbst" bleibt immer verfügbar.
+
+**Die Passwort-Durchreichung wird vorerst gar nicht gebaut** — nicht nur abgeschaltet. Sie
+würde OTA zum Passwortspeicher machen; wenn sie später gebraucht wird, ist das eine eigene
+Entscheidung mit eigener Prüfung.
+
+### 17.10 Cursor — bleibt draussen
+
+Aus dem App-Katalog entfernt, nicht nur gesperrt. Proprietär, Lizenzlage für
+Mehrbenutzerbetrieb ungeklärt, und als VS-Code-Fork dürfte es den MS-Marketplace ohnehin
+nicht ansprechen. Die übrigen Editoren sind unbedenklich.
+
+### 17.11 Registry-Signatur — nicht prüfen
+
+Registries sind eine Vertrauensentscheidung des Admins, mit deutlichem Hinweis im
+Import-Dialog. Eine Signaturprüfung würde eine Abhängigkeit von Kasms öffentlichem
+Schlüssel schaffen, ohne mehr Sicherheit zu bringen als die Entscheidung, wem man vertraut.
+
+### 17.12 Kasm und Golden Images — gelöst, ohne Kasm anzufassen
+
+**Die Ursache war ein geerbtes Label.** Kasms Agent räumt im Modus „Aggressive" alle 30
+Sekunden auf und löscht dabei genau die Images, die `com.kasmweb.image=true` tragen und
+nicht in seiner Datenbank stehen. Ein von einem Kasm-Image abgeleitetes Golden Image
+**erbt dieses Label** und wird deshalb als verwaiste Workspace-Version eingestuft.
+
+Am 2026-08-27 durch einen Gegentest belegt: Zwei identische abgeleitete Images, eines mit
+dem Label, eines ohne. Nach zwei Aufräumdurchläufen war das mit Label gelöscht, das ohne
+unangetastet. Images ohne dieses Label betrachtet Kasm gar nicht erst — `alpine`- und
+`busybox`-Ableitungen überstehen jeden Durchlauf.
+
+**Der Builder löscht das Label deshalb in jedem erzeugten Dockerfile.** Damit laufen OTA
+und Kasm auf demselben Host nebeneinander, ohne dass an Kasm etwas umgestellt werden muss.
+
+Als Rückfallebene bleibt eine zweite Möglichkeit bestehen: Ein Build kann fremde
+Aufräumdienste für seine Dauer anhalten (`pause_foreign_cleanup`, Vorgabe `kasm_agent`).
+Der Agent startet sie in jedem Fall wieder — auch wenn der Build scheitert. Nach dem
+Label-Fund ist das nicht mehr nötig, aber es kostet nichts und deckt den Fall ab, dass ein
+anderes System auf demselben Host nach anderen Regeln aufräumt.
+
+### 17.13 Port — bleibt frei einstellbar
+
+OTA bleibt auf **8443**. Port 443 zu übernehmen war nie notwendig — der Port ist über
+`OTA_HTTPS_PORT` frei wählbar, und mit einem vorgelagerten Reverse Proxy (§17.2) ist die
+Frage endgültig gegenstandslos. Kasm behält 443.
+
+**Damit entfällt auch der Zwang, Kasm abzuschalten.** Beide Systeme laufen dauerhaft
+nebeneinander; §17.12 hat den letzten Konflikt beseitigt. Aus der Ablösung wird ein
+Umzug im eigenen Tempo.
+
+### 17.14 Migration — nur kopieren, Kasm bleibt
+
+Übernommen wird das Profil, nicht der Container. `scripts/migrate-kasm-profile.sh` kopiert
+`/srv/kasm_profiles/<nutzer>` nach `/srv/ota/profiles/<nutzer>/user`, lässt Caches,
+Absturzabbilder und das alte VNC-Passwort weg und setzt die Eigentümerschaft auf 1000.
+
+Am 2026-08-27 durchgeführt: **805 MB Rohdaten wurden zu 63 MB**, ohne dass eine
+Nutzerdatei fehlt — der Löwenanteil waren Service-Worker-Caches (193 MB), von Chrome
+nachgeladene Modelle (91 MB) und Editor-Caches. Abnahme bestanden: Einstellungen,
+Extensions, SSH- und GPG-Schlüssel, XFCE-Layout und Continue-Konfiguration sind da.
+**Kasm blieb unverändert** und läuft weiter.
+

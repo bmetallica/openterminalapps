@@ -33,7 +33,7 @@ zeigt der Browser keine Warnung mehr — auch nach jedem Zertifikatswechsel.
 | `deploy/` | Compose-Stack, Traefik, Zertifikate |
 | `docs/wiki/` | Handbuch — wird im Admin-Bereich als Hilfe ausgeliefert |
 | `tests/` | Oberflächentest mit echtem Browser |
-| `scripts/` | Zertifikat, Autorisierungstests |
+| `scripts/` | Zertifikat, Migration aus Kasm, Testsuiten |
 
 ## Dokumentation
 
