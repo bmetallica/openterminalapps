@@ -90,7 +90,16 @@ services:
       OTA_AGENT_URL: "http://agent:8100"
       OTA_AGENT_TOKEN: "${OTA_AGENT_TOKEN:?OTA_AGENT_TOKEN fehlt in deploy/.env}"
       OTA_PROFILES_ROOT: "${OTA_PROFILES_ROOT:-/srv/ota/profiles}"
+      # Nur, um Images der eigenen Registry als eigene zu erkennen.
+      OTA_REGISTRY: "${OTA_REGISTRY:-127.0.0.1:5000}"
       OTA_COOKIE_SECURE: "true"
+    volumes:
+      # Das Handbuch wird eingehaengt statt ins Abbild kopiert: So laesst es
+      # sich nachbessern, ohne das Abbild neu zu bauen — dieselbe Ueberlegung
+      # wie bei der nginx-Konfiguration.
+      - ../docs/wiki:/app/wiki:ro
+      # Die Firefox-Erweiterung wird beim Abruf gepackt, nicht beim Bauen.
+      - ../extension:/app/extension:ro
     networks:
       - public      # damit Traefik sie erreicht
       - internal    # damit sie DB und Agent erreicht
@@ -114,6 +123,12 @@ services:
     environment:
       OTA_AGENT_TOKEN: "${OTA_AGENT_TOKEN:?OTA_AGENT_TOKEN fehlt in deploy/.env}"
       OTA_PROFILES_ROOT: "${OTA_PROFILES_ROOT:-/srv/ota/profiles}"
+      OTA_RUNTIME_ROOT: "${OTA_RUNTIME_ROOT:-/srv/ota/runtime}"
+      # Leer lassen schaltet die Registry ab; dann bleiben Images nur lokal.
+      OTA_REGISTRY: "${OTA_REGISTRY:-127.0.0.1:5000}"
+      # Gemeinsame Ablage. In Session-Containern nur lesbar; geschrieben wird
+      # ausschliesslich ueber die Oberflaeche.
+      OTA_SHARED_ROOT: "${OTA_SHARED_ROOT:-/srv/ota/shared}"
       OTA_SESSION_NETWORK: ota_sessions
       OTA_PUBLIC_NETWORK: ota_public
       OTA_BACKUP_ROOT: "${OTA_BACKUP_ROOT:-/srv/ota/backups}"
@@ -122,6 +137,12 @@ services:
       # Die API bekommt ihn bewusst nicht — sie verarbeitet Nutzereingaben.
       - /var/run/docker.sock:/var/run/docker.sock
       - ${OTA_PROFILES_ROOT:-/srv/ota/profiles}:${OTA_PROFILES_ROOT:-/srv/ota/profiles}
+      # Dateien, die der Agent in Session-Container einhaengt. Muss auf beiden
+      # Seiten derselbe Pfad sein: Docker loest Bind-Mounts gegen den Host auf.
+      - ${OTA_RUNTIME_ROOT:-/srv/ota/runtime}:${OTA_RUNTIME_ROOT:-/srv/ota/runtime}
+      # Derselbe Pfad auf beiden Seiten, damit der Agent ihn als
+      # Bind-Mount in Session-Container weiterreichen kann.
+      - ${OTA_SHARED_ROOT:-/srv/ota/shared}:${OTA_SHARED_ROOT:-/srv/ota/shared}
       # Ein einziges Wurzelverzeichnis für alle Sicherungen. Genau deshalb
       # lässt es sich später ohne Änderung an OTA durch einen NFS-Mount
       # ersetzen — die Anwendung sieht weiterhin nur diesen Pfad.
@@ -134,6 +155,45 @@ services:
       - sessions
     labels:
       - "traefik.enable=false"
+
+  # ------------------------------------------------------------------
+  # Eigene Registry
+  #
+  # Wozu, wenn die Images ohnehin im Docker-Store liegen? Zwei Gruende, und
+  # das Zurueckdrehen einer Fassung ist keiner davon — das kann OTA laengst
+  # ueber `image_builds`.
+  #
+  #   1. Ein zweiter Host. Ohne Registry existieren die eigenen Golden Images
+  #      nur lokal; eine zweite Maschine koennte sie nicht bekommen.
+  #   2. Fremdes Aufraeumen. Kasms Agent hat auf diesem Host schon einmal
+  #      jedes ihm unbekannte Image geloescht. Das Label-Problem ist umgangen,
+  #      aber eine Kopie ausserhalb des Stores ist der stabilere Schutz.
+  #
+  # Veroeffentlicht auf 127.0.0.1: Der Docker-Daemon laeuft auf dem Host und
+  # muss die Registry erreichen, nicht ein Container. Und Docker verlangt fuer
+  # localhost kein TLS — deshalb braucht diese Registry weder Zertifikat noch
+  # einen Eintrag in daemon.json. Von aussen ist sie damit nicht erreichbar;
+  # wer sie einem zweiten Host anbieten will, stellt sie hinter Traefik.
+  registry:
+    image: registry:2
+    container_name: ota-registry
+    restart: unless-stopped
+    environment:
+      # Loeschen erlauben. Ohne das laesst sich eine alte Fassung nur
+      # verstecken, nicht entfernen.
+      REGISTRY_STORAGE_DELETE_ENABLED: "true"
+    volumes:
+      - registry-data:/var/lib/registry
+    ports:
+      - "127.0.0.1:${OTA_REGISTRY_PORT:-5000}:5000"
+    networks:
+      - public
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:5000/v2/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   db:
     image: postgres:16-alpine
@@ -159,6 +219,9 @@ services:
       start_period: 20s
 
 volumes:
+  registry-data:
+    name: ota_registry_data
+
   db-data:
     name: ota_db_data
 

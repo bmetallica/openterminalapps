@@ -5,6 +5,7 @@ import {
   type Group, type Permission, type User,
 } from '../lib/api'
 import { ago } from '../lib/format'
+import { t as tr, useLang } from '../lib/i18n'
 
 type Tab = 'Nutzer' | 'Gruppen'
 
@@ -44,7 +45,7 @@ function UserEditor({ user, groups, onSaved, onClose, onToast }: {
       onToast(isNew ? `${username} angelegt` : `${username} gespeichert`)
       onSaved()
     } catch (err) {
-      onToast(err instanceof ApiError ? err.message : 'Speichern fehlgeschlagen', 'bad')
+      onToast(err instanceof ApiError ? err.message : tr('Speichern fehlgeschlagen'), 'bad')
     } finally {
       setBusy(false)
     }
@@ -58,7 +59,7 @@ function UserEditor({ user, groups, onSaved, onClose, onToast }: {
       onToast(res.status)
       onSaved()
     } catch (err) {
-      onToast(err instanceof ApiError ? err.message : 'Löschen fehlgeschlagen', 'bad')
+      onToast(err instanceof ApiError ? err.message : tr('Löschen fehlgeschlagen'), 'bad')
     } finally {
       setBusy(false)
     }
@@ -66,61 +67,64 @@ function UserEditor({ user, groups, onSaved, onClose, onToast }: {
 
   return (
     <Drawer
-      title={isNew ? 'Nutzer anlegen' : username}
-      subtitle={isNew ? undefined : user?.auth_provider === 'local' ? 'Lokales Konto' : user?.auth_provider}
+      title={isNew ? tr('Nutzer anlegen') : username}
+      subtitle={isNew ? undefined
+        : user?.auth_provider === 'local' ? tr('Lokales Konto') : user?.auth_provider}
       onClose={onClose}
       footer={
         <>
           {!isNew && (
             <button className="btn btn--halt" style={{ marginRight: 'auto' }}
-              disabled={busy} onClick={() => void remove()}>Löschen</button>
+              disabled={busy} onClick={() => void remove()}>{tr('Löschen')}</button>
           )}
-          <button className="btn btn--ghost" onClick={onClose}>Verwerfen</button>
+          <button className="btn btn--ghost" onClick={onClose}>{tr('Verwerfen')}</button>
           <button className="btn btn--primary" disabled={busy || !username} onClick={() => void save()}>
-            {busy ? 'Wird gespeichert…' : isNew ? 'Nutzer anlegen' : 'Speichern'}
+            {busy ? tr('Wird gespeichert…') : isNew ? tr('Nutzer anlegen') : tr('Speichern')}
           </button>
         </>
       }
     >
-      <Field label="Benutzername" hint={isNew ? 'Wird für die Anmeldung verwendet und lässt sich später nicht ändern.' : undefined}>
+      <Field label={tr('Benutzername')}
+        hint={isNew ? tr('Wird für die Anmeldung verwendet und lässt sich später nicht ändern.') : undefined}>
         <div className="row-item">
-          <input value={username} disabled={!isNew} aria-label="Benutzername"
+          <input value={username} disabled={!isNew} aria-label={tr('Benutzername')}
             onChange={(e) => setUsername(e.target.value)} />
         </div>
       </Field>
 
-      <Field label="Anzeigename">
+      <Field label={tr('Anzeigename')}>
         <div className="row-item">
-          <input value={displayName} aria-label="Anzeigename"
+          <input value={displayName} aria-label={tr('Anzeigename')}
             onChange={(e) => setDisplayName(e.target.value)} />
         </div>
       </Field>
 
-      <Field label="E-Mail">
+      <Field label={tr('E-Mail')}>
         <div className="row-item">
-          <input value={email} type="email" aria-label="E-Mail"
+          <input value={email} type="email" aria-label={tr('E-Mail')}
             onChange={(e) => setEmail(e.target.value)} />
         </div>
       </Field>
 
-      <Field label={isNew ? 'Startpasswort' : 'Neues Passwort'}
-        hint="Mindestens 12 Zeichen. Der Nutzer muss es bei der ersten Anmeldung wechseln.">
+      <Field label={isNew ? tr('Startpasswort') : tr('Neues Passwort')}
+        hint={tr('Mindestens 12 Zeichen. Der Nutzer muss es bei der ersten Anmeldung wechseln.')}>
         <div className="row-item">
           <input value={password} type="text" autoComplete="new-password"
-            placeholder={isNew ? '' : 'leer lassen, um es nicht zu ändern'}
-            aria-label="Passwort"
+            placeholder={isNew ? '' : tr('leer lassen, um es nicht zu ändern')}
+            aria-label={tr('Passwort')}
             onChange={(e) => setPassword(e.target.value)} />
         </div>
       </Field>
 
-      <Field label="Gruppen" hint="Bestimmt, welche Workspaces der Nutzer sieht und was er darf.">
-        <ChipSelect label="Gruppen" selected={selected} options={groups.map((g) => g.name)}
+      <Field label={tr('Gruppen')} hint={tr('Bestimmt, welche Workspaces der Nutzer sieht und was er darf.')}>
+        <ChipSelect label={tr('Gruppen')} selected={selected} options={groups.map((g) => g.name)}
           onChange={(names) => setGroupIds(names.map((n) => bySlug[n]).filter(Boolean))} />
       </Field>
 
-      <Field label="Konto">
-        <Toggle on={isActive} name="Konto ist aktiv"
-          note={isActive ? 'Der Nutzer kann sich anmelden.' : 'Anmeldung gesperrt, Daten bleiben erhalten.'}
+      <Field label={tr('Konto')}>
+        <Toggle on={isActive} name={tr('Konto ist aktiv')}
+          note={isActive ? tr('Der Nutzer kann sich anmelden.')
+                         : tr('Anmeldung gesperrt, Daten bleiben erhalten.')}
           onChange={setIsActive} />
       </Field>
     </Drawer>
@@ -153,7 +157,7 @@ function GroupEditor({ group, permissions, onSaved, onClose, onToast }: {
       onToast(isNew ? `${name} angelegt` : `${name} gespeichert`)
       onSaved()
     } catch (err) {
-      onToast(err instanceof ApiError ? err.message : 'Speichern fehlgeschlagen', 'bad')
+      onToast(err instanceof ApiError ? err.message : tr('Speichern fehlgeschlagen'), 'bad')
     } finally {
       setBusy(false)
     }
@@ -167,7 +171,7 @@ function GroupEditor({ group, permissions, onSaved, onClose, onToast }: {
       onToast(res.status)
       onSaved()
     } catch (err) {
-      onToast(err instanceof ApiError ? err.message : 'Löschen fehlgeschlagen', 'bad')
+      onToast(err instanceof ApiError ? err.message : tr('Löschen fehlgeschlagen'), 'bad')
     } finally {
       setBusy(false)
     }
@@ -175,42 +179,42 @@ function GroupEditor({ group, permissions, onSaved, onClose, onToast }: {
 
   return (
     <Drawer
-      title={isNew ? 'Gruppe anlegen' : name}
-      subtitle={group?.is_system ? 'Systemgruppe — Name und Priorität sind festgelegt' : undefined}
+      title={isNew ? tr('Gruppe anlegen') : name}
+      subtitle={group?.is_system
+        ? tr('Systemgruppe — Name und Priorität sind festgelegt') : undefined}
       onClose={onClose}
       footer={
         <>
           {!isNew && !group.is_system && (
             <button className="btn btn--halt" style={{ marginRight: 'auto' }}
-              disabled={busy} onClick={() => void remove()}>Löschen</button>
+              disabled={busy} onClick={() => void remove()}>{tr('Löschen')}</button>
           )}
-          <button className="btn btn--ghost" onClick={onClose}>Verwerfen</button>
+          <button className="btn btn--ghost" onClick={onClose}>{tr('Verwerfen')}</button>
           <button className="btn btn--primary" disabled={busy || !name} onClick={() => void save()}>
-            {busy ? 'Wird gespeichert…' : isNew ? 'Gruppe anlegen' : 'Speichern'}
+            {busy ? tr('Wird gespeichert…') : isNew ? tr('Gruppe anlegen') : tr('Speichern')}
           </button>
         </>
       }
     >
-      <Field label="Name">
+      <Field label={tr('Name')}>
         <div className="row-item">
-          <input value={name} disabled={group?.is_system} aria-label="Gruppenname"
+          <input value={name} disabled={group?.is_system} aria-label={tr('Gruppenname')}
             onChange={(e) => setName(e.target.value)} />
         </div>
       </Field>
 
-      <Field label="Priorität"
-        hint="Kleinere Zahl gewinnt, wenn zwei Gruppen widersprechende Ressourcen vorgeben.">
+      <Field label={tr('Priorität')}
+        hint={tr('Kleinere Zahl gewinnt, wenn zwei Gruppen widersprechende Ressourcen vorgeben.')}>
         <div className="row-item">
           <input type="number" min={1} max={9999} value={priority}
-            disabled={group?.is_system} aria-label="Priorität"
+            disabled={group?.is_system} aria-label={tr('Priorität')}
             onChange={(e) => setPriority(Number(e.target.value))} />
         </div>
       </Field>
 
-      <Field label="Rechte"
-        hint={'Ohne Rechte sieht ein Mitglied nur sein eigenes Dashboard. ' +
-              '„Vollzugriff auf alles" schliesst alle übrigen ein.'}>
-        <ChipSelect label="Rechte" selected={selected} options={permissions.map((p) => p.text)}
+      <Field label={tr('Rechte')}
+        hint={tr('Ohne Rechte sieht ein Mitglied nur sein eigenes Dashboard. „Vollzugriff auf alles" schliesst alle übrigen ein.')}>
+        <ChipSelect label={tr('Rechte')} selected={selected} options={permissions.map((p) => p.text)}
           onChange={(texts) => setPerms(texts.map((x) => byText[x]).filter(Boolean))} />
       </Field>
     </Drawer>
@@ -218,6 +222,7 @@ function GroupEditor({ group, permissions, onSaved, onClose, onToast }: {
 }
 
 export function People({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad') => void }) {
+  useLang()
   const [tab, setTab] = useState<Tab>('Nutzer')
   const [users, setUsers] = useState<User[] | null>(null)
   const [groups, setGroups] = useState<Group[]>([])
@@ -239,7 +244,7 @@ export function People({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad') 
   if (failed) {
     return (
       <div className="wrap"><div className="empty">
-        <p className="empty__title">Konnte nicht geladen werden</p>
+        <p className="empty__title">{tr('Konnte nicht geladen werden')}</p>
         <p className="empty__body">{failed}</p>
         <button className="btn" onClick={() => void load()}>Erneut versuchen</button>
       </div></div>
@@ -251,20 +256,20 @@ export function People({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad') 
     <div className="wrap">
       <header className="topbar">
         <div>
-          <p className="silk" style={{ marginBottom: 6 }}>Verwaltung</p>
-          <h1 className="h-page">Nutzer und Gruppen</h1>
+          <p className="silk" style={{ marginBottom: 6 }}>{tr('Verwaltung')}</p>
+          <h1 className="h-page">{tr('Nutzer und Gruppen')}</h1>
         </div>
         <button className="btn btn--primary"
           onClick={() => (tab === 'Nutzer' ? setEditUser(null) : setEditGroup(null))}>
-          {tab === 'Nutzer' ? 'Nutzer anlegen' : 'Gruppe anlegen'}
+          {tab === 'Nutzer' ? tr('Nutzer anlegen') : tr('Gruppe anlegen')}
         </button>
       </header>
 
-      <div className="seg" role="radiogroup" aria-label="Ansicht" style={{ marginBottom: 20 }}>
+      <div className="seg" role="radiogroup" aria-label={tr('Ansicht')} style={{ marginBottom: 20 }}>
         {(['Nutzer', 'Gruppen'] as Tab[]).map((x) => (
           <button key={x} type="button" role="radio" aria-checked={tab === x}
             className={`seg__opt${tab === x ? ' is-on' : ''}`} onClick={() => setTab(x)}>
-            {x} <span className="data" style={{ opacity: .6 }}>
+            {tr(x)} <span className="data" style={{ opacity: .6 }}>
               {x === 'Nutzer' ? users.length : groups.length}
             </span>
           </button>
@@ -276,10 +281,10 @@ export function People({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad') 
           <table className="tbl">
             <thead>
               <tr>
-                <th style={{ paddingLeft: 20 }}>Nutzer</th>
-                <th>Gruppen</th>
-                <th>Zuletzt angemeldet</th>
-                <th>Status</th>
+                <th style={{ paddingLeft: 20 }}>{tr('Nutzer')}</th>
+                <th>{tr('Gruppen')}</th>
+                <th>{tr('Zuletzt angemeldet')}</th>
+                <th>{tr('Status')}</th>
               </tr>
             </thead>
             <tbody>
@@ -297,7 +302,7 @@ export function People({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad') 
                       .filter(Boolean).join(', ') || '—'}
                   </td>
                   <td className="data" style={{ color: 'var(--mute)', fontSize: 12 }}>
-                    {u.last_login_at ? ago(new Date(u.last_login_at).getTime()) : 'noch nie'}
+                    {u.last_login_at ? ago(new Date(u.last_login_at).getTime()) : tr('noch nie')}
                   </td>
                   <td><Led status={u.is_active ? 'running' : 'stopped'} /></td>
                 </tr>
@@ -308,10 +313,10 @@ export function People({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad') 
           <table className="tbl">
             <thead>
               <tr>
-                <th style={{ paddingLeft: 20 }}>Gruppe</th>
-                <th>Priorität</th>
-                <th>Rechte</th>
-                <th>Mitglieder</th>
+                <th style={{ paddingLeft: 20 }}>{tr('Gruppe')}</th>
+                <th>{tr('Priorität')}</th>
+                <th>{tr('Rechte')}</th>
+                <th>{tr('Mitglieder')}</th>
               </tr>
             </thead>
             <tbody>
@@ -320,13 +325,13 @@ export function People({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad') 
                   onKeyDown={(e) => { if (e.key === 'Enter') setEditGroup(g) }}>
                   <td style={{ paddingLeft: 20 }}>
                     <div style={{ fontWeight: 500 }}>{g.name}</div>
-                    {g.is_system && <div className="silk" style={{ marginTop: 2 }}>Systemgruppe</div>}
+                    {g.is_system && <div className="silk" style={{ marginTop: 2 }}>{tr('Systemgruppe')}</div>}
                   </td>
                   <td className="data" style={{ color: 'var(--label)' }}>{g.priority}</td>
                   <td style={{ color: 'var(--label)', fontSize: 12.5 }}>
                     {g.permissions.length
                       ? g.permissions.map((k) => permissions.find((p) => p.key === k)?.text ?? k).join(', ')
-                      : 'nur eigenes Dashboard'}
+                      : tr('nur eigenes Dashboard')}
                   </td>
                   <td className="data" style={{ color: 'var(--label)' }}>{g.member_count}</td>
                 </tr>

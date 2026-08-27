@@ -22,11 +22,44 @@ und zurück. Auch Bilder, nicht nur Text.
 **Das Panel als Rückfall**: In der Kontrollleiste gibt es ein Textfeld in beide Richtungen. Es
 funktioniert immer, auch wenn der Browser die automatische Zwischenablage verweigert.
 
-### Firefox
+### Firefox ✅
 
-Firefox stellt Webseiten das *automatische Lesen* der Zwischenablage nicht zur Verfügung. OTA nutzt
-dort den Weg über das Einfüge-Ereignis: Du drückst Strg+V, und der Inhalt wird übernommen. Für dich
-macht das keinen Unterschied — es funktioniert, nur die Technik dahinter ist eine andere.
+Firefox stellt Webseiten das *automatische Lesen* der Zwischenablage nicht zur Verfügung. Das ist
+keine Einstellung, die sich umlegen liesse, sondern eine Festlegung des Browsers.
+
+**Ohne Erweiterung** nutzt OTA dort den Weg über das Einfüge-Ereignis: Du drückst Strg+V, und der
+Inhalt wird übernommen. Das funktioniert zuverlässig, verlangt aber jedes Mal den Tastendruck im
+richtigen Fenster.
+
+**Mit der OTA-Erweiterung** verhält sich Firefox wie Chrome: Kopieren und Einfügen gleichen sich von
+selbst ab. Die Erweiterung tut nichts anderes — sie reicht den Lesezugriff an genau eine Adresse
+weiter.
+
+Wenn OTA in Firefox läuft und die Erweiterung fehlt, steht in der Kontrollleiste ein Hinweis mit
+einem Knopf zum Herunterladen. Der Weg dorthin von Hand:
+
+1. In der Session die Kontrollleiste öffnen (Griff am rechten Rand).
+2. Unter **Zwischenablage** auf **Erweiterung herunterladen**.
+3. In Firefox `about:debugging` → **Dieser Firefox** → **Temporäres Add-on laden** → die
+   heruntergeladene ZIP-Datei auswählen.
+4. Auf das Symbol der Erweiterung in der Symbolleiste klicken, während OTA offen ist. Erst dieser
+   Klick gibt sie für diese Adresse frei — vorher darf sie nichts.
+
+#### Dauerhaft installieren ⚠️
+
+Der Weg über `about:debugging` hält nur bis zum nächsten Neustart von Firefox. Für den Dauerbetrieb
+gibt es zwei Wege, und beide brauchen eine Entscheidung ausserhalb von OTA:
+
+| Weg | Was zu tun ist | Wann sinnvoll |
+|---|---|---|
+| **Unternehmensrichtlinie** | `policies.json` mit `ExtensionSettings` verteilen, die Erweiterung von einer internen Adresse installieren lassen | Der übliche Weg im Unternehmen. Firefox nimmt so auch unsignierte Erweiterungen an, wenn sie über die Richtlinie kommen |
+| **Signatur durch Mozilla** | Die Erweiterung bei addons.mozilla.org einreichen (auch als „unlisted", dann ohne Veröffentlichung) | Wenn keine Richtlinien ausgerollt werden können |
+
+Firefox ESR erlaubt zusätzlich `xpinstall.signatures.required=false`. Das ist bequem, hebt die
+Signaturpflicht aber für **alle** Erweiterungen auf — also nur dort, wo das bewusst getragen wird.
+
+Der Quelltext liegt in `extension/firefox/` und ist keine hundert Zeilen. Wer ihn vor dem Ausrollen
+prüfen will, findet dort drei Dateien: das Manifest, das Hintergrundskript und die Brücke zur Seite.
 
 ## Zwischen Apps im Arbeitsplatz ✅
 
@@ -78,6 +111,12 @@ Diese Punkte scheitern in Eigenbauten regelmäßig, und zwar **lautlos**:
 4. **Der Server darf nichts zurücknehmen.** Traefik sendet in OTA
    `Permissions-Policy: clipboard-read=(self), clipboard-write=(self), …` — eine restriktive Vorgabe
    an dieser Stelle macht alles andere wirkungslos.
+5. **Der KasmVNC-Client schaltet die Zwischenablage im iframe selbst ab.** Er prüft
+   `window.self !== window.top` und setzt dann `clipboard_up` und `clipboard_down` auf `false`;
+   empfangene Inhalte werden danach verworfen — ohne Fehler, ohne Meldung. OTA hängt deshalb
+   `clipboard_up=1&clipboard_down=1` an die Stream-Adresse, denn Parameter in der Adresse schlagen
+   den Vorgabewert des Clients. Wer den Viewer umbaut oder die Adresse selbst zusammensetzt, muss
+   diese Parameter mitnehmen, sonst ist der Weg aus der Session heraus wieder tot.
 
 ### Abnahme
 
@@ -85,6 +124,10 @@ Diese Punkte scheitern in Eigenbauten regelmäßig, und zwar **lautlos**:
 `plan.md` §10.5 und wird in **Chrome und Firefox** durchlaufen. Die beiden Fälle, die erfahrungsgemäß
 durchrutschen: IntelliJ (Java behandelt X11-Zwischenablage eigenwillig) und der Weg zwischen zwei
 Apps im selben Arbeitsplatz.
+
+Vier Fälle laufen bei jedem Testlauf automatisch mit: Browser → Session, Session → Browser und
+mehrzeiliger Text mit Umlauten in `tests/e2e.mjs`, der Weg zwischen zwei Apps in
+`scripts/test-clipboard-bridge.sh`. Beides startet `make test`.
 
 ## Dateien
 

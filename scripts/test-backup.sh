@@ -14,7 +14,7 @@ JAR="$(mktemp)"
 trap 'rm -f "$JAR"' EXIT
 
 USER_NAME="${OTA_TEST_ADMIN:-bmetallica}"
-USER_PW="${OTA_TEST_ADMIN_PW:-OtaStart2026!xyz}"
+USER_PW="${OTA_TEST_ADMIN_PW:?OTA_TEST_ADMIN_PW fehlt. Trag es in deploy/.env ein.}"
 
 pass=0; fail=0
 ok()  { printf '  \033[32m✓\033[0m %s\n' "$1"; pass=$((pass+1)); }

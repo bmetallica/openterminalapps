@@ -7,16 +7,20 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session as DbSession
 
 from .. import agent_client, audit
+import os
 import re
 from ..db import get_db
 from ..deps import current_user, require_permission
 from ..models import (
-    PERMISSIONS, AuditLog, Group, GroupMember, Session as SessionModel, User,
+    PERMISSIONS, AuditLog, Group, GroupMember, Session as SessionModel,
+    Template, User,
 )
 from ..schemas import (
-    GroupIn, GroupOut, HostOut, SessionAdminOut, UserIn, UserOut,
+    GroupIn, GroupOut, HostOut, ImagePullIn, SessionAdminOut, SettingsIn,
+    UserIn, UserOut,
 )
 from ..security import hash_password, password_problem
+from .. import settings_store
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -29,10 +33,115 @@ def host(_: User = Depends(require_permission("admin", "settings.manage"))) -> H
     return HostOut(**agent_client.host_info())
 
 
+manage_images = require_permission("images.manage", "templates.manage")
+
+# Eine Image-Adresse, wie Docker sie versteht: optionale Registry mit Port,
+# Pfad, Tag oder Digest. Bewusst streng — was hier durchkommt, wandert in
+# einen Aufruf an die Docker-API.
+IMAGE_REF = re.compile(
+    r"^(?:[a-z0-9.-]+(?::\d{1,5})?/)?"      # Registry, optional
+    r"[a-z0-9]+(?:[._-][a-z0-9]+)*"          # erster Pfadteil
+    r"(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)*"    # weitere Pfadteile
+    r"(?::[\w][\w.-]{0,127})?"               # Tag
+    r"(?:@sha256:[a-f0-9]{64})?$"            # oder Digest
+)
+
+# Woher ein Image stammt, ist am Namen ablesbar und fuer die Oberflaeche
+# wichtiger als der Name selbst: Ein Kasm-Image gehoert dem anderen System auf
+# diesem Host und wird von OTA nicht angefasst.
+# Die eigene Registry traegt dieselben Images wie der Store — nur mit ihrer
+# Adresse davor. Ohne diese Zeile stuenden die eigenen Golden Images nach dem
+# Ablegen dort unter "Uebrige".
+OTA_REGISTRY = os.environ.get("OTA_REGISTRY", "127.0.0.1:5000").strip()
+
+
+def _origin(ref: str) -> str:
+    if ref.startswith("ota/"):
+        return "ota"
+    if OTA_REGISTRY and ref.startswith(f"{OTA_REGISTRY}/ota/"):
+        return "ota"
+    if "kasmweb/" in ref or ref.startswith("kasmregistry"):
+        return "kasm"
+    return "fremd"
+
+
 @router.get("/images")
-def images(_: User = Depends(require_permission("templates.manage"))) -> list[dict]:
-    """Die auf dem Host vorhandenen Images — Grundlage der Auswahlliste."""
-    return agent_client.list_images()
+def images(db: DbSession = Depends(get_db),
+           _: User = Depends(manage_images)) -> list[dict]:
+    """Die auf dem Host vorhandenen Images.
+
+    Mit zwei Angaben, die die blosse Liste nicht hat: woher das Image stammt,
+    und welcher Workspace es gerade benutzt. Ohne die zweite ist "loeschen"
+    ein Ratespiel.
+    """
+    used: dict[str, list[str]] = {}
+    for tpl in db.scalars(select(Template)).all():
+        used.setdefault(tpl.image_ref, []).append(tpl.friendly_name)
+
+    out = []
+    for entry in agent_client.list_images():
+        ref = entry["ref"]
+        out.append({**entry, "origin": _origin(ref), "used_by": used.get(ref, [])})
+    return out
+
+
+@router.post("/images/pull", dependencies=[Depends(manage_images)])
+def pull_image(body: ImagePullIn, request: Request,
+               actor: User = Depends(manage_images),
+               db: DbSession = Depends(get_db)) -> dict:
+    """Holt ein Image aus seiner Registry auf diesen Host.
+
+    Damit ist die Auswahlliste kein geschlossener Kreis mehr: Bisher liess
+    sich nur waehlen, was zufaellig schon dalag.
+    """
+    ref = body.ref.strip()
+    if not IMAGE_REF.match(ref):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Das sieht nicht nach einer Image-Adresse aus. Beispiel: "
+            "kasmweb/gimp:1.18.0-rolling-weekly",
+        )
+    job = agent_client.pull_image(ref)
+    audit.record(db, "image.pull", actor=actor, object_type="image",
+                 object_id=ref, request=request)
+    db.commit()
+    return job
+
+
+@router.get("/images/pull/{job_id}", dependencies=[Depends(manage_images)])
+def pull_status(job_id: str) -> dict:
+    return agent_client.pull_status(job_id)
+
+
+@router.delete("/images", dependencies=[Depends(manage_images)])
+def remove_image(ref: str, request: Request,
+                 actor: User = Depends(manage_images),
+                 db: DbSession = Depends(get_db)) -> dict:
+    """Entfernt ein Image vom Host.
+
+    Nicht, solange ein Workspace es benutzt: Der liesse sich danach nicht mehr
+    starten, und die Meldung dazu kaeme erst beim naechsten Klick eines
+    Nutzers.
+    """
+    in_use = db.scalars(select(Template).where(Template.image_ref == ref)).all()
+    if in_use:
+        names = ", ".join(t.friendly_name for t in in_use)
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"Dieses Image ist in Benutzung: {names}. Stelle die Workspaces "
+            "erst auf ein anderes Image um.",
+        )
+    if _origin(ref) == "kasm":
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Das ist ein Image von Kasm. OTA fasst fremde Images nicht an — "
+            "gelöscht wird es dort, wo es hergekommen ist.",
+        )
+    result = agent_client.remove_image(ref)
+    audit.record(db, "image.removed", actor=actor, object_type="image",
+                 object_id=ref, request=request)
+    db.commit()
+    return result
 
 
 # --------------------------------------------------------------------------
@@ -321,3 +430,44 @@ def audit_log(limit: int = 100, db: DbSession = Depends(get_db)) -> list[dict]:
         "ip": r.ip,
         "detail": r.detail,
     } for r in rows]
+
+
+# --------------------------------------------------------------------------
+# Globale Einstellungen
+# --------------------------------------------------------------------------
+
+manage_settings = require_permission("settings.manage")
+
+
+@router.get("/settings", dependencies=[Depends(manage_settings)])
+def read_settings(db: DbSession = Depends(get_db)) -> dict:
+    """Was im laufenden Betrieb umstellbar ist — mit den erlaubten Stufen.
+
+    Die Stufen kommen bewusst vom Server: Die Oberflaeche soll keine Auswahl
+    anbieten, die der Server anschliessend zurechtbiegt.
+    """
+    return {
+        "auth_idle_minutes": settings_store.idle_minutes(db),
+        "auth_idle_steps": list(settings_store.IDLE_STEPS),
+    }
+
+
+@router.put("/settings", dependencies=[Depends(manage_settings)])
+def write_settings(
+    body: SettingsIn,
+    request: Request,
+    db: DbSession = Depends(get_db),
+    actor: User = Depends(manage_settings),
+) -> dict:
+    if body.auth_idle_minutes is not None:
+        if body.auth_idle_minutes not in settings_store.IDLE_STEPS:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "Diese Anmeldefrist ist nicht vorgesehen.",
+            )
+        settings_store.put(db, settings_store.AUTH_IDLE_MINUTES, body.auth_idle_minutes)
+
+    audit.record(db, "settings.updated", actor=actor, object_type="settings",
+                 object_id="global", request=request)
+    db.commit()
+    return read_settings(db)

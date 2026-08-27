@@ -66,12 +66,19 @@ export HOME=/home/kasm-user
 export XAUTHORITY=$HOME/.Xauthority
 export DISPLAY=:@DISPLAY@
 
-# Laeuft auf diesem Display schon ein Fenster? Das ist die verlaessliche
-# Frage. Ein Abgleich ueber den Prozessnamen scheitert hier: "pgrep -f"
-# durchsucht ganze Kommandozeilen und findet dabei DIESES Skript, dessen
-# Text den Anwendungsnamen enthaelt — das Skript haelt sich dann selbst
-# fuer die laufende Anwendung und beendet sich.
-if wmctrl -l 2>/dev/null | grep -q .; then
+# Laeuft auf diesem Display schon eine Anwendung? Ein Abgleich ueber den
+# Prozessnamen scheitert hier: "pgrep -f" durchsucht ganze Kommandozeilen
+# und findet dabei DIESES Skript, dessen Text den Anwendungsnamen enthaelt —
+# das Skript haelt sich dann selbst fuer die laufende Anwendung.
+#
+# Gezaehlt werden deshalb Fenster, aber nicht alle: Die zweite Spalte von
+# "wmctrl -l" ist die Arbeitsflaeche, und -1 heisst "klebt ueberall" — das
+# tragen Hintergrundbild, Panels und Benachrichtigungen. Auf Display :1 laeuft
+# die volle XFCE-Sitzung, dort ist immer mindestens das Hintergrundfenster
+# "Desktop" da. Ohne diesen Filter meldete das Skript auf :1 stets
+# "already-running" und startete die Anwendung nie — gemessen am 2026-08-27:
+# VS Code liess sich im Arbeitsplatz nicht oeffnen, der Bildschirm blieb leer.
+if wmctrl -l 2>/dev/null | awk '$2 != -1' | grep -q .; then
   echo "already-running"
   exit 0
 fi
@@ -79,7 +86,7 @@ fi
 nohup @COMMAND@ > /tmp/ota-app-@SLUG@.log 2>&1 &
 
 for i in $(seq 1 60); do
-  if DISPLAY=:@DISPLAY@ wmctrl -l 2>/dev/null | grep -q .; then
+  if DISPLAY=:@DISPLAY@ wmctrl -l 2>/dev/null | awk '$2 != -1' | grep -q .; then
     break
   fi
   sleep 0.5
@@ -87,7 +94,7 @@ done
 
 # Fenster formatfuellend setzen, damit der Stream nicht an den Raendern
 # den leeren Desktop zeigt.
-WIN=$(DISPLAY=:@DISPLAY@ wmctrl -l 2>/dev/null | head -1 | cut -d' ' -f1)
+WIN=$(DISPLAY=:@DISPLAY@ wmctrl -l 2>/dev/null | awk '$2 != -1' | head -1 | cut -d' ' -f1)
 if [ -n "$WIN" ]; then
   DISPLAY=:@DISPLAY@ wmctrl -i -r "$WIN" -b add,maximized_vert,maximized_horz 2>/dev/null || true
 fi

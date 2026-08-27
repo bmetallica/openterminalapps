@@ -72,10 +72,28 @@ formatfüllend auf eigenem Display, alle im selben Container mit gemeinsamem
 - [x] Profil-Mount, UID/GID 1000
 - [x] **Zwischenablage in beide Richtungen** (`plan.md` §10): iframe mit
       `allow="clipboard-read; clipboard-write"`, Fokus-Rückgabe ans iframe, Panel als Rückfall
-- [ ] **Offen**: Abnahmematrix (`plan.md` §10.5) in Chrome **und** Firefox von Hand durchgehen.
-      Automatisiert nicht prüfbar — Headless-Chromium verweigert `navigator.clipboard`
-      grundsätzlich. Der Test prüft alle Voraussetzungen, den vollständigen Weg muss ein
-      Mensch einmal gehen
+- [x] **Client-Schalter im iframe erzwingen** (`plan.md` §10.2 Punkt 5): KasmVNC setzt
+      `clipboard_up`/`clipboard_down` auf `false`, sobald er nicht die oberste Seite ist, und
+      verwirft danach lautlos alles, was der Server schickt. Die API hängt deshalb
+      `clipboard_up=1&clipboard_down=1&clipboard_seamless=0` an die Stream-Adresse
+- [x] **Brücke im Elternfenster** (`web/src/lib/clipboardBridge.ts`): steuert den Client von
+      aussen an — Panel lesen → System-Zwischenablage, System-Zwischenablage → Panel + `change`.
+      Zweiter Anlauf bei der nächsten Nutzergeste, weil Firefox ohne sie nicht schreiben lässt
+- [x] Abnahmefälle 1, 2 und 4 laufen automatisiert in `tests/e2e.mjs` gegen den Viewer.
+      Die frühere Annahme, Headless-Chromium verweigere `navigator.clipboard` grundsätzlich,
+      war falsch: Puppeteers `overridePermissions('clipboard-write')` trifft nur nicht das Recht,
+      das `writeText()` prüft. Über `Browser.grantPermissions` mit `clipboardReadWrite` und
+      `clipboardSanitizedWrite` läuft der vollständige Weg im Test durch
+- [x] **Firefox-Erweiterung** (`extension/firefox/`): Firefox gibt Webseiten den Lesezugriff auf
+      die Zwischenablage grundsätzlich nicht. Die Erweiterung reicht ihn an genau eine Adresse
+      weiter — und zwar erst nach einem Klick auf ihr Symbol, sie kommt ohne jede
+      Seitenberechtigung ins Haus. OTA erkennt Firefox, prüft per Handschlag, ob sie da ist, und
+      bietet sie sonst in der Kontrollleiste zum Herunterladen an
+      (`/api/help/extension/firefox`)
+- [ ] **Offen**: Signatur oder Unternehmensrichtlinie für die dauerhafte Installation der
+      Erweiterung. Beides liegt ausserhalb von OTA; die Wege stehen im Handbuch Kapitel 4
+- [ ] **Offen**: die restliche Abnahmematrix (`plan.md` §10.5, Fälle 3, 5, 6, 7, 9, 10, 11, 12)
+      in Chrome **und** Firefox von Hand durchgehen
 - [x] Heartbeat, Idle-Reaper, Orphan-GC
 
 **Fertig, wenn**: Ein Klick startet einen Container, der Desktop erscheint, die Abnahmematrix läuft in
@@ -153,6 +171,39 @@ Der Entwurf steht bereits (`web/`, `plan.md` §13). Hier wird er verkabelt.
 - [x] Grenzen gelten für den Container als Ganzes (`plan.md` §9.3); Spitzenlast-Dimensionierung
 - [ ] `oom_score_adj` so setzen, dass nicht der ganze Arbeitsplatz an einer App stirbt
 
+**Arbeitsgefühl** — nachgezogen am 2026-08-27 nach dem ersten echten Benutzen
+- [x] **Der Stream wächst mit dem Fenster.** Der KasmVNC-Client schaltet `resize` im iframe auf
+      `off`; der ferne Bildschirm blieb dann auf Startgrösse und sass mit schwarzem Rand mitten im
+      Fenster. Die Stream-Adresse trägt jetzt `resize=remote` (`STREAM_ARGS` in
+      `api/ota/routers/sessions.py`) — gemessen: Fenster 1600×1000 → Display 1600×1000
+- [x] **Jede Anwendung in einem eigenen Tab.** Eigene Adressen `/view/s/<id>[/<display>]`;
+      das Dashboard bleibt im ersten Tab stehen
+- [x] **Verknüpfung auf dem Desktop** (PWA): Manifest je Vorlage und App aus der API
+      (`api/ota/routers/pwa.py`), Startadresse `/launch/<vorlage>/<app>` startet notfalls den
+      Container, Anmeldung davor bleibt erhalten
+- [x] **Administratoren sind root im eigenen Container.** Ohne `no-new-privileges`, ohne
+      `cap_drop`, mit `sudo`-Regel — sonst liesse sich dort nichts nachinstallieren.
+      Für alle anderen bleibt beides scharf
+- [x] **Rollende Anmeldung** mit einstellbarer Frist (30 min – 48 h, ab Werk 8 h).
+      Vorher lief der Zugang nach 15 Minuten ab, egal ob jemand arbeitete
+- [x] **Vier Fehler behoben**, alle erst beim echten Benutzen sichtbar. Sie stehen mit Symptom,
+      Ursache und Reparatur im Handbuch Kapitel 12:
+      1. Sessions meldeten sich als `running`, bevor Traefik ihre Route kannte → Schutzwall-Seite
+         „Diese Sitzung läuft nicht mehr" direkt nach dem Start
+      2. Ein zweiter Container desselben Nutzers überschrieb `~/.kasmpasswd` des ersten → 401 aus
+         dem Nichts auf einer laufenden Session
+      3. Das geerbte `custom_startup.sh` des Basisimages startete VS Code alle drei Sekunden neu
+         → 119 leere Fenster, 2,5 GB belegt, schwarzer Bildschirm. Arbeitsplatz-Images bringen
+         jetzt ein Startskript mit, das nichts startet; bereits gebaute Images bekommen es als
+         Bind-Mount
+      4. Die API startete Anwendungen mit festem Display gar nicht, weil sie annahm, das Image
+         habe es schon getan — was nur stimmte, solange Fehler 3 bestand
+- [x] **Ein Zuhause, ein laufender Container**: OTA lehnt eine zweite Session ab, die sich dasselbe
+      Profil teilt, und nennt den Ausweg (eigenes Profil unter Persistenz). Zwei Container auf einem
+      Home haben zweimal Schaden angerichtet — die Ablehnung ist die ehrlichere Antwort
+- [x] **Fenstersturm-Wache** in `tests/e2e.mjs`: prüft im Container nach, wie viele
+      Anwendungsfenster auf Display :1 offen sind. Fehler 3 war an der Oberfläche unsichtbar
+
 **Erreicht**: Ein Nutzer öffnet seinen Arbeitsplatz und startet darin VS Code, ein Terminal und
 den Dateimanager — jedes formatfüllend auf einem eigenen Display, alle im selben Container mit
 gemeinsamem `/home`. Displays entstehen erst beim Klick und werden beim Schliessen abgebaut.
@@ -160,6 +211,11 @@ gemeinsamem `/home`. Displays entstehen erst beim Klick und werden beim Schliess
 Die **Zwischenablage-Brücke** steht ebenfalls: Kopieren in einer App, Einfügen in der anderen
 funktioniert in beide Richtungen, mit Umlauten und mehrzeiligem Code. Sie startet automatisch beim
 ersten App-Start und folgt den Rechten des Workspace.
+
+**Nachgezogen am 2026-08-27**, nachdem der Arbeitsplatz das erste Mal wirklich benutzt wurde: Der
+Stream wächst jetzt mit dem Fenster, jede Anwendung bekommt einen eigenen Tab und lässt sich als
+Verknüpfung auf den Desktop legen, Administratoren sind in ihrem Container root, und die Anmeldung
+läuft nicht mehr nach 15 Minuten ab. Zwei Fehler, die nur im echten Betrieb auftraten, sind behoben.
 
 **Noch offen in M4**: Der klassische XFCE-Desktop als zusätzliche Ansicht, `oom_score_adj` für die
 Session-Prozesse, und die ereignisgesteuerte statt abfragende Brücke (braucht ein eigenes Basisimage).
@@ -181,11 +237,55 @@ Session-Prozesse, und die ereignisgesteuerte statt abfragende Brücke (braucht e
       gilt der Build als fehlgeschlagen und erklärt den Grund
 - [x] Deklarativer Build-Layer: APT-Pakete, **VS-Code-Extension-Listen**, freies Setup-Skript
 - [x] Version aktivieren und Rollback über die API; laufende Sessions bleiben unberührt
+- [x] **Software einbauen über die Oberfläche** (Workspace-Editor → Software): Pakete als Chips,
+      eigenes Skript, Build starten, Protokoll mitlesen, Fassung aktivieren. Bis dahin gab es die
+      Build-Pipeline nur als API
+- [x] **Pakete vorher prüfen**: OTA fragt das Image, ob es einen Namen kennt, bevor gebaut wird —
+      und erkennt Ubuntus Snap-Platzhalter (`firefox` ist dort kein Programm, sondern ein Verweis).
+      Erspart den häufigsten Fehlschlag: Debian-Name auf Ubuntu-Image
+- [x] **Rezepte** für Software ohne brauchbares Paket (Firefox aus dem Mozilla-Depot, Chrome,
+      VSCodium). Sie hängen ihre Schritte sichtbar an das eigene Skript an
+- [x] **Anwendungen im Image finden** (`agent/otaagent/discover.py`): liest die `.desktop`-Dateien
+      des gebauten Images und schlägt Name, Zeichen und Startbefehl vor. Niemand muss mehr wissen,
+      wo eine Binärdatei liegt. Zuordnung zum bestehenden Katalog über Kennung **und** Binärname
+- [x] **Image-Verwaltung** (Verwaltung → Images): Liste nach Herkunft (OTA / Kasm / Übrige), mit
+      der Angabe, welcher Workspace ein Image benutzt. Holen per Adresse mit Fortschritt,
+      Entfernen nur für Unbenutztes und Nicht-Kasm. Im Editor lässt sich die Adresse frei eintragen
+- [x] **Workspace löschen** über die Oberfläche, mit Nennung der Folgen. Der Endpunkt gab es
+      bereits, der Knopf fehlte — und er verweigert jetzt, solange Sessions laufen
+- [x] **Rezept-Bauer** (`api/ota/recipes.py`, `web/src/screens/RecipeBuilder.tsx`): Rezepte liegen
+      in der Datenbank statt fest im Frontend und entstehen aus wenigen Fragen. Fünf Muster —
+      APT-Depot, `.deb` von einer Adresse, Archiv nach `/opt`, AppImage, freies Skript. Das
+      erzeugte Skript steht daneben und lässt sich ändern; erzeugt wird auf dem Server, damit
+      Vorschau und Bau nicht auseinanderlaufen
+- [x] **Eigene Registry** im Stack (`registry:2`): Jedes gebaute Golden Image landet dort, und
+      fehlt es lokal, holt der Agent es beim Sessionstart von dort. Gemessen: Image entfernt,
+      Session gestartet, Image wieder da. Auf 127.0.0.1 veröffentlicht — Docker verlangt für
+      localhost kein TLS, das erspart Zertifikat und `daemon.json`
+- [x] **Bearbeiten im Hauptfenster** statt in einer 560-px-Seitenleiste: `Workspaces / Arbeitsplatz`
+      mit Reitern, 1116 px Arbeitsfläche. Die Seitenleiste bleibt für kurze Formulare
+- [x] **Drei Fehler beim echten Benutzen gefunden und behoben** (Handbuch Kapitel 12):
+      Electron-Anwendungen brauchen `--no-sandbox` — ohne den Schalter bleibt der Bildschirm
+      schwarz, und die `.desktop`-Datei sagt nichts darüber; erkannt wird es jetzt an der Datei
+      `chrome-sandbox` neben dem Programm. Mehrere `.desktop`-Dateien auf dasselbe Programm
+      lieferten den falschen Aufruf (`thunar --bulk-rename` statt `thunar`) — es gewinnt jetzt der
+      schlichteste. Und die Displaynummer kam aus der Katalogposition, wodurch die Grenze von sechs
+      für die Kataloggrösse galt statt für gleichzeitig offene Anwendungen
 - [ ] Live-Log per SSE in der Oberfläche (derzeit über Abfrage)
 - [ ] App-Katalog um **Skeleton-Teilbaum und Auflösung je App** ergänzen.
       Startbefehl, Icon, Sperrgrund und festes Display stehen bereits
 - [x] Extensions beim **Build** installieren, nicht beim Start
 - [ ] Sichtbarkeit je App und Gruppe (`group_template_apps`)
+- [x] **Gemeinsame Ablage** (`agent/otaagent/shared.py`, Verwaltung → Ablage): ein Ort für
+      Dateien, die in jeden Arbeitsplatz sollen. Liegt dort unter `/mnt/ota` **am Einhängepunkt
+      schreibgeschützt** und als Verweis `~/Gemeinsam`. Hochladen per Ziehen und Ablegen, nur für
+      Berechtigte; ausgeführt im Agent, weil die API das Dateisystem des Hosts nicht anfasst
+- [x] **Skript beim Sessionstart** je Workspace (`start_script`): läuft als Nutzer im Container,
+      mit `$OTA_SHARED` auf die Ablage. Für alles, was ins Home gehört, aber nicht ins Image.
+      Scheitert es, startet der Arbeitsplatz trotzdem
+- [x] **Fehlende Spalten beim Start ergänzen** (`api/ota/schema_sync.py`): `create_all` legt
+      Tabellen an, aber keine Spalten — eine neue Spalte legte am 2026-08-27 eine laufende Anlage
+      lahm. Ergänzt wird nur; Löschen, Umbenennen und Typwechsel bleiben Alembic vorbehalten
 - [ ] Skeleton-Profile: Kopie beim ersten Start, Datei-Browser, „Enforce"-Pfade
 - [ ] **„Session einfrieren"**: `docker commit`, Home-Diff, Secret-Filter (`.ssh/id_*`, `.gnupg`,
       `*token*`, `*.pem`, `.aws`, `.docker/config.json`, `krb5cc_*`, `.smbcredentials`, `keytab`)

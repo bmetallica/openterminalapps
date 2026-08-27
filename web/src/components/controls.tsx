@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { t } from '../lib/i18n'
 
 /* ============================================================
    SIGNATURE — Kapazitäts-Fader
@@ -142,7 +143,7 @@ export function Combobox({ value, options, onChange, label, placeholder }: {
         type="button" className="select__btn" aria-haspopup="listbox" aria-expanded={open}
         aria-label={label} onClick={() => { setOpen(!open); setQ('') }}
       >
-        <span>{current?.label ?? placeholder ?? 'Bitte wählen'}</span>
+        <span>{current?.label ?? placeholder ?? t('Bitte wählen')}</span>
         {current?.sub && <span className="select__sub">{current.sub}</span>}
       </button>
       <span className="select__caret" aria-hidden="true">▼</span>
@@ -151,8 +152,8 @@ export function Combobox({ value, options, onChange, label, placeholder }: {
         <div className="pop" role="listbox">
           {options.length > 6 && (
             <input
-              className="pop__search" autoFocus value={q} placeholder="Suchen…"
-              onChange={(e) => setQ(e.target.value)} aria-label="Auswahl durchsuchen"
+              className="pop__search" autoFocus value={q} placeholder={t('Suchen…')}
+              onChange={(e) => setQ(e.target.value)} aria-label={t('Auswahl durchsuchen')}
             />
           )}
           {shown.map((o) => (
@@ -165,7 +166,7 @@ export function Combobox({ value, options, onChange, label, placeholder }: {
               {o.sub && <span className="select__sub">{o.sub}</span>}
             </button>
           ))}
-          {shown.length === 0 && <p className="pop__empty">Nichts gefunden für „{q}"</p>}
+          {shown.length === 0 && <p className="pop__empty">{t('Nichts gefunden für „{q}"', { q })}</p>}
         </div>
       )}
     </div>
@@ -218,7 +219,8 @@ export function KeyValueRows({ rows, onChange, keyPlaceholder, valuePlaceholder,
             onChange={(e) => onChange(rows.map((r, j) => (j === i ? { ...r, v: e.target.value } : r)))}
           />
           <button
-            type="button" className="btn btn--icon btn--ghost" aria-label={`Zeile ${i + 1} entfernen`}
+            type="button" className="btn btn--icon btn--ghost"
+            aria-label={t('Zeile {n} entfernen', { n: i + 1 })}
             onClick={() => onChange(rows.filter((_, j) => j !== i))}
           >✕</button>
         </div>
@@ -249,8 +251,8 @@ export function Field({ label, hint, inherited, onReset, children }: {
         <span className="field__label">{label}</span>
         {inherited && (
           <span className="inherit">
-            geerbt von {inherited}
-            {onReset && <button type="button" onClick={onReset}>zurücksetzen</button>}
+            {t('geerbt von {source}', { source: inherited })}
+            {onReset && <button type="button" onClick={onReset}>{t('zurücksetzen')}</button>}
           </span>
         )}
       </div>
@@ -299,7 +301,7 @@ export function Led({ status }: { status: string }) {
   return (
     <span className={`led ${STATUS_CLASS[status] ?? 'led--stop'}`}>
       <span className="led__dot" aria-hidden="true" />
-      <span className="led__text">{STATUS_TEXT[status] ?? status}</span>
+      <span className="led__text">{t(STATUS_TEXT[status] ?? status)}</span>
     </span>
   )
 }
@@ -308,10 +310,13 @@ export function Led({ status }: { status: string }) {
    Drawer
    ============================================================ */
 
-export function Drawer({ title, subtitle, tabs, tab, onTab, onClose, footer, children }: {
+export function Drawer({ title, subtitle, tabs, tabLabel, tab, onTab, onClose, footer, children }: {
   title: string
   subtitle?: string
   tabs?: string[]
+  /** Übersetzt die Reiterbeschriftung. Die Werte selbst bleiben unverändert,
+      damit der Vergleich mit `tab` sprachunabhängig bleibt. */
+  tabLabel?: (s: string) => string
   tab?: string
   onTab?: (t: string) => void
   onClose: () => void
@@ -333,13 +338,13 @@ export function Drawer({ title, subtitle, tabs, tab, onTab, onClose, footer, chi
             <h2 className="h-card">{title}</h2>
             {subtitle && <p className="sub" style={{ marginTop: 4 }}>{subtitle}</p>}
           </div>
-          <button type="button" className="btn btn--icon btn--ghost" onClick={onClose} aria-label="Schliessen">✕</button>
+          <button type="button" className="btn btn--icon btn--ghost" onClick={onClose} aria-label={t('Schliessen')}>✕</button>
         </header>
 
         {tabs && tab && onTab && (
           <nav className="drawer__tabs">
             {tabs.map((t) => (
-              <button key={t} type="button" className={`drawer__tab${t === tab ? ' is-on' : ''}`} onClick={() => onTab(t)}>{t}</button>
+              <button key={t} type="button" className={`drawer__tab${t === tab ? ' is-on' : ''}`} onClick={() => onTab(t)}>{tabLabel ? tabLabel(t) : t}</button>
             ))}
           </nav>
         )}

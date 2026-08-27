@@ -892,6 +892,128 @@ Kein einziger Eintrag verlangt eine GPU.
 Dass eine Registry ein Image listet, ist keine Aussage über dessen Lizenz. Der Import-Dialog verlinkt
 deshalb auf §3 und markiert Images, die eine Einzelprüfung brauchen.
 
+### 9.9 Ein Arbeitsplatz startet nichts von selbst
+
+Kasm-Images für einzelne Anwendungen bringen ein `/dockerstartup/custom_startup.sh` mit, das „ihre"
+Anwendung startet. `vnc_startup.sh` beaufsichtigt dieses Skript und **startet es alle drei Sekunden
+neu**, sobald es sich beendet — der Kommentar dort sagt ausdrücklich: *„custom startup scripts track
+the target process on their own, they should not exit."*
+
+Für ein Einzelanwendungs-Image ist das genau richtig: Stirbt die Anwendung, kommt sie zurück.
+
+Für einen davon abgeleiteten Arbeitsplatz ist es verheerend. Gemessen am 2026-08-27 mit einem von
+`kasmweb/vs-code` abgeleiteten Image:
+
+1. Das geerbte Skript rief `code` auf.
+2. VS Code ist einzelinstanzig. Die zweite Instanz reichte den Aufruf an die laufende weiter — das
+   öffnete dort ein **neues, leeres Fenster** — und beendete sich.
+3. Die Aufsicht sah ein beendetes Skript und startete es erneut. Alle drei Sekunden.
+
+Nach sechs Minuten: 119 leere Fenster, 2,5 GB belegt, der Bildschirm zeigte nur noch Schwarz. Und
+weil VS Code seine offenen Fenster im Profil merkt und beim Start wiederherstellt, überlebte der
+Schaden jeden Neustart.
+
+Ein Arbeitsplatz startet seine Anwendungen selbst, auf Zuruf, jede auf ihrem Display. Das geerbte
+Skript wird deshalb überdeckt — durch eines, das einfach wartet und damit die Aufsicht
+zufriedenstellt. Zweifach: beim Bauen eines Arbeitsplatz-Images (`render_dockerfile`) und beim Start
+eines Containers als Bind-Mount (`WORKSPACE_STARTUP` im Agent), damit auch bereits gebaute Images
+sofort in Ordnung sind.
+
+**Was daraus folgt, über diesen Fall hinaus:** Ein Kasm-Image mitzubenutzen heisst nicht nur, seine
+Software zu erben, sondern auch sein Startverhalten. Beim Einbinden fremder Images (§9.8) gehört die
+Frage „was startet dieses Image von sich aus, und was tut es, wenn das stirbt?" zur Prüfung dazu.
+
+### 9.10 Software einbauen, freigeben — und Rezepte selbst bauen
+
+Der Weg von „ich hätte gern GIMP" bis „GIMP steht im Dashboard" hat zwei Schritte, und beide waren
+lange nur als API vorhanden.
+
+**Einbauen.** Pakete auswählen, Image bauen, Fassung aktivieren. Zwei Prüfungen davor, beide aus
+gemessenen Fehlschlägen entstanden:
+
+- **Kennt das Image dieses Paket?** Ein Build dauert Minuten und scheitert an einem Debian-Namen auf
+  einem Ubuntu-Image (`firefox-esr`) erst am Ende, mit einer Zeile in hundert Zeilen Protokoll.
+- **Taugt das Paket überhaupt?** Ubuntu 22.04 führt `firefox` nur noch als Verweis auf ein Snap. In
+  einem Container läuft kein Snap; installiert würde ein Platzhalter ohne Programm. Der Build meldete
+  Erfolg — und erst der Nutzer merkte, dass nichts da ist.
+
+**Freigeben.** Niemand soll einen Startbefehl kennen müssen. Jedes Linux-Paket bringt eine
+`.desktop`-Datei mit, in der Name, Symbol und Aufruf stehen — OTA liest sie aus dem gebauten Image
+(`agent/otaagent/discover.py`) und macht daraus eine Liste mit Schaltern. Zugeordnet wird über
+Kennung **und** Binärnamen: Der Katalog kennt `vscode`, die Datei heisst `visual-studio-code`, und
+gemeint ist dasselbe Programm.
+
+**Rezepte.** Für Software, die kein einfaches Paket ist. Anfangs drei fest eingebaute — das war zu
+wenig: Wer eine vierte Anwendung brauchte, sass wieder vor einem leeren Skriptfeld, also genau dem,
+was diese Oberfläche vermeiden soll.
+
+Rezepte liegen jetzt in der Datenbank und entstehen aus wenigen Fragen (`api/ota/recipes.py`). Fünf
+Muster decken fast alles ab: fremdes APT-Depot, `.deb` von einer Adresse, Archiv nach `/opt`,
+AppImage, freies Skript. Zwei Entscheidungen darin sind bewusst:
+
+- **Das Skript wird nicht versteckt.** Es steht neben den Fragen und lässt sich ändern; wer das tut,
+  dessen Fassung gilt. Der Sinn der Führung ist nicht, Bash zu verbergen, sondern es nicht von Hand
+  schreiben zu müssen.
+- **Erzeugt wird auf dem Server**, obwohl eine Vorschau im Browser schneller wäre. Zwei Erzeuger für
+  dasselbe laufen irgendwann auseinander, und dann stimmt die Vorschau nicht mehr mit dem überein,
+  was gebaut wird.
+
+Archiv und AppImage legen zusätzlich eine `.desktop`-Datei an. Das ist kein Beiwerk, sondern die
+Verbindung zum zweiten Schritt: Ohne sie wäre die Anwendung installiert, aber beim *Im Image
+nachsehen* nicht auffindbar.
+
+### 9.11 Was ins Image gehört, was ins Home, und was dazwischen
+
+Drei Wege führen Dinge in einen Arbeitsplatz, und sie zu verwechseln kostet Zeit oder Geduld:
+
+| Was | Wohin | Warum dorthin |
+|---|---|---|
+| Software | Golden Image (§8) | Einmal bauen statt bei jedem Start installieren |
+| Dateien für alle | Gemeinsame Ablage | Austauschbar, ohne Image-Bau |
+| Einrichtung je Nutzer | Startskript | Läuft in dessen Rechten, in dessen Home |
+| Eigene Einstellungen | gar nichts davon | Das persistente Home hält sie ohnehin |
+
+Der letzte Punkt ist der, der am ehesten übersehen wird — auch von uns: **Das persistente Home
+liegt über dem Image.** Extensions, Editorkonfiguration, Schlüssel und Projekte liegen unter
+`/srv/ota/profiles/<nutzer>/` auf dem Host und werden bei jedem Start eingehängt. Ein neues Golden
+Image ändert daran nichts. Nachgeprüft am 2026-08-27: 3,5 MB VS-Code-Extensions im Profil, über
+mehrere Image-Fassungen hinweg unverändert.
+
+**Die gemeinsame Ablage** hängt in jedem Container unter `/mnt/ota` — **schreibgeschützt am
+Einhängepunkt**, nicht durch eine Prüfung, die sich umgehen liesse. Dazu ein Verweis `~/Gemeinsam`
+im Home, damit sie auffindbar ist; der Einhängepunkt selbst liegt bewusst ausserhalb des Home, weil
+ein unbeschreibbares Verzeichnis mitten in den eigenen Dateien mehr verwirrt als hilft.
+
+Geschrieben wird ausschliesslich über die Oberfläche, und ausgeführt wird das im **Agent**
+(`agent/otaagent/shared.py`) — die API fasst das Dateisystem des Hosts nicht an, sie entscheidet
+nur, wer was darf. Dieselbe Aufteilung wie bei Containern und Images.
+
+Die kritische Stelle dieser Datei ist `_resolve()`: Jeder Pfad kommt aus dem Browser. Aufgelöst wird
+**zuerst**, geprüft **danach** — ein `..` fällt so genauso auf wie ein Symlink, der aus der Ablage
+herauszeigt. Vorher zu prüfen genügt nicht.
+
+**Das Startskript** läuft bei jedem Sessionstart als der Nutzer, nicht als root. Ein Skript, das mit
+root-Rechten in ein Nutzerverzeichnis schreibt, hinterlässt Dateien, die der Nutzer nicht mehr
+ändern kann — ein Fehler, der erst Wochen später auffällt. Scheitert es, startet der Arbeitsplatz
+trotzdem: Ihn wegen einer misslungenen Einrichtung ganz zu verweigern wäre die schlechtere Antwort.
+
+### 9.12 Die Displaynummer gehört zum Zustand, nicht zum Katalog
+
+Ein Fehler, der erst mit einem gewachsenen App-Katalog auftrat.
+
+Die Nummer des Displays wurde aus der **Position im Katalog** abgeleitet (`index + 2`). Damit galt
+die Grenze von sechs gleichzeitigen Anwendungen in Wirklichkeit für die **Grösse des Katalogs**:
+Bei zehn eingetragenen Anwendungen liessen sich die letzten vier nie starten — mit der Meldung
+„höchstens 6 gleichzeitig", obwohl keine einzige lief. Alphabetisch traf es ausgerechnet VS Code
+und VSCodium.
+
+Vergeben wird jetzt das erste freie Display aus 2–7, gemessen an den *laufenden* Streams. Die
+Traefik-Routen dafür legt der Containerstart ohnehin auf Vorrat an; welche Anwendung auf welcher
+Nummer liegt, darf sich von Start zu Start unterscheiden — die Adresse kommt aus der API.
+
+**Die Lehre dahinter:** Eine Nummer, die eine Laufzeitressource bezeichnet, darf nicht aus einer
+Konfigurationsliste abgeleitet werden. Sonst begrenzt die Konfiguration die Laufzeit.
+
 ## 10. Zwischenablage und Datenaustausch
 
 Kopieren und Einfügen ist die Funktion, an der eine Remote-Desktop-Plattform im Alltag scheitert oder
@@ -949,6 +1071,62 @@ Die Engine ist nicht das Problem. Vier Dinge auf der Browser-Seite entscheiden, 
    verfügbar. Chrome verlangt zudem eine Nutzerfreigabe für `clipboard-read`.
 4. **Das iframe muss den Fokus haben**, sonst erreichen Tastenereignisse den Stream nie. Der Viewer
    setzt den Fokus beim Verbinden und nach jedem Schließen der Kontrollleiste zurück.
+5. **Firefox gibt den Lesezugriff überhaupt nicht her — dafür gibt es eine Erweiterung.**
+   Das ist keine Einstellung, sondern eine Festlegung des Browsers, und der Weg über das
+   `paste`-Ereignis bleibt der Rückfall. Für ein Arbeitsgefühl wie auf dem Desktop reicht er nicht:
+   Er verlangt bei jedem Einfügen ein Strg+V im richtigen Fenster.
+
+   `extension/firefox/` schliesst genau diese Lücke und sonst nichts. Zwei Entscheidungen darin
+   sind bewusst:
+
+   - **Keine Seitenberechtigung bei der Installation.** Die Erweiterung darf zunächst nirgends
+     mitlesen; erst ein Klick auf ihr Symbol gibt sie für die gerade offene Adresse frei
+     (`optional_host_permissions` plus `scripting.registerContentScripts`). Eine Erweiterung, die
+     sich beim Installieren Zugriff auf jede Seite nimmt, wäre für diese Aufgabe völlig überzogen.
+   - **Die Seite fragt, die Erweiterung antwortet.** Das Protokoll über `window.postMessage` ist
+     einseitig; die Erweiterung ruft von sich aus nie etwas auf und schickt nichts weiter.
+
+   OTA erkennt Firefox, prüft per Handschlag, ob die Erweiterung da ist, und bietet sie sonst in der
+   Kontrollleiste zum Herunterladen an. Fehlt sie, verhält sich alles wie zuvor.
+
+   **Offen bleibt die dauerhafte Installation.** Firefox nimmt unsignierte Erweiterungen nur
+   temporär an. Die beiden Wege — Unternehmensrichtlinie oder Signatur durch Mozilla — liegen
+   ausserhalb von OTA und stehen im Handbuch Kapitel 4.
+
+6. **Der KasmVNC-Client schaltet die Zwischenablage im iframe von sich aus ab.** Das ist der
+   Stolperstein, der uns tatsächlich Zeit gekostet hat, und er steht in keiner Dokumentation.
+   In `ui.js` entscheidet der Client anhand von `window.self !== window.top`:
+
+   ```js
+   window.self !== window.top && !readSetting("show_control_bar")
+       ? (initSetting("clipboard_up",   false),
+          initSetting("clipboard_down", false),
+          initSetting("clipboard_seamless", false))
+       : (initSetting("clipboard_up",   true), …)
+   ```
+
+   `clipboardReceive()` prüft anschliessend `rfb.clipboardDown` und **verwirft** alles, was der
+   Server schickt. Nach aussen sieht das aus wie ein kaputter Server: kein Fehler, keine Meldung in
+   der Konsole, das Feld bleibt leer. Gemessen am 2026-08-27 mit demselben Container einmal als
+   eigene Seite und einmal im Viewer — als eigene Seite kam der Text an, im iframe nie.
+
+   OTA hängt deshalb `clipboard_up=1&clipboard_down=1&clipboard_seamless=0` an die Stream-Adresse
+   (`STREAM_ARGS` in `api/ota/routers/sessions.py`). **Derselbe iframe-Zweig setzt auch `resize` auf
+   `off`** — der ferne Bildschirm blieb dadurch auf Startgrösse und sass mit schwarzem Rand mitten
+   im Fenster. `resize=remote` gehört deshalb in dieselbe Liste; damit wächst der Arbeitsbereich mit
+   dem Browserfenster, wie man es von einer Desktopanwendung erwartet. `initSetting()` liest zuerst die Adresse und
+   erst danach den gespeicherten Vorgabewert, also gewinnt der Parameter. `clipboard_seamless`
+   bleibt bewusst **aus**: Den Abgleich mit der System-Zwischenablage macht die Brücke im
+   Elternfenster, das dafür auch die Berechtigung besitzt.
+
+**Eine Sackgasse, die hier festgehalten sei**, damit sie niemand noch einmal geht: Der Verdacht fiel
+zuerst auf die Cross-Origin-Isolation, weil `crossOriginIsolated` im iframe `false` war und oben
+`true`. COOP und COEP wurden ergänzt, die Isolation stimmte danach in beiden Fällen — am Ergebnis
+änderte sich nichts. `Cross-Origin-Embedder-Policy: require-corp` ist deshalb wieder draussen: Der
+Client dekodiert über `ImageDecoder`, nicht über `SharedArrayBuffer`, hat also von der Isolation
+nichts — der Header hätte nur den Preis, dass jede fremde Ressource ohne CORP kommentarlos
+ausfällt, und genau solche kommen mit den Kasm-Registries noch dazu. `Cross-Origin-Opener-Policy`
+ist geblieben; die kostet nichts.
 
 Ergänzend bleibt das **Zwischenablage-Panel** in der Kontrollleiste erhalten: ein Textfeld in beide
 Richtungen. Es ist der Rückfall, wenn ein Browser die API verweigert, und der einzige Weg für Nutzer,
@@ -1024,6 +1202,11 @@ dort aussah, und wenn sich die Brücke in der Praxis als zickig erweist, ist Xpr
 | 12 | Firefox ohne `readText()` | Einfügen läuft über das `paste`-Ereignis, Nutzer merkt keinen Unterschied |
 
 Fall 8 und 12 sind die, die erfahrungsgemäß durchrutschen.
+
+**Stand 2026-08-27:** Die Fälle 1, 2, 4 und 8 laufen automatisiert mit — 1, 2 und 4 in
+`tests/e2e.mjs` gegen den Viewer im iframe, 8 in `scripts/test-clipboard-bridge.sh` zwischen zwei
+Displays desselben Containers. Alle grün. Offen bleiben 3, 5, 6, 7, 9, 10, 11 und 12; 6 (Bilder) und
+7 (IntelliJ) hängen an Roadmap-Punkten, die noch nicht dran sind.
 
 ## 11. Persistenz und Storage
 
@@ -1195,25 +1378,122 @@ Rahmen, Text, sogar die Primäraktion — bleibt neutral. Gesättigte Farbe trit
 auf. Dadurch sind die Status-LEDs die einzigen farbigen Pixel im Layout und ohne Suchen lesbar.
 
 Diese Regel wird konsequent durchgehalten, auch wo es unbequem ist: Ein aktivierter Schalter im
-Rechte-Reiter ist **Bone**, nicht Grün — denn „Einstellung aktiv" ist kein Laufzeitzustand. Mint bedeutet
-im ganzen Produkt genau eine Sache: *läuft gerade*.
+Rechte-Reiter ist **hell und unbunt**, nicht Grün — denn „Einstellung aktiv" ist kein
+Laufzeitzustand. Grün bedeutet im ganzen Produkt genau eine Sache: *läuft gerade*.
+
+### 13.0b Ein Tab je Anwendung, und eine Adresse für jede
+
+Die Ansicht einer Session ersetzte anfangs das Dashboard. Beim ersten echten Benutzen fiel auf, dass
+das dem Modell aus §9 widerspricht: Ein Arbeitsplatz hat mehrere Anwendungen offen, und „zurück zum
+Dashboard" hiess, die laufende zu verlassen.
+
+Seither hat jede Ansicht eine eigene Adresse, und Anwendungen öffnen in einem eigenen Tab:
+
+| Adresse | Bedeutung |
+|---|---|
+| `/view/s/<session>[/<display>]` | Zeigt eine **bestimmte laufende** Session. Entsteht beim Öffnen aus dem Dashboard |
+| `/launch/<vorlage>[/<app>]` | Sorgt dafür, dass etwas läuft, und zeigt es dann. Startet notfalls den Container |
+
+Der Unterschied ist wichtig: Eine Verknüpfung auf dem Desktop wird angeklickt, wenn gerade *nichts*
+läuft. Sie kann keine Session-Nummer enthalten — sie muss sagen, *was* jemand will, nicht *welche
+Instanz*. Genau das ist `/launch/`, und genau das ist die Startadresse im PWA-Manifest.
+
+Wer nicht angemeldet ist, landet auf der Anmeldung und danach in seiner Anwendung. Die Adresse
+bleibt dabei stehen; es wird nichts umgeleitet und nichts zwischengespeichert.
+
+### 13.0c Zweisprachig, mit dem deutschen Satz als Schlüssel
+
+Die Oberfläche gibt es auf Deutsch und Englisch. Der Umschalter steht in der Leiste und — wichtig —
+auch auf der Anmeldemaske: Wer kein Deutsch liest, soll nicht vor einer deutschen Anmeldung stehen.
+
+Übersetzt wird über den **deutschen Satz als Schlüssel**, nicht über erfundene Bezeichner wie
+`nav.help`. Drei Gründe:
+
+- Im Quelltext steht weiterhin der Satz, den der Nutzer sieht. Wer den Code liest, muss nicht in
+  einer zweiten Datei nachschlagen.
+- Es gibt **ein** Wörterbuch statt zwei. Ein Bezeichner-Ansatz bräuchte auch für Deutsch eine
+  vollständige Tabelle, die mit dem Quelltext auseinanderlaufen kann.
+- Der Rückfall ist brauchbar: Fehlt eine Übersetzung, erscheint der deutsche Satz — nicht `nav.help`
+  und keine leere Fläche.
+
+Dieselbe Tabelle übersetzt auch die Meldungen des Servers (`call()` in `web/src/lib/api.ts`). Ein
+Fehler soll nicht auf Deutsch dastehen, während der Rest der Seite Englisch spricht.
+
+Das Handbuch selbst bleibt deutsch. Im englischen Modus sagt die Hilfe das offen, statt es zu
+verschweigen.
+
+### 13.0d Das Handbuch im Programm
+
+`docs/wiki/` wird über die API ausgeliefert (`/api/help`), nicht als statische Dateien: Welche
+Kapitel jemand sieht, ist eine Rechtefrage. Anwender bekommen Überblick, Arbeitsplatz und
+Zwischenablage; Verwaltung und Betrieb bleiben Administratoren vorbehalten.
+
+Der Markdown-Übersetzer (`web/src/lib/markdown.ts`) ist bewusst selbst geschrieben und keine
+Bibliothek. Das Handbuch nutzt eine überschaubare Teilmenge, und jede Bibliothek müsste hier ohnehin
+gebändigt werden — rohes HTML hat im Handbuch nichts zu suchen. Es wird zuerst alles maskiert und
+danach ausschliesslich eingesetzt, was der Übersetzer selbst erzeugt.
+
+### 13.0e Bearbeiten übernimmt das Hauptfenster
+
+Der Workspace-Editor lag anfangs in einer Seitenleiste von 560 px. Das ging, solange darin ein
+Formular stand. Es geht nicht mehr, seit dort App-Listen, Build-Protokolle, ein Rezept-Bauer und
+Zuteilungen je Nutzer liegen — Inhalte, die Breite brauchen, um lesbar zu sein.
+
+Deshalb ein Wechsel der Ansicht statt einer Überlagerung: Aus *Workspaces* wird
+*Workspaces / Arbeitsplatz*, mit Reitern darunter. Der Weg zurück ist der erste Teil des Pfades,
+kein Kreuz in der Ecke — man ist nicht in einem Dialog, sondern eine Ebene tiefer. Gemessen: 1116 px
+statt 560 px Arbeitsfläche.
+
+Die Seitenleiste bleibt, wo sie hingehört: für kurze Formulare, die man neben dem Bestand ausfüllt
+(Nutzer, Gruppen). **Die Regel dahinter:** Ein Dialog unterbricht, eine Ebene führt weiter. Was man
+in zehn Sekunden ausfüllt, unterbricht; woran man zehn Minuten arbeitet, führt weiter.
+
+Formularfelder werden darin auf 720 px begrenzt. Eine Eingabezeile über die volle Breite ist nicht
+komfortabler, sondern schlechter zu lesen; Listen und Tabellen dürfen die Breite dagegen nutzen.
 
 ### 13.1 Token
+
+Abgeleitet aus Logo und Symbol (`icon.svg`, `Logo-Banner.svg`). Vorher war die Grundfläche ein
+tiefes Teal-Ink mit warmem Bone als Primäraktion; die Marke arbeitet mit einer Slate-Leiter und
+einem Cyan-Akzent. **Die Grundfläche ist das größte Stück Farbe im Bild** — sie anzugleichen bringt
+mehr Wiedererkennung als jeder Akzent, deshalb beginnt der Wechsel dort.
+
 ```
-Flächen    --ground  #0B1315   App-Grund, tiefes Teal-Ink (chromatisch, nicht Neutralschwarz)
-           --bay     #111E21   Karten und Panels
-           --bay-2   #16272B   angehoben: Drawer, Popover, Hover
-           --well    #0D181B   eingelassen: Eingaben, Fader-Schienen
-           --edge    #223438   Haarlinie      --edge-lit #33555D  Hover/Fokus
+Flächen    --ground   #090D16   App-Grund — der Grund des Logo-Banners
+           --bay      #0F172A   Karten und Panels — die Fläche des Symbols
+           --bay-2    #1B2436   angehoben: Drawer, Popover, Hover
+           --well     #060A12   eingelassen: Eingaben, Fader-Schienen
+           --edge     #1E293B   Haarlinie — die Panelfarbe im Logo
+           --edge-lit #334155   Hover — die Strichfarbe im Logo
 
-Text       --text    #E6EDEC   --label #8AA1A5   --mute #5C7378
+Text       --text     #F1F5F9   --label #94A3B8 (Logo-Unterzeile)   --mute #64748B
 
-Aktion     --bone    #EADFCB   Primäraktion und Kennzahlen; das einzige Warm im Chrome
-           --bone-dim #CFC3AC  Fader-Füllung
+Aktion     --key      #E2E8F0   Primäraktion und Kennzahlen; das helle Element
+           --key-dim  #CBD5E1   Fader-Füllung
 
-Zustand    --live    #3ECF9A   läuft        --paused  #5FB8D6   pausiert
-           --caution #F0A742   nahe Limit   --halt    #F2666F   gestoppt / Fehler
+Marke      --accent   #06B6D4   das Cyan aus „Apps" und aus dem Bildschirmrahmen
+           --accent-dim #0891B2
+
+Zustand    --live     #10B981   läuft        --paused  #3B82F6   pausiert
+           --caution  #F59E0B   nahe Limit   --halt    #EF4444   gestoppt / Fehler
 ```
+
+**Die Zustandsfarben stehen alle im Logo** — als LEDs in der Fensterleiste und am Rack. Das ist
+kein Zufall, sondern der Grund, warum sich die Regel aus §13.0 hier halten lässt: Die Marke
+verwendet gesättigte Farbe selbst nur als Statuspunkt.
+
+**Wo der Akzent auftritt, und wo nicht.** Cyan ist die auffälligste Farbe der Marke, und genau
+deshalb ist es keine Flächenfarbe. Es erscheint nur dort, wo es *Zugehörigkeit oder Fokus* anzeigt:
+Signet in der Leiste, Fokusring, Verweise im Handbuch, das Zeichen des aktiven Menüpunkts, die
+gewählte Sprache. Die Primäraktion bleibt bewusst unbunt — wäre der wichtigste Knopf gesättigt,
+wäre Farbe wieder Dekoration statt Zustand.
+
+**Ein Ort macht eine Ausnahme:** die Anmeldemaske. Dort steht das farbige Banner in voller Breite.
+Es ist der einzige Bildschirm, auf dem sich die Anwendung vorstellt, statt benutzt zu werden.
+
+**Breite der Leiste:** 112 px. Gemessen an der längsten Beschriftung — „Einstellungen" braucht
+83 px Text plus Innenabstand. Bei den ursprünglichen 76 px wurde sie abgeschnitten.
+
 
 **Schrift**: **Archivo** (variabel, Breitenachse) + **IBM Plex Mono**.
 Bewusst *nicht* Inter/JetBrains Mono — das ist der Reflex jedes Dev-Dashboards.
@@ -1347,7 +1627,9 @@ Aus den bestehenden Images werden Templates: Obsidian, Thunderbird, GIMP, Inksca
 | Risiko | Maßnahme |
 |---|---|
 | Docker-Socket = Root | Nur `ota-agent` hat ihn; API und Web nicht. Später optional Socket-Proxy mit Endpoint-Whitelist oder rootless Docker |
-| Container-Ausbruch | Kein `--privileged`, `no-new-privileges`, alle Capabilities gedroppt außer den nötigen, `seccomp`-Default, read-only Root-FS wo möglich, `/dev/shm` limitiert |
+| Container-Ausbruch | Kein `--privileged`, `no-new-privileges`, alle Capabilities gedroppt außer den nötigen, `seccomp`-Default, read-only Root-FS wo möglich, `/dev/shm` limitiert. **Ausnahme: Administratoren** — siehe §15.1 |
+| Anmeldung läuft mitten in der Arbeit ab | Rollende Sitzung: Jede Anfrage schiebt die Frist nach vorn. Die Frist misst Untätigkeit, nicht Zeit, und ist im Verwaltungsbereich zwischen 30 min und 48 h einstellbar |
+| Zweite Session entwertet die erste | Das VNC-Passwort hängt am **Profil**, nicht an der Session. Sonst überschreibt der Start eines zweiten Containers `~/.kasmpasswd` im gemeinsamen Home — siehe §15.3 |
 | Fremdzugriff auf Session | `forwardAuth` bei **jedem** Request; VNC-Secret nur serverseitig; Session-IDs sind UUIDv4 |
 | Ressourcen-DoS durch einen Nutzer | Harte `cpus`/`mem_limit`/`pids_limit` pro Container, Session-Limit pro Nutzer, globale Kapazitätsprüfung vor Start |
 | Geheimnisse in Golden Images | Automatischer Secret-Filter beim „Session einfrieren", Warnung bei Fund, Build-Args nie im Image-Layer persistieren |
@@ -1356,6 +1638,70 @@ Aus den bestehenden Images werden Templates: Obsidian, Thunderbird, GIMP, Inksca
 | Nachvollziehbarkeit | Audit-Log für alle Admin-Aktionen, unveränderlich (append-only), Export |
 
 Vor dem Produktivgang: ein Sicherheitsreview der Auth- und Autorisierungspfade (Roadmap M6).
+
+### 15.1 Administratoren dürfen in ihrem Container root werden
+
+Wer OTA administriert, bekommt in **seinen eigenen** Session-Containern passwortloses `sudo`. Das
+ist eine bewusste Lockerung, keine Nebenwirkung: Ohne sie liesse sich im Arbeitsplatz nichts
+nachinstallieren und nichts prüfen — und genau dafür meldet sich ein Administrator dort an.
+
+Konkret entfallen für diese Container zwei Sperren:
+
+| Sperre | Warum sie fallen muss |
+|---|---|
+| `no-new-privileges:true` | Verhindert **jede** Rechteerhöhung, auch die über setuid. Mit ihr läuft `sudo` gar nicht erst an |
+| `cap_drop: ALL` | Nimmt unter anderem `SETUID` und `SETGID`; ohne die kann `sudo` den Benutzer nicht wechseln |
+
+**Der ehrliche Preis:** Root in einem Container ist nicht Root auf dem Host, aber der Abstand ist
+kleiner als bei einem unprivilegierten Container. Diese Rechte gehören deshalb an denselben kleinen
+Kreis wie der Zugang zum Docker-Host. Wer nur Nutzer anlegen oder Workspaces pflegen soll, bekommt
+die einzelnen Rechte statt „Vollzugriff auf alles" — das Rechtemodell aus §5 kann das, und genau
+dafür ist es da.
+
+Entschieden wird das in der API (`user.is_admin`), nicht im Agent: Der Agent kennt keine Rollen und
+soll auch keine kennen.
+
+### 15.2 Ein Zuhause, ein laufender Container
+
+Alle Workspaces mit Persistenz „Pro Nutzer" teilen sich dasselbe
+`/home/kasm-user` (§11.1). Solange nur einer davon läuft, ist das genau richtig — es ist der Sinn
+der Sache. Zwei gleichzeitig laufende Container auf einem Zuhause haben am 2026-08-27 zweimal
+Schaden angerichtet, auf völlig unterschiedliche Weise:
+
+| Was kaputtging | Warum |
+|---|---|
+| Zugangsdaten der laufenden Session | Der Startvorgang der Kasm-Images schreibt `~/.kasmpasswd` aus `VNC_PW` neu. Der zweite Container entwertete damit das Passwort des ersten (§15.3) |
+| VS Code | Einzelinstanzig, mit Steuerkanal als Socket im Profil. Der zweite Container fand ihn und schickte seine Fenster in den *ersten* Container — dessen Aufsicht startete das Ganze alle drei Sekunden neu (§9.9) |
+
+Beides liesse sich einzeln abfangen. Die gemeinsame Ursache nicht: **Ein Zuhause ist für einen
+Rechner gedacht, nicht für zwei.** Jedes Programm, das eine Sperrdatei, einen Socket oder einen
+Cache-Index im Home ablegt, geht davon aus, dass genau ein Prozess darauf schaut.
+
+OTA lehnt deshalb den Start ab, wenn der Nutzer bereits eine laufende Session mit demselben
+Profilpfad hat, und sagt auch, was stattdessen zu tun ist: den anderen beenden — oder dem zweiten
+Workspace unter Persistenz ein eigenes Profil geben. Die Ablehnung ist die ehrlichere Antwort als
+zwei Container, die sich gegenseitig die Arbeit zerlegen.
+
+### 15.3 Das VNC-Passwort gehört zum Profil, nicht zur Session
+
+Ein Fehler, der erst beim echten Benutzen auftrat und deshalb hier festgehalten sei.
+
+Alle Sessions eines Nutzers teilen sich dasselbe `/home/kasm-user` — das ist der Sinn des
+persistenten Profils (§11.1). Der Startvorgang der Kasm-Images schreibt aber bei *jedem*
+Containerstart `~/.kasmpasswd` aus `VNC_PW` neu. Solange jedes Session-Passwort ein eigener
+Zufallswert war, hiess das: **Wer eine zweite Session startete, entwertete die Zugangsdaten der
+ersten.** Die lief weiter, das Bild lief weiter — aber jede neue Anfrage an ihren Stream bekam 401,
+ohne dass sich an ihr irgendetwas geändert hätte.
+
+Gemessen am 2026-08-27: Arbeitsplatz um 10:29 gestartet, VS Code um 11:12 dazu, danach antworteten
+alle drei Displays des Arbeitsplatzes mit 401. Der verräterische Hinweis lag im Profil selbst — ein
+`~/.vnc/<hostname>:1.pid` mit dem Hostnamen des *anderen* Containers.
+
+Das Passwort wird deshalb aus Nutzer und Profilpfad abgeleitet (HMAC über das JWT-Geheimnis) statt
+je Session gewürfelt. Wer sich dasselbe Zuhause teilt, teilt sich den Zugang; ein Überschreiben
+schreibt denselben Wert. Das schwächt nichts ab — es ist dieselbe Person, und die Datei liegt
+ohnehin in genau diesem Zuhause. Flüchtige Sessions ohne Profil behalten ihren Zufallswert, denn
+dort hat jeder Container sein eigenes Home.
 
 ---
 

@@ -1,0 +1,22 @@
+OpenTerminalApps (OTA)
+Copyright 2026 OpenTerminalApps contributors
+
+Dieses Werk steht unter der Apache-Lizenz 2.0 (siehe LICENSE).
+
+Es setzt Bestandteile ein, die es NICHT enthält und die eigenen Lizenzen
+unterliegen. Sie werden zur Laufzeit als Container-Images bezogen:
+
+  KasmVNC                      GPL-2.0
+  Kasm-Workspaces-Images       MIT
+  Traefik                      MIT
+  PostgreSQL                   PostgreSQL-Lizenz
+  Docker Registry              Apache-2.0
+  XFCE                         GPL-2.0 / LGPL-2.1
+
+Anwendungen in einem Golden Image behalten ihre eigenen Bedingungen. Für
+Microsoft Visual Studio Code gilt dessen EULA: Der Betrieb im eigenen
+Unternehmensnetz ist ausdrücklich erlaubt, die Weitergabe an Dritte nicht.
+Einzelheiten mit Originalzitaten in docs/wiki/13-lizenzen.md.
+
+"Kasm" ist eine Marke von Kasm Technologies. OTA ist kein Kasm-Produkt und
+steht in keiner Verbindung zu Kasm Technologies.

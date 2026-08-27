@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  CapacityFader, ChipSelect, Combobox, Drawer, Field, KeyValueRows, Led, Segmented, Toggle,
+  CapacityFader, ChipSelect, Combobox, Field, KeyValueRows, Led, Segmented, Toggle,
 } from '../components/controls'
+import { Workbench } from '../components/Workbench'
 import { cores as coresLabel, gb, idleLabel } from '../lib/format'
 import {
   ApiError, api,
-  type Allocation, type Group, type Host, type Template,
+  type Allocation, type Group, type Host, type HostImage, type Template,
 } from '../lib/api'
+import { t as tr, useLang } from '../lib/i18n'
+import { Software } from './Software'
 
 const GB = 1024 ** 3
 const ALL_CATEGORIES = ['Entwicklung', 'Produktivität', 'Büro', 'Multimedia', 'Kommunikation', 'KI-Werkzeug']
@@ -57,14 +60,16 @@ function Editor({ tpl, host, groups, images, onSaved, onClose, onToast }: {
   tpl: Template
   host: Host | null
   groups: Group[]
-  images: { ref: string; size_bytes: number }[]
+  images: HostImage[]
   onSaved: () => void
   onClose: () => void
   onToast: (m: string, tone?: 'ok' | 'bad') => void
 }) {
+  // "Software" steht direkt neben "Apps", weil es derselbe Vorgang in zwei
+  // Schritten ist: erst einbauen, dann freigeben.
   const TABS = tpl.mode === 'workspace'
-    ? ['Allgemein', 'Apps', 'Ressourcen', 'Rechte', 'Umgebung', 'Zuteilung']
-    : ['Allgemein', 'Ressourcen', 'Rechte', 'Umgebung', 'Zuteilung']
+    ? ['Allgemein', 'Apps', 'Software', 'Ressourcen', 'Rechte', 'Umgebung', 'Zuteilung']
+    : ['Allgemein', 'Software', 'Ressourcen', 'Rechte', 'Umgebung', 'Zuteilung']
 
   const [draft, setDraft] = useState<Draft>(() => toDraft(tpl))
   const [tab, setTab] = useState(TABS[0])
@@ -90,7 +95,7 @@ function Editor({ tpl, host, groups, images, onSaved, onClose, onToast }: {
       onToast(`${draft.friendly_name} gespeichert`)
       onSaved()
     } catch (err) {
-      onToast(err instanceof ApiError ? err.message : 'Speichern fehlgeschlagen', 'bad')
+      onToast(err instanceof ApiError ? err.message : tr('Speichern fehlgeschlagen'), 'bad')
     } finally {
       setBusy(false)
     }
@@ -111,90 +116,147 @@ function Editor({ tpl, host, groups, images, onSaved, onClose, onToast }: {
       await api.setOverride(tpl.id, body)
       setAllocs(await api.allocations(tpl.id))
     } catch (err) {
-      onToast(err instanceof ApiError ? err.message : 'Zuteilung fehlgeschlagen', 'bad')
+      onToast(err instanceof ApiError ? err.message : tr('Zuteilung fehlgeschlagen'), 'bad')
     }
   }
+
+  /** Löscht den Workspace, nachdem die Folgen genannt wurden.
+   *
+   * Ein Dialog statt eines stillen Klicks: Der Workspace nimmt seinen
+   * App-Katalog, seine Zuteilungen und seine Image-Fassungen mit. Was er
+   * *nicht* mitnimmt, ist ebenso wichtig — die Profile der Nutzer bleiben,
+   * und das steht in der Frage.
+   */
+  async function remove() {
+    const ok = window.confirm(
+      tr('„{name}“ löschen?', { name: tpl.friendly_name }) + '\n\n'
+      + tr('App-Katalog, Zuteilungen je Nutzer und die Image-Fassungen dieses Workspace verschwinden mit. Die Profile der Nutzer bleiben erhalten.'))
+    if (!ok) return
+    setBusy(true)
+    try {
+      await api.deleteTemplate(tpl.id)
+      onToast(tr('{name} gelöscht', { name: tpl.friendly_name }))
+      onSaved()
+      onClose()
+    } catch (err) {
+      onToast(err instanceof ApiError ? err.message : tr('Löschen fehlgeschlagen'), 'bad')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /* Von OTA gebaute Images zuerst: Sie sind fast immer gemeint, und
+     dazwischen liegen sonst fünfzig fremde Einträge. */
+  const imageOptions = [...images]
+    .sort((a, b) => Number(b.origin === 'ota') - Number(a.origin === 'ota')
+      || a.ref.localeCompare(b.ref))
+    .map((i) => ({
+      value: i.ref,
+      label: i.ref,
+      sub: `${(i.size_bytes / GB).toFixed(2)} GB${i.origin === 'ota' ? ' · OTA' : ''}`,
+    }))
 
   const groupDelta = draft.group_ids.length - tpl.group_ids.length
 
   return (
-    <Drawer
-      title={draft.friendly_name || 'Neuer Workspace'}
+    <Workbench
+      crumb={tr('Workspaces')}
+      title={draft.friendly_name || tr('Neuer Workspace')}
       subtitle={draft.image_ref}
-      tabs={TABS} tab={tab} onTab={setTab} onClose={onClose}
-      footer={
+      tabs={TABS} tabLabel={tr} tab={tab} onTab={setTab} onBack={onClose}
+      actions={
         <>
-          <button className="btn btn--ghost" onClick={onClose}>Verwerfen</button>
+          {/* Löschen steht abgesetzt: Es ist nicht dieselbe Art Handlung wie
+              Speichern und gehört nicht in dieselbe Reihe. */}
+          <button className="btn btn--halt btn--sm" style={{ marginRight: 10 }}
+            disabled={busy} onClick={() => void remove()}>{tr('Löschen')}</button>
+          <button className="btn btn--ghost" onClick={onClose}>{tr('Verwerfen')}</button>
           <button className="btn btn--primary" disabled={busy} onClick={() => void save()}>
-            {busy ? 'Wird gespeichert…' : 'Änderungen speichern'}
+            {busy ? tr('Wird gespeichert…') : tr('Änderungen speichern')}
           </button>
         </>
       }
     >
       {tab === 'Allgemein' && (
         <>
-          <Field label="Anzeigename" hint="So erscheint der Workspace auf der Kachel im Dashboard.">
+          <Field label={tr('Anzeigename')} hint={tr('So erscheint der Workspace auf der Kachel im Dashboard.')}>
             <div className="row-item">
-              <input value={draft.friendly_name} aria-label="Anzeigename"
+              <input value={draft.friendly_name} aria-label={tr('Anzeigename')}
                 onChange={(e) => set('friendly_name', e.target.value)} />
             </div>
           </Field>
 
-          <Field label="Beschreibung" hint="Ein Satz, der Nutzern sagt, wofür sie diesen Workspace öffnen.">
+          <Field label={tr('Beschreibung')} hint={tr('Ein Satz, der Nutzern sagt, wofür sie diesen Workspace öffnen.')}>
             <div className="row-item">
-              <input value={draft.description} aria-label="Beschreibung"
+              <input value={draft.description} aria-label={tr('Beschreibung')}
                 onChange={(e) => set('description', e.target.value)} />
             </div>
           </Field>
 
-          <Field label="Image" hint="Wählbar sind die Images, die auf diesem Host bereitliegen.">
-            <Combobox label="Image" value={draft.image_ref}
-              options={images.map((i) => ({
-                value: i.ref, label: i.ref, sub: `${(i.size_bytes / GB).toFixed(2)} GB`,
-              }))}
+          <Field label={tr('Image')}
+            hint={tr('Die Auswahl zeigt, was auf diesem Host liegt — von OTA gebaute zuerst. Ein Image, das noch nicht da ist, holst du unter Images.')}>
+            <Combobox label={tr('Image')} value={draft.image_ref}
+              options={imageOptions}
               onChange={(v) => set('image_ref', v)} />
+            {/* Die Auswahl war bisher ein geschlossener Kreis: Was nicht
+                zufällig auf dem Host lag, liess sich nicht eintragen. Hier
+                steht die Adresse frei — sie muss beim Start vorhanden sein,
+                nicht beim Speichern. */}
+            <div className="row-item" style={{ marginTop: 8 }}>
+              <input value={draft.image_ref} spellCheck={false}
+                placeholder="kasmweb/gimp:1.18.0-rolling-weekly"
+                aria-label={tr('Image-Adresse')}
+                onChange={(e) => set('image_ref', e.target.value)} />
+            </div>
+            {draft.image_ref && !images.some((i) => i.ref === draft.image_ref) && (
+              <p className="note-warn" style={{ marginTop: 8 }}>
+                {tr('Dieses Image liegt nicht auf dem Host. Hol es unter Images, sonst scheitert der erste Start.')}
+              </p>
+            )}
           </Field>
 
-          <Field label="Betriebsart"
+          <Field label={tr('Betriebsart')}
             hint={draft.mode === 'workspace'
-              ? 'Ein Linux je Nutzer mit mehreren Apps darin. Der Standard.'
-              : 'Eine Anwendung als Wegwerf-Container. Für selten genutzte Werkzeuge.'}>
-            <Segmented label="Betriebsart" value={draft.mode}
+              ? tr('Ein Linux je Nutzer mit mehreren Apps darin. Der Standard.')
+              : tr('Eine Anwendung als Wegwerf-Container. Für selten genutzte Werkzeuge.')}>
+            <Segmented label={tr('Betriebsart')} value={draft.mode}
               options={[
-                { value: 'workspace' as const, label: 'Arbeitsplatz' },
-                { value: 'single_app' as const, label: 'Einzelne App' },
+                { value: 'workspace' as const, label: tr('Arbeitsplatz') },
+                { value: 'single_app' as const, label: tr('Einzelne App') },
               ]}
               onChange={(v) => set('mode', v)} />
           </Field>
 
-          <Field label="Kategorien" hint="Bestimmt, unter welchem Filter der Workspace erscheint.">
-            <ChipSelect label="Kategorien" selected={draft.categories} options={ALL_CATEGORIES}
+          <Field label={tr('Kategorien')} hint={tr('Bestimmt, unter welchem Filter der Workspace erscheint.')}>
+            <ChipSelect label={tr('Kategorien')} selected={draft.categories} options={ALL_CATEGORIES}
               onChange={(v) => set('categories', v)} />
           </Field>
 
-          <Field label="Sichtbarkeit">
-            <Toggle on={draft.is_enabled} name="Workspace ist aktiv"
+          <Field label={tr('Sichtbarkeit')}>
+            <Toggle on={draft.is_enabled} name={tr('Workspace ist aktiv')}
               note={draft.is_enabled
-                ? 'Zugewiesene Nutzer können ihn starten.'
-                : 'Niemand kann ihn starten, die Zuweisung bleibt bestehen.'}
+                ? tr('Zugewiesene Nutzer können ihn starten.')
+                : tr('Niemand kann ihn starten, die Zuweisung bleibt bestehen.')}
               onChange={(v) => set('is_enabled', v)} />
           </Field>
         </>
       )}
 
+      {tab === 'Software' && (
+        <Software tpl={tpl} onToast={onToast} onChanged={onSaved} />
+      )}
+
       {tab === 'Apps' && (
         <>
           <p className="sub" style={{ marginBottom: 6 }}>
-            Diese Anwendungen sind im Golden Image installiert. Jede bekommt beim Start ein
-            eigenes Display im selben Container und teilt sich mit den anderen das Zuhause.
+            {tr('Diese Anwendungen sind im Golden Image installiert. Jede bekommt beim Start ein eigenes Display im selben Container und teilt sich mit den anderen das Zuhause.')}
           </p>
           <p className="note-warn">
-            Extensions wandern nicht zwischen den Editoren. Jeder bezieht sie aus seiner eigenen Quelle.
+            {tr('Extensions wandern nicht zwischen den Editoren. Jeder bezieht sie aus seiner eigenen Quelle.')}
           </p>
           {draft.apps.length === 0 ? (
             <p className="assign__empty" style={{ marginTop: 18 }}>
-              Für dieses Image ist noch kein App-Katalog hinterlegt. Er entsteht mit dem
-              Golden Image.
+              {tr('Für dieses Image ist noch kein App-Katalog hinterlegt. Er entsteht mit dem Golden Image.')}
             </p>
           ) : (
             <div className="applist">
@@ -206,10 +268,10 @@ function Editor({ tpl, host, groups, images, onSaved, onClose, onToast }: {
                     <span className="applist__name">{a.name}</span>
                     {a.blocked_reason
                       ? <span className="applist__block">{a.blocked_reason}</span>
-                      : a.registry_hint && <span className="applist__reg">Extensions aus: {a.registry_hint}</span>}
+                      : a.registry_hint && <span className="applist__reg">{tr('Extensions aus:')} {a.registry_hint}</span>}
                   </span>
                   <Toggle on={a.is_enabled && !a.blocked_reason} name=""
-                    ariaLabel={`${a.name} bereitstellen`}
+                    ariaLabel={tr('{app} bereitstellen', { app: a.name })}
                     onChange={(v) => !a.blocked_reason && set('apps',
                       draft.apps.map((x) => (x.slug === a.slug ? { ...x, is_enabled: v } : x)))} />
                 </div>
@@ -223,35 +285,36 @@ function Editor({ tpl, host, groups, images, onSaved, onClose, onToast }: {
         <>
           {draft.mode === 'workspace' && (
             <p className="note-info">
-              Die Werte gelten für den Container als Ganzes, nicht je App. Er muss auf die
-              Spitze ausgelegt sein — auf alles, was ein Nutzer gleichzeitig offen hat.
+              {tr('Die Werte gelten für den Container als Ganzes, nicht je App. Er muss auf die Spitze ausgelegt sein — auf alles, was ein Nutzer gleichzeitig offen hat.')}
             </p>
           )}
 
-          <Field label="Prozessorkerne" hint={`Dieser Host hat ${hostCores} Kerne.`}>
-            <CapacityFader aria-label="Prozessorkerne"
+          <Field label={tr('Prozessorkerne')} hint={tr('Dieser Host hat {n} Kerne.', { n: hostCores })}>
+            <CapacityFader aria-label={tr('Prozessorkerne')}
               value={draft.cores} min={0.5} max={8} step={0.5} limit={hostCores}
               format={(v) => v.toString().replace('.', ',')}
-              unit={draft.cores === 1 ? 'Kern' : 'Kerne'}
+              unit={draft.cores === 1 ? tr('Kern') : tr('Kerne')}
               ticks={[0.5, 2, 4, 6, 8]} tickLabel={(t) => String(t)}
-              overMessage={`Über ${hostCores} Kernen teilen sich die Sessions die CPU.`}
+              overMessage={tr('Über {n} Kernen teilen sich die Sessions die CPU.', { n: hostCores })}
               onChange={(v) => set('cores', v)} />
           </Field>
 
-          <Field label="Arbeitsspeicher"
+          <Field label={tr('Arbeitsspeicher')}
             hint={host
-              ? `Der Host hat ${gb(host.memory_total, 0)} GB, davon sind gerade ${gb(freeBytes)} GB frei.`
-              : 'Host-Auslastung nicht verfügbar.'}>
-            <CapacityFader aria-label="Arbeitsspeicher"
+              ? tr('Der Host hat {total} GB, davon sind gerade {free} GB frei.',
+                   { total: gb(host.memory_total, 0), free: gb(freeBytes) })
+              : tr('Host-Auslastung nicht verfügbar.')}>
+            <CapacityFader aria-label={tr('Arbeitsspeicher')}
               value={draft.memory_bytes / GB} min={0.5} max={16} step={0.1} limit={freeGb}
               format={(v) => gb(v * GB)} unit="GB"
               ticks={[0.5, 4, 8, 12, 16]} tickLabel={(t) => String(t)}
-              overMessage={`Mehr als ${gb(freeBytes)} GB sind gerade nicht frei. Der Start würde abgelehnt.`}
+              overMessage={tr('Mehr als {free} GB sind gerade nicht frei. Der Start würde abgelehnt.',
+                { free: gb(freeBytes) })}
               onChange={(v) => set('memory_bytes', v * GB)} />
           </Field>
 
-          <Field label="Auflösung" hint="Nutzer können sie in der Session jederzeit ändern.">
-            <Combobox label="Auflösung" value={`${draft.x_res}x${draft.y_res}`}
+          <Field label={tr('Auflösung')} hint={tr('Nutzer können sie in der Session jederzeit ändern.')}>
+            <Combobox label={tr('Auflösung')} value={`${draft.x_res}x${draft.y_res}`}
               options={[
                 { value: '1280x720', label: '1280 × 720', sub: 'HD' },
                 { value: '1920x1080', label: '1920 × 1080', sub: 'Full HD' },
@@ -263,9 +326,9 @@ function Editor({ tpl, host, groups, images, onSaved, onClose, onToast }: {
               }} />
           </Field>
 
-          <Field label="Sitzung endet nach Inaktivität"
-            hint="Gemessen ab dem letzten Lebenszeichen des Browsers.">
-            <CapacityFader aria-label="Zeit bis zur Inaktivität"
+          <Field label={tr('Sitzung endet nach Inaktivität')}
+            hint={tr('Gemessen ab dem letzten Lebenszeichen des Browsers.')}>
+            <CapacityFader aria-label={tr('Zeit bis zur Inaktivität')}
               value={Math.max(0, IDLE_STEPS.indexOf(draft.idle_minutes))}
               min={0} max={IDLE_STEPS.length - 1} step={1}
               format={(i) => idleLabel(IDLE_STEPS[i])}
@@ -273,32 +336,32 @@ function Editor({ tpl, host, groups, images, onSaved, onClose, onToast }: {
               onChange={(i) => set('idle_minutes', IDLE_STEPS[i])} />
           </Field>
 
-          <Field label="Was dann passiert"
+          <Field label={tr('Was dann passiert')}
             hint={draft.idle_action === 'delete'
-              ? 'Der Container wird entfernt. Das persistente Profil bleibt erhalten.'
+              ? tr('Der Container wird entfernt. Das persistente Profil bleibt erhalten.')
               : draft.idle_action === 'pause'
-                ? 'Der Container behält seinen Arbeitsspeicher und ist sofort wieder da.'
-                : 'Der Container wird gestoppt und beim nächsten Mal neu gestartet.'}>
-            <Segmented label="Aktion bei Inaktivität" value={draft.idle_action}
+                ? tr('Der Container behält seinen Arbeitsspeicher und ist sofort wieder da.')
+                : tr('Der Container wird gestoppt und beim nächsten Mal neu gestartet.')}>
+            <Segmented label={tr('Aktion bei Inaktivität')} value={draft.idle_action}
               options={[
-                { value: 'pause' as const, label: 'Pausieren' },
-                { value: 'stop' as const, label: 'Stoppen' },
-                { value: 'delete' as const, label: 'Löschen', tone: 'halt' as const },
+                { value: 'pause' as const, label: tr('Pausieren') },
+                { value: 'stop' as const, label: tr('Stoppen') },
+                { value: 'delete' as const, label: tr('Löschen'), tone: 'halt' as const },
               ]}
               onChange={(v) => set('idle_action', v)} />
           </Field>
 
-          <Field label="Persistentes Profil"
+          <Field label={tr('Persistentes Profil')}
             hint={draft.persistence_scope === 'user'
-              ? 'Ein gemeinsames Home für alle Workspaces dieses Nutzers.'
+              ? tr('Ein gemeinsames Home für alle Workspaces dieses Nutzers.')
               : draft.persistence_scope === 'template'
-                ? 'Ein eigenes Home nur für diesen Workspace-Typ.'
-                : 'Nichts wird gespeichert. Jeder Start beginnt beim Golden Image.'}>
-            <Segmented label="Persistenz" value={draft.persistence_scope}
+                ? tr('Ein eigenes Home nur für diesen Workspace-Typ.')
+                : tr('Nichts wird gespeichert. Jeder Start beginnt beim Golden Image.')}>
+            <Segmented label={tr('Persistenz')} value={draft.persistence_scope}
               options={[
-                { value: 'user' as const, label: 'Pro Nutzer' },
-                { value: 'template' as const, label: 'Pro Workspace' },
-                { value: 'none' as const, label: 'Flüchtig' },
+                { value: 'user' as const, label: tr('Pro Nutzer') },
+                { value: 'template' as const, label: tr('Pro Workspace') },
+                { value: 'none' as const, label: tr('Flüchtig') },
               ]}
               onChange={(v) => set('persistence_scope', v)} />
           </Field>
@@ -308,21 +371,20 @@ function Editor({ tpl, host, groups, images, onSaved, onClose, onToast }: {
       {tab === 'Rechte' && (
         <>
           <p className="sub" style={{ marginBottom: 16 }}>
-            Gilt für alle Nutzer dieses Workspace. Gruppen können strenger sein, nie großzügiger.
+            {tr('Gilt für alle Nutzer dieses Workspace. Gruppen können strenger sein, nie großzügiger.')}
           </p>
           {['Zwischenablage', 'Dateien', 'Geräte', 'Sonstiges'].map((grp) => (
             <div key={grp} style={{ marginBottom: 18 }}>
               <div className="section__head" style={{ marginBottom: 4 }}>
-                <span className="silk">{grp}</span><span className="section__rule" />
+                <span className="silk">{tr(grp)}</span><span className="section__rule" />
               </div>
               {grp === 'Zwischenablage' && draft.mode === 'workspace' && (
                 <p className="note-info" style={{ marginTop: 10, marginBottom: 6 }}>
-                  Die Brücke hält die Zwischenablage über alle Apps im Container gleich.
-                  Wird das Kopieren hier abgeschaltet, läuft auch die Brücke nicht.
+                  {tr('Die Brücke hält die Zwischenablage über alle Apps im Container gleich. Wird das Kopieren hier abgeschaltet, läuft auch die Brücke nicht.')}
                 </p>
               )}
               {RIGHTS_META.filter((r) => r.group === grp).map((r) => (
-                <Toggle key={r.key} on={!!draft.rights[r.key]} name={r.name} note={r.note}
+                <Toggle key={r.key} on={!!draft.rights[r.key]} name={tr(r.name)} note={tr(r.note)}
                   onChange={(v) => set('rights', { ...draft.rights, [r.key]: v })} />
               ))}
             </div>
@@ -331,19 +393,35 @@ function Editor({ tpl, host, groups, images, onSaved, onClose, onToast }: {
       )}
 
       {tab === 'Umgebung' && (
-        <Field label="Umgebungsvariablen"
-          hint="Keine Geheimnisse hier — Umgebungsvariablen sind über docker inspect lesbar und landen in Logs.">
-          <KeyValueRows rows={draft.env_rows} onChange={(v) => set('env_rows', v)}
-            keyPlaceholder="Name" valuePlaceholder="Wert" addLabel="Variable hinzufügen" />
-        </Field>
+        <>
+          <Field label={tr('Umgebungsvariablen')}
+            hint={tr('Keine Geheimnisse hier — Umgebungsvariablen sind über docker inspect lesbar und landen in Logs.')}>
+            <KeyValueRows rows={draft.env_rows} onChange={(v) => set('env_rows', v)}
+              keyPlaceholder={tr('Name')} valuePlaceholder={tr('Wert')} addLabel={tr('Variable hinzufügen')} />
+          </Field>
+
+          <Field label={tr('Skript beim Start')}
+            hint={tr('Läuft bei jedem Sessionstart als Nutzer im Container, bevor der Arbeitsplatz bereit ist. Für alles, was ins Home gehört, aber nicht ins Image.')}>
+            <textarea className="build__log" spellCheck={false}
+              style={{ minHeight: 200, width: '100%', color: 'var(--text)', resize: 'vertical' }}
+              value={draft.start_script} aria-label={tr('Skript beim Start')}
+              placeholder={'# $OTA_SHARED zeigt auf die gemeinsame Ablage.\n'
+                + 'mkdir -p "$HOME/.pki"\n'
+                + 'cp "$OTA_SHARED"/zertifikate/*.crt "$HOME/.pki/" 2>/dev/null || true\n'}
+              onChange={(e) => set('start_script', e.target.value)} />
+            <p className="note-info" style={{ marginTop: 10 }}>
+              {tr('Nicht für Installationen — die gehören ins Golden Image, sonst wartet jeder Nutzer bei jedem Start darauf. Scheitert das Skript, startet der Arbeitsplatz trotzdem; die Ausgabe steht im Container unter /tmp/ota-start.log.')}
+            </p>
+          </Field>
+        </>
       )}
 
       {tab === 'Zuteilung' && (
         <>
-          <Field label="Gruppen" hint="Nur Mitglieder dieser Gruppen sehen den Workspace in ihrem Dashboard.">
+          <Field label={tr('Gruppen')} hint={tr('Nur Mitglieder dieser Gruppen sehen den Workspace in ihrem Dashboard.')}>
             <div className="assign">
               <div className="assign__col">
-                <div className="assign__head"><span className="silk">Verfügbar</span></div>
+                <div className="assign__head"><span className="silk">{tr('Verfügbar')}</span></div>
                 <div className="assign__list">
                   {groups.filter((g) => !draft.group_ids.includes(g.id)).map((g) => (
                     <button key={g.id} className="assign__item"
@@ -354,7 +432,7 @@ function Editor({ tpl, host, groups, images, onSaved, onClose, onToast }: {
                     </button>
                   ))}
                   {groups.every((g) => draft.group_ids.includes(g.id)) &&
-                    <p className="assign__empty">Alle Gruppen zugewiesen</p>}
+                    <p className="assign__empty">{tr('Alle Gruppen zugewiesen')}</p>}
                 </div>
               </div>
               <div className="assign__col">
@@ -373,7 +451,7 @@ function Editor({ tpl, host, groups, images, onSaved, onClose, onToast }: {
                     )
                   })}
                   {draft.group_ids.length === 0 &&
-                    <p className="assign__empty">Niemand sieht diesen Workspace</p>}
+                    <p className="assign__empty">{tr('Niemand sieht diesen Workspace')}</p>}
                 </div>
               </div>
             </div>
@@ -387,7 +465,7 @@ function Editor({ tpl, host, groups, images, onSaved, onClose, onToast }: {
           </Field>
 
           <div className="section__head" style={{ marginTop: 26 }}>
-            <span className="silk">Ressourcen je Nutzer</span>
+            <span className="silk">{tr('Ressourcen je Nutzer')}</span>
             <span className="section__rule" />
           </div>
           <p className="sub" style={{ marginBottom: 14 }}>
@@ -421,30 +499,32 @@ function Editor({ tpl, host, groups, images, onSaved, onClose, onToast }: {
 
                     {open && (
                       <div className="alloc__body">
-                        <Field label="Prozessorkerne für diesen Nutzer"
-                          inherited={a.cores_from !== 'Nutzer' ? a.cores_from : undefined}
+                        <Field label={tr('Prozessorkerne für diesen Nutzer')}
+                          inherited={a.cores_from !== 'Nutzer' ? tr(a.cores_from) : undefined}
                           onReset={a.cores_from === 'Nutzer'
                             ? () => void setOverride(a.user_id, { cores: null })
                             : undefined}>
-                          <CapacityFader aria-label={`Prozessorkerne für ${a.username}`}
+                          <CapacityFader aria-label={tr('Prozessorkerne für {name}', { name: a.username })}
                             value={a.cores} min={0.5} max={8} step={0.5} limit={hostCores}
                             format={(v) => v.toString().replace('.', ',')}
-                            unit={a.cores === 1 ? 'Kern' : 'Kerne'}
+                            unit={a.cores === 1 ? tr('Kern') : tr('Kerne')}
                             ticks={[0.5, 2, 4, 6, 8]} tickLabel={(x) => String(x)}
-                            overMessage={`Über ${hostCores} Kernen teilen sich die Sessions die CPU.`}
+                            overMessage={tr('Über {n} Kernen teilen sich die Sessions die CPU.',
+                              { n: hostCores })}
                             onChange={(v) => void setOverride(a.user_id, { cores: v })} />
                         </Field>
 
-                        <Field label="Arbeitsspeicher für diesen Nutzer"
-                          inherited={a.memory_from !== 'Nutzer' ? a.memory_from : undefined}
+                        <Field label={tr('Arbeitsspeicher für diesen Nutzer')}
+                          inherited={a.memory_from !== 'Nutzer' ? tr(a.memory_from) : undefined}
                           onReset={a.memory_from === 'Nutzer'
                             ? () => void setOverride(a.user_id, { memory_bytes: null })
                             : undefined}>
-                          <CapacityFader aria-label={`Arbeitsspeicher für ${a.username}`}
+                          <CapacityFader aria-label={tr('Arbeitsspeicher für {name}', { name: a.username })}
                             value={a.memory_bytes / GB} min={0.5} max={16} step={0.1} limit={freeGb}
                             format={(v) => gb(v * GB)} unit="GB"
                             ticks={[0.5, 4, 8, 12, 16]} tickLabel={(x) => String(x)}
-                            overMessage={`Mehr als ${gb(freeBytes)} GB sind gerade nicht frei.`}
+                            overMessage={tr('Mehr als {free} GB sind gerade nicht frei.',
+                              { free: gb(freeBytes) })}
                             onChange={(v) => void setOverride(a.user_id, { memory_bytes: Math.round(v * GB) })} />
                         </Field>
                       </div>
@@ -456,14 +536,15 @@ function Editor({ tpl, host, groups, images, onSaved, onClose, onToast }: {
           )}
         </>
       )}
-    </Drawer>
+    </Workbench>
   )
 }
 
 export function Workspaces({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad') => void }) {
+  useLang()
   const [list, setList] = useState<Template[] | null>(null)
   const [groups, setGroups] = useState<Group[]>([])
-  const [images, setImages] = useState<{ ref: string; size_bytes: number }[]>([])
+  const [images, setImages] = useState<HostImage[]>([])
   const [host, setHost] = useState<Host | null>(null)
   const [editing, setEditing] = useState<Template | null>(null)
   const [failed, setFailed] = useState<string | null>(null)
@@ -497,11 +578,11 @@ export function Workspaces({ onToast }: { onToast: (m: string, tone?: 'ok' | 'ba
         rights: { clipboardUp: true, clipboardDown: true, clipboardImages: true },
         group_ids: [],
       })
-      onToast('Workspace angelegt')
+      onToast(tr('Workspace angelegt'))
       await load()
       setEditing(t)
     } catch (err) {
-      onToast(err instanceof ApiError ? err.message : 'Anlegen fehlgeschlagen', 'bad')
+      onToast(err instanceof ApiError ? err.message : tr('Anlegen fehlgeschlagen'), 'bad')
     }
   }
 
@@ -509,7 +590,7 @@ export function Workspaces({ onToast }: { onToast: (m: string, tone?: 'ok' | 'ba
     return (
       <div className="wrap">
         <div className="empty">
-          <p className="empty__title">Die Verwaltung konnte nicht geladen werden</p>
+          <p className="empty__title">{tr('Die Verwaltung konnte nicht geladen werden')}</p>
           <p className="empty__body">{failed}</p>
           <button className="btn" onClick={() => void load()}>Erneut versuchen</button>
         </div>
@@ -520,67 +601,80 @@ export function Workspaces({ onToast }: { onToast: (m: string, tone?: 'ok' | 'ba
 
   const usedPct = ((host.memory_total - host.memory_available) / host.memory_total) * 100
 
+  // Bearbeiten ersetzt die Liste, statt sie zu überlagern: Man ist dann eine
+  // Ebene tiefer (Workspaces / Arbeitsplatz) und nicht in einem Dialog.
+  if (editing) {
+    return (
+      <Editor tpl={editing} host={host} groups={groups} images={images}
+        onClose={() => setEditing(null)}
+        onSaved={() => { setEditing(null); void load() }}
+        onToast={onToast} />
+    )
+  }
+
   return (
     <div className="wrap">
       <header className="topbar">
         <div>
-          <p className="silk" style={{ marginBottom: 6 }}>Verwaltung</p>
+          <p className="silk" style={{ marginBottom: 6 }}>{tr('Verwaltung')}</p>
           <h1 className="h-page">Workspaces</h1>
         </div>
-        <button className="btn btn--primary" onClick={() => void create()}>Workspace anlegen</button>
+        <button className="btn btn--primary" onClick={() => void create()}>{tr('Workspace anlegen')}</button>
       </header>
 
       <div className="meters">
         <div className="panel meter">
-          <div className="meter__top"><span className="silk">Arbeitsspeicher frei</span>
+          <div className="meter__top"><span className="silk">{tr('Arbeitsspeicher frei')}</span>
             <span className="meter__val">{gb(host.memory_available)} GB</span></div>
           <div className="meter__bar">
             <div className="meter__fill" data-tone={usedPct > 85 ? 'caution' : undefined}
               style={{ width: `${usedPct}%` }} />
           </div>
-          <p className="meter__note">von {gb(host.memory_total, 0)} GB</p>
+          <p className="meter__note">{tr('von {n} GB', { n: gb(host.memory_total, 0) })}</p>
         </div>
 
         <div className="panel meter">
-          <div className="meter__top"><span className="silk">Zugesagt je Session</span>
+          <div className="meter__top"><span className="silk">{tr('Zugesagt je Session')}</span>
             <span className="meter__val">{gb(committed)} GB</span></div>
           <div className="meter__bar">
             <div className="meter__fill" data-tone={committed > host.memory_available ? 'halt' : 'caution'}
               style={{ width: `${Math.min(100, (committed / host.memory_total) * 100)}%` }} />
           </div>
           <p className="meter__note">
-            wenn alle {list.filter((t) => t.is_enabled).length} Workspaces gleichzeitig laufen
+            {tr('wenn alle {n} Workspaces gleichzeitig laufen',
+              { n: list.filter((t) => t.is_enabled).length })}
           </p>
         </div>
 
         <div className="panel meter">
-          <div className="meter__top"><span className="silk">Kerne</span>
+          <div className="meter__top"><span className="silk">{tr('Kerne')}</span>
             <span className="meter__val">{host.cores}</span></div>
           <div className="meter__bar"><div className="meter__fill" style={{ width: '100%' }} /></div>
-          <p className="meter__note">Docker {host.docker_version} · {host.running_containers} Container</p>
+          <p className="meter__note">
+            Docker {host.docker_version} · {tr('{n} Container', { n: host.running_containers })}
+          </p>
         </div>
       </div>
 
       <section className="section">
         {list.length === 0 ? (
           <div className="empty">
-            <p className="empty__title">Noch kein Workspace angelegt</p>
+            <p className="empty__title">{tr('Noch kein Workspace angelegt')}</p>
             <p className="empty__body">
-              Lege einen Arbeitsplatz an und weise ihn einer Gruppe zu — dann erscheint er
-              im Dashboard der Nutzer.
+              {tr('Lege einen Arbeitsplatz an und weise ihn einer Gruppe zu — dann erscheint er im Dashboard der Nutzer.')}
             </p>
-            <button className="btn btn--primary" onClick={() => void create()}>Workspace anlegen</button>
+            <button className="btn btn--primary" onClick={() => void create()}>{tr('Workspace anlegen')}</button>
           </div>
         ) : (
           <div className="panel" style={{ padding: '14px 0 0' }}>
             <table className="tbl">
               <thead>
                 <tr>
-                  <th style={{ paddingLeft: 20 }}>Workspace</th>
-                  <th>Art</th>
-                  <th>Ressourcen</th>
-                  <th>Gruppen</th>
-                  <th>Status</th>
+                  <th style={{ paddingLeft: 20 }}>{tr('Workspace')}</th>
+                  <th>{tr('Art')}</th>
+                  <th>{tr('Ressourcen')}</th>
+                  <th>{tr('Gruppen')}</th>
+                  <th>{tr('Status')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -617,12 +711,6 @@ export function Workspaces({ onToast }: { onToast: (m: string, tone?: 'ok' | 'ba
         )}
       </section>
 
-      {editing && (
-        <Editor tpl={editing} host={host} groups={groups} images={images}
-          onClose={() => setEditing(null)}
-          onSaved={() => { setEditing(null); void load() }}
-          onToast={onToast} />
-      )}
     </div>
   )
 }

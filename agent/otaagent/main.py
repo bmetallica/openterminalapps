@@ -7,28 +7,93 @@ was darf. Das passiert in der API.
 
 from __future__ import annotations
 
+import base64
+import logging
 import os
 import shutil
 import secrets
+import threading
 from typing import Any
 
 import docker
 from docker.errors import APIError, ImageNotFound, NotFound
-from fastapi import Depends, FastAPI, Header, HTTPException, status
+from fastapi import (
+    Depends, FastAPI, File, Form, Header, HTTPException, Response, UploadFile, status,
+)
 from pydantic import BaseModel, Field
 
 from . import apps as app_scripts
 from . import backup as backup_ops
 from . import builder
 from . import clipboard as clip_scripts
+from . import discover
+from . import shared as shared_store
 
 AGENT_TOKEN = os.environ.get("OTA_AGENT_TOKEN", "")
 PROFILES_ROOT = os.environ.get("OTA_PROFILES_ROOT", "/srv/ota/profiles")
+# Ablage fuer Dateien, die in Session-Container gemountet werden. Muss im
+# Agent und auf dem Host unter demselben Pfad liegen — Docker loest Bind-Mounts
+# gegen den Host auf, nicht gegen den Container, der sie anfordert.
+RUNTIME_ROOT = os.environ.get("OTA_RUNTIME_ROOT", "/srv/ota/runtime")
+# Adresse der eigenen Registry. Leer schaltet sie ab.
+REGISTRY = os.environ.get("OTA_REGISTRY", "").strip()
+# Gemeinsame Ablage. Liegt in jedem Session-Container **nur lesbar** — sie ist
+# der Weg der Administration zu den Nutzern, nicht umgekehrt.
+SHARED_ROOT = os.environ.get("OTA_SHARED_ROOT", "/srv/ota/shared")
+SHARED_MOUNT = "/mnt/ota"
 SESSION_NETWORK = os.environ.get("OTA_SESSION_NETWORK", "ota_sessions")
 PUBLIC_NETWORK = os.environ.get("OTA_PUBLIC_NETWORK", "ota_public")
 
+log = logging.getLogger("ota.agent")
+
 app = FastAPI(title="OTA Agent", docs_url=None, redoc_url=None)
 _client: docker.DockerClient | None = None
+
+
+# Was `custom_startup.sh` in einem Arbeitsplatz tun soll: nichts.
+#
+# Die Kasm-Images fuer einzelne Anwendungen bringen ein `custom_startup.sh`
+# mit, das "ihre" Anwendung startet. `vnc_startup.sh` beaufsichtigt dieses
+# Skript und startet es **alle drei Sekunden neu**, sobald es sich beendet —
+# der Kommentar dort sagt ausdruecklich: "custom startup scripts track the
+# target process on their own, they should not exit".
+#
+# In einem abgeleiteten Arbeitsplatz-Image ist das verheerend. Gemessen am
+# 2026-08-27 mit `ota/arbeitsplatz:v1` (abgeleitet von kasmweb/vs-code):
+# Das geerbte Skript startete `code`, VS Code ist einzelinstanzig, die zweite
+# Instanz reichte den Aufruf an die erste weiter und beendete sich — worauf
+# die Aufsicht sie erneut startete. Ergebnis nach sechs Minuten: 119 leere
+# VS-Code-Fenster, 2,5 GB belegt, der Bildschirm zeigte nur noch Schwarz.
+#
+# Ein Arbeitsplatz startet seine Anwendungen selbst, auf Zuruf. Das geerbte
+# Skript wird deshalb ueberdeckt — durch eines, das einfach wartet und damit
+# die Aufsicht zufriedenstellt.
+WORKSPACE_STARTUP = """#!/usr/bin/env bash
+# Von OpenTerminalApps eingehaengt. Ersetzt das custom_startup.sh des
+# Basisimages, damit im Arbeitsplatz keine Anwendung von selbst startet.
+# Anwendungen startet der OTA-Agent auf Zuruf, jede auf ihrem Display.
+#
+# Das Skript darf sich nicht beenden: vnc_startup.sh startet es sonst alle
+# drei Sekunden neu.
+while true; do sleep 3600; done
+"""
+
+
+def _workspace_startup_file() -> str:
+    """Legt das Ersatzskript ab und gibt seinen Pfad zurueck."""
+    os.makedirs(RUNTIME_ROOT, exist_ok=True)
+    path = os.path.join(RUNTIME_ROOT, "workspace-startup.sh")
+    current = ""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            current = fh.read()
+    except OSError:
+        pass
+    if current != WORKSPACE_STARTUP:
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(WORKSPACE_STARTUP)
+    os.chmod(path, 0o755)
+    return path
 
 
 def dc() -> docker.DockerClient:
@@ -56,6 +121,12 @@ class StartRequest(BaseModel):
     vnc_secret: str
     mode: str = "workspace"
     labels: dict[str, str] = {}
+    # Laeuft nach dem Start als Nutzer im Container. Siehe _run_start_script.
+    start_script: str = ""
+    # Darf der Anwender in seinem eigenen Container root werden? Setzt die
+    # API fuer Administratoren. Siehe `_elevate()` — das ist eine bewusste
+    # Lockerung, keine Nebenwirkung.
+    elevated: bool = False
 
 
 @app.get("/healthz")
@@ -94,6 +165,75 @@ def host_info() -> dict[str, Any]:
     }
 
 
+# --------------------------------------------------------------------------
+# Gemeinsame Ablage (siehe shared.py)
+# --------------------------------------------------------------------------
+
+class SharedNameRequest(BaseModel):
+    path: str = ""
+    name: str
+
+
+def _shared(fn, *args):
+    try:
+        return fn(*args)
+    except shared_store.SharedError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+
+@app.get("/shared", dependencies=[Depends(require_token)])
+def shared_list(path: str = "") -> dict[str, Any]:
+    return _shared(shared_store.listing, path)
+
+
+@app.post("/shared/upload", dependencies=[Depends(require_token)])
+async def shared_upload(path: str = Form(default=""),
+                        file: UploadFile = File(...)) -> dict[str, Any]:
+    data = await file.read()
+    return _shared(shared_store.save, path, file.filename or "datei", data)
+
+
+@app.post("/shared/dir", dependencies=[Depends(require_token)])
+def shared_mkdir(req: SharedNameRequest) -> dict[str, Any]:
+    return _shared(shared_store.make_dir, req.path, req.name)
+
+
+@app.delete("/shared", dependencies=[Depends(require_token)])
+def shared_remove(path: str) -> dict[str, Any]:
+    return _shared(shared_store.remove, path)
+
+
+@app.get("/shared/file", dependencies=[Depends(require_token)])
+def shared_read(path: str) -> Response:
+    name, data = _shared(shared_store.read, path)
+    return Response(
+        content=data, media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{name}"'},
+    )
+
+
+@app.get("/images/applications", dependencies=[Depends(require_token)])
+def image_applications(ref: str) -> list[dict[str, Any]]:
+    """Welche Anwendungen in diesem Image installiert sind.
+
+    Gelesen aus den .desktop-Dateien des Images — siehe discover.py.
+    """
+    try:
+        return discover.applications(ref)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+
+
+@app.get("/images/packages", dependencies=[Depends(require_token)])
+def image_packages(ref: str, names: str = "") -> list[dict[str, Any]]:
+    """Kennt dieses Image diese Pakete? Siehe discover.check_packages."""
+    wanted = [n.strip() for n in names.split(",") if n.strip()]
+    try:
+        return discover.check_packages(ref, wanted)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+
+
 @app.get("/images", dependencies=[Depends(require_token)])
 def list_images() -> list[dict[str, Any]]:
     out = []
@@ -125,11 +265,15 @@ def start_container(req: StartRequest) -> dict[str, Any]:
     try:
         client.images.get(req.image)
     except ImageNotFound:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            f"Das Image {req.image} liegt nicht auf diesem Host. "
-            "Es muss zuerst geladen werden.",
-        )
+        # Aus der eigenen Registry nachholen, statt abzulehnen. Das ist der
+        # Punkt, an dem sich die Registry auszahlt: Ein Host, der ein Golden
+        # Image nie gebaut hat, kann es trotzdem starten.
+        if not _fetch_from_registry(client, req.image):
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                f"Das Image {req.image} liegt nicht auf diesem Host und ist "
+                "auch nicht in der Registry. Hole es unter Verwaltung → Images.",
+            )
 
     env = dict(req.env)
     env.setdefault("VNC_PW", req.vnc_secret)
@@ -139,10 +283,31 @@ def start_container(req: StartRequest) -> dict[str, Any]:
                                  "-DynamicQualityMax=7 -DLP_ClipDelay=0")
 
     mounts = []
+    if req.mode == "workspace":
+        # Siehe WORKSPACE_STARTUP: Das geerbte Startskript wuerde die
+        # Anwendung des Basisimages im Drei-Sekunden-Takt neu starten.
+        try:
+            mounts.append(docker.types.Mount(
+                target="/dockerstartup/custom_startup.sh",
+                source=_workspace_startup_file(),
+                type="bind", read_only=True,
+            ))
+        except OSError as exc:
+            log.warning("Arbeitsplatz-Startskript nicht ablegbar: %s", exc)
+
     if req.profile_path:
         _ensure_profile(req.profile_path)
         mounts.append(docker.types.Mount(
             target="/home/kasm-user", source=req.profile_path, type="bind",
+        ))
+
+    # Die gemeinsame Ablage, nur lesbar. Sie haengt **nicht** im Home: Ein
+    # Verzeichnis, das der Nutzer nicht beschreiben kann, mitten in seinem
+    # eigenen Zuhause verwirrt mehr, als es hilft. Statt dessen ein eigener
+    # Ort und ein Verweis darauf (siehe _link_shared).
+    if os.path.isdir(SHARED_ROOT):
+        mounts.append(docker.types.Mount(
+            target=SHARED_MOUNT, source=SHARED_ROOT, type="bind", read_only=True,
         ))
 
     try:
@@ -159,9 +324,19 @@ def start_container(req: StartRequest) -> dict[str, Any]:
             # Grosszuegig, weil Browser und Electron-Anwendungen sonst
             # unvermittelt abstuerzen.
             shm_size="1g",
-            security_opt=["no-new-privileges:true"],
-            cap_drop=["ALL"],
-            cap_add=["SYS_ADMIN"] if req.mode == "workspace" else [],
+            # Administratoren duerfen in ihrem Container root werden — sonst
+            # koennten sie nichts nachinstallieren. Das kostet zwei Sperren:
+            #
+            #   no-new-privileges  verhindert *jede* Rechteerhoehung, auch die
+            #       ueber setuid. Mit dieser Sperre laeuft `sudo` gar nicht an.
+            #   cap_drop ALL       nimmt unter anderem SETUID und SETGID; ohne
+            #       die kann sudo den Benutzer nicht wechseln.
+            #
+            # Fuer alle anderen bleibt beides scharf. Wer nicht administriert,
+            # bekommt auch keinen Weg zu root.
+            security_opt=[] if req.elevated else ["no-new-privileges:true"],
+            cap_drop=[] if req.elevated else ["ALL"],
+            cap_add=["SYS_ADMIN"] if req.mode == "workspace" and not req.elevated else [],
             pids_limit=4096,
             restart_policy={"Name": "no"},
         )
@@ -174,8 +349,147 @@ def start_container(req: StartRequest) -> dict[str, Any]:
     except (NotFound, APIError):
         pass
 
+    if req.elevated:
+        _elevate(container)
+
+    _wait_for_vnc(container)
+    _link_shared(container)
+    if req.start_script.strip():
+        _run_start_script(container, req.start_script)
+
     container.reload()
     return {"container_id": container.id, "status": container.status}
+
+
+def _link_shared(container) -> None:
+    """Legt einen Verweis auf die gemeinsame Ablage ins Home.
+
+    Der eigentliche Einhaengepunkt liegt ausserhalb des Home, damit niemand
+    ein unbeschreibbares Verzeichnis mitten in seinen eigenen Dateien hat.
+    Findbar soll die Ablage trotzdem sein — deshalb der Verweis.
+
+    Nur wenn dort noch nichts liegt: Wer einen eigenen Ordner „Gemeinsam"
+    angelegt hat, behaelt ihn.
+    """
+    script = (
+        f'[ -d {SHARED_MOUNT} ] || exit 0; '
+        '[ -e "$HOME/Gemeinsam" ] && exit 0; '
+        f'ln -s {SHARED_MOUNT} "$HOME/Gemeinsam"'
+    )
+    try:
+        container.exec_run(["bash", "-lc", script], user="1000")
+    except APIError as exc:
+        log.warning("Verweis auf die Ablage nicht angelegt: %s", exc)
+
+
+def _run_start_script(container, script: str) -> None:
+    """Fuehrt das Startskript der Vorlage als Nutzer aus.
+
+    Als Nutzer und nicht als root: Es geht um das Home, und was dort entsteht,
+    soll dem Nutzer gehoeren. Ein Skript, das mit root-Rechten in ein
+    Nutzerverzeichnis schreibt, hinterlaesst Dateien, die der Nutzer nicht
+    mehr aendern kann — ein Fehler, der erst Wochen spaeter auffaellt.
+
+    Scheitert es, wird der Start **nicht** abgebrochen. Der Arbeitsplatz laeuft
+    ja; ihn wegen einer misslungenen Einrichtung ganz zu verweigern waere die
+    schlechtere Antwort. Die Ausgabe steht im Container unter
+    /tmp/ota-start.log und im Agent-Protokoll.
+    """
+    payload = base64.b64encode(script.encode("utf-8")).decode("ascii")
+    # Ueber base64 statt direkt: Das Skript kommt aus einem Textfeld und
+    # enthaelt Anfuehrungszeichen, Zeilenumbrueche und Dollarzeichen. Alles
+    # davon wuerde beim Einbetten in eine Kommandozeile etwas anderes tun.
+    runner = (
+        f'echo {payload} | base64 -d > /tmp/ota-start.sh && '
+        'chmod +x /tmp/ota-start.sh && '
+        'exec bash /tmp/ota-start.sh > /tmp/ota-start.log 2>&1'
+    )
+    try:
+        res = container.exec_run(
+            ["bash", "-lc", runner], user="1000",
+            environment={"HOME": "/home/kasm-user", "OTA_SHARED": SHARED_MOUNT},
+        )
+        if res.exit_code != 0:
+            out = (res.output or b"").decode("utf-8", "replace")
+            log.warning("Startskript in %s endete mit %s: %s",
+                        container.name, res.exit_code, out[-400:])
+    except APIError as exc:
+        log.warning("Startskript nicht ausfuehrbar: %s", exc)
+
+
+def _fetch_from_registry(client: docker.DockerClient, ref: str) -> bool:
+    """Holt ein fehlendes Image, wenn es in der eigenen Registry liegt.
+
+    Nur fuer Adressen, die auf genau diese Registry zeigen. Ein beliebiges
+    Image aus dem Netz nachzuladen, weil beim Start eines auffiel, waere ein
+    stiller Griff nach draussen — das gehoert in eine bewusste Handlung
+    (Verwaltung → Images), nicht in einen Sessionstart.
+    """
+    if not REGISTRY or not ref.startswith(f"{REGISTRY}/"):
+        return False
+    try:
+        log.info("Hole %s aus der Registry", ref)
+        client.images.pull(ref)
+        client.images.get(ref)
+        return True
+    except (APIError, ImageNotFound) as exc:
+        log.warning("Registry-Abruf fuer %s gescheitert: %s", ref, exc)
+        return False
+
+
+def _wait_for_vnc(container, seconds: int = 40) -> bool:
+    """Wartet, bis KasmVNC im Container Verbindungen annimmt.
+
+    Ohne das meldet die API die Session als bereit, sobald Docker den Container
+    gestartet hat — der Webserver darin braucht danach aber noch ein paar
+    Sekunden. Wer sofort hinschaut, bekommt 502 und denkt, es sei kaputt.
+
+    Geprueft wird von innen mit Bordmitteln: Bash kann ueber /dev/tcp eine
+    Verbindung aufbauen. Das braucht kein zusaetzliches Werkzeug im Image und
+    keinen Netzwerkweg vom Agent zum Container.
+    """
+    probe = (
+        f"for i in $(seq 1 {seconds * 2}); do "
+        "(exec 3<>/dev/tcp/127.0.0.1/6901) 2>/dev/null && exit 0; "
+        "sleep 0.5; done; exit 1"
+    )
+    try:
+        code, _out = _run_as_root(container, ["bash", "-lc", probe])
+        if code != 0:
+            log.warning("KasmVNC in %s war nach %ss noch nicht bereit",
+                        container.name, seconds)
+        return code == 0
+    except APIError as exc:
+        log.warning("Bereitschaft nicht pruefbar: %s", exc)
+        return False
+
+
+def _elevate(container) -> None:
+    """Gibt dem Anwender im Container passwortloses sudo.
+
+    Als Datei unter /etc/sudoers.d und nicht per `usermod -aG sudo`: Die
+    Kasm-Images legen die Gruppe nicht in jedem Fall an, und eine eigene Datei
+    ist beim Nachsehen sofort als von OTA gesetzt zu erkennen.
+
+    Scheitert das, ist es kein Grund, den Start abzubrechen — dann hat jemand
+    eben kein sudo und merkt das beim ersten Versuch. Ein Container, der gar
+    nicht erst hochkommt, waere das schlechtere Ergebnis.
+    """
+    script = (
+        "printf '%s\\n' 'kasm-user ALL=(ALL) NOPASSWD:ALL' "
+        "> /etc/sudoers.d/ota-admin && chmod 0440 /etc/sudoers.d/ota-admin"
+    )
+    try:
+        code, out = _run_as_root(container, ["bash", "-lc", script])
+        if code != 0:
+            log.warning("sudo konnte nicht eingerichtet werden: %s", out[:200])
+    except APIError as exc:
+        log.warning("sudo konnte nicht eingerichtet werden: %s", exc)
+
+
+def _run_as_root(container, cmd: list[str]) -> tuple[int, str]:
+    res = container.exec_run(cmd, user="root", demux=False)
+    return res.exit_code, (res.output or b"").decode("utf-8", "replace")
 
 
 @app.get("/containers/{cid}", dependencies=[Depends(require_token)])
@@ -261,7 +575,10 @@ def exec_in_container(cid: str, req: ExecRequest) -> dict[str, Any]:
 class AppStartRequest(BaseModel):
     slug: str
     command: str
-    display: int = Field(ge=2, le=9)
+    # Ab 1, nicht ab 2: Einzelinstanz-Anwendungen gehoeren auf den
+    # Hauptbildschirm des Containers. Das Startskript legt auf einem bereits
+    # offenen Display kein zweites an.
+    display: int = Field(ge=1, le=9)
     geometry: str = "1280x720"
     title: str = "OTA"
     send_primary: bool = False
@@ -370,6 +687,9 @@ class BuildRequest(BaseModel):
     apt_packages: list[str] = []
     vscode_extensions: list[str] = []
     setup_script: str = ""
+    # Arbeitsplatz oder Einzelanwendung. Entscheidet, ob das Startskript des
+    # Basisimages ueberschrieben wird — siehe builder.render_dockerfile.
+    mode: str = "workspace"
     # Container, die waehrend des Builds angehalten werden. Siehe builder._pause.
     pause_containers: list[str] = []
 
@@ -391,7 +711,7 @@ def start_build(req: BuildRequest) -> dict[str, Any]:
         )
     return builder.start(
         req.tag, req.base_image, req.apt_packages,
-        req.vscode_extensions, req.setup_script, req.pause_containers,
+        req.vscode_extensions, req.setup_script, req.pause_containers, req.mode,
     )
 
 
@@ -400,6 +720,59 @@ def build_status(build_id: str) -> dict[str, Any]:
     state = builder.status(build_id)
     if state is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Build nicht gefunden")
+    return state
+
+
+# Laufende und abgeschlossene Ladevorgaenge. Ein Kasm-Image bringt ein bis
+# drei Gigabyte mit; das dauert Minuten, und solange darf die Oberflaeche
+# nicht auf eine Antwort warten.
+_pulls: dict[str, dict[str, Any]] = {}
+
+
+class PullRequest(BaseModel):
+    ref: str
+
+
+def _pull_worker(job_id: str, ref: str) -> None:
+    state = _pulls[job_id]
+    try:
+        # low-level API statt images.pull(): Nur die liefert den Fortschritt
+        # schichtweise, und ohne den steht die Oberflaeche minutenlang still.
+        for chunk in dc().api.pull(ref, stream=True, decode=True):
+            if "error" in chunk:
+                state.update(status="failed", detail=str(chunk["error"]))
+                return
+            note = chunk.get("status") or ""
+            layer = chunk.get("id")
+            state["detail"] = f"{note} {layer}".strip() if layer else note
+        image = dc().images.get(ref)
+        state.update(status="ok", detail="geladen",
+                     size_bytes=image.attrs.get("Size", 0))
+    except (APIError, ImageNotFound) as exc:
+        state.update(status="failed", detail=str(exc))
+    except Exception as exc:  # noqa: BLE001 — der Arbeiter darf nie sterben
+        state.update(status="failed", detail=str(exc))
+
+
+@app.post("/images/pull", dependencies=[Depends(require_token)])
+def pull_image(req: PullRequest) -> dict[str, Any]:
+    """Holt ein Image aus seiner Registry auf diesen Host."""
+    ref = req.ref.strip()
+    if not ref:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Keine Adresse angegeben.")
+
+    job_id = secrets.token_hex(8)
+    _pulls[job_id] = {"id": job_id, "ref": ref, "status": "running",
+                      "detail": "wird begonnen", "size_bytes": 0}
+    threading.Thread(target=_pull_worker, args=(job_id, ref), daemon=True).start()
+    return _pulls[job_id]
+
+
+@app.get("/images/pull/{job_id}", dependencies=[Depends(require_token)])
+def pull_status(job_id: str) -> dict[str, Any]:
+    state = _pulls.get(job_id)
+    if state is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ladevorgang nicht gefunden")
     return state
 
 

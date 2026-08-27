@@ -13,7 +13,7 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
 ADMIN_USER="${OTA_TEST_ADMIN:-bmetallica}"
-ADMIN_PW="${OTA_TEST_ADMIN_PW:-OtaStart2026!xyz}"
+ADMIN_PW="${OTA_TEST_ADMIN_PW:?OTA_TEST_ADMIN_PW fehlt. Trag es in deploy/.env ein.}"
 TEST_USER="ota-testnutzer"
 TEST_PW="TestNutzer2026!ab"
 

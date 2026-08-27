@@ -3,6 +3,7 @@ import { Led } from '../components/controls'
 import { ApiError, api, type AdminSession, type AuditEntry } from '../lib/api'
 import { Backups } from './Backups'
 import { ago, duration, gb } from '../lib/format'
+import { getLang, t as tr, useLang } from '../lib/i18n'
 
 type Tab = 'Sessions' | 'Protokoll' | 'Sicherung'
 
@@ -37,6 +38,7 @@ const ACTION_TEXT: Record<string, string> = {
 const FAILURE = /failed/
 
 export function Monitor({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad') => void }) {
+  useLang()
   const [tab, setTab] = useState<Tab>('Sessions')
   const [sessions, setSessions] = useState<AdminSession[] | null>(null)
   const [audit, setAudit] = useState<AuditEntry[]>([])
@@ -70,7 +72,7 @@ export function Monitor({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad')
   if (failed) {
     return (
       <div className="wrap"><div className="empty">
-        <p className="empty__title">Konnte nicht geladen werden</p>
+        <p className="empty__title">{tr('Konnte nicht geladen werden')}</p>
         <p className="empty__body">{failed}</p>
         <button className="btn" onClick={() => void load()}>Erneut versuchen</button>
       </div></div>
@@ -84,16 +86,16 @@ export function Monitor({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad')
     <div className="wrap">
       <header className="topbar">
         <div>
-          <p className="silk" style={{ marginBottom: 6 }}>Verwaltung</p>
-          <h1 className="h-page">Betrieb</h1>
+          <p className="silk" style={{ marginBottom: 6 }}>{tr('Verwaltung')}</p>
+          <h1 className="h-page">{tr('Betrieb')}</h1>
         </div>
       </header>
 
-      <div className="seg" role="radiogroup" aria-label="Ansicht" style={{ marginBottom: 20 }}>
+      <div className="seg" role="radiogroup" aria-label={tr('Ansicht')} style={{ marginBottom: 20 }}>
         {(['Sessions', 'Protokoll', 'Sicherung'] as Tab[]).map((x) => (
           <button key={x} type="button" role="radio" aria-checked={tab === x}
             className={`seg__opt${tab === x ? ' is-on' : ''}`} onClick={() => setTab(x)}>
-            {x}{x !== 'Sicherung' && (
+            {tr(x)}{x !== 'Sicherung' && (
               <span className="data" style={{ opacity: .6 }}>
                 {' '}{x === 'Sessions' ? sessions.length : audit.length}
               </span>
@@ -107,26 +109,27 @@ export function Monitor({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad')
       ) : tab === 'Sessions' ? (
         sessions.length === 0 ? (
           <div className="empty">
-            <p className="empty__title">Zurzeit läuft nichts</p>
+            <p className="empty__title">{tr('Zurzeit läuft nichts')}</p>
             <p className="empty__body">
-              Hier stehen alle Sessions aller Nutzer, sobald jemand einen Workspace öffnet.
+              {tr('Hier stehen alle Sessions aller Nutzer, sobald jemand einen Workspace öffnet.')}
             </p>
           </div>
         ) : (
           <>
             <p className="sub" style={{ marginBottom: 14 }}>
-              {sessions.length} Session(en) belegen zusammen <b className="data">{gb(totalMem)} GB</b> zugeteilten Speicher.
+              {tr('{n} Session(en) belegen zusammen', { n: sessions.length })}{' '}
+              <b className="data">{gb(totalMem)} GB</b>{' '}{tr('zugeteilten Speicher.')}
             </p>
             <div className="panel" style={{ padding: '14px 0 0' }}>
               <table className="tbl">
                 <thead>
                   <tr>
-                    <th style={{ paddingLeft: 20 }}>Nutzer</th>
-                    <th>Workspace</th>
-                    <th>Laufzeit</th>
-                    <th>Zuletzt aktiv</th>
-                    <th>Zugeteilt</th>
-                    <th>Status</th>
+                    <th style={{ paddingLeft: 20 }}>{tr('Nutzer')}</th>
+                    <th>{tr('Workspace')}</th>
+                    <th>{tr('Laufzeit')}</th>
+                    <th>{tr('Zuletzt aktiv')}</th>
+                    <th>{tr('Zugeteilt')}</th>
+                    <th>{tr('Status')}</th>
                     <th />
                   </tr>
                 </thead>
@@ -139,7 +142,7 @@ export function Monitor({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad')
                         {s.template_name}
                         {s.app_count > 0 && (
                           <span className="silk" style={{ marginLeft: 8 }}>
-                            {s.app_count} Apps
+                            {tr('{n} Apps', { n: s.app_count })}
                           </span>
                         )}
                       </td>
@@ -155,7 +158,7 @@ export function Monitor({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad')
                       <td><Led status={s.status} /></td>
                       <td style={{ textAlign: 'right', paddingRight: 20 }}>
                         <button className="btn btn--sm btn--halt" onClick={() => void stop(s)}>
-                          Beenden
+                          {tr('Beenden')}
                         </button>
                       </td>
                     </tr>
@@ -164,24 +167,24 @@ export function Monitor({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad')
               </table>
             </div>
             <p className="field__hint" style={{ marginTop: 12 }}>
-              Beenden entfernt nur den Container. Das persistente Profil des Nutzers bleibt erhalten.
+              {tr('Beenden entfernt nur den Container. Das persistente Profil des Nutzers bleibt erhalten.')}
             </p>
           </>
         )
       ) : (
         <>
           <p className="sub" style={{ marginBottom: 14 }}>
-            Vorgänge, keine Inhalte. Was in einer Session getan wird, steht hier nicht.
+            {tr('Vorgänge, keine Inhalte. Was in einer Session getan wird, steht hier nicht.')}
           </p>
           <div className="panel" style={{ padding: '14px 0 0' }}>
             <table className="tbl">
               <thead>
                 <tr>
-                  <th style={{ paddingLeft: 20 }}>Zeitpunkt</th>
-                  <th>Wer</th>
-                  <th>Was</th>
-                  <th>Betrifft</th>
-                  <th>Von wo</th>
+                  <th style={{ paddingLeft: 20 }}>{tr('Zeitpunkt')}</th>
+                  <th>{tr('Wer')}</th>
+                  <th>{tr('Was')}</th>
+                  <th>{tr('Betrifft')}</th>
+                  <th>{tr('Von wo')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -190,14 +193,14 @@ export function Monitor({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad')
                   return (
                     <tr key={i} style={{ cursor: 'default' }}>
                       <td style={{ paddingLeft: 20 }} className="data">
-                        {new Date(e.ts).toLocaleString('de-DE', {
+                        {new Date(e.ts).toLocaleString(getLang() === 'de' ? 'de-DE' : 'en-GB', {
                           day: '2-digit', month: '2-digit',
                           hour: '2-digit', minute: '2-digit', second: '2-digit',
                         })}
                       </td>
                       <td style={{ color: 'var(--label)' }}>{e.actor ?? '—'}</td>
                       <td style={{ color: bad ? 'var(--halt)' : 'var(--text)' }}>
-                        {ACTION_TEXT[e.action] ?? e.action}
+                        {tr(ACTION_TEXT[e.action] ?? e.action)}
                       </td>
                       <td className="data" style={{ color: 'var(--mute)', fontSize: 11.5 }}>
                         {e.object_id ?? '—'}

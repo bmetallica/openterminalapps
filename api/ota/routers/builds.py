@@ -167,6 +167,8 @@ async def start_build(
         "apt_packages": body.apt_packages,
         "vscode_extensions": body.vscode_extensions,
         "setup_script": body.setup_script,
+        # Arbeitsplatz-Images duerfen keine Anwendung von selbst starten.
+        "mode": tpl.mode,
         "pause_containers": pause,
     })
 

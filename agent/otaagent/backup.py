@@ -44,8 +44,21 @@ EXCLUDE_PREFIXES = ("core.", ".X11-unix", ".vnc/", "krb5cc_")
 # fluechtig, nutzlos oder geheim.
 CONTAINER_SKIP = (
     "/tmp", "/proc", "/sys", "/dev", "/run", "/var/run", "/var/tmp",
-    "/var/log", "/var/cache", "/home/kasm-user",
+    "/var/log", "/var/cache",
+    # Eingehaengte Verzeichnisse. Sie gehoeren nicht in eine Container-
+    # Sicherung — sie liegen auf dem Host und werden getrennt gesichert.
+    #
+    # `/mnt/ota` ist dabei nicht nur ueberfluessig, sondern schaedlich:
+    # Docker meldet den Einhaengepunkt in `docker diff` als neues
+    # Verzeichnis, das Zurueckspielen versucht ihn anzulegen, und weil er
+    # schreibgeschuetzt eingehaengt ist, scheitert der ganze Vorgang mit
+    #   failed to Lchown "mnt/ota": read-only file system
+    # Gemessen am 2026-08-27, unmittelbar nachdem es die Ablage gab.
+    "/home/kasm-user", "/mnt/ota",
 )
+# Hinweis: Die eingehaengten Verzeichnisse werden zusaetzlich aus den
+# Container-Angaben gelesen — siehe backup_container. Diese Liste deckt den
+# Fall ab, dass ein Pfad nicht als Mount gemeldet wird.
 
 
 def _skip(path: Path) -> bool:
@@ -242,11 +255,31 @@ def backup_container(container, username: str, template_slug: str) -> dict[str, 
 
     changes = container.diff() or []
 
+    # Was uebersprungen wird: die feste Liste **und** alles, was in diesem
+    # Container eingehaengt ist. Letzteres liegt auf dem Host und wird
+    # getrennt gesichert.
+    skip = list(CONTAINER_SKIP)
+    try:
+        skip += [m["Destination"] for m in (container.attrs.get("Mounts") or [])]
+    except (KeyError, TypeError):
+        pass
+
     # Kind 0 = geaendert, 1 = hinzugefuegt, 2 = geloescht.
+    #
+    # Ein Pfad faellt aus zwei Gruenden heraus, und der zweite ist der, der
+    # gefehlt hat: Nicht nur `/mnt/ota` muss weg, sondern auch `/mnt` — sonst
+    # zieht `get_archive("/mnt")` den Einhaengepunkt wieder mit hinein. Beim
+    # Zurueckspielen scheiterte dann der ganze Vorgang an
+    #   failed to Lchown "mnt/ota": read-only file system
+    # Dasselbe gaelte fuer `/home` ueber dem Profil.
+    def _drop(path: str) -> bool:
+        if any(path.startswith(s) for s in skip):
+            return True
+        return any(s.startswith(path.rstrip("/") + "/") for s in skip)
+
     candidates = [
         c["Path"] for c in changes
-        if c.get("Kind") in (0, 1)
-        and not any(c["Path"].startswith(skip) for skip in CONTAINER_SKIP)
+        if c.get("Kind") in (0, 1) and not _drop(c["Path"])
     ]
 
     # Elternverzeichnisse aussortieren. Wird eine Datei geaendert, meldet

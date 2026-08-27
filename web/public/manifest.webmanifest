@@ -1,0 +1,14 @@
+{
+  "name": "OpenTerminalApps",
+  "short_name": "OTA",
+  "description": "Arbeitsplätze und Anwendungen im Browser.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0B1315",
+  "theme_color": "#0B1315",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

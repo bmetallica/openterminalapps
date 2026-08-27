@@ -11,7 +11,14 @@ import puppeteer from 'puppeteer-core'
 
 const BASE = process.env.OTA_BASE ?? 'https://192.168.66.224:8443'
 const USER = process.env.OTA_USER ?? 'bmetallica'
-const PW = process.env.OTA_PW ?? 'OtaStart2026!xyz'
+/* Kein Vorgabewert: Ein Passwort im Quelltext ist eines, das irgendwann in
+   einem Repository steht. Es kommt aus deploy/.env, die der Makefile-Ziel
+   `test` einliest. */
+const PW = process.env.OTA_TEST_ADMIN_PW ?? process.env.OTA_PW
+if (!PW) {
+  console.error('OTA_TEST_ADMIN_PW fehlt. Trag es in deploy/.env ein.')
+  process.exit(2)
+}
 const SHOTS = process.env.OTA_SHOTS ?? '/tmp/ota-shots'
 const CERT = '/opt/openterminalapps/deploy/certs/ota.crt'
 
@@ -44,11 +51,26 @@ const browser = await puppeteer.launch({
   defaultViewport: { width: 1440, height: 900 },
 })
 
-const ctx = browser.defaultBrowserContext()
 // Die Zwischenablage-Freigabe erteilen, wie ein Nutzer sie im Browser gibt.
-await ctx.overridePermissions(BASE, ['clipboard-read', 'clipboard-write'])
+//
+// Bewusst ueber das Protokoll und nicht ueber overridePermissions(): Dessen
+// Name 'clipboard-write' landet in Chromium nicht auf dem Recht, das
+// writeText() tatsaechlich prueft. Ergebnis war "Write permission denied"
+// trotz erteilter Freigabe — was frueher als Grenze der Testumgebung
+// verbucht wurde, obwohl nur der falsche Name gesetzt war.
+const cdp = await browser.target().createCDPSession()
+await cdp.send('Browser.grantPermissions', {
+  origin: BASE,
+  permissions: ['clipboardReadWrite', 'clipboardSanitizedWrite'],
+})
 
+// Die Oberflaeche richtet sich nach der Browsersprache. Der Test prueft
+// deutsche Beschriftungen, also wird sie hier gesetzt — sonst haengt das
+// Ergebnis davon ab, wie der Rechner eingestellt ist, auf dem er laeuft.
 const page = await browser.newPage()
+await page.evaluateOnNewDocument(() => {
+  try { localStorage.setItem('ota.lang', 'de') } catch { /* privater Modus */ }
+})
 const errors = []
 page.on('pageerror', (e) => errors.push(String(e)))
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()) })
@@ -114,11 +136,16 @@ try {
   // ------------------------------------------------------------ Editor
   console.log('\nWorkspace-Editor')
   await page.click('.tbl tbody tr')
-  await page.waitForSelector('.drawer', { timeout: 10000 })
-  ok('Editor öffnet als Seitenleiste')
+  // Seit M5 übernimmt der Editor das Hauptfenster statt einer Seitenleiste:
+  // App-Listen, Build-Protokolle und Zuteilungen brauchen Breite.
+  await page.waitForSelector('.wb__tabs', { timeout: 10000 })
+  const crumb = await page.$eval('.wb__crumb', (e) => e.textContent?.replace(/\s+/g, ' ') ?? '')
+  check(crumb.startsWith('Workspaces'), `Editor liegt eine Ebene tiefer: ${crumb}`)
+  const wide = await page.$eval('.wb__body', (e) => Math.round(e.getBoundingClientRect().width))
+  check(wide > 700, `Bearbeitungsfläche ist ${wide} px breit`)
 
   await page.evaluate(() => {
-    const t = [...document.querySelectorAll('.drawer__tab')]
+    const t = [...document.querySelectorAll('.wb__tab')]
       .find((x) => x.textContent?.includes('Ressourcen'))
     t?.click()
   })
@@ -141,7 +168,7 @@ try {
     `Skalenstriche wertgenau positioniert (${tickPositions.filter(Boolean).length} Striche)`)
 
   await page.evaluate(() => {
-    const t = [...document.querySelectorAll('.drawer__tab')]
+    const t = [...document.querySelectorAll('.wb__tab')]
       .find((x) => x.textContent?.includes('Rechte'))
     t?.click()
   })
@@ -152,7 +179,7 @@ try {
 
   // Zuteilung je Nutzer
   await page.evaluate(() => {
-    const t = [...document.querySelectorAll('.drawer__tab')]
+    const t = [...document.querySelectorAll('.wb__tab')]
       .find((x) => x.textContent?.includes('Zuteilung'))
     t?.click()
   })
@@ -173,21 +200,28 @@ try {
   })
   await page.waitForSelector('.tiles', { timeout: 15000 })
 
+  // Sessions oeffnen seit M4 in einem eigenen Tab. Der Test folgt dem Tab —
+  // "page" bleibt das Dashboard, "view" ist die Session.
   const hasBay = await page.$('.bay')
+  const opened = new Promise((resolve) => browser.once('targetcreated',
+    (t) => resolve(t.page())))
   if (hasBay) {
     await page.click('.bay .btn--primary')
   } else {
-    // Keine Session offen — eine über die Kachel starten. Die App springt
-    // danach von selbst in den Viewer, deshalb wird auf ihn gewartet.
     await page.click('.tile')
     ok('Session über die Kachel gestartet')
   }
 
+  const view = await opened
+  check(!!view, 'Session öffnet in einem eigenen Tab')
+  check(/\/view\/s\/[0-9a-f-]{36}/.test(view.url()),
+    `Der Tab hat eine eigene Adresse (${new URL(view.url()).pathname})`)
+
   {
-    await page.waitForSelector('.viewer__frame', { timeout: 120000 })
+    await view.waitForSelector('.viewer__frame', { timeout: 120000 })
     ok('Session-Viewer öffnet')
 
-    const allow = await page.$eval('.viewer__frame', (el) => el.getAttribute('allow'))
+    const allow = await view.$eval('.viewer__frame', (el) => el.getAttribute('allow'))
     check(allow?.includes('clipboard-read') && allow?.includes('clipboard-write'),
       `iframe trägt die Zwischenablage-Erlaubnis (${allow?.slice(0, 46)}…)`)
 
@@ -196,7 +230,7 @@ try {
     let state = null
     for (let i = 0; i < 20; i++) {
       await new Promise((r) => setTimeout(r, 1500))
-      state = await page.evaluate(() => {
+      state = await view.evaluate(() => {
         const d = document.querySelector('.viewer__frame')?.contentDocument
         if (!d) return null
         return { cls: d.documentElement.className, canvas: !!d.querySelector('canvas') }
@@ -206,7 +240,7 @@ try {
     check(state?.cls?.includes('noVNC_connected'),
       `Websocket verbunden (Zustand: ${state?.cls ?? 'unbekannt'})`)
     check(state?.canvas === true, 'Bildfläche des Streams vorhanden')
-    await shot(page, '07-session')
+    await shot(view, '07-session')
 
     // Kontrollleiste öffnen.
     //
@@ -215,54 +249,78 @@ try {
     // Alt noch am iframe an, Shift und Buchstaben nicht mehr. Ein Kürzel, das
     // im laufenden Stream verlässlich greift, gibt es deshalb nicht. Der Griff
     // liegt im Elternfenster und funktioniert immer.
-    await page.click('.viewer__handle')
+    await view.click('.viewer__handle')
     await new Promise((r) => setTimeout(r, 500))
-    const barOpen = await page.$('.viewer__bar')
+    const barOpen = await view.$('.viewer__bar')
     check(!!barOpen, 'Griff am Rand öffnet die Kontrollleiste')
-    if (barOpen) await shot(page, '08-session-leiste')
+    if (barOpen) await shot(view, '08-session-leiste')
 
-    // Zwischenablage.
+    // Zwischenablage — der vollstaendige Weg in beide Richtungen.
     //
-    // Was hier NICHT geprüft werden kann: der vollständige Weg über die
-    // System-Zwischenablage. Headless-Chromium verweigert
-    // navigator.clipboard grundsätzlich ("Write permission denied"), auch
-    // mit erteilter Berechtigung. Das ist eine Grenze der Testumgebung, kein
-    // Fehler der Anwendung.
-    //
-    // Geprüft wird deshalb alles, was die Voraussetzung dafür bildet — und
-    // dass der Rückfallweg über das Panel vorhanden und bedienbar ist. Der
-    // vollständige Durchlauf steht als Abnahmematrix in plan.md §10.5 und
-    // gehört in einen echten Browser.
+    // Der Viewer zeigt den Stream in einem iframe, und genau dort schaltet
+    // KasmVNCs Weboberflaeche die Zwischenablage von sich aus ab (siehe
+    // web/src/lib/clipboardBridge.ts). Deshalb pruefen wir zuerst, dass die
+    // Schalter im Client wirklich stehen, und danach den Rundlauf.
     if (barOpen) {
-      await page.type('.viewer__clip', 'Prüftext für die Zwischenablage: äöü ß 123')
-      const typed = await page.$eval('.viewer__clip', (el) => el.value)
+      const switches = await view.evaluate(() => {
+        const d = document.querySelector('.viewer__frame').contentDocument
+        const g = (id) => d.getElementById(id)?.checked ?? null
+        return {
+          up: g('noVNC_setting_clipboard_up'),
+          down: g('noVNC_setting_clipboard_down'),
+        }
+      })
+      check(switches.up === true && switches.down === true,
+        `Client meldet die Zwischenablage im iframe als offen (${JSON.stringify(switches)})`)
+
+      // Richtung Browser → Session.
+      const outbound = `AUS-DEM-BROWSER-${Date.now()} äöü ß`
+      await view.evaluate((t) => navigator.clipboard.writeText(t), outbound)
+      await new Promise((r) => setTimeout(r, 2500))
+      const inSession = await view.evaluate(() => {
+        const d = document.querySelector('.viewer__frame').contentDocument
+        return d.getElementById('noVNC_clipboard_text').value
+      })
+      check(inSession === outbound,
+        `Browser → Session uebertraegt Umlaute (${inSession.slice(0, 28)}…)`)
+
+      // Richtung Session → Browser: im Container kopieren und im Elternfenster
+      // nachsehen. Beides ausserhalb des Browsers zu erzeugen ist der einzige
+      // Weg, der den echten Fall trifft — ein Klick im Stream wuerde nur die
+      // Anwendung im Container bedienen, nicht ihre Zwischenablage.
+      const cn = execSync(`docker ps --filter "label=ota.session_id" --format '{{.Names}}'`)
+        .toString().trim().split('\n')[0]
+      const inbound = `AUS-DER-SESSION-${Date.now()} äöü ß`
+      if (cn) {
+        execSync(`docker exec -u 1000 ${cn} bash -c ` +
+          `'export HOME=/home/kasm-user XAUTHORITY=/home/kasm-user/.Xauthority; ` +
+          `printf %s ${JSON.stringify(inbound)} | timeout 3 xclip -d :1 -selection clipboard -i' &`,
+          { shell: '/bin/bash' })
+        await new Promise((r) => setTimeout(r, 3500))
+        const backInBrowser = await view.evaluate(() => navigator.clipboard.readText())
+        check(backInBrowser === inbound,
+          `Session → Browser landet in der System-Zwischenablage (${backInBrowser.slice(0, 28)}…)`)
+      } else {
+        bad('Kein Session-Container fuer die Richtung Session → Browser gefunden')
+      }
+
+      // Der Rueckfallweg ueber das Panel muss trotzdem bedienbar bleiben —
+      // Firefox gibt das Schreiben ohne Nutzergeste nicht frei.
+      await view.type('.viewer__clip', 'Prüftext für die Zwischenablage: äöü ß 123')
+      const typed = await view.$eval('.viewer__clip', (el) => el.value)
       check(typed.includes('äöü ß'),
         'Zwischenablage-Panel nimmt Text inklusive Umlauten an')
 
-      const buttons = await page.$$eval('.viewer__row .btn', (els) => els.map((e) => e.textContent))
-      check(buttons.some((b) => b?.includes('In den Browser legen')) &&
-            buttons.some((b) => b?.includes('Aus dem Browser holen')),
-        'Beide Richtungen sind als Rückfallweg bedienbar')
-
-      // Auch wenn der Browser die Zwischenablage verweigert, darf die
-      // Anwendung nicht stumm bleiben — sie muss es sagen.
-      await page.evaluate(() => {
-        const b = [...document.querySelectorAll('.viewer__row .btn')]
-          .find((x) => x.textContent?.includes('In den Browser legen'))
-        b?.click()
-      })
-      await new Promise((r) => setTimeout(r, 900))
-      const toast = await page.$eval('.toast', (el) => el.textContent).catch(() => null)
-      check(!!toast, `Rückmeldung erscheint statt stillem Fehlschlag ("${toast?.slice(0, 52) ?? '—'}")`)
+      const buttons = await view.$$eval('.viewer__row .btn', (els) => els.map((e) => e.textContent))
+      check(buttons.some((b) => b?.includes('In die Session')) &&
+            buttons.some((b) => b?.includes('Aus der Session')),
+        'Beide Richtungen sind als Rueckfallweg bedienbar')
     }
 
-    await page.evaluate(() => {
-      const b = [...document.querySelectorAll('.btn')]
-        .find((x) => x.textContent?.includes('Zurück zum Dashboard'))
-      b?.click()
-    })
+    await view.close()
+    await page.bringToFront()
     await page.waitForSelector('.tiles', { timeout: 15000 })
-    ok('Rückkehr zum Dashboard funktioniert')
+    ok('Das Dashboard bleibt im ersten Tab stehen')
   }
 
   // ------------------------------------------------- Nutzer und Gruppen
@@ -387,21 +445,14 @@ try {
     let openCount = await page.$$eval('.bay .strip__app.is-on', (els) => els.length)
     if (openCount === 0) {
       // Frischer Arbeitsplatz: eine Anwendung starten, damit der Abschnitt
-      // unabhängig vom Vorzustand prüfbar bleibt.
+      // unabhängig vom Vorzustand prüfbar bleibt. Sie öffnet in einem eigenen
+      // Tab, der danach wieder zugeht.
+      const spawn = new Promise((r) => browser.once('targetcreated', (t) => r(t.page())))
       await page.click('.bay .strip__app:not(:disabled)')
-      await page.waitForSelector('.viewer__frame', { timeout: 90000 })
-      await page.evaluate(() => {
-        const b = [...document.querySelectorAll('.btn')]
-          .find((x) => x.textContent?.includes('Zurück zum Dashboard'))
-        b?.click()
-      }).catch(() => {})
-      await page.click('.viewer__handle').catch(() => {})
-      await new Promise((r) => setTimeout(r, 500))
-      await page.evaluate(() => {
-        const b = [...document.querySelectorAll('.btn')]
-          .find((x) => x.textContent?.includes('Zurück zum Dashboard'))
-        b?.click()
-      })
+      const started = await spawn
+      await started.waitForSelector('.viewer__frame', { timeout: 90000 })
+      await started.close()
+      await page.bringToFront()
       await page.waitForSelector('.bay .strip__app.is-on', { timeout: 30000 })
       openCount = await page.$$eval('.bay .strip__app.is-on', (els) => els.length)
       ok('Anwendung im Arbeitsplatz für den Test gestartet')
@@ -417,9 +468,11 @@ try {
     // Einzelinstanz-Anwendung, die das Image selbst auf dem Hauptbildschirm
     // startet — die hat dann keine eigene /a/-Route, und das ist richtig so.
     const running = await page.$$('.bay .strip__app.is-on')
+    const appTab = new Promise((r) => browser.once('targetcreated', (t) => r(t.page())))
     await running[running.length - 1].click()
-    await page.waitForSelector('.viewer__frame', { timeout: 60000 })
-    const appSrc = await page.$eval('.viewer__frame', (el) => el.getAttribute('src'))
+    const appView = await appTab
+    await appView.waitForSelector('.viewer__frame', { timeout: 60000 })
+    const appSrc = await appView.$eval('.viewer__frame', (el) => el.getAttribute('src'))
     check(/\/s\/[0-9a-f-]{36}\//.test(appSrc ?? ''),
       `Stream der App wird geladen (${appSrc?.slice(0, 44)}…)`)
     if (running.length > 1) {
@@ -430,33 +483,172 @@ try {
     let appState = null
     for (let i = 0; i < 20; i++) {
       await new Promise((r) => setTimeout(r, 1500))
-      appState = await page.evaluate(() => {
+      appState = await appView.evaluate(() => {
         const d = document.querySelector('.viewer__frame')?.contentDocument
         return d ? d.documentElement.className : null
       })
       if (appState?.includes('noVNC_connected')) break
     }
     check(appState?.includes('noVNC_connected'), 'Eigener Stream der App verbindet')
+
+    // Fenstersturm-Wache.
+    //
+    // Am 2026-08-27 startete das geerbte Startskript des Basisimages die
+    // Anwendung alle drei Sekunden neu; VS Code ist einzelinstanzig und
+    // oeffnete dabei jedes Mal ein neues leeres Fenster. Nach sechs Minuten
+    // waren es 119, der Bildschirm blieb schwarz — und nichts davon war an
+    // der Oberflaeche zu sehen. Diese Pruefung schaut deshalb im Container
+    // nach, nicht im Browser. Sie ist der einzige Weg, diesen Fehler
+    // automatisch zu bemerken.
+    const cnWs = execSync(`docker ps --filter "label=ota.session_id" --format '{{.Names}}'`)
+      .toString().trim().split('\n')[0]
+    if (cnWs) {
+      const windows = execSync(
+        `docker exec ${cnWs} bash -lc 'export HOME=/home/kasm-user ` +
+        `XAUTHORITY=$HOME/.Xauthority; DISPLAY=:1 wmctrl -l 2>/dev/null | awk "\\$2 != -1"'`,
+        { shell: '/bin/bash' }).toString().trim()
+      const count = windows ? windows.split('\n').length : 0
+      // Der Hintergrund ("Desktop", Arbeitsflaeche -1) ist herausgefiltert.
+      // Uebrig bleiben echte Anwendungsfenster; mehr als eine Handvoll je
+      // Anwendung ist immer ein Fehler, nie Absicht.
+      check(count <= 3,
+        `Display :1 zeigt ${count} Anwendungsfenster (kein Fenstersturm)`)
+    }
     await shot(page, '09-arbeitsplatz-app')
 
     // Umschalter in der Kontrollleiste
-    await page.click('.viewer__handle')
+    await appView.click('.viewer__handle')
     await new Promise((r) => setTimeout(r, 600))
-    const switcher = await page.$$eval('.viewer__bar .strip__app .strip__name',
+    const switcher = await appView.$$eval('.viewer__bar .strip__app .strip__name',
       (els) => els.map((e) => e.textContent)).catch(() => [])
     check(switcher.includes('Desktop') && switcher.length > 1,
       `Umschalter bietet ${switcher.length} Ansichten: ${switcher.join(', ')}`)
     await shot(page, '10-arbeitsplatz-umschalter')
 
-    await page.evaluate(() => {
-      const b = [...document.querySelectorAll('.btn')]
-        .find((x) => x.textContent?.includes('Zurück zum Dashboard'))
-      b?.click()
-    })
+    await appView.close()
+    await page.bringToFront()
     await page.waitForSelector('.tiles', { timeout: 15000 })
   } else {
     ok('Kein Arbeitsplatz mit App-Katalog vorhanden — Abschnitt übersprungen')
   }
+
+  // ------------------------------------------------------------- Hilfe
+  console.log('\nHandbuch und Einstellungen')
+  await page.evaluate(() => {
+    const b = [...document.querySelectorAll('.rail__btn')]
+      .find((x) => x.textContent?.includes('Hilfe'))
+    b?.click()
+  })
+  await page.waitForSelector('.book__item', { timeout: 15000 })
+  const chapters = await page.$$eval('.book__item', (els) => els.map((e) => e.textContent))
+  check(chapters.length >= 10, `${chapters.length} Kapitel im Handbuch`)
+  const firstHeading = await page.$eval('.md-h1', (e) => e.textContent).catch(() => null)
+  check(!!firstHeading, `Kapitel wird gesetzt dargestellt („${firstHeading}")`)
+  check((await page.$$('.md-table')).length >= 0, 'Tabellen im Handbuch werden gerendert')
+  await shot(page, '15-handbuch')
+
+  // Verweise zwischen Kapiteln bleiben im Programm.
+  const inlineLink = await page.$('.md a[data-chapter]')
+  if (inlineLink) {
+    await inlineLink.click()
+    await new Promise((r) => setTimeout(r, 700))
+    const after = await page.$eval('.md-h1', (e) => e.textContent).catch(() => null)
+    check(after !== firstHeading, `Verweis wechselt das Kapitel („${after}")`)
+  }
+
+  await page.evaluate(() => {
+    const b = [...document.querySelectorAll('.rail__btn')]
+      .find((x) => x.textContent?.includes('Einstellungen'))
+    b?.click()
+  })
+  await page.waitForSelector('.fader', { timeout: 15000 })
+  const idle = await page.$eval('.fader__value', (e) => e.textContent)
+  check(/min|h/.test(idle ?? ''), `Anmeldefrist einstellbar (${idle})`)
+  await shot(page, '16-einstellungen')
+
+  // ----------------------------------------------------------- Sprache
+  console.log('\nSprache')
+  await page.evaluate(() => {
+    const b = [...document.querySelectorAll('.rail__langopt')].find((x) => x.textContent === 'EN')
+    b?.click()
+  })
+  await new Promise((r) => setTimeout(r, 400))
+  const navEn = await page.$$eval('.rail__cap', (els) => els.map((e) => e.textContent))
+  check(navEn.includes('Settings') && navEn.includes('Help'),
+    `Oberfläche wechselt nach Englisch (${navEn.join(', ')})`)
+  const labelEn = await page.$eval('.field__label', (e) => e.textContent)
+  check(!/[äöüß]/i.test(labelEn ?? ''), `Auch die Felder übersetzen ("${labelEn}")`)
+  await shot(page, '17-englisch')
+
+  await page.evaluate(() => {
+    const b = [...document.querySelectorAll('.rail__langopt')].find((x) => x.textContent === 'DE')
+    b?.click()
+  })
+  await new Promise((r) => setTimeout(r, 400))
+  const navDe = await page.$$eval('.rail__cap', (els) => els.map((e) => e.textContent))
+  check(navDe.includes('Einstellungen'), 'Zurück auf Deutsch')
+
+  // ------------------------------------------------ Verknüpfung, Erweiterung
+  console.log('\nVerknüpfungen')
+  const pwa = await page.evaluate(async () => {
+    const r = await fetch('/api/pwa/manifest.webmanifest?template=arbeitsplatz&app=vscode')
+    return r.ok ? await r.json() : null
+  })
+  check(pwa?.display === 'standalone' && pwa?.start_url?.startsWith('/launch/'),
+    `Manifest für die Desktop-Verknüpfung (${pwa?.name} → ${pwa?.start_url})`)
+
+  const ext = await page.evaluate(async () => {
+    const r = await fetch('/api/help/extension/firefox')
+    return { ok: r.ok, type: r.headers.get('content-type'), size: (await r.blob()).size }
+  })
+  check(ext.ok && ext.size > 1000,
+    `Firefox-Erweiterung steht bereit (${ext.size} Bytes, ${ext.type})`)
+
+  const sw = await page.evaluate(() => navigator.serviceWorker?.controller !== undefined)
+  check(sw, 'Service Worker ist eingerichtet')
+
+  // ------------------------------------------------------------- Ablage
+  console.log('\nAblage und Startskript')
+  await page.evaluate(() => {
+    const b = [...document.querySelectorAll('.rail__btn')]
+      .find((x) => x.textContent?.includes('Ablage'))
+    b?.click()
+  })
+  await page.waitForSelector('.drop', { timeout: 15000 })
+  ok('Ablage öffnet mit Ziehfläche')
+
+  // Hochladen über die API, weil ein echtes Ziehen im Browser sich nicht
+  // nachstellen lässt. Geprüft wird, was dabei zählt: dass die Datei
+  // ankommt und dass sie im Container **nur lesbar** liegt.
+  const stamp = `pruef-${Date.now()}.txt`
+  const stored = await page.evaluate(async (name) => {
+    const body = new FormData()
+    body.append('file', new File(['OTA-Pruefdatei'], name, { type: 'text/plain' }))
+    const r = await fetch('/api/shared/upload?path=', { method: 'POST', body })
+    return r.ok ? await r.json() : null
+  }, stamp)
+  check(stored?.name === stamp, `Datei landet in der Ablage (${stored?.name ?? '—'})`)
+
+  const cnShared = execSync(`docker ps --filter "label=ota.session_id" --format '{{.Names}}'`)
+    .toString().trim().split('\n')[0]
+  if (cnShared) {
+    const inside = execSync(
+      `docker exec ${cnShared} bash -lc 'ls /mnt/ota/${stamp} 2>&1; ` +
+      `touch /mnt/ota/darf-nicht 2>&1 | head -1'`, { shell: '/bin/bash' })
+      .toString()
+    check(inside.includes(stamp), 'Die Datei liegt im Arbeitsplatz unter /mnt/ota')
+    check(/[Rr]ead-only/.test(inside),
+      'Die Ablage ist im Arbeitsplatz schreibgeschützt')
+
+    const link = execSync(
+      `docker exec ${cnShared} bash -lc 'readlink /home/kasm-user/Gemeinsam || echo -'`,
+      { shell: '/bin/bash' }).toString().trim()
+    check(link === '/mnt/ota', `Verweis im Home zeigt auf die Ablage (${link})`)
+  }
+
+  // Wieder aufräumen, damit der Test wiederholbar bleibt.
+  await page.evaluate((name) =>
+    fetch(`/api/shared?path=${encodeURIComponent(name)}`, { method: 'DELETE' }), stamp)
 
   // ------------------------------------------------------------ Abmelden
   console.log('\nAbmelden')

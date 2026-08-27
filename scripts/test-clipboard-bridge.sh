@@ -17,7 +17,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CA="$ROOT/deploy/certs/ota-ca.crt"
 JAR="$(mktemp)"; trap 'rm -f "$JAR"' EXIT
 ADMIN="${OTA_TEST_ADMIN:-bmetallica}"
-ADMIN_PW="${OTA_TEST_ADMIN_PW:-OtaStart2026!xyz}"
+ADMIN_PW="${OTA_TEST_ADMIN_PW:?OTA_TEST_ADMIN_PW fehlt. Trag es in deploy/.env ein.}"
 
 api() { curl -s --cacert "$CA" -b "$JAR" -c "$JAR" "$@"; }
 jqp() { python3 -c "import sys,json;d=json.load(sys.stdin);print($1)" 2>/dev/null; }

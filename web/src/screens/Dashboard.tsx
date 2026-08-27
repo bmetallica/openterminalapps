@@ -2,13 +2,14 @@ import { useEffect, useState } from 'react'
 import { Led, stateClass } from '../components/controls'
 import { ApiError, api, type Me, type Session, type Stream, type Template } from '../lib/api'
 import { ago, duration, gb } from '../lib/format'
+import { t as tr, useLang } from '../lib/i18n'
 
 function greeting(): string {
   const h = new Date().getHours()
-  if (h < 5) return 'Noch wach'
-  if (h < 11) return 'Guten Morgen'
-  if (h < 18) return 'Guten Tag'
-  return 'Guten Abend'
+  if (h < 5) return tr('Noch wach')
+  if (h < 11) return tr('Guten Morgen')
+  if (h < 18) return tr('Guten Tag')
+  return tr('Guten Abend')
 }
 
 function Bay({ session, template, onOpen, onAct, onApp, busy, busyApp }: {
@@ -29,7 +30,7 @@ function Bay({ session, template, onOpen, onAct, onApp, busy, busyApp }: {
   return (
     <article className={`panel panel--state panel--${stateClass(session.status)} bay`}>
       <div className={`bay__screen${running ? ' bay__screen--on' : ''}`}>
-        <span className="bay__screen-tag data">{running ? 'bereit' : 'eingefroren'}</span>
+        <span className="bay__screen-tag data">{running ? tr('bereit') : tr('eingefroren')}</span>
       </div>
 
       <div className="bay__meta">
@@ -48,13 +49,13 @@ function Bay({ session, template, onOpen, onAct, onApp, busy, busyApp }: {
               return (
                 <button key={a.slug} className={`strip__app${on ? ' is-on' : ''}`}
                   disabled={!running || busyApp === a.slug}
-                  title={on ? `${a.name} anzeigen` : `${a.name} starten`}
+                  title={on ? tr('{app} anzeigen', { app: a.name }) : tr('{app} starten', { app: a.name })}
                   onClick={() => (on && stream ? onOpen(session, stream) : onApp(session, a.slug))}>
                   <span className="strip__icon" aria-hidden="true">{a.icon}</span>
                   <span className="strip__name">{a.name}</span>
                   {busyApp === a.slug
-                    ? <span className="strip__wait" aria-label="startet" />
-                    : on && <span className="strip__led" aria-label="läuft" />}
+                    ? <span className="strip__wait" aria-label={tr('startet')} />
+                    : on && <span className="strip__led" aria-label={tr('läuft')} />}
                 </button>
               )
             })}
@@ -62,15 +63,16 @@ function Bay({ session, template, onOpen, onAct, onApp, busy, busyApp }: {
         )}
 
         <div className="bay__facts">
-          <span className="bay__fact"><span className="silk">Laufzeit</span>
+          <span className="bay__fact"><span className="silk">{tr('Laufzeit')}</span>
             <b>{duration(Date.now() - started)}</b></span>
-          <span className="bay__fact"><span className="silk">Zuletzt aktiv</span>
+          <span className="bay__fact"><span className="silk">{tr('Zuletzt aktiv')}</span>
             <b>{ago(new Date(session.last_seen_at).getTime())}</b></span>
-          <span className="bay__fact"><span className="silk">Zugeteilt</span>
+          <span className="bay__fact"><span className="silk">{tr('Zugeteilt')}</span>
             <b>{session.cores} × {gb(session.memory_bytes)} GB</b></span>
           {isWorkspace && (
-            <span className="bay__fact"><span className="silk">Apps offen</span>
-              <b>{session.streams.length} von {apps.length}</b></span>
+            <span className="bay__fact"><span className="silk">{tr('Apps offen')}</span>
+              <b>{tr('{open} von {total}',
+                { open: session.streams.length, total: apps.length })}</b></span>
           )}
         </div>
       </div>
@@ -78,13 +80,13 @@ function Bay({ session, template, onOpen, onAct, onApp, busy, busyApp }: {
       <div className="bay__actions">
         <button className="btn btn--primary" disabled={busy}
           onClick={() => (running ? onOpen(session) : onAct(session, 'unpause'))}>
-          {running ? (isWorkspace ? 'Desktop öffnen' : 'Weiter arbeiten') : 'Fortsetzen'}
+          {running ? (isWorkspace ? tr('Desktop öffnen') : tr('Weiter arbeiten')) : tr('Fortsetzen')}
         </button>
         {running && (
-          <button className="btn" disabled={busy} onClick={() => onAct(session, 'pause')}>Pause</button>
+          <button className="btn" disabled={busy} onClick={() => onAct(session, 'pause')}>{tr('Pause')}</button>
         )}
         <button className="btn btn--halt btn--icon" disabled={busy}
-          aria-label={`${session.template_name} beenden`}
+          aria-label={tr('{name} beenden', { name: session.template_name })}
           onClick={() => onAct(session, 'stop')}>■</button>
       </div>
     </article>
@@ -96,6 +98,7 @@ export function Dashboard({ me, onOpen, onToast }: {
   onOpen: (s: Session, stream?: Stream) => void
   onToast: (m: string, tone?: 'ok' | 'bad') => void
 }) {
+  useLang()
   const [sessions, setSessions] = useState<Session[] | null>(null)
   const [templates, setTemplates] = useState<Template[] | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -109,7 +112,7 @@ export function Dashboard({ me, onOpen, onToast }: {
       setTemplates(t)
       setFailed(null)
     } catch (err) {
-      setFailed(err instanceof ApiError ? err.message : 'Laden fehlgeschlagen')
+      setFailed(err instanceof ApiError ? err.message : tr('Laden fehlgeschlagen'))
     }
   }
 
@@ -123,11 +126,21 @@ export function Dashboard({ me, onOpen, onToast }: {
     setBusy(t.id)
     try {
       const s = await api.startSession(t.id)
-      onToast(`${t.friendly_name} läuft`)
       await load()
-      if (s.status === 'running') onOpen(s)
+
+      // Nur eine Einzelanwendung wird sofort geöffnet — dort gibt es genau
+      // eine Sache zu sehen. Ein Arbeitsplatz wird erst einmal nur gestartet;
+      // was darin läuft, entscheidet der Nutzer danach in der App-Leiste.
+      // Vorher sprang stattdessen ein Tab mit dem leeren Desktop auf.
+      if (t.mode === 'single_app' && s.status === 'running') {
+        onOpen(s)
+        onToast(tr('{name} läuft', { name: t.friendly_name }))
+      } else {
+        onToast(tr('{name} ist bereit. Wähle oben eine Anwendung.',
+          { name: t.friendly_name }))
+      }
     } catch (err) {
-      onToast(err instanceof ApiError ? err.message : 'Start fehlgeschlagen', 'bad')
+      onToast(err instanceof ApiError ? err.message : tr('Start fehlgeschlagen'), 'bad')
     } finally {
       setBusy(null)
     }
@@ -142,7 +155,7 @@ export function Dashboard({ me, onOpen, onToast }: {
       setSessions((prev) => (prev ?? []).map((x) => (x.id === updated.id ? updated : x)))
       if (stream) onOpen(updated, stream)
     } catch (err) {
-      onToast(err instanceof ApiError ? err.message : 'Start fehlgeschlagen', 'bad')
+      onToast(err instanceof ApiError ? err.message : tr('Start fehlgeschlagen'), 'bad')
     } finally {
       setBusyApp(null)
     }
@@ -152,10 +165,11 @@ export function Dashboard({ me, onOpen, onToast }: {
     setBusy(s.id)
     try {
       await api.sessionAction(s.id, action)
-      onToast({ pause: 'Pausiert', unpause: 'Fortgesetzt', stop: 'Beendet — dein Profil bleibt erhalten' }[action])
+      onToast(tr({ pause: 'Pausiert', unpause: 'Fortgesetzt',
+                   stop: 'Beendet — dein Profil bleibt erhalten' }[action]))
       await load()
     } catch (err) {
-      onToast(err instanceof ApiError ? err.message : 'Aktion fehlgeschlagen', 'bad')
+      onToast(err instanceof ApiError ? err.message : tr('Aktion fehlgeschlagen'), 'bad')
     } finally {
       setBusy(null)
     }
@@ -165,16 +179,16 @@ export function Dashboard({ me, onOpen, onToast }: {
     return (
       <div className="wrap">
         <div className="empty">
-          <p className="empty__title">Die Daten konnten nicht geladen werden</p>
+          <p className="empty__title">{tr('Die Daten konnten nicht geladen werden')}</p>
           <p className="empty__body">{failed}</p>
-          <button className="btn" onClick={() => void load()}>Erneut versuchen</button>
+          <button className="btn" onClick={() => void load()}>{tr('Erneut versuchen')}</button>
         </div>
       </div>
     )
   }
 
   if (!sessions || !templates) {
-    return <div className="wrap"><p className="sub">Wird geladen…</p></div>
+    return <div className="wrap"><p className="sub">{tr('Wird geladen…')}</p></div>
   }
 
   const busyTemplates = new Set(sessions.map((s) => s.template_id))
@@ -184,14 +198,16 @@ export function Dashboard({ me, onOpen, onToast }: {
     <div className="wrap">
       <header className="topbar">
         <div>
-          <p className="silk" style={{ marginBottom: 6 }}>Angemeldet als {me.username}</p>
+          <p className="silk" style={{ marginBottom: 6 }}>
+            {tr('Angemeldet als {name}', { name: me.username })}
+          </p>
           <h1 className="h-page">{greeting()}</h1>
         </div>
       </header>
 
       <section>
         <div className="section__head">
-          <span className="silk">Deine Sessions</span>
+          <span className="silk">{tr('Deine Sessions')}</span>
           <span className="section__rule" />
           <span className="silk data">{sessions.length}</span>
         </div>
@@ -207,10 +223,9 @@ export function Dashboard({ me, onOpen, onToast }: {
           </div>
         ) : (
           <div className="empty">
-            <p className="empty__title">Keine Session läuft</p>
+            <p className="empty__title">{tr('Keine Session läuft')}</p>
             <p className="empty__body">
-              Wähle unten eine App. Der erste Start dauert etwas länger, danach
-              bleibt deine Umgebung erhalten.
+              {tr('Wähle unten eine App. Der erste Start dauert etwas länger, danach bleibt deine Umgebung erhalten.')}
             </p>
           </div>
         )}
@@ -218,16 +233,16 @@ export function Dashboard({ me, onOpen, onToast }: {
 
       <section className="section">
         <div className="section__head">
-          <span className="silk">Deine Apps</span>
+          <span className="silk">{tr('Deine Apps')}</span>
           <span className="section__rule" />
           <span className="silk data">{available.length}</span>
         </div>
 
         {available.length === 0 ? (
           <div className="empty">
-            <p className="empty__title">Dir ist noch nichts zugewiesen</p>
+            <p className="empty__title">{tr('Dir ist noch nichts zugewiesen')}</p>
             <p className="empty__body">
-              Wende dich an deinen Administrator — er kann dir einen Arbeitsplatz freischalten.
+              {tr('Wende dich an deine Administration — dort kann dir ein Arbeitsplatz freigeschaltet werden.')}
             </p>
           </div>
         ) : (
@@ -240,7 +255,7 @@ export function Dashboard({ me, onOpen, onToast }: {
                 <button key={t.id} className={`tile${isBusy ? ' tile--busy' : ''}`}
                   disabled={busy === t.id}
                   onClick={() => (isBusy
-                    ? onToast(`${t.friendly_name} läuft bereits — oben verbinden`)
+                    ? onToast(tr('{name} läuft bereits — oben verbinden', { name: t.friendly_name }))
                     : void start(t))}>
                   <span className="tile__top">
                     <span className="tile__icon" aria-hidden="true">{t.icon}</span>
@@ -249,19 +264,20 @@ export function Dashboard({ me, onOpen, onToast }: {
                   <span className="tile__desc">{t.description}</span>
                   {t.mode === 'workspace' && t.apps.length > 0 && (
                     <span className="tile__mode">
-                      {t.apps.filter((a) => a.is_enabled).length} Apps in einem Container
+                      {tr('{n} Apps in einem Container',
+                        { n: t.apps.filter((a) => a.is_enabled).length })}
                     </span>
                   )}
                   <span className="tile__foot">
                     <span className="tile__spec data">
-                      <span>{cores} {cores === 1 ? 'Kern' : 'Kerne'}</span>
+                      <span>{cores} {cores === 1 ? tr('Kern') : tr('Kerne')}</span>
                       <span>{gb(mem)} GB</span>
                     </span>
                     {busy === t.id
-                      ? <span className="silk">startet…</span>
+                      ? <span className="silk">{tr('startet…')}</span>
                       : isBusy
                         ? <Led status="live" />
-                        : <span className="silk" style={{ color: 'var(--bone)' }}>Starten</span>}
+                        : <span className="silk" style={{ color: 'var(--key)' }}>{tr('Starten')}</span>}
                   </span>
                 </button>
               )

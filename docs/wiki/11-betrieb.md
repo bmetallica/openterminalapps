@@ -40,6 +40,26 @@ docker compose down                # Alles stoppen (Sessions laufen weiter!)
 > zu den Session-Containern; die Anwendung ist am Datenstrom nicht beteiligt. Das ist ein bewusster
 > Vorteil des Aufbaus und macht Updates im laufenden Betrieb unkritisch.
 
+## Anmeldefrist ✅
+
+**Verwaltung → Einstellungen → Abmelden nach Untätigkeit.**
+
+Wie lange jemand angemeldet bleibt, ohne etwas zu tun. Der Regler kennt acht Stufen zwischen
+30 Minuten und 48 Stunden; ab Werk sind es acht Stunden — ein Arbeitstag, also einmal anmelden am
+Morgen.
+
+Die Frist misst **Untätigkeit**. Jede Anfrage der Oberfläche schiebt sie nach vorn, und die
+Oberfläche fragt im 15-Sekunden-Takt nach dem Zustand der Sessions. Wer einen Tab offen hat und
+darin arbeitet, wird also nicht abgemeldet.
+
+Die Änderung wirkt ab der nächsten Anmeldung und für jede Sitzung, die danach verlängert wird.
+Bereits ausgestellte Zugänge behalten ihre alte Frist bis zur nächsten Verlängerung — wer die
+Frist drastisch kürzt und sofortige Wirkung braucht, setzt zusätzlich die Sitzungen zurück
+(Nutzer → Konto → Passwort ändern macht alle bestehenden Zugänge ungültig).
+
+> Nicht zu verwechseln mit dem **automatischen Beenden von Sessions**. Das steht je Workspace unter
+> *Ressourcen → Sitzung endet nach Inaktivität* und betrifft den Container, nicht die Anmeldung.
+
 ## Update
 
 ```bash

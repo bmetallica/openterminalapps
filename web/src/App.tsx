@@ -1,30 +1,48 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Dashboard } from './screens/Dashboard'
 import { Login } from './screens/Login'
-import { SessionViewer } from './screens/SessionViewer'
 import { Monitor } from './screens/Monitor'
 import { People } from './screens/People'
 import { Workspaces } from './screens/Workspaces'
+import { Help } from './screens/Help'
+import { Settings } from './screens/Settings'
+import { Images } from './screens/Images'
+import { Storage } from './screens/Storage'
+import { StandaloneViewer } from './screens/StandaloneViewer'
+import { openInTab, parseRoute, viewPath, type Route } from './lib/routes'
 import { ApiError, api, type Host, type Me, type Session, type Stream, type Template } from './lib/api'
 import { gb } from './lib/format'
+import { setLang, t, useLang, type Lang } from './lib/i18n'
 import './styles/app.css'
 
-type View = 'dashboard' | 'workspaces' | 'people' | 'monitor'
+type View = 'dashboard' | 'workspaces' | 'images' | 'storage' | 'people' | 'monitor' | 'settings' | 'help'
 type Toast = { id: number; msg: string; tone: 'ok' | 'bad' }
 
 const NAV: { id: View; glyph: string; cap: string; adminOnly: boolean }[] = [
   { id: 'dashboard', glyph: '▣', cap: 'Start', adminOnly: false },
   { id: 'workspaces', glyph: '⬡', cap: 'Workspaces', adminOnly: true },
+  { id: 'images', glyph: '⬢', cap: 'Images', adminOnly: true },
+  // Die Ablage sehen alle: Sie liegt ohnehin in jedem Container. Nur
+  // schreiben darf, wer darf — das entscheidet die API, nicht dieses Menü.
+  { id: 'storage', glyph: '▦', cap: 'Ablage', adminOnly: false },
   { id: 'people', glyph: '◔', cap: 'Nutzer', adminOnly: true },
   { id: 'monitor', glyph: '◈', cap: 'Betrieb', adminOnly: true },
+  { id: 'settings', glyph: '⚙', cap: 'Einstellungen', adminOnly: true },
+  // Das Handbuch steht allen offen. Welche Kapitel jemand sieht, entscheidet
+  // die API anhand der Rechte — Betriebs- und Verwaltungskapitel bleiben
+  // Administratoren vorbehalten.
+  { id: 'help', glyph: '?', cap: 'Hilfe', adminOnly: false },
 ]
 
 export default function App() {
+  useLang()
+  // Die Adresse wird einmal gelesen und dann festgehalten. Innerhalb der
+  // Anwendung wird nicht navigiert — sie hat genau drei Einstiege, und alle
+  // drei stehen beim Laden fest.
+  const [route] = useState<Route>(() => parseRoute())
   const [me, setMe] = useState<Me | null>(null)
   const [checking, setChecking] = useState(true)
   const [view, setView] = useState<View>('dashboard')
-  const [viewing, setViewing] = useState<Session | null>(null)
-  const [viewingStream, setViewingStream] = useState<Stream | undefined>()
   const [templates, setTemplates] = useState<Template[]>([])
   const [host, setHost] = useState<Host | null>(null)
   const [toasts, setToasts] = useState<Toast[]>([])
@@ -55,37 +73,43 @@ export default function App() {
     api.templates().then(setTemplates).catch(() => {})
   }, [me])
 
+  /** Öffnet eine Session in einem eigenen Tab.
+   *
+   * Früher ersetzte die Ansicht das Dashboard. Das war unpraktisch, sobald
+   * jemand mehr als eine Anwendung offen hat: Zurück zum Dashboard hiess, die
+   * laufende Anwendung zu verlassen. Ein Tab je Anwendung entspricht dem, was
+   * Leute von ihrem Desktop kennen — und der Weg zurück ist ein Klick auf den
+   * ersten Tab.
+   */
   function openSession(s: Session, stream?: Stream) {
-    setViewing(s)
-    setViewingStream(stream)
+    openInTab(viewPath(s.id, stream?.display_num))
   }
 
   async function logout() {
     await api.logout().catch(() => {})
     setMe(null)
-    setViewing(null)
-    setViewingStream(undefined)
     setView('dashboard')
   }
 
   if (checking) {
-    return <div className="boot"><span className="silk">OpenTerminalApps startet…</span></div>
+    return (
+      <div className="boot">
+        <img className="boot__mark" src="/icon.svg" alt="" aria-hidden="true" />
+        <span className="silk">{t('OpenTerminalApps startet…')}</span>
+      </div>
+    )
   }
 
   if (!me) {
-    return <Login onDone={(u) => { setMe(u); toast(`Willkommen, ${u.username}`) }} />
+    // Nach der Anmeldung bleibt die Adresse stehen. Wer auf eine Verknüpfung
+    // geklickt hat, landet danach in seiner Anwendung und nicht im Dashboard.
+    return <Login onDone={(u) => { setMe(u); toast(t('Willkommen, {name}', { name: u.username })) }} />
   }
 
-  if (viewing) {
+  if (route.kind !== 'app') {
     return (
       <>
-        <SessionViewer
-          session={viewing}
-          stream={viewingStream}
-          template={templates.find((t) => t.id === viewing.template_id)}
-          onSwitch={setViewingStream}
-          onClose={() => { setViewing(null); setViewingStream(undefined) }}
-          onToast={toast} />
+        <StandaloneViewer route={route} onToast={toast} />
         <Toasts items={toasts} />
       </>
     )
@@ -97,31 +121,37 @@ export default function App() {
 
   return (
     <div className="shell">
-      <nav className="rail" aria-label="Hauptnavigation">
-        <div className="rail__mark" aria-hidden="true">O</div>
+      <nav className="rail" aria-label={t('Hauptnavigation')}>
+        {/* Das Symbol der Anwendung, nicht nachgezeichnet: Es bringt seine
+            eigene Fläche mit, deshalb sitzt es ohne Hintergrund hier. */}
+        <img className="rail__mark" src="/icon.svg" alt="" aria-hidden="true" />
 
         {visible.map((n) => (
           <button key={n.id} className={`rail__btn${current === n.id ? ' is-on' : ''}`}
             onClick={() => setView(n.id)} aria-current={current === n.id ? 'page' : undefined}>
             <span className="rail__glyph" aria-hidden="true">{n.glyph}</span>
-            <span className="rail__cap">{n.cap}</span>
+            <span className="rail__cap">{t(n.cap)}</span>
           </button>
         ))}
 
         <div className="rail__spacer" />
 
-        <button className="rail__btn" onClick={() => void logout()} title={`Abmelden (${me.username})`}>
+        <LangSwitch />
+
+        <button className="rail__btn" onClick={() => void logout()}
+          title={t('Abmelden ({name})', { name: me.username })}>
           <span className="rail__glyph" aria-hidden="true">⇥</span>
-          <span className="rail__cap">Abmelden</span>
+          <span className="rail__cap">{t('Abmelden')}</span>
         </button>
 
         {freePct !== null && host && (
-          <div className="rail__host" title={`${gb(host.memory_available)} GB von ${gb(host.memory_total, 0)} GB frei`}>
+          <div className="rail__host" title={t('{free} GB von {total} GB frei',
+            { free: gb(host.memory_available), total: gb(host.memory_total, 0) })}>
             <span className={`led ${freePct < 15 ? 'led--fail' : 'led--live'}`}>
               <span className="led__dot" aria-hidden="true" />
             </span>
             <b className="data">{Math.round(freePct)}%</b>
-            <span className="silk" style={{ fontSize: 8 }}>frei</span>
+            <span className="silk" style={{ fontSize: 8 }}>{t('frei')}</span>
           </div>
         )}
       </nav>
@@ -134,11 +164,41 @@ export default function App() {
           <Dashboard me={me} onOpen={openSession} onToast={toast} />
         )}
         {current === 'workspaces' && <Workspaces onToast={toast} />}
+        {current === 'images' && <Images onToast={toast} />}
+        {current === 'storage' && (
+          <Storage onToast={toast}
+            canWrite={me.is_admin || me.permissions.includes('images.manage')
+              || me.permissions.includes('templates.manage')} />
+        )}
         {current === 'people' && <People onToast={toast} />}
         {current === 'monitor' && <Monitor onToast={toast} />}
+        {current === 'settings' && <Settings onToast={toast} />}
+        {current === 'help' && <Help onToast={toast} />}
       </main>
 
       <Toasts items={toasts} />
+    </div>
+  )
+}
+
+/** Sprachumschalter in der Leiste.
+ *
+ * Bewusst zwei sichtbare Schalter statt eines Klapp-Menüs: Bei genau zwei
+ * Möglichkeiten ist die aktuelle Sprache damit auf einen Blick zu sehen, und
+ * der Wechsel kostet einen Klick statt zwei.
+ */
+function LangSwitch() {
+  const current = useLang()
+  return (
+    <div className="rail__lang" role="radiogroup" aria-label={t('Sprache')}>
+      {(['de', 'en'] as Lang[]).map((l) => (
+        <button key={l} type="button" role="radio" aria-checked={current === l}
+          className={`rail__langopt${current === l ? ' is-on' : ''}`}
+          title={l === 'de' ? 'Deutsch' : 'English'}
+          onClick={() => setLang(l)}>
+          {l.toUpperCase()}
+        </button>
+      ))}
     </div>
   )
 }
@@ -174,10 +234,10 @@ function PasswordGate({ onDone, onToast }: {
     setError(null)
     try {
       await api.changePassword(current, next)
-      onToast('Passwort geändert')
+      onToast(t('Passwort geändert'))
       onDone()
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Wechsel fehlgeschlagen')
+      setError(err instanceof ApiError ? err.message : t('Wechsel fehlgeschlagen'))
     } finally {
       setBusy(false)
     }
@@ -189,33 +249,33 @@ function PasswordGate({ onDone, onToast }: {
       <form className="drawer" style={{ width: 'min(460px, 100vw)' }} onSubmit={submit}>
         <header className="drawer__head">
           <div>
-            <h2 className="h-card">Passwort ändern</h2>
+            <h2 className="h-card">{t('Passwort ändern')}</h2>
             <p className="sub" style={{ marginTop: 4 }}>
-              Dein Konto wurde mit einem Einmal-Passwort angelegt. Bitte vergib ein eigenes.
+              {t('Dein Konto wurde mit einem Einmal-Passwort angelegt. Bitte vergib ein eigenes.')}
             </p>
           </div>
         </header>
         <div className="drawer__body">
           <label className="field">
-            <span className="field__label" style={{ display: 'block', marginBottom: 8 }}>Aktuelles Passwort</span>
+            <span className="field__label" style={{ display: 'block', marginBottom: 8 }}>{t('Aktuelles Passwort')}</span>
             <div className="row-item">
               <input type="password" value={current} required autoFocus
                 onChange={(e) => setCurrent(e.target.value)} />
             </div>
           </label>
           <label className="field">
-            <span className="field__label" style={{ display: 'block', marginBottom: 8 }}>Neues Passwort</span>
+            <span className="field__label" style={{ display: 'block', marginBottom: 8 }}>{t('Neues Passwort')}</span>
             <div className="row-item">
               <input type="password" value={next} required
                 onChange={(e) => setNext(e.target.value)} />
             </div>
-            <p className="field__hint">Mindestens 12 Zeichen.</p>
+            <p className="field__hint">{t('Mindestens 12 Zeichen.')}</p>
           </label>
           {error && <p className="login__error" role="alert">{error}</p>}
         </div>
         <footer className="drawer__foot">
           <button className="btn btn--primary" disabled={busy}>
-            {busy ? 'Wird gespeichert…' : 'Passwort setzen'}
+            {busy ? t('Wird gespeichert…') : t('Passwort setzen')}
           </button>
         </footer>
       </form>

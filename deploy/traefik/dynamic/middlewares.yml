@@ -21,6 +21,21 @@ http:
           # Header greift in manchen Browsern eine restriktive Vorgabe und
           # navigator.clipboard schlägt lautlos fehl.
           Permissions-Policy: "clipboard-read=(self), clipboard-write=(self), camera=(self), microphone=(self), fullscreen=(self)"
+          # Trennt die Anwendung von fremden Fenstern, die sie geöffnet haben
+          # könnten. Kostet nichts und betrifft eingebettete Streams nicht.
+          Cross-Origin-Opener-Policy: "same-origin"
+          # Cross-Origin-Embedder-Policy steht hier bewusst NICHT.
+          #
+          # Am 2026-08-27 war die fehlende Cross-Origin-Isolation der erste
+          # Verdacht, warum die Zwischenablage im iframe nichts aus dem
+          # Container liefert. require-corp wurde ergänzt, die Isolation stimmte
+          # danach — am Ergebnis änderte sich nichts. Die wahre Ursache lag im
+          # KasmVNC-Client (siehe plan.md §10.2 Punkt 5). Der Header ist wieder
+          # draussen, weil er hier nichts bewirkt: Der Client dekodiert über
+          # ImageDecoder, nicht über SharedArrayBuffer. Er hätte aber einen
+          # Preis — require-corp lässt jede fremde Ressource ohne CORP
+          # kommentarlos ausfallen, und genau solche Quellen kommen mit den
+          # Kasm-Registries noch dazu.
           Content-Security-Policy: "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self' ws: wss:; frame-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'"
           Server: ""
 

@@ -66,6 +66,13 @@ cert:
 	@echo "Traefik lädt das Zertifikat von selbst neu — kein Neustart nötig."
 
 .PHONY: test
+# Die Zugangsdaten der Pruefung stehen in deploy/.env, nicht im Repository.
+# `export` weil die Skripte und der Browsertest sie als Umgebungsvariable
+# erwarten; `-include` damit ein fehlendes .env eine verstaendliche Meldung
+# ergibt statt eines Make-Fehlers.
+-include deploy/.env
+export OTA_TEST_ADMIN_PW
+
 test:
 	@./scripts/test-authz.sh
 	@echo

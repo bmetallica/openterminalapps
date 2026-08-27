@@ -1,7 +1,11 @@
 # OpenTerminalApps — Handbuch
 
-Dieses Handbuch wird im Admin-Bereich unter **Hilfe** ausgeliefert. Es beschreibt Bedienung, Verwaltung
-und Betrieb von OTA.
+Dieses Handbuch wird im Programm selbst unter **Hilfe** ausgeliefert. Es beschreibt Bedienung,
+Verwaltung und Betrieb von OTA.
+
+Welche Kapitel jemand dort sieht, hängt an den Rechten: Anwender bekommen Überblick, Arbeitsplatz,
+Zwischenablage und Lizenzen; Verwaltung und Betrieb bleiben Administratoren vorbehalten. Diese
+Aufteilung steht in `api/ota/routers/help.py` — wer ein Kapitel hinzufügt, trägt es dort ein.
 
 ## Kennzeichnung
 
@@ -31,6 +35,8 @@ heute schon funktioniert.
 7. [Golden Images](07-golden-images.md)
 8. [Nutzer, Gruppen und Rechte](08-nutzer-und-gruppen.md)
 9. [Kasm-Images und Registries einbinden](09-kasm-images-und-registries.md)
+16. [Images verwalten](16-images-verwalten.md)
+17. [Ablage und Startskript](17-ablage-und-startskript.md)
 
 **Betrieb**
 10. [Zertifikate und HTTPS](10-zertifikate-und-https.md)

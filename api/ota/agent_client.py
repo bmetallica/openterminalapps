@@ -16,8 +16,11 @@ def _headers() -> dict[str, str]:
 
 def _call(method: str, path: str, **kw: Any) -> Any:
     url = f"{settings().agent_url.rstrip('/')}{path}"
+    # Grosszuegig, weil hier auch Dateien durchgehen: Ein Gigabyte in die
+    # gemeinsame Ablage braucht laenger als eine Minute.
+    timeout = 300.0 if "files" in kw else 60.0
     try:
-        with httpx.Client(timeout=60.0) as client:
+        with httpx.Client(timeout=timeout) as client:
             resp = client.request(method, url, headers=_headers(), **kw)
     except httpx.HTTPError as exc:
         raise HTTPException(
@@ -41,6 +44,15 @@ def host_info() -> dict[str, Any]:
 
 def list_images() -> list[dict[str, Any]]:
     return _call("GET", "/images")
+
+
+def image_applications(ref: str) -> list[dict[str, Any]]:
+    return _call("GET", "/images/applications", params={"ref": ref})
+
+
+def image_packages(ref: str, names: list[str]) -> list[dict[str, Any]]:
+    return _call("GET", "/images/packages",
+                 params={"ref": ref, "names": ",".join(names)})
 
 
 def start_container(payload: dict[str, Any]) -> dict[str, Any]:
@@ -86,6 +98,50 @@ def build_status(build_id: str) -> dict[str, Any]:
 
 def remove_image(ref: str) -> dict[str, Any]:
     return _call("DELETE", f"/images/{ref}")
+
+
+# --- Gemeinsame Ablage ---------------------------------------------------
+
+def shared_list(path: str = "") -> dict[str, Any]:
+    return _call("GET", "/shared", params={"path": path})
+
+
+def shared_upload(path: str, name: str, data: bytes) -> dict[str, Any]:
+    return _call("POST", "/shared/upload", data={"path": path},
+                 files={"file": (name, data)})
+
+
+def shared_mkdir(path: str, name: str) -> dict[str, Any]:
+    return _call("POST", "/shared/dir", json={"path": path, "name": name})
+
+
+def shared_remove(path: str) -> dict[str, Any]:
+    return _call("DELETE", "/shared", params={"path": path})
+
+
+def shared_read(path: str) -> tuple[bytes, str]:
+    """Der Inhalt einer Datei und ihr Name.
+
+    Anders als die uebrigen Aufrufe kommt hier kein JSON zurueck, sondern die
+    Datei selbst — deshalb der eigene Weg an `_call` vorbei.
+    """
+    import httpx
+
+    url = f"{settings().agent_url.rstrip('/')}/shared/file"
+    with httpx.Client(timeout=300.0) as client:
+        resp = client.get(url, headers=_headers(), params={"path": path})
+    if resp.status_code >= 400:
+        raise HTTPException(resp.status_code, "Die Datei liess sich nicht lesen.")
+    name = path.rsplit("/", 1)[-1] or "datei"
+    return resp.content, name
+
+
+def pull_image(ref: str) -> dict[str, Any]:
+    return _call("POST", "/images/pull", json={"ref": ref})
+
+
+def pull_status(job_id: str) -> dict[str, Any]:
+    return _call("GET", f"/images/pull/{job_id}")
 
 
 def image_exists(ref: str) -> dict[str, Any]:

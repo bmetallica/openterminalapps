@@ -1,0 +1,40 @@
+{
+  "manifest_version": 3,
+  "name": "OpenTerminalApps Zwischenablage",
+  "version": "1.0.0",
+  "description": "Gleicht die Zwischenablage zwischen Firefox und einer OTA-Sitzung ab. Firefox gibt Webseiten den Lesezugriff nicht von sich aus; diese Erweiterung reicht ihn genau einer Adresse weiter.",
+
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "clipboard@openterminalapps.local",
+      "strict_min_version": "115.0"
+    }
+  },
+
+  "permissions": ["clipboardRead", "clipboardWrite", "scripting", "storage"],
+
+  "//optional_host_permissions": [
+    "Bewusst leer bei der Installation: Die Erweiterung darf zunaechst",
+    "nirgends mitlesen. Erst ein Klick auf ihr Symbol gibt sie fuer die",
+    "gerade offene Adresse frei — und nur fuer diese. Eine Erweiterung, die",
+    "sich beim Installieren Zugriff auf jede Seite nimmt, waere fuer diese",
+    "Aufgabe voellig ueberzogen."
+  ],
+  "optional_host_permissions": ["*://*/*"],
+
+  "background": {
+    "scripts": ["background.js"]
+  },
+
+  "action": {
+    "default_title": "Zwischenablage für diese Seite freigeben",
+    "default_icon": {
+      "48": "icons/ota-48.svg"
+    }
+  },
+
+  "icons": {
+    "48": "icons/ota-48.svg",
+    "96": "icons/ota-96.svg"
+  }
+}

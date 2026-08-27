@@ -1,5 +1,7 @@
 /** Typisierter Zugriff auf die OTA-API. */
 
+import { t } from './i18n'
+
 export type Me = {
   id: string
   username: string
@@ -37,6 +39,8 @@ export type Template = {
   idle_action: 'pause' | 'stop' | 'delete'
   persistence_scope: 'user' | 'template' | 'none'
   rights: Record<string, boolean>
+  /** Läuft bei jedem Sessionstart als Nutzer im Container. */
+  start_script: string
   env: Record<string, string>
   is_enabled: boolean
   apps: App[]
@@ -92,6 +96,107 @@ export type User = {
 }
 
 export type Permission = { key: string; text: string }
+
+export type GlobalSettings = {
+  auth_idle_minutes: number
+  auth_idle_steps: number[]
+}
+
+/** Ein Programm, wie es im Image gefunden wurde. */
+export type DiscoveredApp = {
+  slug: string
+  name: string
+  icon: string
+  exec_cmd: string
+  exec_args: string
+  categories: string[]
+  /** Braucht ein Terminal um sich herum — startet sonst auf leerem Bildschirm. */
+  needs_terminal: boolean
+  binary: string
+  /** Steht schon im Katalog dieses Workspace? */
+  in_catalog: boolean
+  is_enabled: boolean
+  fixed_display: number | null
+  /** Im Katalog, aber im Image nicht mehr vorhanden. */
+  missing: boolean
+}
+
+/** Was das Image über einen Paketnamen weiss. */
+export type RecipeKind = 'apt_repo' | 'deb_url' | 'tarball' | 'appimage' | 'script'
+
+export type Recipe = {
+  id: string
+  slug: string
+  name: string
+  glyph: string
+  why: string
+  kind: RecipeKind
+  params: Record<string, unknown>
+  script: string
+  /** Mitgeliefert: nicht änderbar, aber kopierbar. */
+  is_builtin: boolean
+  created_by: string | null
+}
+
+export type SharedEntry = {
+  name: string
+  is_dir: boolean
+  size_bytes: number
+  /** Unix-Zeit in Sekunden. */
+  modified: number
+}
+
+export type SharedListing = {
+  path: string
+  entries: SharedEntry[]
+  total_bytes: number
+}
+
+export type HostImage = {
+  ref: string
+  size_bytes: number
+  /** 'ota' = selbst gebaut, 'kasm' = gehört dem anderen System, 'fremd' = sonst. */
+  origin: 'ota' | 'kasm' | 'fremd'
+  used_by: string[]
+}
+
+export type PullJob = {
+  id: string
+  ref: string
+  status: 'running' | 'ok' | 'failed'
+  detail: string
+  size_bytes: number
+}
+
+export type PackageCheck = {
+  name: string
+  available: boolean
+  candidate: string
+  /** Vorhanden, aber nur als Verweis auf ein Snap — im Container nutzlos. */
+  snap_stub: boolean
+  suggestions: string[]
+}
+
+export type Build = {
+  id: string
+  version: number
+  base_image: string
+  apt_packages: string[]
+  vscode_extensions: string[]
+  setup_script: string
+  comment: string
+  status: 'queued' | 'building' | 'ok' | 'failed'
+  log: string
+  image_ref: string | null
+  size_bytes: number
+  is_current: boolean
+  built_by: string | null
+  started_at: string
+  finished_at: string | null
+}
+
+export type HelpChapter = { slug: string; title: string; section: string }
+export type HelpPage = { slug: string; title: string; markdown: string }
 
 export type AdminSession = {
   id: string
@@ -187,16 +292,22 @@ export class ApiError extends Error {
   }
 }
 
+/* Meldungen des Servers laufen durch dieselbe Übersetzung wie die Oberfläche.
+   Das geht auf, weil der deutsche Satz der Schlüssel ist: Was im Wörterbuch
+   steht, erscheint übersetzt; alles andere bleibt, wie der Server es sagt. */
 async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
   let res: Response
   try {
     res = await fetch(`/api${path}`, {
       credentials: 'same-origin',
-      headers: init.body ? { 'Content-Type': 'application/json' } : undefined,
+      // Bei FormData setzt der Browser den Content-Type samt Grenzmarke
+      // selbst. Einen eigenen zu setzen macht die Übertragung unbrauchbar.
+      headers: init.body && !(init.body instanceof FormData)
+        ? { 'Content-Type': 'application/json' } : undefined,
       ...init,
     })
   } catch {
-    throw new ApiError(0, 'Keine Verbindung zum Server. Läuft OTA noch?')
+    throw new ApiError(0, t('Keine Verbindung zum Server. Läuft OTA noch?'))
   }
 
   if (res.status === 204) return undefined as T
@@ -209,8 +320,8 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
     const detail =
       (data && typeof data === 'object' && 'detail' in data && typeof data.detail === 'string')
         ? data.detail
-        : `Unerwarteter Fehler (${res.status})`
-    throw new ApiError(res.status, detail)
+        : t('Unerwarteter Fehler ({code})', { code: res.status })
+    throw new ApiError(res.status, t(detail))
   }
   return data as T
 }
@@ -226,6 +337,9 @@ export const api = {
     }),
 
   templates: () => call<Template[]>('/templates'),
+
+  help: () => call<HelpChapter[]>('/help'),
+  helpPage: (slug: string) => call<HelpPage>(`/help/${slug}`),
   createTemplate: (body: unknown) =>
     call<Template>('/templates', { method: 'POST', body: JSON.stringify(body) }),
   updateTemplate: (id: string, body: unknown) =>
@@ -252,17 +366,76 @@ export const api = {
     call<Session>(`/sessions/${id}/apps/${slug}`, { method: 'POST' }),
   stopApp: (id: string, slug: string) =>
     call<Session>(`/sessions/${id}/apps/${slug}`, { method: 'DELETE' }),
+  discoverApps: (templateId: string) =>
+    call<DiscoveredApp[]>(`/templates/${templateId}/apps/discover`),
+
+  sharedList: (path = '') =>
+    call<SharedListing>(`/shared?path=${encodeURIComponent(path)}`),
+  sharedUpload: (path: string, file: File) => {
+    // FormData statt JSON: Der Browser setzt die Grenze zwischen den Teilen
+    // selbst. Ein eigener Content-Type hier würde sie überschreiben und die
+    // Datei unbrauchbar machen — deshalb wird er bewusst nicht gesetzt.
+    const body = new FormData()
+    body.append('file', file)
+    return call<{ name: string; size_bytes: number }>(
+      `/shared/upload?path=${encodeURIComponent(path)}`, { method: 'POST', body })
+  },
+  sharedMkdir: (path: string, name: string) =>
+    call<{ name: string }>('/shared/dir', {
+      method: 'POST', body: JSON.stringify({ path, name }),
+    }),
+  sharedRemove: (path: string) =>
+    call<{ status: string }>(`/shared?path=${encodeURIComponent(path)}`, { method: 'DELETE' }),
+
+  recipes: () => call<Recipe[]>('/admin/recipes'),
+  previewRecipe: (kind: string, params: Record<string, unknown>) =>
+    call<{ script: string }>('/admin/recipes/preview', {
+      method: 'POST', body: JSON.stringify({ kind, params }),
+    }),
+  createRecipe: (body: unknown) =>
+    call<Recipe>('/admin/recipes', { method: 'POST', body: JSON.stringify(body) }),
+  updateRecipe: (id: string, body: unknown) =>
+    call<Recipe>(`/admin/recipes/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  deleteRecipe: (id: string) =>
+    call<{ status: string }>(`/admin/recipes/${id}`, { method: 'DELETE' }),
+
+  checkPackages: (templateId: string, names: string[]) =>
+    call<PackageCheck[]>(
+      `/templates/${templateId}/packages?names=${encodeURIComponent(names.join(','))}`),
+
+  builds: (templateId: string) => call<Build[]>(`/templates/${templateId}/builds`),
+  build: (templateId: string, id: string) =>
+    call<Build>(`/templates/${templateId}/builds/${id}`),
+  startBuild: (templateId: string, body: {
+    apt_packages: string[]; vscode_extensions?: string[]
+    setup_script?: string; comment?: string
+  }) => call<Build>(`/templates/${templateId}/builds`, {
+    method: 'POST', body: JSON.stringify(body),
+  }),
+  activateBuild: (templateId: string, id: string) =>
+    call<Build>(`/templates/${templateId}/builds/${id}/activate`, { method: 'POST' }),
+  deleteBuild: (templateId: string, id: string) =>
+    call<void>(`/templates/${templateId}/builds/${id}`, { method: 'DELETE' }),
+
   setApps: (templateId: string, apps: unknown[]) =>
     call<Template>(`/templates/${templateId}/apps`, {
       method: 'PUT', body: JSON.stringify(apps),
     }),
 
   host: () => call<Host>('/admin/host'),
-  images: () => call<{ ref: string; size_bytes: number }[]>('/admin/images'),
+  images: () => call<HostImage[]>('/admin/images'),
+  pullImage: (ref: string) =>
+    call<PullJob>('/admin/images/pull', { method: 'POST', body: JSON.stringify({ ref }) }),
+  pullStatus: (jobId: string) => call<PullJob>(`/admin/images/pull/${jobId}`),
+  removeImage: (ref: string) =>
+    call<{ status: string }>(`/admin/images?ref=${encodeURIComponent(ref)}`, { method: 'DELETE' }),
   users: () => call<User[]>('/admin/users'),
   groups: () => call<Group[]>('/admin/groups'),
   audit: (limit = 100) => call<AuditEntry[]>(`/admin/audit?limit=${limit}`),
   permissions: () => call<Permission[]>('/admin/permissions'),
+  settings: () => call<GlobalSettings>('/admin/settings'),
+  saveSettings: (body: { auth_idle_minutes?: number }) =>
+    call<GlobalSettings>('/admin/settings', { method: 'PUT', body: JSON.stringify(body) }),
   adminSessions: () => call<AdminSession[]>('/admin/sessions'),
 
   backups: () => call<Backup[]>('/backups'),

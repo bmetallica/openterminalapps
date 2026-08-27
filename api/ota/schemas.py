@@ -89,6 +89,7 @@ class TemplateOut(BaseModel):
     persistence_scope: str
     rights: dict
     env: dict
+    start_script: str = ""
     is_enabled: bool
     apps: list[AppOut] = []
     group_ids: list[uuid.UUID] = []
@@ -113,6 +114,7 @@ class TemplateIn(BaseModel):
     persistence_scope: str = "user"
     rights: dict = {}
     env: dict = {}
+    start_script: str = ""
     is_enabled: bool = True
     group_ids: list[uuid.UUID] = []
 
@@ -304,3 +306,59 @@ class HostOut(BaseModel):
     docker_version: str = ""
     architecture: str = ""
     running_containers: int = 0
+
+
+class HelpChapter(BaseModel):
+    slug: str
+    title: str
+    section: str
+
+
+class HelpPage(BaseModel):
+    slug: str
+    title: str
+    markdown: str
+
+
+class SettingsIn(BaseModel):
+    # Optional, damit spaetere Einstellungen einzeln gesetzt werden koennen,
+    # ohne die uebrigen mitzuschicken.
+    auth_idle_minutes: int | None = None
+
+
+class ImagePullIn(BaseModel):
+    ref: str
+
+
+class RecipeIn(BaseModel):
+    name: str
+    glyph: str = "▢"
+    why: str = ""
+    kind: str = "script"
+    params: dict = {}
+    # Leer heisst: aus kind und params erzeugen. Gefuellt heisst: so nehmen.
+    script: str = ""
+
+
+class RecipePreviewIn(BaseModel):
+    kind: str
+    params: dict = {}
+
+
+class RecipeOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    slug: str
+    name: str
+    glyph: str
+    why: str
+    kind: str
+    params: dict
+    script: str
+    is_builtin: bool
+    created_by: str | None
+
+
+class SharedDirIn(BaseModel):
+    path: str = ""
+    name: str

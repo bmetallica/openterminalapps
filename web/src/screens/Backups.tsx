@@ -5,6 +5,7 @@ import {
   type Backup, type BackupPolicy, type BackupStorage,
 } from '../lib/api'
 import { ago, gb } from '../lib/format'
+import { getLang, t as tr, useLang } from '../lib/i18n'
 
 const WEEKDAYS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
 
@@ -45,12 +46,13 @@ function BackupStatus({ status }: { status: string }) {
   return (
     <span className={`led ${STATUS_DOT[status] ?? 'led--stop'}`}>
       <span className="led__dot" aria-hidden="true" />
-      <span className="led__text">{STATUS_TEXT[status] ?? status}</span>
+      <span className="led__text">{tr(STATUS_TEXT[status] ?? status)}</span>
     </span>
   )
 }
 
 export function Backups({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad') => void }) {
+  useLang()
   const [list, setList] = useState<Backup[] | null>(null)
   const [storage, setStorage] = useState<BackupStorage | null>(null)
   const [policy, setPolicy] = useState<BackupPolicy | null>(null)
@@ -83,7 +85,7 @@ export function Backups({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad')
       onToast(res.status)
       setTimeout(() => { void load() }, 2500)
     } catch (err) {
-      onToast(err instanceof ApiError ? err.message : 'Sicherung fehlgeschlagen', 'bad')
+      onToast(err instanceof ApiError ? err.message : tr('Sicherung fehlgeschlagen'), 'bad')
     } finally {
       setBusy(null)
     }
@@ -95,7 +97,7 @@ export function Backups({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad')
       onToast((await api.runBackup({ database_only: true })).status)
       await load()
     } catch (err) {
-      onToast(err instanceof ApiError ? err.message : 'Sicherung fehlgeschlagen', 'bad')
+      onToast(err instanceof ApiError ? err.message : tr('Sicherung fehlgeschlagen'), 'bad')
     } finally {
       setBusy(null)
     }
@@ -119,7 +121,7 @@ export function Backups({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad')
     try {
       await api.saveBackupPolicy(next)
     } catch (err) {
-      onToast(err instanceof ApiError ? err.message : 'Speichern fehlgeschlagen', 'bad')
+      onToast(err instanceof ApiError ? err.message : tr('Speichern fehlgeschlagen'), 'bad')
       void load()
     }
   }
@@ -145,7 +147,7 @@ export function Backups({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad')
       onToast((await api.deleteBackup(b.id)).status)
       await load()
     } catch (err) {
-      onToast(err instanceof ApiError ? err.message : 'Löschen fehlgeschlagen', 'bad')
+      onToast(err instanceof ApiError ? err.message : tr('Löschen fehlgeschlagen'), 'bad')
     } finally {
       setBusy(null)
     }
@@ -154,13 +156,13 @@ export function Backups({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad')
   if (failed) {
     return (
       <div className="empty">
-        <p className="empty__title">Konnte nicht geladen werden</p>
+        <p className="empty__title">{tr('Konnte nicht geladen werden')}</p>
         <p className="empty__body">{failed}</p>
-        <button className="btn" onClick={() => void load()}>Erneut versuchen</button>
+        <button className="btn" onClick={() => void load()}>{tr('Erneut versuchen')}</button>
       </div>
     )
   }
-  if (!list || !storage || !policy) return <p className="sub">Wird geladen…</p>
+  if (!list || !storage || !policy) return <p className="sub">{tr('Wird geladen…')}</p>
 
   const usedPct = ((storage.disk_total - storage.disk_free) / storage.disk_total) * 100
 
@@ -169,57 +171,62 @@ export function Backups({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad')
       {/* Ablage */}
       <div className="meters" style={{ marginBottom: 20 }}>
         <div className="panel meter">
-          <div className="meter__top"><span className="silk">Ablage</span>
+          <div className="meter__top"><span className="silk">{tr('Ablage')}</span>
             <span className="meter__val" style={{ fontSize: 13 }}>
-              {storage.is_network ? 'Netzlaufwerk' : 'lokale Platte'}
+              {storage.is_network ? tr('Netzlaufwerk') : tr('lokale Platte')}
             </span></div>
           <p className="meter__note data" style={{ fontSize: 11 }}>{storage.path}</p>
           <p className="meter__note">
             {storage.fstype}{storage.source ? ` · ${storage.source}` : ''}
-            {storage.writable ? '' : ' · NICHT beschreibbar'}
+            {storage.writable ? '' : ` · ${tr('NICHT beschreibbar')}`}
           </p>
         </div>
 
         <div className="panel meter">
-          <div className="meter__top"><span className="silk">Platz frei</span>
+          <div className="meter__top"><span className="silk">{tr('Platz frei')}</span>
             <span className="meter__val">{gb(storage.disk_free)} GB</span></div>
           <div className="meter__bar">
             <div className="meter__fill" data-tone={usedPct > 85 ? 'caution' : undefined}
               style={{ width: `${usedPct}%` }} />
           </div>
-          <p className="meter__note">von {gb(storage.disk_total, 0)} GB</p>
+          <p className="meter__note">{tr('von {n} GB', { n: gb(storage.disk_total, 0) })}</p>
         </div>
 
         <div className="panel meter">
-          <div className="meter__top"><span className="silk">Belegt durch Sicherungen</span>
+          <div className="meter__top"><span className="silk">{tr('Belegt durch Sicherungen')}</span>
             <span className="meter__val">{size(storage.used_by_backups)}</span></div>
-          <p className="meter__note">{list.filter((b) => b.status === 'ok').length} gültige Sicherungen</p>
+          <p className="meter__note">
+            {tr('{n} gültige Sicherungen', { n: list.filter((b) => b.status === 'ok').length })}
+          </p>
         </div>
       </div>
 
       {!storage.is_network && (
         <p className="note-info" style={{ marginBottom: 20 }}>
-          Die Sicherungen liegen auf der lokalen Platte. Für ein Netzlaufwerk genügt es,
-          ein NFS unter <code className="data">{storage.path}</code> einzuhängen — an OTA
-          ändert sich dabei nichts, es sieht weiterhin nur diesen einen Pfad.
+          {tr('Die Sicherungen liegen auf der lokalen Platte. Für ein Netzlaufwerk genügt es, ein NFS unter')}{' '}
+          <code className="data">{storage.path}</code>{' '}
+          {tr('einzuhängen — an OTA ändert sich dabei nichts, es sieht weiterhin nur diesen einen Pfad.')}
         </p>
       )}
 
       {/* Zeitplan */}
-      <div className="section__head"><span className="silk">Zeitplan</span><span className="section__rule" /></div>
+      <div className="section__head"><span className="silk">{tr('Zeitplan')}</span><span className="section__rule" /></div>
       <div className="panel" style={{ padding: '18px 20px', marginBottom: 22 }}>
-        <Toggle on={policy.is_enabled} name="Automatisch sichern"
+        <Toggle on={policy.is_enabled} name={tr('Automatisch sichern')}
           note={policy.is_enabled
-            ? `Täglich um ${String(policy.hour).padStart(2, '0')}:${String(policy.minute).padStart(2, '0')} Uhr` +
-              (policy.weekdays.length ? ` an ${policy.weekdays.map((d) => WEEKDAYS[d]).join(', ')}` : '')
-            : 'Es wird nur gesichert, wenn du es von Hand anstösst.'}
+            ? tr('Täglich um {time} Uhr', {
+                time: `${String(policy.hour).padStart(2, '0')}:${String(policy.minute).padStart(2, '0')}`,
+              }) + (policy.weekdays.length
+                ? ' ' + tr('an {days}', { days: policy.weekdays.map((d) => tr(WEEKDAYS[d])).join(', ') })
+                : '')
+            : tr('Es wird nur gesichert, wenn du es von Hand anstösst.')}
           onChange={(v) => void savePolicy({ ...policy, is_enabled: v })} />
 
         {policy.is_enabled && (
           <div style={{ marginTop: 18 }}>
-            <Field label="Uhrzeit" hint="Ortszeit des Servers. Am besten dann, wenn niemand arbeitet.">
+            <Field label={tr('Uhrzeit')} hint={tr('Ortszeit des Servers. Am besten dann, wenn niemand arbeitet.')}>
               <div className="row-item" style={{ maxWidth: 200 }}>
-                <input type="time" aria-label="Uhrzeit"
+                <input type="time" aria-label={tr('Uhrzeit')}
                   value={`${String(policy.hour).padStart(2, '0')}:${String(policy.minute).padStart(2, '0')}`}
                   onChange={(e) => {
                     const [h, m] = e.target.value.split(':').map(Number)
@@ -228,7 +235,7 @@ export function Backups({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad')
               </div>
             </Field>
 
-            <Field label="An welchen Tagen" hint="Nichts ausgewählt bedeutet: jeden Tag.">
+            <Field label={tr('An welchen Tagen')} hint={tr('Nichts ausgewählt bedeutet: jeden Tag.')}>
               <div className="chips">
                 {WEEKDAYS.map((day, i) => {
                   const on = policy.weekdays.includes(i)
@@ -239,38 +246,38 @@ export function Backups({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad')
                         ...policy,
                         weekdays: on ? policy.weekdays.filter((d) => d !== i)
                                      : [...policy.weekdays, i].sort(),
-                      })}>{day}</button>
+                      })}>{tr(day)}</button>
                   )
                 })}
               </div>
             </Field>
 
-            <Field label="Was gesichert wird">
-              <Toggle on={policy.include_profiles} name="Profile der Nutzer"
-                note="Das Home mit Projekten, Einstellungen und Schlüsseln. Der eigentliche Wert."
+            <Field label={tr('Was gesichert wird')}>
+              <Toggle on={policy.include_profiles} name={tr('Profile der Nutzer')}
+                note={tr('Das Home mit Projekten, Einstellungen und Schlüsseln. Der eigentliche Wert.')}
                 onChange={(v) => void savePolicy({ ...policy, include_profiles: v })} />
-              <Toggle on={policy.include_containers} name="Änderungen in den Containern"
-                note="Nur was ausserhalb des Home verändert wurde. Meist aus dem Golden Image reproduzierbar."
+              <Toggle on={policy.include_containers} name={tr('Änderungen in den Containern')}
+                note={tr('Nur was ausserhalb des Home verändert wurde. Meist aus dem Golden Image reproduzierbar.')}
                 onChange={(v) => void savePolicy({ ...policy, include_containers: v })} />
-              <Toggle on={policy.include_database} name="Datenbank"
-                note="Nutzer, Gruppen, Workspaces, Zuweisungen und das Audit-Log. Klein und schnell."
+              <Toggle on={policy.include_database} name={tr('Datenbank')}
+                note={tr('Nutzer, Gruppen, Workspaces, Zuweisungen und das Audit-Log. Klein und schnell.')}
                 onChange={(v) => void savePolicy({ ...policy, include_database: v })} />
             </Field>
 
-            <Field label="Wie viele tägliche Stände bleiben"
-              hint="Ältere werden nach dem Lauf entfernt.">
-              <CapacityFader aria-label="Tägliche Stände"
+            <Field label={tr('Wie viele tägliche Stände bleiben')}
+              hint={tr('Ältere werden nach dem Lauf entfernt.')}>
+              <CapacityFader aria-label={tr('Tägliche Stände')}
                 value={policy.keep_daily} min={1} max={30} step={1}
-                format={(v) => String(v)} unit="Stände"
+                format={(v) => String(v)} unit={tr('Stände')}
                 ticks={[1, 7, 14, 21, 30]} tickLabel={(t) => String(t)}
                 onChange={(v) => void savePolicy({ ...policy, keep_daily: v })} />
             </Field>
 
-            <Field label="Zusätzliche wöchentliche Stände"
-              hint="Aus den älteren wird je Kalenderwoche der neueste behalten.">
-              <CapacityFader aria-label="Wöchentliche Stände"
+            <Field label={tr('Zusätzliche wöchentliche Stände')}
+              hint={tr('Aus den älteren wird je Kalenderwoche der neueste behalten.')}>
+              <CapacityFader aria-label={tr('Wöchentliche Stände')}
                 value={policy.keep_weekly} min={0} max={26} step={1}
-                format={(v) => String(v)} unit="Wochen"
+                format={(v) => String(v)} unit={tr('Wochen')}
                 ticks={[0, 4, 8, 16, 26]} tickLabel={(t) => String(t)}
                 onChange={(v) => void savePolicy({ ...policy, keep_weekly: v })} />
             </Field>
@@ -279,31 +286,31 @@ export function Backups({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad')
 
         {policy.last_run_at && (
           <p className="field__hint" style={{ marginTop: 14 }}>
-            Zuletzt gelaufen {ago(new Date(policy.last_run_at).getTime())}
-            {policy.last_result ? ` — ${policy.last_result}` : ''}
+            {tr('Zuletzt gelaufen {when}', { when: ago(new Date(policy.last_run_at).getTime()) })}
+            {policy.last_result ? ` — ${tr(policy.last_result)}` : ''}
           </p>
         )}
       </div>
 
       {/* Sicherungen */}
       <div className="section__head">
-        <span className="silk">Vorhandene Sicherungen</span>
+        <span className="silk">{tr('Vorhandene Sicherungen')}</span>
         <span className="section__rule" />
         <button className="btn btn--sm" disabled={busy === 'db'}
           onClick={() => void runDatabase()}>
-          {busy === 'db' ? 'Läuft…' : 'Nur Datenbank'}
+          {busy === 'db' ? tr('Läuft…') : tr('Nur Datenbank')}
         </button>
         <button className="btn btn--sm btn--primary" disabled={busy === 'all'}
           onClick={() => void runAll()}>
-          {busy === 'all' ? 'Läuft…' : 'Jetzt alle sichern'}
+          {busy === 'all' ? tr('Läuft…') : tr('Jetzt alle sichern')}
         </button>
       </div>
 
       {list.length === 0 ? (
         <div className="empty">
-          <p className="empty__title">Noch nichts gesichert</p>
+          <p className="empty__title">{tr('Noch nichts gesichert')}</p>
           <p className="empty__body">
-            Stosse eine Sicherung von Hand an oder schalte den Zeitplan ein.
+            {tr('Stosse eine Sicherung von Hand an oder schalte den Zeitplan ein.')}
           </p>
         </div>
       ) : (
@@ -311,12 +318,12 @@ export function Backups({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad')
           <table className="tbl">
             <thead>
               <tr>
-                <th style={{ paddingLeft: 20 }}>Zeitpunkt</th>
-                <th>Nutzer</th>
-                <th>Art</th>
-                <th>Grösse</th>
-                <th>Ausgelöst</th>
-                <th>Status</th>
+                <th style={{ paddingLeft: 20 }}>{tr('Zeitpunkt')}</th>
+                <th>{tr('Nutzer')}</th>
+                <th>{tr('Art')}</th>
+                <th>{tr('Grösse')}</th>
+                <th>{tr('Ausgelöst')}</th>
+                <th>{tr('Status')}</th>
                 <th />
               </tr>
             </thead>
@@ -324,21 +331,21 @@ export function Backups({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad')
               {list.map((b) => (
                 <tr key={b.id} style={{ cursor: 'default' }}>
                   <td style={{ paddingLeft: 20 }} className="data">
-                    {new Date(b.started_at).toLocaleString('de-DE', {
+                    {new Date(b.started_at).toLocaleString(getLang() === 'de' ? 'de-DE' : 'en-GB', {
                       day: '2-digit', month: '2-digit',
                       hour: '2-digit', minute: '2-digit',
                     })}
                   </td>
                   <td style={{ fontWeight: 500 }}>{b.username ?? '—'}</td>
-                  <td style={{ color: 'var(--label)' }}>{KIND_TEXT[b.kind] ?? b.kind}</td>
+                  <td style={{ color: 'var(--label)' }}>{tr(KIND_TEXT[b.kind] ?? b.kind)}</td>
                   <td className="data" style={{ color: 'var(--label)' }}>
                     {b.status === 'ok' ? size(b.size_bytes) : '—'}
                     {b.file_count > 0 && (
-                      <span className="silk" style={{ marginLeft: 8 }}>{b.file_count} Dateien</span>
+                      <span className="silk" style={{ marginLeft: 8 }}>{tr('{n} Dateien', { n: b.file_count })}</span>
                     )}
                   </td>
                   <td style={{ color: 'var(--mute)', fontSize: 12 }}>
-                    {TRIGGER_TEXT[b.trigger] ?? b.trigger}
+                    {tr(TRIGGER_TEXT[b.trigger] ?? b.trigger)}
                     {b.actor ? ` · ${b.actor}` : ''}
                   </td>
                   <td>
@@ -352,20 +359,20 @@ export function Backups({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad')
                   <td style={{ textAlign: 'right', paddingRight: 20, whiteSpace: 'nowrap' }}>
                     {b.status === 'ok' && b.kind === 'profile' && (
                       <button className="btn btn--sm" disabled={busy === b.id}
-                        onClick={() => setConfirm(b)}>Wiederherstellen</button>
+                        onClick={() => setConfirm(b)}>{tr('Wiederherstellen')}</button>
                     )}
                     {b.status === 'ok' && b.kind === 'container' && b.size_bytes > 0 && (
                       <button className="btn btn--sm" disabled={busy === b.id}
-                        title="Legt die Dateien in den laufenden Arbeitsplatz zurück"
-                        onClick={() => void restoreIntoSession(b)}>In Session zurückspielen</button>
+                        title={tr('Legt die Dateien in den laufenden Arbeitsplatz zurück')}
+                        onClick={() => void restoreIntoSession(b)}>{tr('In Session zurückspielen')}</button>
                     )}
                     {b.status === 'ok' && b.kind === 'database' && (
                       <button className="btn btn--sm" disabled={busy === b.id}
-                        onClick={() => setDbHint(b)}>Wiederherstellen</button>
+                        onClick={() => setDbHint(b)}>{tr('Wiederherstellen')}</button>
                     )}
                     <button className="btn btn--sm btn--ghost" disabled={busy === b.id}
                       style={{ marginLeft: 6 }}
-                      aria-label="Sicherung löschen"
+                      aria-label={tr('Sicherung löschen')}
                       onClick={() => void remove(b)}>✕</button>
                   </td>
                 </tr>
@@ -382,22 +389,18 @@ export function Backups({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad')
           <div className="drawer" style={{ width: 'min(560px, 100vw)' }} role="dialog" aria-modal="true">
             <header className="drawer__head">
               <div>
-                <h2 className="h-card">Datenbank wiederherstellen</h2>
+                <h2 className="h-card">{tr('Datenbank wiederherstellen')}</h2>
                 <p className="sub" style={{ marginTop: 4 }}>
-                  {new Date(dbHint.started_at).toLocaleString('de-DE')}
+                  {new Date(dbHint.started_at).toLocaleString(getLang() === 'de' ? 'de-DE' : 'en-GB')}
                 </p>
               </div>
             </header>
             <div className="drawer__body">
               <p className="note-info" style={{ marginBottom: 16 }}>
-                Das geht bewusst nicht per Knopfdruck. Die Datenbank trägt die
-                Anmeldung, mit der du gerade hier stehst — sie unter der laufenden
-                Anwendung auszutauschen bricht jede offene Verbindung mittendrin.
+                {tr('Das geht bewusst nicht per Knopfdruck. Die Datenbank trägt die Anmeldung, mit der du gerade hier stehst — sie unter der laufenden Anwendung auszutauschen bricht jede offene Verbindung mittendrin.')}
               </p>
               <p className="sub" style={{ marginBottom: 12 }}>
-                Auf dem Server ausführen. Das Skript legt vorher eine
-                Sicherheitskopie an, hält API und Agent an, spielt zurück und
-                startet beides wieder:
+                {tr('Auf dem Server ausführen. Das Skript legt vorher eine Sicherheitskopie an, hält API und Agent an, spielt zurück und startet beides wieder:')}
               </p>
               <pre className="viewer__clip" style={{ minHeight: 0, whiteSpace: 'pre-wrap' }}>
 {`cd /opt/openterminalapps
@@ -405,12 +408,11 @@ export function Backups({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad')
   ${dbHint.path}`}
               </pre>
               <p className="field__hint">
-                Profile auf der Platte sind davon nicht betroffen. Nach der
-                Wiederherstellung müssen sich alle neu anmelden.
+                {tr('Profile auf der Platte sind davon nicht betroffen. Nach der Wiederherstellung müssen sich alle neu anmelden.')}
               </p>
             </div>
             <footer className="drawer__foot">
-              <button className="btn" onClick={() => setDbHint(null)}>Verstanden</button>
+              <button className="btn" onClick={() => setDbHint(null)}>{tr('Verstanden')}</button>
             </footer>
           </div>
         </>
@@ -423,29 +425,28 @@ export function Backups({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad')
           <div className="drawer" style={{ width: 'min(500px, 100vw)' }} role="dialog" aria-modal="true">
             <header className="drawer__head">
               <div>
-                <h2 className="h-card">Profil wiederherstellen</h2>
+                <h2 className="h-card">{tr('Profil wiederherstellen')}</h2>
                 <p className="sub" style={{ marginTop: 4 }}>{confirm.username}</p>
               </div>
             </header>
             <div className="drawer__body">
               <p className="note-warn" style={{ marginBottom: 16 }}>
-                Das aktuelle Profil von <b>{confirm.username}</b> wird durch den Stand vom{' '}
-                <b>{new Date(confirm.started_at).toLocaleString('de-DE')}</b> ersetzt.
-                Alles, was seitdem entstanden ist, verschwindet aus dem Arbeitsplatz.
+                {tr('Das aktuelle Profil von')} <b>{confirm.username}</b> {tr('wird durch den Stand vom')}{' '}
+                <b>{new Date(confirm.started_at).toLocaleString(getLang() === 'de' ? 'de-DE' : 'en-GB')}</b>{' '}
+                {tr('ersetzt. Alles, was seitdem entstanden ist, verschwindet aus dem Arbeitsplatz.')}
               </p>
               <p className="sub">
-                Der bisherige Stand wird nicht gelöscht, sondern daneben aufgehoben — falls
-                die Wiederherstellung doch nicht das Richtige war, lässt er sich zurückholen.
+                {tr('Der bisherige Stand wird nicht gelöscht, sondern daneben aufgehoben — falls die Wiederherstellung doch nicht das Richtige war, lässt er sich zurückholen.')}
               </p>
               <p className="sub" style={{ marginTop: 12 }}>
-                Laufende Sessions des Nutzers müssen vorher beendet sein.
+                {tr('Laufende Sessions des Nutzers müssen vorher beendet sein.')}
               </p>
             </div>
             <footer className="drawer__foot">
-              <button className="btn btn--ghost" onClick={() => setConfirm(null)}>Abbrechen</button>
+              <button className="btn btn--ghost" onClick={() => setConfirm(null)}>{tr('Abbrechen')}</button>
               <button className="btn btn--primary" disabled={busy === confirm.id}
                 onClick={() => void restore(confirm)}>
-                {busy === confirm.id ? 'Läuft…' : 'Wiederherstellen'}
+                {busy === confirm.id ? tr('Läuft…') : tr('Wiederherstellen')}
               </button>
             </footer>
           </div>

@@ -24,6 +24,10 @@ from typing import Any
 
 import docker
 
+# Adresse der eigenen Registry. Leer schaltet sie ab — dann bleiben Images
+# nur im Docker-Store dieses Hosts.
+REGISTRY = os.environ.get("OTA_REGISTRY", "").strip()
+
 _lock = threading.Lock()
 _builds: dict[str, dict[str, Any]] = {}
 _MAX_LOG = 200_000
@@ -31,12 +35,17 @@ _TIMEOUT = 45 * 60
 
 
 def render_dockerfile(base_image: str, apt_packages: list[str],
-                      vscode_extensions: list[str], setup_script: str) -> str:
+                      vscode_extensions: list[str], setup_script: str,
+                      mode: str = "workspace") -> str:
     """Erzeugt das Dockerfile aus den Angaben der Oberflaeche.
 
     Alle Eingaben werden mit shlex.quote entschaerft, bevor sie in eine
     Shell-Zeile wandern. Das Setup-Skript ist bewusst frei — es wird als Datei
     hineingelegt und ausgefuehrt, nicht in eine Kommandozeile eingebettet.
+
+    `mode` entscheidet ueber das Startverhalten: Ein Arbeitsplatz startet keine
+    Anwendung von selbst (siehe unten), ein Einzelanwendungs-Image behaelt das
+    Startskript des Basisimages.
     """
     lines = [
         f"FROM {base_image}",
@@ -88,6 +97,36 @@ def render_dockerfile(base_image: str, apt_packages: list[str],
         lines += [
             "COPY ota-setup.sh /tmp/ota-setup.sh",
             "RUN chmod +x /tmp/ota-setup.sh && /tmp/ota-setup.sh && rm -f /tmp/ota-setup.sh",
+            "",
+        ]
+
+    if mode == "workspace":
+        # Das Startskript des Basisimages ueberschreiben.
+        #
+        # Kasm-Images fuer einzelne Anwendungen bringen ein
+        # `custom_startup.sh` mit, das "ihre" Anwendung startet, und
+        # `vnc_startup.sh` startet dieses Skript **alle drei Sekunden neu**,
+        # sobald es sich beendet.
+        #
+        # In einem abgeleiteten Arbeitsplatz-Image ist das verheerend.
+        # Gemessen am 2026-08-27 mit einem von kasmweb/vs-code abgeleiteten
+        # Image: Das geerbte Skript startete `code`, VS Code ist
+        # einzelinstanzig, die zweite Instanz reichte den Aufruf weiter und
+        # beendete sich — worauf die Aufsicht sie erneut startete. Nach sechs
+        # Minuten: 119 leere Fenster, 2,5 GB belegt, schwarzer Bildschirm.
+        #
+        # Ein Arbeitsplatz startet seine Anwendungen selbst, auf Zuruf.
+        lines += [
+            "# Kein Selbststart einer Anwendung — der Arbeitsplatz startet sie",
+            "# auf Zuruf, jede auf ihrem eigenen Display.",
+            "RUN printf '%s\\n' "
+            "'#!/usr/bin/env bash' "
+            "'# Von OpenTerminalApps ersetzt: Im Arbeitsplatz startet keine' "
+            "'# Anwendung von selbst. Das Skript darf sich nicht beenden,' "
+            "'# sonst startet vnc_startup.sh es alle drei Sekunden neu.' "
+            "'while true; do sleep 3600; done' "
+            "> /dockerstartup/custom_startup.sh \\",
+            " && chmod +x /dockerstartup/custom_startup.sh",
             "",
         ]
 
@@ -182,11 +221,26 @@ def _run_build(build_id: str, tag: str, dockerfile: str, setup_script: str,
             # erfolgreich. Genau daran scheiterte der klassische Weg lautlos.
             client = docker.from_env()
             image = client.images.get(tag)
-            state["status"] = "ok"
             state["image_ref"] = tag
             state["size_bytes"] = image.attrs.get("Size", 0)
             state["digest"] = (image.id or "")[:71]
             _append(state, f"\nImage im Store: {tag} ({state['size_bytes'] / 1024**3:.2f} GB)\n")
+
+            # In die eigene Registry, falls es eine gibt — **vor** dem Setzen
+            # von "ok". Die API hoert auf zuzusehen, sobald der Zustand nicht
+            # mehr "building" ist; stuende das Hochladen danach, fehlte es im
+            # Protokoll und die Adresse bliebe die lokale.
+            #
+            # Der Build gilt auch dann als gelungen, wenn das Ablegen
+            # misslingt: Das Image liegt im Store und ist benutzbar. Ein Build,
+            # der an einer nicht erreichbaren Registry scheitert, waere die
+            # schlechtere Antwort.
+            if REGISTRY:
+                pushed = _push(state, client, tag)
+                if pushed:
+                    state["image_ref"] = pushed
+
+            state["status"] = "ok"
 
         except subprocess.TimeoutExpired:
             state["status"] = "failed"
@@ -205,10 +259,42 @@ def _run_build(build_id: str, tag: str, dockerfile: str, setup_script: str,
             state["finished_at"] = datetime.now(timezone.utc).isoformat()
 
 
+def _push(state: dict[str, Any], client: docker.DockerClient, tag: str) -> str | None:
+    """Legt eine Kopie in der eigenen Registry ab.
+
+    Zwei Gruende, und das Zurueckdrehen einer Fassung ist keiner davon — das
+    kann OTA laengst ueber `image_builds`:
+
+      1. Ein zweiter Host koennte die eigenen Golden Images sonst nicht
+         bekommen. Sie existieren nirgends ausser lokal.
+      2. Fremdes Aufraeumen. Kasms Agent hat auf diesem Host schon einmal
+         jedes ihm unbekannte Image geloescht.
+
+    Zurueck kommt die Adresse in der Registry — sie wird die Adresse des
+    Images, damit ein spaeterer Start sie von dort holen kann.
+    """
+    remote = f"{REGISTRY}/{tag}"
+    try:
+        client.images.get(tag).tag(remote)
+        _append(state, f"\nIn die Registry: {remote}\n")
+        for chunk in client.images.push(remote, stream=True, decode=True):
+            if "error" in chunk:
+                _append(state, f"Registry meldet: {chunk['error']}\n")
+                return None
+        _append(state, "Abgelegt.\n")
+        return remote
+    except docker.errors.APIError as exc:
+        _append(state, f"\nRegistry nicht erreichbar ({exc}). Das Image liegt "
+                       "im Store dieses Hosts und ist benutzbar.\n")
+        return None
+
+
 def start(tag: str, base_image: str, apt_packages: list[str],
           vscode_extensions: list[str], setup_script: str,
-          pause_containers: list[str] | None = None) -> dict[str, Any]:
-    dockerfile = render_dockerfile(base_image, apt_packages, vscode_extensions, setup_script)
+          pause_containers: list[str] | None = None,
+          mode: str = "workspace") -> dict[str, Any]:
+    dockerfile = render_dockerfile(base_image, apt_packages, vscode_extensions,
+                                   setup_script, mode)
     build_id = uuid.uuid4().hex
 
     _builds[build_id] = {

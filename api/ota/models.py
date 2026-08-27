@@ -139,6 +139,13 @@ class Template(Base):
     env: Mapped[dict] = mapped_column(JSONB, default=dict)
     rights: Mapped[dict] = mapped_column(JSONB, default=dict)
 
+    # Laeuft bei jedem Sessionstart als Nutzer im Container, bevor die Session
+    # als bereit gilt. Gedacht fuer alles, was ins Home gehoert, aber nicht ins
+    # Image: Firmenzertifikate nachziehen, Einstellungen setzen, ein Verzeichnis
+    # anlegen. Nicht fuer Installationen — die gehoeren ins Golden Image (§8),
+    # sonst wartet jeder Nutzer bei jedem Start darauf.
+    start_script: Mapped[str] = mapped_column(Text, default="")
+
     persistence_scope: Mapped[str] = mapped_column(String(16), default="user")
     idle_minutes: Mapped[int] = mapped_column(Integer, default=60)
     idle_action: Mapped[str] = mapped_column(String(16), default="stop")
@@ -459,4 +466,41 @@ class Setting(Base):
     value: Mapped[dict] = mapped_column(JSONB, default=dict)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+
+class Recipe(Base):
+    """Ein Bauplan fuer Software, die kein einfaches Paket ist.
+
+    Die drei mitgelieferten Rezepte (Firefox, Chrome, VSCodium) standen
+    anfangs im Frontend. Das war zu wenig: Wer eine vierte Anwendung
+    braucht, sass wieder vor einem leeren Skriptfeld — genau dem, was diese
+    Oberflaeche vermeiden soll.
+
+    `kind` sagt, nach welchem Muster das Skript entsteht; `params` haelt die
+    Antworten der Fuehrung. Beides wird aufgehoben, damit sich ein Rezept
+    spaeter aendern laesst, ohne es neu zu erfinden. `script` ist das
+    Ergebnis — und die Wahrheit: Wer den Text von Hand nachbessert, dessen
+    Fassung gilt.
+    """
+
+    __tablename__ = "recipes"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    slug: Mapped[str] = mapped_column(String(64), unique=True)
+    name: Mapped[str] = mapped_column(String(120))
+    glyph: Mapped[str] = mapped_column(String(8), default="\u25a2")
+    # Warum es dieses Rezept braucht — steht als Hinweis an der Schaltflaeche.
+    why: Mapped[str] = mapped_column(Text, default="")
+    kind: Mapped[str] = mapped_column(String(24), default="script")
+    params: Mapped[dict] = mapped_column(JSONB, default=dict)
+    script: Mapped[str] = mapped_column(Text, default="")
+    # Mitgeliefert oder selbst gebaut. Mitgelieferte lassen sich nicht
+    # loeschen, aber kopieren.
+    is_builtin: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
     )

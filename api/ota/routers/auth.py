@@ -10,12 +10,11 @@ from sqlalchemy.orm import Session as DbSession
 from .. import audit
 from ..config import settings
 from ..db import get_db
-from ..deps import current_user
+from ..deps import current_user, set_session_cookie
 from ..models import User
+from .. import settings_store
 from ..schemas import LoginIn, MeOut, PasswordChangeIn
-from ..security import (
-    hash_password, make_token, password_problem, verify_password,
-)
+from ..security import hash_password, password_problem, verify_password
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -23,17 +22,6 @@ LOCK_AFTER = 8
 LOCK_MINUTES = 15
 
 
-def _set_cookie(response: Response, user: User) -> None:
-    s = settings()
-    response.set_cookie(
-        s.cookie_name,
-        make_token(user, "access"),
-        httponly=True,
-        secure=s.cookie_secure,
-        samesite="lax",
-        max_age=s.access_token_minutes * 60,
-        path="/",
-    )
 
 
 @router.post("/login")
@@ -86,7 +74,7 @@ def login(
     audit.record(db, "login.ok", actor=user, request=request)
     db.commit()
 
-    _set_cookie(response, user)
+    set_session_cookie(response, user, settings_store.idle_minutes(db))
     return _me(user)
 
 
@@ -137,5 +125,5 @@ def change_password(
     db.commit()
 
     # Die eigene Sitzung bleibt bestehen, sonst wirft der Wechsel den Nutzer raus.
-    _set_cookie(response, user)
+    set_session_cookie(response, user, settings_store.idle_minutes(db))
     return {"status": "Passwort geändert"}

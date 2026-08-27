@@ -3,6 +3,23 @@
 Die hier dokumentierten Fälle sind beim Aufbau tatsächlich aufgetreten. Sie haben gemeinsam, dass sie
 **lautlos** scheitern — nichts stürzt ab, es funktioniert nur nicht.
 
+## „Diese Sitzung läuft nicht mehr", obwohl sie gerade gestartet wurde
+
+Diese Seite kommt vom Schutzwall aus `deploy/traefik/dynamic/session-guard.yml`. Er antwortet, wenn
+für einen `/s/…`-Pfad **kein** Session-Router passt.
+
+Das passierte früher direkt nach dem Start: Traefiks Docker-Anbindung bemerkt einen neuen Container
+erst beim nächsten Durchlauf, die Oberfläche öffnete den Stream aber sofort. In der Lücke dazwischen
+gab es keine Route.
+
+**Behoben:** Die API meldet eine Session erst als `running`, wenn Traefik ihre Route kennt
+(`_wait_for_route()` in `api/ota/routers/sessions.py`), und der Agent wartet zusätzlich, bis
+KasmVNC im Container Verbindungen annimmt. Bleibt die Route aus, steht die Session auf `starting`
+statt auf `running` — das Dashboard versucht es dann weiter, statt eine Sackgasse zu zeigen.
+
+Kommt die Seite trotzdem, ist die Session wirklich weg: beendet, aufgeräumt oder der Container
+gestorben. Ein Blick in **Betrieb → Sessions** zeigt, was gilt.
+
 ## Zwischenablage funktioniert nicht
 
 In dieser Reihenfolge prüfen:
@@ -15,6 +32,21 @@ technisch nicht verfügbar. → [Kapitel 10](10-zertifikate-und-https.md)
 Der Session-Viewer bettet den Stream ein. Ohne `allow="clipboard-read; clipboard-write"` blockiert die
 Permissions-Policy den Zugriff — **ohne Fehlermeldung**. Das ist die häufigste Ursache in
 Eigenbauten.
+
+**2b · Hat der Client die Zwischenablage im iframe abgeschaltet?**
+KasmVNC tut das von sich aus, sobald er nicht die oberste Seite ist. Im Viewer die Kontrollleiste
+des Streams öffnen und nachsehen, oder in der Browser-Konsole:
+
+```js
+const d = document.querySelector('.viewer__frame').contentDocument
+d.getElementById('noVNC_setting_clipboard_down').checked   // muss true sein
+```
+
+Ist der Wert `false`, fehlen die Parameter in der Stream-Adresse. Sie muss
+`…&clipboard_up=1&clipboard_down=1` enthalten. Der Weg **aus der Session heraus** ist sonst tot,
+und zwar völlig lautlos: kein Fehler, keine Konsolenmeldung, das Feld bleibt leer. Der Weg **in die
+Session hinein** funktioniert davon unabhängig weiter — wenn also nur eine Richtung fehlt, ist das
+hier die erste Vermutung.
 
 **3 · Nimmt der Server es zurück?**
 ```bash
@@ -37,6 +69,170 @@ Rechte → Zwischenablage. Kopieren und Einfügen sind getrennt schaltbar.
 Jede App läuft auf einem eigenen X-Display mit eigener Zwischenablage. Dafür läuft die Brücke im
 Container. Prüfen, ob sie läuft — und ob das Kopieren in den Rechten überhaupt erlaubt ist, denn
 sonst startet sie bewusst nicht. → [Kapitel 4](04-zwischenablage.md)
+
+## VS Code öffnet sich, aber der Bildschirm bleibt leer
+
+**Symptom:** Im Arbeitsplatz startet VS Code, der Stream verbindet sich — und es kommt kein Bild.
+Oder: Der Container füllt sich ohne erkennbaren Grund mit Arbeitsspeicher.
+
+**Ursache (behoben am 2026-08-27), zwei Schichten:**
+
+**1 · Das geerbte Startskript.** Kasm-Images für einzelne Anwendungen bringen ein
+`/dockerstartup/custom_startup.sh` mit, das „ihre" Anwendung startet. `vnc_startup.sh` beaufsichtigt
+dieses Skript und **startet es alle drei Sekunden neu**, sobald es sich beendet. In einem davon
+abgeleiteten Arbeitsplatz-Image ist das verheerend: Das Skript rief `code` auf, VS Code ist
+einzelinstanzig, die zweite Instanz reichte den Aufruf an die erste weiter und beendete sich —
+worauf die Aufsicht sie erneut startete. Nach sechs Minuten: 119 leere VS-Code-Fenster, 2,5 GB
+belegt, schwarzer Bildschirm.
+
+OTA hängt in Arbeitsplatz-Containern jetzt ein Ersatzskript darüber, das nichts startet, und neu
+gebaute Arbeitsplatz-Images bringen es gleich mit. Anwendungen startet der Agent auf Zuruf.
+
+**2 · Der gespeicherte Fensterzustand.** VS Code merkt sich seine offenen Fenster und stellt sie
+beim nächsten Start wieder her. Nach einem solchen Fenstersturm steht die Zahl im Profil — und der
+Sturm wiederholt sich bei jedem Start, auch nachdem die Ursache behoben ist.
+
+**Reparatur eines betroffenen Profils.** Die Reihenfolge ist wichtig: erst VS Code beenden, dann die
+Datei ändern. Sonst schreibt VS Code beim Beenden seinen alten Zustand zurück.
+
+```bash
+CN=<container>   # docker ps --filter "label=ota.session_id"
+
+docker exec -u 1000 "$CN" pkill -f /usr/share/code/code
+sleep 3
+
+docker exec -i -u 1000 "$CN" python3 - <<'EOF'
+import json, pathlib
+p = pathlib.Path("/home/kasm-user/.config/Code/User/globalStorage/storage.json")
+d = json.loads(p.read_text())
+d.setdefault("windowsState", {})["openedWindows"] = []
+p.write_text(json.dumps(d))
+EOF
+```
+
+Danach die Anwendung im Dashboard neu starten. Wie viele Fenster wirklich offen sind, zeigt
+
+```bash
+docker exec "$CN" bash -lc 'export HOME=/home/kasm-user XAUTHORITY=$HOME/.Xauthority
+  DISPLAY=:1 wmctrl -l'
+```
+
+Genau zwei Zeilen sind richtig: `Desktop` (das Hintergrundbild) und die Anwendung.
+
+## Zwei Arbeitsplätze lassen sich nicht gleichzeitig starten
+
+**Meldung:** „… läuft schon und benutzt dasselbe Zuhause."
+
+Das ist keine Störung, sondern Absicht. Alle Workspaces mit Persistenz **Pro Nutzer** teilen sich
+dasselbe `/home/kasm-user`. Zwei laufende Container auf einem Zuhause haben in der Praxis zweimal
+Schaden angerichtet:
+
+- Der Startvorgang der Kasm-Images schreibt `~/.kasmpasswd` neu — der zweite Container entwertete
+  damit die Zugangsdaten des ersten (siehe Abschnitt zu 401).
+- VS Code legt seinen Steuerkanal als Socket im Profil ab. Der zweite Container fand ihn und
+  schickte seine Fenster in den *ersten* Container.
+
+**Was tun:** Entweder den anderen Arbeitsplatz beenden — oder dem zweiten Workspace unter
+*Ressourcen → Persistentes Profil* die Einstellung **Pro Workspace** geben. Dann bekommt er sein
+eigenes Zuhause und beide laufen nebeneinander. Der Preis: getrennte Einstellungen und Projekte.
+
+## „Die Daten konnten nicht geladen werden" nach einem Update
+
+**Ursache (behoben am 2026-08-27):** `Base.metadata.create_all()` legt fehlende **Tabellen** an,
+fehlende **Spalten** nicht. Eine neue Spalte im Modell bedeutete deshalb: Der Start meldete „Schema
+bereit", und danach scheiterte jede Abfrage auf diese Tabelle mit
+
+```
+column templates.start_script does not exist
+```
+
+Für den Anwender sah das aus wie „Unerwarteter Fehler. Der Vorgang wurde abgebrochen."
+
+**Behoben:** Beim Start werden fehlende Spalten ergänzt (`api/ota/schema_sync.py`). Was dabei
+passiert, steht im Protokoll:
+
+```bash
+docker compose -f deploy/docker-compose.yml logs api | grep "Spalte ergänzt"
+```
+
+Ergänzt wird nur, **hinzugefügt** — nie gelöscht, nie umbenannt, nie ein Typ geändert. Eine Spalte,
+die im Modell fehlt, kann ein vergessener Rest sein oder das Zeichen dafür, dass die Datenbank
+neuer ist als der Code; im zweiten Fall wäre Löschen Datenverlust. Was sich nicht gefahrlos
+ergänzen lässt — eine Spalte ohne Vorgabewert, die nicht leer sein darf — wird gemeldet und
+verlangt eine Migration von Hand.
+
+## „Es sind höchstens 6 Anwendungen gleichzeitig möglich", obwohl keine läuft
+
+**Ursache (behoben am 2026-08-27):** Die Displaynummer wurde aus der **Position im App-Katalog**
+abgeleitet. Damit galt die Grenze nicht für gleichzeitig offene Anwendungen, sondern für die Grösse
+des Katalogs: Ab dem siebten Eintrag liess sich eine Anwendung nie starten. Alphabetisch traf es
+meist VS Code und VSCodium.
+
+**Behoben:** Vergeben wird das erste freie Display, gemessen an den laufenden Streams. Der Katalog
+darf beliebig gross sein; gleichzeitig offen sind weiterhin höchstens sechs.
+
+## Eine Anwendung öffnet, der Bildschirm bleibt schwarz
+
+Zuerst das Protokoll der Anwendung im Container ansehen:
+
+```bash
+docker exec <container> cat /tmp/ota-app-<slug>.log
+```
+
+**Der häufigste Fund bei Electron- und Chromium-Anwendungen** (VS Code, VSCodium, Chrome, viele
+Chat-Programme):
+
+```
+Failed to move to new namespace: ... errno = Operation not permitted
+FATAL: Check failed: . : Invalid argument (22)
+```
+
+Diese Programme legen ihre Sandbox über PID-Namespaces an; im Container scheitert das. Sie brauchen
+`--no-sandbox`. Die `.desktop`-Datei sagt darüber nichts — sie ist für einen normalen Desktop
+geschrieben.
+
+OTA erkennt das inzwischen beim *Im Image nachsehen*: Ein Programm, neben dem eine Datei
+`chrome-sandbox` liegt, bekommt den Schalter von selbst. Steht er in einem älteren Katalogeintrag
+noch nicht, genügt ein erneutes Durchsehen und Übernehmen.
+
+## Der Desktop ist leer — kein Menü, keine Leiste
+
+Dann fehlt `xfce4-panel` im Golden Image. Frühe Arbeitsplatz-Images hatten es bewusst entfernt, weil
+Anwendungen über OTA gestartet werden; für den Desktop als Ansicht braucht es die Leiste aber.
+
+Nachrüsten über *Software → Pakete*: `xfce4-panel` und `xfce4-whiskermenu-plugin`, bauen,
+aktivieren. Laufende Sessions bekommen es beim nächsten Start.
+
+## Eine laufende Session antwortet plötzlich mit 401
+
+**Symptom:** Ein Arbeitsplatz läuft, das Bild stand eben noch — und auf einmal kommt für jeden
+seiner Streams `401`. Neu anmelden hilft nicht. Der Container läuft weiter, `docker ps` zeigt ihn,
+die Anwendungen darin arbeiten.
+
+**Ursache (behoben am 2026-08-27):** Alle Sessions eines Nutzers teilen sich dasselbe
+`/home/kasm-user` — das ist der Sinn des persistenten Profils. Der Startvorgang der Kasm-Images
+schreibt aber bei *jedem* Containerstart `~/.kasmpasswd` aus `VNC_PW` neu. Startete jemand eine
+zweite Session, überschrieb sie damit das Passwort der bereits laufenden ersten. Deren Traefik-Regel
+schickte weiterhin die alten Zugangsdaten — KasmVNC lehnte sie ab.
+
+Der Fehler war unauffällig, weil an der laufenden Session nichts passiert war: kein Neustart, kein
+Fehler im Log, nur 401 aus dem Nichts.
+
+**Behebung:** Das VNC-Passwort hängt jetzt am Profil und nicht mehr an der Session
+(`vnc_secret()` in `api/ota/security.py`). Wer sich dasselbe Zuhause teilt, teilt sich den Zugang —
+und ein Überschreiben schreibt denselben Wert.
+
+**Prüfen, ob es wieder auftritt:**
+
+```bash
+# Zeigt der Container ein PID-File mit fremdem Hostnamen, hat ein anderer
+# Container in dasselbe Profil geschrieben.
+docker exec <container> bash -c 'hostname; ls /home/kasm-user/.vnc/*.pid'
+```
+
+Stimmen Hostname und PID-Datei nicht überein, sind zwei Container auf demselben Profil — das ist
+normal. Kommt dann trotzdem 401, sind die Passwörter auseinandergelaufen; die betroffenen Sessions
+einmal beenden und neu starten.
 
 ## Traefik erzeugt keine Route — alles gibt 404
 

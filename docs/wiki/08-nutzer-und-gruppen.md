@@ -32,6 +32,27 @@ An drei Stellen, nicht nur im Menü:
 3. Abfrage-Beschränkung: Nicht-Admins bekommen ausschließlich die eigenen Datensätze; nicht „alles
    holen und im Frontend filtern"
 
+## Administratoren sind root in ihrem Container ✅
+
+Wer in OTA administriert, bekommt in **seinen eigenen** Session-Containern passwortloses `sudo`.
+Ohne das liesse sich dort nichts nachinstallieren und nichts prüfen — und genau dafür meldet sich
+ein Administrator ja an einem Arbeitsplatz an.
+
+Technisch heisst das zweierlei: Der Container läuft ohne `no-new-privileges`, und ihm werden die
+Linux-Fähigkeiten nicht entzogen. Beides ist nötig, damit `sudo` überhaupt anläuft. Für alle
+anderen Nutzer bleibt beides scharf.
+
+**Was das bedeutet, in aller Deutlichkeit:** Root in einem Container ist nicht Root auf dem Host,
+aber der Abstand dazwischen ist kleiner als bei einem unprivilegierten Container. Diese Rechte
+gehören deshalb an dieselbe wenige Personen wie der Zugang zum Docker-Host — nicht an „alle, die
+mal etwas verwalten müssen". Wer Nutzer nur anlegen und Workspaces pflegen soll, bekommt dafür die
+einzelnen Rechte (*Nutzer anlegen und ändern*, *Workspaces anlegen und ändern*) statt
+*Vollzugriff auf alles*.
+
+Änderungen an `/etc` und nachinstallierte Pakete überleben den Container nicht — sie liegen
+ausserhalb von `/home`. Was dauerhaft dabei sein soll, gehört ins Golden Image
+([Kapitel 7](07-golden-images.md)).
+
 ## Passwörter und Anmeldung
 
 - **Argon2id**, Mindestlänge 12, Abgleich gegen bekannt kompromittierte Passwörter

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -47,14 +50,24 @@ def password_problem(pw: str) -> str | None:
     return None
 
 
-def make_token(user: User, kind: str = "access") -> str:
+def make_token(user: User, kind: str = "access", minutes: int | None = None) -> str:
+    """Baut ein Zugangsmerkmal.
+
+    `minutes` uebersteuert die Frist aus der Konfiguration. Gebraucht wird das
+    fuer die rollende Anmeldung: Wie lange jemand angemeldet bleibt, steht in
+    der Datenbank und ist im Verwaltungsbereich einstellbar — nicht in einer
+    Umgebungsvariablen, die einen Neustart braechte.
+    """
     s = settings()
     now = datetime.now(timezone.utc)
-    lifetime = (
-        timedelta(minutes=s.access_token_minutes)
-        if kind == "access"
-        else timedelta(days=s.refresh_token_days)
-    )
+    if minutes is not None:
+        lifetime = timedelta(minutes=minutes)
+    else:
+        lifetime = (
+            timedelta(minutes=s.access_token_minutes)
+            if kind == "access"
+            else timedelta(days=s.refresh_token_days)
+        )
     payload = {
         "sub": str(user.id),
         "typ": kind,
@@ -74,9 +87,39 @@ def read_token(token: str) -> dict | None:
         return None
 
 
-def vnc_secret() -> str:
-    """Einmal-Passwort fuer KasmVNC. Sieht der Browser nie."""
-    return secrets.token_urlsafe(24)[:32]
+def vnc_secret(user: User, profile: str) -> str:
+    """Das KasmVNC-Passwort dieser Session. Sieht der Browser nie.
+
+    Frueher war das ein Zufallswert je Session. Das war falsch, und der Fehler
+    war heimtueckisch:
+
+    Alle Sessions eines Nutzers teilen sich dasselbe `/home/kasm-user` — das
+    ist der Sinn des persistenten Profils. Der Startvorgang der Kasm-Images
+    schreibt aber bei *jedem* Containerstart `~/.kasmpasswd` aus `VNC_PW` neu.
+    Startete jemand eine zweite Session, ueberschrieb sie damit das Passwort
+    der ersten. Die lief weiter, ihr Bild lief weiter — aber jede neue Anfrage
+    an ihren Stream bekam 401, ohne dass sich an der laufenden Session
+    irgendetwas geaendert haette. Gemessen am 2026-08-27: Arbeitsplatz um
+    10:29 gestartet, VS Code um 11:12 dazu, danach antworteten alle Displays
+    des Arbeitsplatzes mit 401.
+
+    Deshalb haengt das Passwort jetzt am Profil und nicht an der Session: Wer
+    sich dasselbe Zuhause teilt, teilt sich auch den Zugang. Das schwaecht
+    nichts ab — es ist dieselbe Person, und die Datei liegt ohnehin in genau
+    diesem Zuhause.
+
+    Abgeleitet statt gespeichert, damit es keine weitere Spalte braucht, die
+    mit der Wirklichkeit auseinanderlaufen kann. Ohne Profil (fluechtige
+    Sessions) hat jeder Container sein eigenes Zuhause — dann darf und soll
+    das Passwort je Container verschieden sein.
+    """
+    if not profile:
+        return secrets.token_urlsafe(24)[:32]
+    material = f"vnc:{user.id}:{profile}".encode()
+    digest = hmac.new(settings().jwt_secret.encode(), material, hashlib.sha256).digest()
+    # urlsafe-Base64 ohne Polster: KasmVNC nimmt das Passwort als Zeichenkette,
+    # und ein "=" am Ende hat in Basic-Auth schon oft genug Aerger gemacht.
+    return base64.urlsafe_b64encode(digest).decode().rstrip("=")[:32]
 
 
 # --------------------------------------------------------------------------

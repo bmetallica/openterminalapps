@@ -7,10 +7,12 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session as DbSession
 
-from .. import audit
+from .. import agent_client, audit
 from ..db import get_db
 from ..deps import current_user, require_permission
-from ..models import Group, Template, TemplateApp, TemplateOverride, User
+from ..models import (
+    Group, Session as SessionModel, Template, TemplateApp, TemplateOverride, User,
+)
 from ..schemas import (
     AllocationOut, AppIn, OverrideIn, OverrideOut, TemplateIn, TemplateOut,
 )
@@ -112,6 +114,22 @@ def delete_template(
     tpl = db.get(Template, template_id)
     if not tpl:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Workspace nicht gefunden")
+
+    # Ein Workspace mit laufenden Sessions wird nicht weggezogen. Die Container
+    # blieben sonst als Waisen zurueck, und ihre Nutzer saehen mitten in der
+    # Arbeit eine Fehlerseite statt einer Erklaerung.
+    live = db.scalars(select(SessionModel).where(
+        SessionModel.template_id == tpl.id,
+        SessionModel.status.in_(("starting", "running", "paused")),
+    )).all()
+    if live:
+        who = ", ".join(sorted({s.user.username for s in live}))
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"Hier läuft noch etwas: {who}. Beende die Sessions unter "
+            "Betrieb, dann lässt sich der Workspace löschen.",
+        )
+
     name = tpl.friendly_name
     db.delete(tpl)
     audit.record(db, "template.deleted", actor=actor, object_type="template",
@@ -216,6 +234,100 @@ def set_override(
 # --------------------------------------------------------------------------
 # App-Katalog des Arbeitsplatzes (plan.md §9.5)
 # --------------------------------------------------------------------------
+
+@router.get("/{template_id}/packages", dependencies=[Depends(manage)])
+def check_packages(
+    template_id: uuid.UUID,
+    names: str = "",
+    db: DbSession = Depends(get_db),
+) -> list[dict]:
+    """Kennt das Image dieser Vorlage diese Pakete?
+
+    Gefragt wird, bevor gebaut wird. Ein Build dauert Minuten, und an einem
+    Debian-Namen auf einem Ubuntu-Image (`firefox-esr`) scheitert er erst am
+    Ende — mit einer Meldung, die in hundert Zeilen Protokoll steht.
+    """
+    tpl = db.get(Template, template_id)
+    if not tpl:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Workspace nicht gefunden")
+    wanted = [n.strip() for n in names.split(",") if n.strip()]
+    if not wanted:
+        return []
+    return agent_client.image_packages(tpl.image_ref, wanted)
+
+
+@router.get("/{template_id}/apps/discover", dependencies=[Depends(manage)])
+def discover_apps(
+    template_id: uuid.UUID,
+    db: DbSession = Depends(get_db),
+) -> list[dict]:
+    """Welche Anwendungen im Image dieser Vorlage installiert sind.
+
+    Der Weg vom „Firefox einbauen" zum „Firefox im Dashboard" fuehrt sonst
+    ueber drei Fragen, die niemand beantworten will: Wie heisst die
+    Binaerdatei, wo liegt sie, und wie soll das Ding in der Oberflaeche
+    heissen. Das steht alles in den .desktop-Dateien des Images.
+
+    Zurueck kommt die Vereinigung aus Gefundenem und bereits Eingetragenem.
+    `in_catalog` sagt, was schon im Arbeitsplatz angeboten wird; `missing`
+    markiert Eintraege, die im Katalog stehen, aber im Image nicht mehr
+    vorkommen — etwa nach einem Basiswechsel.
+    """
+    tpl = db.get(Template, template_id)
+    if not tpl:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Workspace nicht gefunden")
+
+    found = agent_client.image_applications(tpl.image_ref)
+
+    # Zuordnung ueber zwei Wege, weil beide vorkommen: Der Katalog kann eine
+    # eigene Kennung tragen (`vscode`), waehrend die .desktop-Datei einen
+    # anderen Namen hat (`visual-studio-code`). Was zaehlt, ist das Programm —
+    # also auch der Name der Binaerdatei.
+    known = {a.slug: a for a in tpl.apps}
+    by_binary = {a.exec_cmd.rsplit("/", 1)[-1]: a for a in tpl.apps}
+
+    out: list[dict] = []
+    matched: set[str] = set()
+    seen: set[str] = set()
+    for entry in found:
+        current = known.get(entry["slug"]) or by_binary.get(str(entry["binary"]))
+        if current is not None:
+            matched.add(current.slug)
+            # Die Kennung des Katalogs behalten: An ihr haengt die
+            # Displaynummer und damit die Traefik-Route.
+            entry = {**entry, "slug": current.slug}
+        # Zwei .desktop-Dateien koennen auf dasselbe Programm zeigen (Thunar
+        # bringt eine fuer die Anwendung und eine fuer den Ordner-Handler mit).
+        # Nach der Zuordnung faellt das zusammen — hier einmal reicht.
+        if entry["slug"] in seen:
+            continue
+        seen.add(str(entry["slug"]))
+        out.append({
+            **entry,
+            "in_catalog": current is not None,
+            "is_enabled": current.is_enabled if current else False,
+            "fixed_display": current.fixed_display if current else None,
+            "missing": False,
+            # Name und Zeichen aus dem Katalog haben Vorrang: Wer sie
+            # angepasst hat, will das nicht bei jedem Durchsehen verlieren.
+            "name": current.name if current else entry["name"],
+            "icon": current.icon if current else entry["icon"],
+        })
+
+    for slug, app in known.items():
+        if slug in matched:
+            continue
+        out.append({
+            "slug": slug, "name": app.name, "icon": app.icon,
+            "exec_cmd": app.exec_cmd, "exec_args": app.exec_args,
+            "categories": [], "needs_terminal": False,
+            "binary": app.exec_cmd.rsplit("/", 1)[-1],
+            "in_catalog": True, "is_enabled": app.is_enabled,
+            "fixed_display": app.fixed_display, "missing": True,
+        })
+
+    return sorted(out, key=lambda a: (a["missing"], str(a["name"]).lower()))
+
 
 @router.put("/{template_id}/apps", dependencies=[Depends(manage)])
 def set_apps(

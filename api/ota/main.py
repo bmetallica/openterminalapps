@@ -10,10 +10,13 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import select
 
-from . import agent_client
+from . import agent_client, recipes, schema_sync
 from .db import Base, SessionLocal, engine
 from .models import Session as SessionModel
-from .routers import admin, auth, backups, builds, internal, sessions, templates
+from .routers import (
+    admin, auth, backups, builds, help as help_router, internal, pwa,
+    recipes as recipes_router, sessions, shared as shared_router, templates,
+)
 
 log = logging.getLogger("ota")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -141,9 +144,23 @@ async def _reaper() -> None:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    # Fuer den ersten Start. Spaetere Schemaaenderungen laufen ueber Alembic.
+    # create_all legt fehlende Tabellen an — fehlende Spalten nicht. Genau das
+    # hat am 2026-08-27 eine laufende Anlage lahmgelegt: neue Spalte im Modell,
+    # "Schema bereit" im Protokoll, und danach scheiterte jede Abfrage auf die
+    # Tabelle. Deshalb der zweite Schritt (siehe schema_sync.py).
     Base.metadata.create_all(bind=engine)
+    added = schema_sync.sync(engine)
+    if added:
+        log.info("Schema ergänzt: %s", ", ".join(added))
     log.info("Schema bereit")
+
+    # Die mitgelieferten Rezepte gehoeren in dieselbe Tabelle wie selbst
+    # gebaute. Sonst gaebe es zwei Quellen fuer dasselbe.
+    with SessionLocal() as db:
+        try:
+            recipes.ensure_builtins(db)
+        except Exception as exc:  # noqa: BLE001 — der Start darf daran nicht scheitern
+            log.warning("Mitgelieferte Rezepte nicht angelegt: %s", exc)
 
     tasks = [asyncio.create_task(_reaper()), asyncio.create_task(_scheduler())]
     try:
@@ -172,6 +189,10 @@ app.include_router(builds.router)
 app.include_router(backups.router)
 app.include_router(sessions.router)
 app.include_router(admin.router)
+app.include_router(help_router.router)
+app.include_router(pwa.router)
+app.include_router(recipes_router.router)
+app.include_router(shared_router.router)
 app.include_router(internal.router)
 
 
