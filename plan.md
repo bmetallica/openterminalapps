@@ -883,9 +883,10 @@ Kein einziger Eintrag verlangt eine GPU.
    Platz auf diesem Host ist ein 6,5-GB-Image eine Entscheidung, keine Nebensache. Das UI warnt, wenn
    der Import den freien Platz nennenswert angreift.
 5. `modified` erlaubt einen Aktualisierungs-Check, ohne den ganzen Katalog neu zu verarbeiten.
-6. **Signatur**: Der Katalog trägt ein ES256-JWT über einen Hash des Inhalts. Ob und wie OTA das prüft,
-   ist ein offener Punkt (§17.12) — der öffentliche Schlüssel liegt bei Kasm. Bis das geklärt ist,
-   gilt: **Registries sind eine Vertrauensentscheidung des Admins**, und das UI sagt das auch so.
+6. **Signatur**: Der Katalog trägt ein ES256-JWT über einen Hash des Inhalts. Ob OTA das prüft, ist
+   entschieden (§17.11, [ADR-004](docs/adr/004-keine-signaturpruefung-fuer-registries.md)): **nein**
+   — der öffentliche Schlüssel liegt bei Kasm, und ohne ihn wäre die Prüfung Theater. Es gilt:
+   **Registries sind eine Vertrauensentscheidung des Admins**, und das UI sagt das auch so.
    Ein importiertes Image kommt aus einer fremden Quelle und läuft anschließend im eigenen Netz.
 
 **Rechtlicher Hinweis**: Der Katalog verweist nur auf Images; deren Lizenzen gelten unverändert (§3).
@@ -1661,11 +1662,14 @@ Aus den bestehenden Images werden Templates: Obsidian, Thunderbird, GIMP, Inksca
 | Risiko | Maßnahme |
 |---|---|
 | Docker-Socket = Root | Nur `ota-agent` hat ihn; API und Web nicht. Später optional Socket-Proxy mit Endpoint-Whitelist oder rootless Docker |
-| Container-Ausbruch | Kein `--privileged`, `no-new-privileges`, alle Capabilities gedroppt außer den nötigen, `seccomp`-Default, read-only Root-FS wo möglich, `/dev/shm` limitiert. **Ausnahme: Administratoren** — siehe §15.1 |
+| Container-Ausbruch | Kein `--privileged`, `no-new-privileges`, `cap_drop: ALL` — **auch kein `SYS_ADMIN`**, siehe §15.4 —, `seccomp`-Default, `pids_limit`, `/dev/shm` begrenzt. **Ausnahme: Administratoren** — siehe §15.1 |
 | Anmeldung läuft mitten in der Arbeit ab | Rollende Sitzung: Jede Anfrage schiebt die Frist nach vorn. Die Frist misst Untätigkeit, nicht Zeit, und ist im Verwaltungsbereich zwischen 30 min und 48 h einstellbar |
 | Zweite Session entwertet die erste | Das VNC-Passwort hängt am **Profil**, nicht an der Session. Sonst überschreibt der Start eines zweiten Containers `~/.kasmpasswd` im gemeinsamen Home — siehe §15.3 |
 | Fremdzugriff auf Session | `forwardAuth` bei **jedem** Request; VNC-Secret nur serverseitig; Session-IDs sind UUIDv4 |
-| Ressourcen-DoS durch einen Nutzer | Harte `cpus`/`mem_limit`/`pids_limit` pro Container, Session-Limit pro Nutzer, globale Kapazitätsprüfung vor Start |
+| Ressourcen-DoS durch einen Nutzer | Harte `cpus`/`mem_limit`/`pids_limit` pro Container, Session-Limit pro Nutzer, Preflight vor jedem Start: Arbeitsspeicher, freier Plattenplatz (Untergrenze) und Kontingent des eigenen Zuhauses |
+| Zweiten Faktor raten | Fehlversuche beim Code zählen auf dieselbe Sperre wie beim Passwort (8 Versuche, 15 min). Ohne das war ein sechsstelliger Code bei bekanntem Passwort beliebig oft ratbar — siehe §15.4 |
+| Konten ausspähen | Gleiche Meldung **und gleiche Dauer** für „gibt es nicht" und „falsches Passwort"; bei unbekanntem Namen läuft ein Argon2-Durchlauf gegen einen Blindhash |
+| Fremder Bildschirm über ein Verwaltungsrecht | `sessions.view_all` erlaubt sehen und beenden, **nicht** das Zuschalten auf `/s/<id>/`. Dafür gilt Eigentum oder voller Admin — siehe §15.4 |
 | Geheimnisse in Golden Images | Automatischer Secret-Filter beim „Session einfrieren", Warnung bei Fund, Build-Args nie im Image-Layer persistieren |
 | Rechteausweitung im UI | Autorisierung serverseitig an jedem Endpunkt, Query-Scoping statt Frontend-Filter |
 | Session-Hijacking | HttpOnly/Secure/SameSite-Cookies, kurze Token-Lifetime, Refresh-Rotation, Logout invalidiert serverseitig |
@@ -1736,6 +1740,42 @@ je Session gewürfelt. Wer sich dasselbe Zuhause teilt, teilt sich den Zugang; e
 schreibt denselben Wert. Das schwächt nichts ab — es ist dieselbe Person, und die Datei liegt
 ohnehin in genau diesem Zuhause. Flüchtige Sessions ohne Profil behalten ihren Zufallswert, denn
 dort hat jeder Container sein eigenes Home.
+
+---
+
+### 15.4 Was ein Durchsehen der Anmeldepfade zutage brachte
+
+Am 2026-08-27 sind die Authentifizierungs- und Autorisierungspfade einmal von Hand durchgesehen
+worden. Vier Befunde, alle behoben, alle mit einer Prüfung in `scripts/test-authz.sh` festgenagelt —
+denn ein Befund ohne Prüfung kommt wieder.
+
+**1 · `SYS_ADMIN` für jeden Arbeitsplatz.** Die Fähigkeit stand vom ersten Tag an im Code, ohne
+Begründung. Sie erlaubt Einhängungen und eigene Namespaces und ist damit praktisch gleichbedeutend
+mit Root auf dem Host. Sie neben `no-new-privileges` zu setzen und im selben Kommentar zu
+behaupten, ein Nicht-Administrator komme nicht an Root, war ein Widerspruch. Der Verdacht, Chrome
+und Electron bräuchten sie, stimmt nicht — die laufen über `--no-sandbox`.
+
+Zwei Folgen, beide gemessen und beide der bessere Tausch: Firefox meldet
+`CanCreateUserNamespace() clone() failure: EPERM` und startet normal (der Standard-seccomp-Filter
+lässt eigene User-Namespaces nur mit `SYS_ADMIN` zu; Firefox fällt auf eine schwächere interne
+Sandbox zurück, die ohnehin nur gegen eine bösartige Webseite in genau dem Container schützt, in
+dem der Nutzer schon ein Terminal hat). Und AppImages hängen sich nicht mehr per FUSE ein — das
+Rezept setzt jetzt `APPIMAGE_EXTRACT_AND_RUN=1`.
+
+**2 · `sessions.view_all` reichte bis auf den fremden Bildschirm.** In der Oberfläche heißt das
+Recht „Alle Sessions sehen und beenden". Die Prüfung vor jedem Aufruf von `/s/<id>/` benutzte aber
+dieselbe Funktion wie die Liste — und damit konnte eine Support-Rolle an einem fremden, laufenden
+Bildschirm sitzen, mit offenem Terminal und entsperrtem Passwortspeicher. Getrennt in
+`owns_session` (verwalten) und `may_attach_to_session` (daransitzen). Fernhilfe mit ausdrücklicher
+Einwilligung wäre der richtige Weg dafür; die gibt es noch nicht.
+
+**3 · Fehlversuche beim zweiten Faktor zählten nicht mit.** Nur das Passwort führte zur Sperre. Bei
+bekanntem Passwort war ein sechsstelliger Code damit beliebig oft ratbar — und drei davon sind zu
+jedem Zeitpunkt gültig (`valid_window=1`). Dasselbe galt für die Rückfallcodes.
+
+**4 · Ein unbekanntes Konto antwortete schneller.** Die Meldung war schon gleich, die Dauer nicht:
+ohne Argon2-Durchlauf war die Antwort messbar früher da. Damit ließe sich die Nutzerliste abfragen,
+ohne je hereinzukommen.
 
 ---
 
@@ -1828,6 +1868,9 @@ nicht ansprechen. Die übrigen Editoren sind unbedenklich.
 Registries sind eine Vertrauensentscheidung des Admins, mit deutlichem Hinweis im
 Import-Dialog. Eine Signaturprüfung würde eine Abhängigkeit von Kasms öffentlichem
 Schlüssel schaffen, ohne mehr Sicherheit zu bringen als die Entscheidung, wem man vertraut.
+
+Ausführlich, mit den Alternativen, die nicht getragen hätten:
+[ADR-004](docs/adr/004-keine-signaturpruefung-fuer-registries.md).
 
 ### 17.12 Kasm und Golden Images — gelöst, ohne Kasm anzufassen
 

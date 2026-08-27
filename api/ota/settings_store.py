@@ -28,9 +28,20 @@ AUTH_IDLE_MINUTES = "auth.idle_minutes"
 # etwas bedeutet — die Groessenordnung ist die Entscheidung.
 IDLE_STEPS = (30, 60, 120, 240, 480, 720, 1440, 2880)
 
+# Wie viel Platz das Zuhause eines Nutzers belegen darf, in Gigabyte.
+# 0 heisst: keine Grenze.
+PROFILE_QUOTA_GB = "storage.profile_quota_gb"
+
+# Wie viel freier Plattenplatz mindestens bleiben muss, damit noch eine
+# Session startet. Ein volles Dateisystem ist kein Fehler, den ein Nutzer
+# versteht — es ist ein Container, der beim Schreiben stehenbleibt.
+DISK_FLOOR_GB = "storage.disk_floor_gb"
+
 DEFAULTS: dict[str, Any] = {
     # Acht Stunden: ein Arbeitstag. Wer morgens kommt, meldet sich einmal an.
     AUTH_IDLE_MINUTES: 480,
+    PROFILE_QUOTA_GB: 20,
+    DISK_FLOOR_GB: 5,
 }
 
 _cache: dict[str, tuple[float, Any]] = {}
@@ -74,3 +85,21 @@ def idle_minutes(db: DbSession) -> int:
     except (TypeError, ValueError):
         return DEFAULTS[AUTH_IDLE_MINUTES]
     return min(IDLE_STEPS, key=lambda step: abs(step - value))
+
+
+def profile_quota_bytes(db: DbSession) -> int:
+    """Die Grenze je Zuhause in Bytes. 0 heisst: keine."""
+    try:
+        gb = max(0, int(get(db, PROFILE_QUOTA_GB)))
+    except (TypeError, ValueError):
+        gb = DEFAULTS[PROFILE_QUOTA_GB]
+    return gb * 1024 ** 3
+
+
+def disk_floor_bytes(db: DbSession) -> int:
+    """Was auf der Platte frei bleiben muss. 0 heisst: keine Untergrenze."""
+    try:
+        gb = max(0, int(get(db, DISK_FLOOR_GB)))
+    except (TypeError, ValueError):
+        gb = DEFAULTS[DISK_FLOOR_GB]
+    return gb * 1024 ** 3

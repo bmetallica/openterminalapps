@@ -14,6 +14,8 @@ export type Me = {
   /** Ist der zweite Faktor eingerichtet? Das Geheimnis selbst kommt nie hierher. */
   totp_enabled: boolean
   recovery_left: number
+  /** Eine Gruppe verlangt den zweiten Faktor, er ist aber nicht eingerichtet. */
+  must_setup_totp: boolean
 }
 
 export type App = {
@@ -76,6 +78,14 @@ export type Session = {
   streams: Stream[]
 }
 
+export type MyStorage = {
+  bytes: number
+  quota_bytes: number
+  /** null, wenn kein Kontingent gesetzt ist. */
+  percent: number | null
+  level: 'in Ordnung' | 'knapp' | 'voll' | 'ohne Grenze' | 'unbekannt'
+}
+
 export type Group = {
   id: string
   name: string
@@ -84,6 +94,8 @@ export type Group = {
   permissions: string[]
   member_count: number
   is_system: boolean
+  /** Mitglieder ohne zweiten Faktor können keinen Arbeitsplatz starten. */
+  require_totp: boolean
 }
 
 export type User = {
@@ -103,6 +115,9 @@ export type Permission = { key: string; text: string }
 export type GlobalSettings = {
   auth_idle_minutes: number
   auth_idle_steps: number[]
+  /** 0 heisst jeweils: keine Grenze. */
+  profile_quota_gb: number
+  disk_floor_gb: number
 }
 
 /** Ein Programm, wie es im Image gefunden wurde. */
@@ -501,7 +516,13 @@ export const api = {
   audit: (limit = 100) => call<AuditEntry[]>(`/admin/audit?limit=${limit}`),
   permissions: () => call<Permission[]>('/admin/permissions'),
   settings: () => call<GlobalSettings>('/admin/settings'),
-  saveSettings: (body: { auth_idle_minutes?: number }) =>
+  myStorage: () => call<MyStorage>('/auth/storage'),
+
+  profileUsage: (username: string) =>
+    call<{ username: string; bytes: number; gemessen: string }>(
+      `/admin/users/${encodeURIComponent(username)}/usage`),
+
+  saveSettings: (body: Partial<GlobalSettings>) =>
     call<GlobalSettings>('/admin/settings', { method: 'PUT', body: JSON.stringify(body) }),
   adminSessions: () => call<AdminSession[]>('/admin/sessions'),
 

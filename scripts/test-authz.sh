@@ -47,6 +47,26 @@ IS_ADMIN=$(api "$TMP/admin.jar" "$BASE/api/auth/me" | python3 -c 'import sys,jso
 expect "True" "$IS_ADMIN" "Administrator ist angemeldet"
 
 expect "401" "$(code /dev/null "$BASE/api/auth/me")" "Ohne Cookie kein Zugriff auf /me"
+
+# Ein unbekannter Name muss genauso lange brauchen wie ein bekannter. Sonst
+# laesst sich die Nutzerliste abfragen, ohne je hereinzukommen.
+tmg() {  # tmg <benutzername> -> Dauer eines Anmeldeversuchs in Millisekunden
+  curl -s --cacert "$CA" -o /dev/null -w '%{time_total}' -X POST "$BASE/api/auth/login" \
+    -H 'Content-Type: application/json' \
+    -d "{\"username\":\"$1\",\"password\":\"garantiert-falsch-9911\"}" \
+    | python3 -c "import sys;print(int(float(sys.stdin.read()) * 1000))"
+}
+T_REAL=0; T_FAKE=0
+for _ in 1 2 3; do
+  T_REAL=$((T_REAL + $(tmg "$ADMIN_USER")))
+  T_FAKE=$((T_FAKE + $(tmg "gibtesnicht-$RANDOM")))
+done
+T_REAL=$((T_REAL / 3)); T_FAKE=$((T_FAKE / 3))
+DIFF=$((T_REAL - T_FAKE)); [ "$DIFF" -lt 0 ] && DIFF=$((-DIFF))
+[ "$DIFF" -lt 60 ] \
+  && ok "Unbekanntes Konto verrät sich nicht über die Dauer (${T_REAL}ms vs ${T_FAKE}ms)" \
+  || bad "Zeitunterschied verrät bestehende Konten: ${T_REAL}ms vs ${T_FAKE}ms"
+
 expect "401" "$(curl -s --cacert "$CA" -o /dev/null -w '%{http_code}' -X POST "$BASE/api/auth/login" \
   -H 'Content-Type: application/json' -d "{\"username\":\"$ADMIN_USER\",\"password\":\"falsch\"}")" \
   "Falsches Passwort wird abgelehnt"
@@ -110,6 +130,34 @@ if [ -n "$SID" ]; then
   expect "401" "$(code /dev/null        "$BASE/s/$SID/")" "Ohne Anmeldung abgewiesen"
   expect "404" "$(code "$TMP/user.jar" -X DELETE "$BASE/api/sessions/$SID")" \
     "Fremde Session löschen nicht möglich"
+
+  # `sessions.view_all` ist fuer eine Rolle wie „Support" gedacht: sehen, was
+  # laeuft, und im Notfall beenden. Es darf **nicht** reichen, um an einem
+  # fremden Bildschirm zu sitzen — dort steht ein offenes Terminal und ein
+  # entsperrter Passwortspeicher. Bis zum 2026-08-27 reichte es.
+  SUP="ota-pruef-support"
+  SUP_GID=$(api "$TMP/admin.jar" -X POST "$BASE/api/admin/groups" \
+    -H 'Content-Type: application/json' \
+    -d '{"name":"OTA-Prüfung Support","permissions":["sessions.view_all"]}' \
+    | jqp "d.get('id','')")
+  if [ -n "$SUP_GID" ]; then
+    api "$TMP/admin.jar" -X POST "$BASE/api/admin/users" -H 'Content-Type: application/json' \
+      -d "{\"username\":\"$SUP\",\"password\":\"$TEST_PW\",\"group_ids\":[\"$SUP_GID\"]}" >/dev/null
+    login "$TMP/sup.jar" "$SUP" "$TEST_PW"
+
+    SEEN=$(api "$TMP/sup.jar" "$BASE/api/sessions?all_users=true" | jqp "len(d)")
+    [ "${SEEN:-0}" -gt 0 ] && ok "Support sieht fremde Sessions in der Liste ($SEEN)" \
+                           || bad "Support sieht die fremde Session nicht — Recht wirkt nicht"
+    expect "403" "$(code "$TMP/sup.jar" "$BASE/s/$SID/")" \
+      "Support kommt trotzdem nicht auf den fremden Bildschirm"
+
+    SUP_UID=$(api "$TMP/admin.jar" "$BASE/api/admin/users" \
+      | jqp "next((u['id'] for u in d if u['username'] == '$SUP'), '')")
+    [ -n "$SUP_UID" ] && api "$TMP/admin.jar" -X DELETE "$BASE/api/admin/users/$SUP_UID" >/dev/null
+    api "$TMP/admin.jar" -X DELETE "$BASE/api/admin/groups/$SUP_GID" >/dev/null
+  else
+    bad "Support-Gruppe für die Prüfung liess sich nicht anlegen"
+  fi
   SEEN=$(api "$TMP/user.jar" "$BASE/api/sessions?all_users=true" \
     | python3 -c 'import sys,json;print(len(json.load(sys.stdin)))')
   expect "0" "$SEEN" "all_users=true zeigt einem Nutzer nichts Fremdes"
@@ -214,7 +262,7 @@ print(next((a["slug"] for a in d["apps"]
       [ "$RC" != "403" ] && ok "Eine freie Anwendung bleibt startbar ($OTHER, HTTP $RC)" \
                          || bad "Auch die freie Anwendung $OTHER wurde abgewiesen"
     fi
-    api "$TMP/user.jar" -X DELETE "$BASE/api/sessions/$USID" >/dev/null
+    USER_CNAME="ota-s-$(echo "$USID" | cut -c1-12)"
   else
     bad "Testnutzer konnte keine eigene Session starten"
   fi
@@ -233,6 +281,183 @@ import json, os, sys
 d = json.load(sys.stdin)
 print(sum(1 for t in d for a in t["apps"] if a["slug"] == os.environ["APP"]))')
   expect "1" "$SEES" "Danach ist die Anwendung wieder für alle da"
+fi
+
+# ------------------------------------------------------- Container-Härtung
+# Der Container aus dem vorigen Abschnitt laeuft noch. Was ihn einsperrt, steht
+# in seiner Docker-Konfiguration — und genau dort wird nachgesehen, statt es zu
+# glauben.
+echo
+echo "Container-Härtung"
+
+# Ausdruecklich der Container des **Testnutzers**. Der eines Administrators
+# laeuft absichtlich lockerer — dort waere die Pruefung wertlos.
+CNAME="${USER_CNAME:-}"
+if [ -z "$CNAME" ] || ! docker inspect "$CNAME" >/dev/null 2>&1; then
+  bad "Kein Session-Container des Testnutzers zum Prüfen vorhanden"
+else
+  INSPECT=$(docker inspect "$CNAME")
+
+  echo "$INSPECT" | grep -q '"no-new-privileges:true"' \
+    && ok "no-new-privileges ist gesetzt" \
+    || bad "no-new-privileges fehlt — sudo liefe an"
+
+  DROPPED=$(echo "$INSPECT" | jqp "','.join(d[0]['HostConfig']['CapDrop'] or [])")
+  expect "ALL" "$DROPPED" "Alle Linux-Fähigkeiten entzogen"
+
+  # SYS_ADMIN erlaubt Einhaengungen und eigene Namespaces und ist damit
+  # praktisch gleichbedeutend mit root auf dem Host. Sie stand hier bis zum
+  # 2026-08-27 ohne Begruendung im Code.
+  ADDED=$(echo "$INSPECT" | jqp "','.join(d[0]['HostConfig']['CapAdd'] or [])")
+  case "$ADDED" in
+    *SYS_ADMIN*) bad "SYS_ADMIN ist wieder gesetzt ($ADDED)" ;;
+    *)           ok "Kein SYS_ADMIN (hinzugefügt: ${ADDED:-nichts})" ;;
+  esac
+
+  PIDS=$(echo "$INSPECT" | jqp "d[0]['HostConfig']['PidsLimit']")
+  [ "${PIDS:-0}" -gt 0 ] && ok "Prozesszahl begrenzt ($PIDS)" \
+                         || bad "Keine Grenze für die Prozesszahl"
+
+  SECCOMP=$(echo "$INSPECT" | jqp "','.join(d[0]['HostConfig']['SecurityOpt'] or [])")
+  case "$SECCOMP" in
+    *seccomp=unconfined*) bad "seccomp ist abgeschaltet" ;;
+    *)                    ok "seccomp-Standardfilter aktiv" ;;
+  esac
+
+  PRIV=$(echo "$INSPECT" | jqp "d[0]['HostConfig']['Privileged']")
+  expect "False" "$PRIV" "Container läuft nicht privilegiert"
+
+  # Das Sessionnetz darf die Datenbank nicht erreichen. Sonst waere jede Lücke
+  # in einer Anwendung im Arbeitsplatz gleich eine Lücke in den Nutzerdaten.
+  if docker exec "$CNAME" bash -c 'timeout 3 bash -c "</dev/tcp/ota-db/5432"' 2>/dev/null; then
+    bad "Der Session-Container erreicht die Datenbank"
+  else
+    ok "Der Session-Container erreicht die Datenbank nicht"
+  fi
+fi
+
+
+# Und die Gegenprobe: Der Container eines Administrators laeuft absichtlich
+# ohne diese beiden Sperren, sonst liefe dort kein sudo. Faellt das zusammen,
+# ist entweder die Haertung kaputt oder das Nachinstallieren.
+ACNAME=$(docker ps --filter "name=ota-s-" --format '{{.Names}}' \
+  | grep -v "^${USER_CNAME:-nichts}$" | head -1)
+if [ -n "$ACNAME" ]; then
+  docker inspect "$ACNAME" | grep -q '"no-new-privileges:true"' \
+    && bad "Der Container des Administrators ist mitgehärtet — sudo liefe dort nicht" \
+    || ok "Der Container des Administrators bleibt bewusst offen (sudo)"
+fi
+
+[ -n "${USID:-}" ] && api "$TMP/user.jar" -X DELETE "$BASE/api/sessions/$USID" >/dev/null
+
+# ------------------------------------------------- Zustand und Kennzahlen
+echo
+echo "Zustand und Kennzahlen"
+
+HEALTH=$(curl -s --cacert "$CA" "$BASE/healthz")
+echo "$HEALTH" | grep -q '"db":"ok"' \
+  && ok "healthz prüft die Datenbank und meldet sie erreichbar" \
+  || bad "healthz sagt nichts über die Datenbank: $HEALTH"
+echo "$HEALTH" | grep -q '"agent":"ok"' \
+  && ok "healthz prüft den Agent und meldet ihn erreichbar" \
+  || bad "healthz sagt nichts über den Agent: $HEALTH"
+
+# Kennzahlen verraten, wie viele Menschen hier arbeiten und wann. Nichts
+# fuers offene Netz.
+expect "401" "$(code /dev/null "$BASE/metrics")" "Kennzahlen ohne Anmeldung verweigert"
+expect "403" "$(code "$TMP/user.jar" "$BASE/metrics")" "Kennzahlen für einen normalen Nutzer verweigert"
+
+METRICS=$(api "$TMP/admin.jar" "$BASE/metrics")
+echo "$METRICS" | grep -q "^ota_users " \
+  && ok "Kennzahlen enthalten die Kontenzahl" \
+  || bad "Kennzahlen ohne ota_users"
+echo "$METRICS" | grep -q "^ota_agent_up 1" \
+  && ok "Kennzahlen melden den Agent als erreichbar" \
+  || bad "ota_agent_up fehlt oder steht auf 0"
+echo "$METRICS" | grep -q "^# TYPE ota_sessions gauge" \
+  && ok "Format ist Prometheus-lesbar (HELP/TYPE je Messwert)" \
+  || bad "Kein TYPE-Kopf im Kennzahlen-Format"
+
+if [ -n "${OTA_METRICS_TOKEN:-}" ]; then
+  RC=$(curl -s --cacert "$CA" -o /dev/null -w '%{http_code}' \
+    -H "Authorization: Bearer $OTA_METRICS_TOKEN" "$BASE/metrics")
+  expect "200" "$RC" "Sammler kommt mit Merkmal herein"
+  RC=$(curl -s --cacert "$CA" -o /dev/null -w '%{http_code}' \
+    -H "Authorization: Bearer garantiert-falsch" "$BASE/metrics")
+  expect "401" "$RC" "Falsches Merkmal wird abgewiesen"
+fi
+
+# ------------------------------------------------------------ Platz
+echo
+echo "Platz im Zuhause"
+
+USAGE=$(api "$TMP/admin.jar" "$BASE/api/admin/users/$ADMIN_USER/usage")
+BYTES=$(echo "$USAGE" | jqp "d.get('bytes', -1)")
+[ "${BYTES:-0}" -gt 0 ] && ok "Belegter Platz gemessen ($((BYTES / 1024 / 1024)) MB)" \
+                        || bad "Der Platz liess sich nicht messen: $USAGE"
+
+QUOTA=$(echo "$USAGE" | jqp "d.get('quota_bytes', 0)")
+[ "${QUOTA:-0}" -gt 0 ] && ok "Ein Kontingent ist gesetzt ($((QUOTA / 1024 / 1024 / 1024)) GB)" \
+                        || ok "Kein Kontingent gesetzt — die Grenze ist abgeschaltet"
+
+expect "403" "$(code "$TMP/user.jar" "$BASE/api/admin/users/$ADMIN_USER/usage")" \
+  "Fremden Platzverbrauch abfragen verweigert"
+
+# Der Punkt der ganzen Übung: eine verständliche Ablehnung statt eines
+# Containers, der irgendwann beim Schreiben stehenbleibt. Dafür muss das
+# Zuhause wirklich über der Grenze liegen — deshalb legt der Test dort einen
+# Klotz ab und räumt ihn hinterher weg.
+BEFORE=$(api "$TMP/admin.jar" "$BASE/api/admin/settings" | jqp "d['profile_quota_gb']")
+PROFILE_ROOT="${OTA_PROFILES_ROOT:-/srv/ota/profiles}"
+BALLAST="$PROFILE_ROOT/$ADMIN_USER/ota-pruef-ballast.bin"
+
+if fallocate -l 2G "$BALLAST" 2>/dev/null || \
+   dd if=/dev/zero of="$BALLAST" bs=1M count=2048 status=none 2>/dev/null; then
+  api "$TMP/admin.jar" -X PUT "$BASE/api/admin/settings" -H 'Content-Type: application/json' \
+    -d '{"profile_quota_gb":1}' >/dev/null
+  sleep 6   # der Einstellungspuffer haelt fuenf Sekunden
+
+  USED=$(api "$TMP/admin.jar" "$BASE/api/admin/users/$ADMIN_USER/usage" | jqp "d['bytes']")
+  [ "${USED:-0}" -gt 1073741824 ] \
+    && ok "Der Ballast wird mitgezählt ($((USED / 1024 / 1024)) MB > 1 GB)" \
+    || bad "Der Ballast fehlt in der Messung ($USED)"
+
+  # Ausdruecklich eine Vorlage **ohne** laufende Session: Laeuft schon eine,
+  # gibt der Start sie zurueck, ohne den Preflight anzufassen — und das ist
+  # richtig so, denn dabei wird nichts neu belegt.
+  LIVE_TPLS=$(api "$TMP/admin.jar" "$BASE/api/sessions" | jqp "
+','.join(s['template_id'] for s in d)")
+  TPL_Q=$(api "$TMP/admin.jar" "$BASE/api/templates" | LIVE_TPLS="$LIVE_TPLS" python3 -c '
+import json, os, sys
+live = set(filter(None, os.environ["LIVE_TPLS"].split(",")))
+d = json.load(sys.stdin)
+print(next((t["id"] for t in d
+            if t["is_enabled"] and t["persistence_scope"] != "none"
+            and t["id"] not in live), ""))')
+  if [ -n "$TPL_Q" ]; then
+    OUT=$(api "$TMP/admin.jar" -X POST "$BASE/api/sessions" -H 'Content-Type: application/json' \
+      -d "{\"template_id\":\"$TPL_Q\"}")
+    echo "$OUT" | grep -q "Zuhause belegt" \
+      && ok "Volles Kontingent lehnt den Start mit einer verständlichen Meldung ab" \
+      || bad "Das Kontingent hielt nichts auf: $(echo "$OUT" | head -c 160)"
+  else
+    bad "Keine freie Vorlage für die Kontingent-Prüfung gefunden"
+  fi
+
+  rm -f "$BALLAST"
+  api "$TMP/admin.jar" -X PUT "$BASE/api/admin/settings" -H 'Content-Type: application/json' \
+    -d "{\"profile_quota_gb\":${BEFORE:-20}}" >/dev/null
+  AFTER=$(api "$TMP/admin.jar" "$BASE/api/admin/settings" | jqp "d['profile_quota_gb']")
+  expect "${BEFORE:-20}" "$AFTER" "Kontingent wieder auf den alten Wert gesetzt"
+
+  # Und die Messung darf den Ballast nicht weiter mitschleppen. Der Puffer im
+  # Agent haelt zehn Minuten — deshalb fragt die Verwaltung frisch.
+  USED=$(api "$TMP/admin.jar" "$BASE/api/admin/users/$ADMIN_USER/usage" | jqp "d['bytes']")
+  [ "${USED:-0}" -lt 1073741824 ] \
+    && ok "Nach dem Aufräumen ist der Platz wieder frei ($((USED / 1024 / 1024)) MB)" \
+    || bad "Der Ballast liegt noch im Profil ($USED)"
+else
+  ok "Kein Schreibzugriff auf die Profile — Kontingent-Prüfung übersprungen"
 fi
 
 # ----------------------------------------------------------- Zwischenablage
@@ -295,6 +520,62 @@ OUT=$(curl -s --cacert "$CA" -X POST "$BASE/api/auth/login" -H 'Content-Type: ap
 echo "$OUT" | grep -q "stimmt nicht" \
   && ok "Derselbe Rückfallcode wirkt kein zweites Mal" \
   || bad "Ein verbrauchter Rückfallcode ging erneut durch"
+
+# Fehlversuche beim zweiten Faktor muessen mitzaehlen. Ohne das ist ein
+# sechsstelliger Code bei bekanntem Passwort beliebig oft ratbar.
+LOCKED=""
+for _ in 1 2 3 4 5 6 7 8 9; do
+  OUT=$(curl -s --cacert "$CA" -X POST "$BASE/api/auth/login" -H 'Content-Type: application/json' \
+    -d "{\"username\":\"$TEST_USER\",\"password\":\"$TEST_PW\",\"totp\":\"000000\"}")
+  case "$OUT" in *"Fehlversuche"*) LOCKED="ja"; break ;; esac
+done
+[ -n "$LOCKED" ] && ok "Raten am zweiten Faktor sperrt das Konto" \
+                 || bad "Der zweite Faktor liess sich unbegrenzt raten"
+
+# Sperre wieder aufheben, sonst scheitert alles Folgende daran.
+docker compose -f "$ROOT/deploy/docker-compose.yml" exec -T db \
+  psql -U ota -d ota -c \
+  "UPDATE users SET locked_until = NULL, failed_logins = 0 WHERE username = '$TEST_USER';" \
+  >/dev/null 2>&1
+
+# Der Zwang je Gruppe. Er wirkt beim **Start einer Session**, nicht bei der
+# Anmeldung: Wer sich nicht anmelden kann, kommt nicht an „Mein Konto" und
+# kann den zweiten Faktor gar nicht erst einrichten.
+USERS_GID_2=$(api "$TMP/admin.jar" "$BASE/api/admin/groups" \
+  | jqp "next((g['id'] for g in d if g['slug'] == 'users'), '')")
+api "$TMP/admin.jar" -X PUT "$BASE/api/admin/groups/$USERS_GID_2" \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"users","priority":100,"permissions":[],"require_totp":true}' >/dev/null
+
+# Ein zweiter Testnutzer ohne zweiten Faktor — der erste hat gerade einen.
+ZWANG="ota-pruef-zwang"
+api "$TMP/admin.jar" -X POST "$BASE/api/admin/users" -H 'Content-Type: application/json' \
+  -d "{\"username\":\"$ZWANG\",\"password\":\"$TEST_PW\",\"group_ids\":[\"$USERS_GID_2\"]}" \
+  >/dev/null
+login "$TMP/zwang.jar" "$ZWANG" "$TEST_PW"
+
+FLAG=$(api "$TMP/zwang.jar" "$BASE/api/auth/me" | jqp "d.get('must_setup_totp')")
+expect "True" "$FLAG" "Die Anmeldung gelingt und sagt, dass der Faktor fehlt"
+
+TPL_Z=$(api "$TMP/zwang.jar" "$BASE/api/templates" | jqp "
+next((t['id'] for t in d if t['is_enabled']), '')")
+if [ -n "$TPL_Z" ]; then
+  OUT=$(api "$TMP/zwang.jar" -X POST "$BASE/api/sessions" -H 'Content-Type: application/json' \
+    -d "{\"template_id\":\"$TPL_Z\"}")
+  echo "$OUT" | grep -q "zweite Faktor Pflicht" \
+    && ok "Ohne zweiten Faktor startet kein Arbeitsplatz" \
+    || bad "Der Zwang hielt nichts auf: $(echo "$OUT" | head -c 140)"
+fi
+
+# Zurückstellen, sonst gilt der Zwang für alle folgenden Läufe.
+api "$TMP/admin.jar" -X PUT "$BASE/api/admin/groups/$USERS_GID_2" \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"users","priority":100,"permissions":[],"require_totp":false}' >/dev/null
+FLAG=$(api "$TMP/zwang.jar" "$BASE/api/auth/me" | jqp "d.get('must_setup_totp')")
+expect "False" "$FLAG" "Ohne Zwang ist der Hinweis wieder weg"
+ZWANG_UID=$(api "$TMP/admin.jar" "$BASE/api/admin/users" \
+  | jqp "next((u['id'] for u in d if u['username'] == '$ZWANG'), '')")
+[ -n "$ZWANG_UID" ] && api "$TMP/admin.jar" -X DELETE "$BASE/api/admin/users/$ZWANG_UID" >/dev/null
 
 # Abschalten verlangt Passwort UND Code.
 OUT=$(curl -s --cacert "$CA" -b "$TMP/user.jar" -X DELETE "$BASE/api/auth/totp" \

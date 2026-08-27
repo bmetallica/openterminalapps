@@ -14,15 +14,15 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session as DbSession
 
-from .. import agent_client, audit
+from .. import agent_client, audit, settings_store
 from ..config import settings
 from ..db import get_db
 from ..deps import current_user
 from ..models import AppStream, Session as SessionModel, Template, TemplateApp, User
 from ..schemas import SessionOut, SessionStartIn, StreamOut
 from ..security import (
-    effective_resources, owns_session, profile_path, user_can_see_app,
-    user_can_see_template, vnc_secret,
+    effective_resources, needs_totp, owns_session, profile_path,
+    user_can_see_app, user_can_see_template, vnc_secret,
 )
 
 router = APIRouter(prefix="/api/sessions", tags=["sessions"])
@@ -210,6 +210,13 @@ def start_session(
     user: User = Depends(current_user),
     db: DbSession = Depends(get_db),
 ) -> SessionOut:
+    if needs_totp(user):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Für deine Gruppe ist der zweite Faktor Pflicht. Richte ihn unter "
+            "„Mein Konto“ ein — danach lassen sich Arbeitsplätze wieder starten.",
+        )
+
     tpl = db.get(Template, body.template_id)
     if not tpl or not user_can_see_template(tpl, user):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Workspace nicht gefunden")
@@ -238,7 +245,9 @@ def start_session(
 
     cores, memory, _, _ = effective_resources(tpl, user)
 
-    # Kapazitaets-Preflight: lieber eine verstaendliche Ablehnung als ein OOM-Kill.
+    # Kapazitaets-Preflight: lieber eine verstaendliche Ablehnung als ein
+    # OOM-Kill oder ein Container, der beim Schreiben stehenbleibt. Drei
+    # Fragen, in dieser Reihenfolge — die billigste zuerst.
     host = agent_client.host_info()
     if memory > host["memory_available"]:
         need = memory / 1024**3
@@ -249,6 +258,33 @@ def start_session(
             f"{need:.1f} GB nötig. Beende eine andere Session oder wende dich "
             "an deinen Administrator.",
         )
+
+    floor = settings_store.disk_floor_bytes(db)
+    if floor and host.get("disk_free", 0) < floor:
+        raise HTTPException(
+            status.HTTP_507_INSUFFICIENT_STORAGE,
+            f"Auf dem Host sind nur noch {host['disk_free'] / 1024**3:.1f} GB "
+            f"frei; ab {floor / 1024**3:.0f} GB startet nichts mehr. Ein volles "
+            "Dateisystem bringt laufende Arbeitsplätze zum Stehen — das hier "
+            "ist die Bremse davor. Bitte den Administrator informieren.",
+        )
+
+    # Und das eigene Zuhause. Gemessen wird im Agent und dort gepuffert; ein
+    # Profil waechst nicht zwischen zwei Starts um Gigabytes.
+    quota = settings_store.profile_quota_bytes(db)
+    if quota and tpl.persistence_scope != "none":
+        try:
+            used = int(agent_client.profile_usage(user.username).get("bytes", 0))
+        except Exception:  # noqa: BLE001 — eine Messung darf keinen Start verhindern
+            used = 0
+        if used >= quota:
+            raise HTTPException(
+                status.HTTP_507_INSUFFICIENT_STORAGE,
+                f"Dein Zuhause belegt {used / 1024**3:.1f} GB und damit die "
+                f"gesamten {quota / 1024**3:.0f} GB, die dir zustehen. Räume "
+                "auf — Downloads, Caches, alte Container-Abbilder — oder bitte "
+                "deinen Administrator um mehr Platz.",
+            )
 
     # Das Profil bestimmt das VNC-Passwort mit — siehe `vnc_secret()`.
     profile = profile_path(user, tpl)

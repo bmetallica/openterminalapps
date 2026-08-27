@@ -171,6 +171,19 @@ def user_can_see_template(tpl: Template, user: User) -> bool:
     return any(g.id in user_groups for g in tpl.groups)
 
 
+def needs_totp(user: User) -> bool:
+    """Verlangt eine Gruppe dieses Nutzers einen zweiten Faktor, den er nicht hat?
+
+    Durchgesetzt wird das beim **Start einer Session**, nicht bei der
+    Anmeldung. Wer sich nicht anmelden kann, kommt nicht an „Mein Konto" und
+    kann den zweiten Faktor gar nicht erst einrichten — eine Sperre an der
+    Anmeldung waere eine Sperre gegen ihre eigene Aufloesung.
+    """
+    if user.totp_secret:
+        return False
+    return any(getattr(g, "require_totp", False) for g in user.groups)
+
+
 def user_can_see_app(app, user: User) -> bool:
     """Darf dieser Nutzer diese Anwendung im Arbeitsplatz sehen und starten?
 
@@ -193,7 +206,31 @@ def user_can_see_app(app, user: User) -> bool:
 
 
 def owns_session(sess: SessionModel, user: User) -> bool:
+    """Darf dieser Nutzer diese Session *verwalten* — sehen, beenden?
+
+    Das Recht `sessions.view_all` reicht dafuer. Es ist fuer eine Rolle wie
+    „Support" gedacht: sehen, was laeuft, und im Notfall beenden.
+    """
     return sess.user_id == user.id or "sessions.view_all" in user.permissions or user.is_admin
+
+
+def may_attach_to_session(sess: SessionModel, user: User) -> bool:
+    """Darf dieser Nutzer sich auf den **Bildschirm** dieser Session schalten?
+
+    Das ist etwas anderes als `owns_session`, und die Unterscheidung fehlte
+    bis zum 2026-08-27. Wer `sessions.view_all` hat, sah in der Verwaltung
+    „Alle Sessions sehen und beenden" — konnte damit aber ueber `/s/<id>/`
+    auch den laufenden Bildschirm eines fremden Menschen uebernehmen,
+    einschliesslich seines offenen Terminals und seines Passwortspeichers.
+    Zwischen „sehen, dass etwas laeuft" und „daran sitzen" liegt der Abstand,
+    um den es hier geht.
+
+    Auf den Bildschirm kommt deshalb nur, wem die Session gehoert — oder ein
+    voller Administrator, der ohnehin am Docker-Host sitzt und dort dasselbe
+    erreichen kann. Eine ausdrueckliche Zuschaltung mit Einwilligung des
+    Nutzers waere der richtige Weg fuer Fernhilfe; die gibt es noch nicht.
+    """
+    return sess.user_id == user.id or user.is_admin
 
 
 def profile_path(user: User, tpl: Template) -> str:

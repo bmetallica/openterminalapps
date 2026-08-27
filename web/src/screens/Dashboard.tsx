@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Led, stateClass } from '../components/controls'
-import { ApiError, api, type Me, type Session, type Stream, type Template } from '../lib/api'
+import {
+  ApiError, api,
+  type Me, type MyStorage, type Session, type Stream, type Template,
+} from '../lib/api'
 import { ago, duration, gb } from '../lib/format'
 import { t as tr, useLang } from '../lib/i18n'
 
@@ -104,6 +107,12 @@ export function Dashboard({ me, onOpen, onToast }: {
   const [busy, setBusy] = useState<string | null>(null)
   const [busyApp, setBusyApp] = useState<string | null>(null)
   const [failed, setFailed] = useState<string | null>(null)
+  // Nachgeladen, nicht Teil des ersten Aufbaus: Eine Messung über ein
+  // gewachsenes Profil dauert beim ersten Mal, und dafür soll niemand vor
+  // einem leeren Dashboard warten.
+  const [space, setSpace] = useState<MyStorage | null>(null)
+
+  useEffect(() => { api.myStorage().then(setSpace).catch(() => {}) }, [])
 
   async function load() {
     try {
@@ -204,6 +213,25 @@ export function Dashboard({ me, onOpen, onToast }: {
           <h1 className="h-page">{greeting()}</h1>
         </div>
       </header>
+
+      {space && (space.level === 'knapp' || space.level === 'voll') && (
+        <div className="gate-note" role="status">
+          <b>
+            {space.level === 'voll'
+              ? tr('Dein Zuhause ist voll.')
+              : tr('Dein Zuhause wird knapp.')}
+          </b>
+          <span>
+            {tr('{used} von {quota} belegt ({pct} %).', {
+              used: gb(space.bytes), quota: gb(space.quota_bytes), pct: String(space.percent),
+            })}
+            {' '}
+            {space.level === 'voll'
+              ? tr('Bis du aufräumst, startet kein Arbeitsplatz mehr.')
+              : tr('Downloads, Caches und alte Abbilder sind meist die Größten.')}
+          </span>
+        </div>
+      )}
 
       <section>
         <div className="section__head">

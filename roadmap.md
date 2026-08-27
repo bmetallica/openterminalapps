@@ -130,7 +130,10 @@ Siehe Handbuch, Kapitel 12.
       Rückfallcodes. Gespeichert wird erst nach bestandener Probe; abschalten verlangt Passwort
       **und** Code. Niemand kann den zweiten Faktor eines anderen entfernen — deshalb sind die
       Rückfallcodes Pflicht und nicht Zubehör. Acht Prüfungen in `test-authz.sh`
-- [ ] Offen: Zwei-Faktor je Gruppe erzwingen
+- [x] **Zwei-Faktor je Gruppe erzwingen** (`groups.require_totp`). Durchgesetzt beim **Start einer
+      Session**, nicht bei der Anmeldung: Wer sich nicht anmelden kann, kommt nicht an „Mein Konto"
+      und kann den Faktor gar nicht erst einrichten — eine Sperre an der Anmeldung wäre eine Sperre
+      gegen ihre eigene Auflösung. Im Dashboard steht ein Streifen mit dem Weg dorthin
 - [x] Seed-Skript für den ersten Admin
 - [x] **Autorisierungstests**: je Admin-Endpunkt ein Test, der mit Nutzer-Token 403 erwartet
 
@@ -350,9 +353,33 @@ Erst mit dem Arbeitsplatz sinnvoll (`plan.md` §9.4).
 - [x] `scripts/migrate-kasm-profile.sh` — idempotent, mit Probelauf und Abnahmemodus
 - [x] Profil in einen **Arbeitsplatz** überführt (805 MB Rohdaten → 63 MB)
 - [x] Abnahme bestanden: Einstellungen, Extensions, SSH- und GPG-Schlüssel, XFCE-Layout
-- [ ] Container-Härtung: `no-new-privileges`, Capabilities gedroppt, seccomp, `pids_limit`, `shm_size`
-- [ ] Netzsegmentierung final; `ota_sessions` ohne Zugriff auf `ota-db`
-- [ ] Security-Review der Auth- und Autorisierungspfade
+- [x] **Container-Härtung**: `no-new-privileges`, `cap_drop: ALL`, seccomp-Standardfilter,
+      `pids_limit: 4096`, `shm_size: 1g`, eigenes Netz. Für Administratoren fallen die ersten
+      beiden weg, sonst liefe `sudo` nicht (`plan.md` §15.1)
+- [x] **`SYS_ADMIN` entfernt.** Die Fähigkeit stand vom ersten Tag an für jeden Arbeitsplatz im
+      Code, ohne Begründung — sie erlaubt Einhängungen und eigene Namespaces und ist praktisch
+      gleichbedeutend mit root auf dem Host. Sie neben `no-new-privileges` zu setzen und dann zu
+      behaupten, ein Nicht-Administrator komme nicht an root, war ein Widerspruch. Der Verdacht,
+      Chrome und Electron brauchten sie, stimmt nicht: die laufen über `--no-sandbox`. Zwei
+      Folgen, beide geprüft: Firefox fällt auf eine schwächere interne Sandbox zurück und startet
+      normal; AppImages hängen sich nicht mehr per FUSE ein, weshalb das Rezept jetzt
+      `APPIMAGE_EXTRACT_AND_RUN=1` setzt (Handbuch, Kapitel 11)
+- [x] **Netzsegmentierung**: Session-Container hängen in `ota_sessions` und zusätzlich im
+      öffentlichen Netz (für Traefik) — die Datenbank liegt in keinem von beiden. Als Prüfung
+      in `scripts/test-authz.sh`: ein `/dev/tcp`-Versuch aus dem Container auf `ota-db:5432`
+      muss scheitern
+- [x] **Security-Review der Auth- und Autorisierungspfade** — drei Befunde, alle behoben und alle
+      mit einer Prüfung in `scripts/test-authz.sh` festgenagelt:
+      1. **`sessions.view_all` reichte bis auf den fremden Bildschirm.** Das Recht heisst in der
+         Oberfläche „Alle Sessions sehen und beenden", benutzte für `/s/<id>/` aber dieselbe
+         Funktion wie die Liste. Getrennt in `owns_session` (verwalten) und
+         `may_attach_to_session` (daransitzen); Letzteres verlangt Eigentum oder vollen Admin
+      2. **Fehlversuche beim zweiten Faktor zählten nicht mit.** Bei bekanntem Passwort war ein
+         sechsstelliger Code damit beliebig oft ratbar — drei davon zu jedem Zeitpunkt gültig.
+         Gleiches galt für die Rückfallcodes. Sie zählen jetzt auf dieselbe Sperre ein
+      3. **Ein unbekanntes Konto antwortete schneller als ein bekanntes.** Die Meldung war schon
+         gleich, die Dauer nicht: ohne Argon2-Durchlauf war die Antwort messbar früher da. Jetzt
+         läuft ein Leerlauf gegen einen Blindhash
 - [x] **Sicherung und Wiederherstellung** (`plan.md` §11.2): ein Wurzelverzeichnis für
       alles, damit später ein NFS ohne Änderung an OTA darunterpasst. Profile ohne
       Caches, Container nur als Differenz, Zeitplan mit Nachholen, Aufbewahrung
@@ -366,8 +393,17 @@ Erst mit dem Arbeitsplatz sinnvoll (`plan.md` §9.4).
       unversehrt. `scripts/restore-db.sh` legt vorher eine Sicherheitskopie an
 - [x] **Container-Sicherungen zurückspielen** über die Oberfläche, in den laufenden
       Arbeitsplatz
-- [ ] Monitoring: `/healthz`, Prometheus-Metriken
-- [ ] Storage-Quotas, Kapazitäts-Preflight statt OOM-Kill
+- [x] **Monitoring**: `/healthz` prüft jetzt wirklich etwas (Datenbank und Agent; 503 nur, wenn
+      die Datenbank fehlt — ohne Agent lässt sich anmelden und nachsehen, nur nichts starten).
+      `/metrics` im Prometheus-Textformat, hinter einem Merkmal (`OTA_METRICS_TOKEN`) oder einer
+      Admin-Anmeldung: Die Zahlen verraten, wie viele Menschen hier arbeiten und wann
+- [x] **Kontingent je Zuhause und Untergrenze für den freien Plattenplatz**, beide im
+      Verwaltungsbereich einstellbar, 0 schaltet ab. Wirkt beim Start einer Session, nicht beim
+      Schreiben einer Datei — kein Dateisystem-Kontingent, sondern eine verständliche Ablehnung
+      statt eines Containers, der mitten in der Arbeit stehenbleibt. Gemessen werden belegte
+      Blöcke, im Agent zehn Minuten gepuffert. Ab 80 % steht ein Hinweis auf dem Dashboard, ab
+      100 % steht dort, warum nichts mehr startet. Der Speicher-Preflight gegen einen OOM-Kill
+      stand schon
 - [x] ~~HSTS~~ — entfällt, solange es bei der lokalen CA bleibt (`plan.md` §17.2)
 - [x] ~~Umzug auf 443~~ — entfällt. OTA bleibt auf 8443, der Port ist frei
       einstellbar, und Kasm läuft dauerhaft daneben weiter (`plan.md` §17.13)
@@ -441,5 +477,12 @@ Erst mit Hardware für die Zielgröße (`plan.md` §17.1).
 
 ## Nächster Schritt
 
-M1. Offen bleiben aus `plan.md` §17 vor allem **Hardware** (§17.1) und **Domain/Zertifikat** (§17.2) —
+**M6 — Identität und Netzlaufwerke.** Der einzige grosse Block, der noch aussteht und den niemand
+umgehen kann: Solange Konten von Hand angelegt werden, skaliert nichts. Er braucht als Erstes eine
+Entscheidung, die nicht am Schreibtisch fällt — ein Testkonto im Verzeichnisdienst und die Antwort,
+ob Kerberos dort überhaupt zur Verfügung steht (`plan.md` §9.4). **Die Passwort-Durchreichung
+bleibt draussen** (§17.9), auch wenn sie der kürzeste Weg wäre.
+
+Aus M5 stehen noch die Skeleton-Profile und „Session einfrieren" offen — beide sind Komfort, keine
+Voraussetzung. Aus `plan.md` §17 bleiben **Hardware** (§17.1) und **Domain/Zertifikat** (§17.2);
 Letzteres bestimmt, ob die lokale CA eine Zwischenlösung bleibt oder dauerhaft trägt.

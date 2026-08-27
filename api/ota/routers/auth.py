@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import secrets
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session as DbSession
 
-from .. import audit
+from .. import agent_client, audit
 from ..config import settings
 from ..db import get_db
 from ..deps import current_user, set_session_cookie
@@ -16,12 +17,17 @@ from ..schemas import (
     LocaleIn, LoginIn, MeOut, PasswordChangeIn, PasswordIn,
     TotpActivateIn, TotpCodesOut, TotpDisableIn, TotpSetupOut,
 )
-from ..security import hash_password, password_problem, verify_password
+from ..security import hash_password, needs_totp, password_problem, verify_password
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 LOCK_AFTER = 8
 LOCK_MINUTES = 15
+
+# Ein gueltiger Argon2-Hash ohne zugehoeriges Passwort. Er dient nur dazu,
+# einen Anmeldeversuch fuer ein Konto, das es nicht gibt, genauso lange
+# dauern zu lassen wie einen fuer eines, das es gibt.
+_DUMMY_HASH = hash_password(secrets.token_urlsafe(32))
 
 
 
@@ -40,6 +46,11 @@ def login(
     invalid = HTTPException(status.HTTP_401_UNAUTHORIZED, "Benutzername oder Passwort ist falsch.")
 
     if user is None:
+        # Die Meldung ist gleich, die Dauer muss es auch sein: Ohne diesen
+        # Leerlauf antwortet ein unbekannter Name in Mikrosekunden und ein
+        # bekannter erst nach einem Argon2-Durchlauf. Damit liesse sich die
+        # Nutzerliste abfragen, ohne je hereinzukommen.
+        verify_password(body.password, _DUMMY_HASH)
         raise invalid
 
     now = datetime.now(timezone.utc)
@@ -66,6 +77,20 @@ def login(
         if not body.totp:
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Bitte den Code aus deiner App eingeben.")
 
+        # Fehlversuche beim zweiten Faktor zaehlen genauso wie beim Passwort.
+        # Ohne das war der zweite Faktor bei bekanntem Passwort beliebig oft
+        # ratbar: sechs Ziffern, drei davon zu jedem Zeitpunkt gueltig
+        # (`valid_window=1`) — mit genug Versuchen eine Frage von Minuten,
+        # nicht von Jahren. Dieselbe Luecke galt fuer die Rueckfallcodes.
+        def _totp_failed(kind: str):
+            user.failed_logins += 1
+            if user.failed_logins >= LOCK_AFTER:
+                user.locked_until = now + timedelta(minutes=LOCK_MINUTES)
+                user.failed_logins = 0
+            audit.record(db, kind, actor=user, request=request)
+            db.commit()
+            return HTTPException(status.HTTP_401_UNAUTHORIZED, "Der Code stimmt nicht.")
+
         # Ein Rueckfallcode statt des Zeitcodes: der Weg fuer ein verlorenes
         # Telefon. Erkannt an der Form, damit nicht jede fehlgeschlagene
         # Anmeldung beide Wege durchprobiert — jeder Versuch waere sonst ein
@@ -73,16 +98,12 @@ def login(
         if totp.looks_like_recovery(body.totp):
             rest = totp.redeem(user.totp_recovery or [], body.totp)
             if rest is None:
-                audit.record(db, "login.totp_failed", actor=user, request=request)
-                db.commit()
-                raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Der Code stimmt nicht.")
+                raise _totp_failed("login.recovery_failed")
             user.totp_recovery = rest
             audit.record(db, "login.recovery_used", actor=user, request=request,
                          remaining=len(rest))
         elif not totp.verify(user.totp_secret, body.totp):
-            audit.record(db, "login.totp_failed", actor=user, request=request)
-            db.commit()
-            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Der Code stimmt nicht.")
+            raise _totp_failed("login.totp_failed")
 
     user.failed_logins = 0
     user.locked_until = None
@@ -92,6 +113,41 @@ def login(
 
     set_session_cookie(response, user, settings_store.idle_minutes(db))
     return _me(user)
+
+
+@router.get("/storage")
+def my_storage(
+    user: User = Depends(current_user),
+    db: DbSession = Depends(get_db),
+) -> dict:
+    """Wie voll das eigene Zuhause ist.
+
+    Bewusst ein eigener Aufruf und nicht Teil von `/me`: `/me` laeuft bei
+    jedem Seitenaufbau, und eine Messung ueber ein gewachsenes Profil dauert
+    beim ersten Mal. Das Dashboard holt das hier nach, wenn es steht.
+
+    Der Wert kommt aus dem Puffer des Agents (zehn Minuten). Wer gerade
+    aufgeraeumt hat, sieht das Ergebnis also nicht sofort — dafuer wartet
+    niemand beim Anmelden.
+    """
+    quota = settings_store.profile_quota_bytes(db)
+    try:
+        used = int(agent_client.profile_usage(user.username).get("bytes", 0))
+    except Exception:  # noqa: BLE001 — eine Anzeige darf nichts umwerfen
+        return {"bytes": 0, "quota_bytes": quota, "percent": None, "level": "unbekannt"}
+
+    percent = round(used / quota * 100, 1) if quota else None
+    # Drei Stufen statt einer Zahl, weil die Zahl allein niemandem sagt, ob
+    # sie ein Problem ist. Warnung ab 80 %, wie in plan.md §11.3 vorgesehen.
+    if percent is None:
+        level = "ohne Grenze"
+    elif percent >= 100:
+        level = "voll"
+    elif percent >= 80:
+        level = "knapp"
+    else:
+        level = "in Ordnung"
+    return {"bytes": used, "quota_bytes": quota, "percent": percent, "level": level}
 
 
 @router.post("/logout")
@@ -112,6 +168,7 @@ def _me(user: User) -> MeOut:
         must_change_password=user.must_change_password,
         totp_enabled=bool(user.totp_secret),
         recovery_left=len(user.totp_recovery or []),
+        must_setup_totp=needs_totp(user),
     )
 
 

@@ -143,6 +143,7 @@ function GroupEditor({ group, permissions, onSaved, onClose, onToast }: {
   const [name, setName] = useState(group?.name ?? '')
   const [priority, setPriority] = useState(group?.priority ?? 100)
   const [perms, setPerms] = useState<string[]>(group?.permissions ?? [])
+  const [requireTotp, setRequireTotp] = useState(group?.require_totp ?? false)
   const [busy, setBusy] = useState(false)
 
   const byText = Object.fromEntries(permissions.map((p) => [p.text, p.key]))
@@ -151,7 +152,10 @@ function GroupEditor({ group, permissions, onSaved, onClose, onToast }: {
   async function save() {
     setBusy(true)
     try {
-      const body = { name, description: null, priority, permissions: perms }
+      const body = {
+        name, description: null, priority, permissions: perms,
+        require_totp: requireTotp,
+      }
       if (isNew) await api.createGroup(body)
       else await api.updateGroup(group.id, body)
       onToast(isNew ? `${name} angelegt` : `${name} gespeichert`)
@@ -217,6 +221,11 @@ function GroupEditor({ group, permissions, onSaved, onClose, onToast }: {
         <ChipSelect label={tr('Rechte')} selected={selected} options={permissions.map((p) => p.text)}
           onChange={(texts) => setPerms(texts.map((x) => byText[x]).filter(Boolean))} />
       </Field>
+
+      <Toggle on={requireTotp} name={tr('Zweiter Faktor ist Pflicht')}
+        note={tr('Mitglieder ohne zweiten Faktor können keinen Arbeitsplatz starten, bis sie ihn unter „Mein Konto“ eingerichtet haben. Die Anmeldung selbst bleibt möglich — sonst käme niemand an die Einrichtung.')}
+        ariaLabel={tr('Zweiter Faktor ist Pflicht')}
+        onChange={setRequireTotp} />
     </Drawer>
   )
 }

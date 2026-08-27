@@ -1235,3 +1235,40 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .applist__vis[aria-expanded="true"] { color: var(--text); }
 .applist__chips { margin-top: 6px; }
 .applist__chips .chip { padding: 3px 9px; font-size: 11.5px; }
+
+/* Zahlenfeld mit Einheit. Die Einheit gehört ans Feld, nicht in die
+   Beschriftung — sonst steht sie beim Tippen nicht mehr im Blick. */
+.numfield { display: flex; align-items: center; gap: 8px; }
+.numfield input {
+  width: 110px;
+  padding: 7px 10px;
+  background: var(--well);
+  border: 1px solid var(--edge);
+  border-radius: 6px;
+  color: var(--text);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.numfield input:hover { border-color: var(--edge-lit); }
+.numfield input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.numfield__unit { font-size: 12px; color: var(--label); }
+
+/* Hinweis, der etwas verlangt, ohne die Oberfläche zu verriegeln. Der
+   eigentliche Riegel sitzt beim Start einer Session — hier steht nur, warum. */
+.gate-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin: 0 0 18px;
+  padding: 12px 16px;
+  border: 1px solid var(--caution);
+  border-left-width: 3px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--caution) 8%, var(--bay));
+  font-size: 13px;
+}
+.gate-note b { color: var(--text); font-weight: 600; }
+.gate-note span { color: var(--label); }
+.gate-note .btn { margin-left: auto; }

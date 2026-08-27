@@ -183,6 +183,18 @@ export default function App() {
         {me.must_change_password && (
           <PasswordGate onDone={() => setMe({ ...me, must_change_password: false })} onToast={toast} />
         )}
+        {/* Kein Riegel vor der ganzen Oberfläche: Der Weg zur Einrichtung
+            führt durch sie hindurch. Der Riegel sitzt beim Start einer
+            Session, wo er auch serverseitig hält. */}
+        {me.must_setup_totp && !me.must_change_password && (
+          <div className="gate-note" role="status">
+            <b>{t('Zweiter Faktor ist für deine Gruppe Pflicht.')}</b>
+            <span>{t('Bis er eingerichtet ist, lässt sich kein Arbeitsplatz starten.')}</span>
+            <button className="btn btn--sm btn--primary" onClick={() => setView('account')}>
+              {t('Jetzt einrichten')}
+            </button>
+          </div>
+        )}
         {current === 'dashboard' && (
           <Dashboard me={me} onOpen={openSession} onToast={toast} />
         )}

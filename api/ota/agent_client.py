@@ -42,6 +42,11 @@ def host_info() -> dict[str, Any]:
     return _call("GET", "/host")
 
 
+def profile_usage(username: str, fresh: bool = False) -> dict[str, Any]:
+    suffix = "?fresh=true" if fresh else ""
+    return _call("GET", f"/profiles/{username}/usage{suffix}")
+
+
 def list_images() -> list[dict[str, Any]]:
     return _call("GET", "/images")
 

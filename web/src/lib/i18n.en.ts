@@ -845,4 +845,32 @@ export const EN: Record<string, string> = {
   'Nur für: {names}': 'Only for: {names}',
   'gelöschte Gruppe': 'deleted group',
   'Sichtbar für welche Gruppen': 'Visible to which groups',
+  'Platz': 'Storage',
+  'Kontingent je Zuhause': 'Quota per home',
+  'Wie viel ein Nutzer in seinem Home belegen darf. Wer darüber liegt, startet keine neue Session mehr — laufende bleiben unberührt. 0 schaltet die Grenze ab.':
+    'How much a user may occupy in their home directory. Anyone above it starts no new session — running ones are untouched. 0 turns the limit off.',
+  'Untergrenze für den freien Plattenplatz': 'Floor for free disk space',
+  'Fällt der freie Platz auf dem Host darunter, startet keine Session mehr. Ein volles Dateisystem bringt laufende Arbeitsplätze zum Stehen — das hier ist die Bremse davor. 0 schaltet sie ab.':
+    'If free space on the host drops below this, no session starts. A full filesystem brings running workspaces to a halt — this is the brake before that. 0 turns it off.',
+  'Beides wirkt beim Start einer Session, nicht beim Schreiben einer Datei. Es ist kein Dateisystem-Kontingent — wer schon drin ist, kann weiter schreiben.':
+    'Both apply when a session starts, not when a file is written. This is not a filesystem quota — anyone already inside can keep writing.',
+  'Kontingent abgeschaltet': 'Quota turned off',
+  'Kontingent auf {n} GB gesetzt': 'Quota set to {n} GB',
+  'Untergrenze abgeschaltet': 'Floor turned off',
+  'Untergrenze auf {n} GB gesetzt': 'Floor set to {n} GB',
+  'GB': 'GB',
+  'Zweiter Faktor ist für deine Gruppe Pflicht.': 'Two-factor is mandatory for your group.',
+  'Bis er eingerichtet ist, lässt sich kein Arbeitsplatz starten.':
+    'Until it is set up, no workspace will start.',
+  'Jetzt einrichten': 'Set it up now',
+  'Zweiter Faktor ist Pflicht': 'Two-factor is mandatory',
+  'Mitglieder ohne zweiten Faktor können keinen Arbeitsplatz starten, bis sie ihn unter „Mein Konto“ eingerichtet haben. Die Anmeldung selbst bleibt möglich — sonst käme niemand an die Einrichtung.':
+    'Members without a second factor cannot start a workspace until they have set one up under “My account”. Signing in still works — otherwise nobody could reach the setup.',
+  'Dein Zuhause ist voll.': 'Your home directory is full.',
+  'Dein Zuhause wird knapp.': 'Your home directory is getting tight.',
+  '{used} von {quota} belegt ({pct} %).': '{used} of {quota} used ({pct} %).',
+  'Bis du aufräumst, startet kein Arbeitsplatz mehr.':
+    'Until you clear some space, no workspace will start.',
+  'Downloads, Caches und alte Abbilder sind meist die Größten.':
+    'Downloads, caches and old images are usually the biggest.',
 }

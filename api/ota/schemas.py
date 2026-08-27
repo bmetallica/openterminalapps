@@ -56,6 +56,7 @@ class GroupOut(BaseModel):
     permissions: list[str] = []
     member_count: int = 0
     is_system: bool = False
+    require_totp: bool = False
 
 
 class GroupIn(BaseModel):
@@ -63,6 +64,7 @@ class GroupIn(BaseModel):
     description: str | None = None
     priority: int = Field(default=100, ge=1, le=9999)
     permissions: list[str] = []
+    require_totp: bool = False
 
 
 class SessionAdminOut(BaseModel):
@@ -91,6 +93,8 @@ class MeOut(BaseModel):
     # noch uebrig? Das Geheimnis selbst verlaesst den Server nie.
     totp_enabled: bool = False
     recovery_left: int = 0
+    # Eine Gruppe verlangt den zweiten Faktor, er ist aber nicht eingerichtet.
+    must_setup_totp: bool = False
 
 
 class AppOut(BaseModel):
@@ -361,6 +365,9 @@ class SettingsIn(BaseModel):
     # Optional, damit spaetere Einstellungen einzeln gesetzt werden koennen,
     # ohne die uebrigen mitzuschicken.
     auth_idle_minutes: int | None = None
+    # 0 heisst jeweils: keine Grenze.
+    profile_quota_gb: int | None = None
+    disk_floor_gb: int | None = None
 
 
 class ImagePullIn(BaseModel):

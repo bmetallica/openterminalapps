@@ -53,6 +53,21 @@ einzelnen Rechte (*Nutzer anlegen und ändern*, *Workspaces anlegen und ändern*
 ausserhalb von `/home`. Was dauerhaft dabei sein soll, gehört ins Golden Image
 ([Kapitel 7](07-golden-images.md)).
 
+## Was ein Recht bedeutet — und was nicht
+
+*Alle Sessions sehen und beenden* (`sessions.view_all`) heisst genau das: In der Verwaltung stehen
+alle laufenden Sessions, und sie lassen sich beenden. Es heisst **nicht**, dass man sich auf einen
+fremden Bildschirm schalten kann.
+
+Bis zum 2026-08-27 tat es das doch. Die Prüfung vor jedem Aufruf von `/s/<id>/` benutzte dieselbe
+Funktion wie die Liste, und damit reichte das Recht bis auf den laufenden Bildschirm eines anderen
+Menschen — mit seinem offenen Terminal und seinem entsperrten Passwortspeicher. Zwischen „sehen,
+dass etwas läuft" und „daran sitzen" liegt der ganze Unterschied.
+
+Auf einen fremden Bildschirm kommt jetzt nur ein **voller Administrator**, und der sitzt ohnehin am
+Docker-Host und erreicht dort dasselbe. Eine Fernhilfe mit ausdrücklicher Einwilligung des Nutzers
+wäre der richtige Weg dafür; die gibt es noch nicht.
+
 ## Passwörter und Anmeldung
 
 - **Argon2id**, Mindestlänge 12, Abgleich gegen bekannt kompromittierte Passwörter
@@ -102,8 +117,25 @@ unbeaufsichtigten Rechner —, soll den zweiten Faktor nicht entfernen können; 
 
 ### Was noch fehlt
 
-Ein Zwang je Gruppe („diese Gruppe muss Zwei-Faktor haben") ist 🔨 offen, ebenso WebAuthn und
-Passkeys (M9).
+**Raten wird gesperrt.** Acht Fehlversuche sperren das Konto für 15 Minuten. Seit dem 2026-08-27
+zählen Fehlversuche beim **zweiten Faktor** genauso mit — vorher taten sie es nicht, und damit war
+der zweite Faktor bei bekanntem Passwort beliebig oft ratbar: sechs Ziffern, davon drei zu jedem
+Zeitpunkt gültig. Dasselbe galt für die Rückfallcodes.
+
+### Zwang je Gruppe ✅
+
+Im Gruppen-Editor steht **„Zweiter Faktor ist Pflicht"**. Ist er an, gilt für jedes Mitglied:
+
+- **Die Anmeldung bleibt möglich.** Wer sich nicht anmelden kann, kommt nicht an *Mein Konto* und
+  kann den zweiten Faktor gar nicht erst einrichten — eine Sperre an der Anmeldung wäre eine Sperre
+  gegen ihre eigene Auflösung.
+- **Es startet kein Arbeitsplatz.** Der Versuch endet mit dem Hinweis, den Faktor einzurichten.
+- Im Dashboard steht ein Streifen mit einer Schaltfläche, die direkt zur Einrichtung führt.
+
+Der Zwang lässt sich auch für die Systemgruppen setzen — gerade für sie: *„admins muss
+Zwei-Faktor haben"* ist der häufigste Wunsch.
+
+WebAuthn und Passkeys sind weiterhin 🔨 offen (M9).
 
 ## Active Directory und LDAP 🔨 M6
 

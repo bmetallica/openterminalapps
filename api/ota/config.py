@@ -40,6 +40,11 @@ class Settings(BaseSettings):
     cookie_secure: bool = True
     cookie_name: str = "ota_session"
 
+    # Merkmal fuer einen Kennzahlen-Sammler (Prometheus). Leer heisst: nur
+    # Administratoren kommen an /metrics. Absichtlich kein Standardwert —
+    # ein voreingestelltes Merkmal ist kein Merkmal.
+    metrics_token: str = ""
+
 
 @lru_cache
 def settings() -> Settings:

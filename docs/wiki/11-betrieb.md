@@ -168,19 +168,145 @@ Ablehnung neuer Sessions bei 100 % — mit einer verständlichen Meldung, nicht 
 
 Alte Golden-Image-Versionen werden automatisch aufgeräumt (Vorgabe: die letzten drei behalten).
 
-## Überwachung 🔨 M7
+## Was einen Session-Container einsperrt ✅
 
-Jeder Dienst bringt `/healthz` mit. Vorgesehene Metriken: aktive Sessions, Startdauer, Fehlerquote,
-Host-Auslastung. Prometheus-Format, Grafana optional.
+Jeder Container, der nicht einem Administrator gehört, läuft mit:
+
+| | |
+|---|---|
+| `no-new-privileges:true` | verhindert **jede** Rechteerhöhung, auch die über setuid. `sudo` läuft damit gar nicht erst an |
+| `cap_drop: ALL` | keine einzige Linux-Fähigkeit. Insbesondere kein `SYS_ADMIN` |
+| seccomp | der Standardfilter von Docker; er sperrt rund 40 Systemaufrufe, die ein Anwendungscontainer nicht braucht |
+| `pids_limit: 4096` | eine Fork-Bombe legt den eigenen Container lahm, nicht den Host |
+| `mem_limit`, `nano_cpus` | je Nutzer und Workspace einstellbar ([Kapitel 6](06-ressourcen-und-zuteilung.md)) |
+| eigenes Netz | `ota_sessions`; die Datenbank liegt nicht darin |
+| `shm_size: 1g` | grosszügig, weil Browser und Electron-Anwendungen sonst unvermittelt abstürzen |
+
+Für Administratoren fallen die ersten beiden Zeilen weg — sonst liefe `sudo` nicht
+([Kapitel 8](08-nutzer-und-gruppen.md)).
+
+### Kein `SYS_ADMIN`, und was das kostet
+
+Diese Fähigkeit stand bis zum 2026-08-27 für jeden Arbeitsplatz im Code, ohne Begründung. Sie
+erlaubt Einhängungen und eigene Namespaces und ist damit praktisch gleichbedeutend mit Root auf dem
+Host. Sie neben `no-new-privileges` zu setzen und gleichzeitig zu behaupten, ein
+Nicht-Administrator komme nicht an Root, war ein Widerspruch. Sie ist weg.
+
+Zwei Dinge verhalten sich seitdem anders — beide sind geprüft und beide sind der bessere Tausch:
+
+**Firefox schreibt „CanCreateUserNamespace() clone() failure: EPERM" ins Protokoll** und startet
+normal. Der Standard-seccomp-Filter von Docker lässt eigene User-Namespaces nur mit `SYS_ADMIN` zu,
+und ohne sie fällt Firefox auf eine schwächere interne Sandbox zurück. Das ist zu verkraften: Diese
+Sandbox schützt vor einer bösartigen Webseite, und die landet im schlimmsten Fall in genau dem
+Container, in dem der Nutzer ohnehin ein Terminal hat. `SYS_ADMIN` dagegen ist ein Weg **aus** dem
+Container heraus.
+
+**AppImages hängen sich nicht mehr selbst per FUSE ein.** Deshalb legt das AppImage-Rezept jetzt
+einen Starter mit `APPIMAGE_EXTRACT_AND_RUN=1` an: Das AppImage entpackt sich und startet daraus.
+Kostet einen Moment beim Start und sonst nichts — und spart `libfuse2` im Image.
+
+## Überwachung ✅
+
+### `GET /healthz`
+
+Beantwortet **eine** Frage: Kann die Anwendung gerade arbeiten? Ohne Anmeldung, damit ein
+Lastverteiler oder ein Docker-Healthcheck sie stellen kann.
+
+```json
+{"status": "ok", "db": "ok", "agent": "ok"}
+```
+
+Fehlt die **Datenbank**, kommt `503` — ohne sie geht nichts. Fehlt der **Agent**, bleibt es bei
+`200`: Anmelden und Nachsehen funktioniert weiter, nur starten lässt sich nichts. Das im Ergebnis zu
+zeigen und trotzdem nicht als tot zu melden, ist der Unterschied zwischen einer Alarmierung und
+einem Fehlalarm.
+
+> Bis zum 2026-08-27 gab dieser Endpunkt fest `{"status":"ok"}` zurück, ohne irgendetwas zu prüfen.
+> Ein Health-Check, der immer „ok" sagt, ist keiner.
+
+### `GET /metrics`
+
+Prometheus-Textformat. **Nicht offen** — zwei Wege herein:
+
+| Weg | Wofür |
+|---|---|
+| `Authorization: Bearer <OTA_METRICS_TOKEN>` | ein Sammler. Das Merkmal steht in `deploy/.env`; ist es leer, gibt es diesen Weg nicht |
+| angemeldet als Administrator (oder mit *Einstellungen ändern*) | ein Mensch, der einmal nachsieht |
+
+Die Zahlen verraten für sich genommen wenig — aber sie verraten, wie viele Menschen hier arbeiten
+und wann. Das gehört nicht ins offene Netz.
+
+```
+ota_sessions{status="running"}          Sessions je Zustand
+ota_users, ota_users_active,
+ota_users_totp                          Konten, davon anmeldefähig, davon mit zweitem Faktor
+ota_templates, ota_templates_enabled    Workspaces
+ota_registries                          eingetragene Kataloge
+ota_builds{status="…"}                  Image-Builds je Zustand
+ota_host_memory_bytes,
+ota_host_memory_available_bytes,
+ota_host_disk_free_bytes, ota_host_cores
+ota_agent_up                            1 oder 0
+```
+
+Der Zustand des Hosts wird 15 Sekunden gepuffert. Ohne das wäre der Agent damit beschäftigt,
+mehreren Sammlern immer wieder dasselbe zu antworten.
+
+Beispiel für eine Alarmregel:
+
+```yaml
+- alert: OTAAgentWeg
+  expr: ota_agent_up == 0
+  for: 2m
+- alert: OTAPlatteKnapp
+  expr: ota_host_disk_free_bytes < 10e9
+  for: 10m
+- alert: OTABuildHaengt
+  expr: ota_builds{status="building"} > 0
+  for: 45m
+```
 
 Beobachtenswert:
 
 | Wert | Warum |
 |---|---|
 | Freier Arbeitsspeicher | Der knappste Posten. Unter 15 % wird es eng |
-| Startdauer der Sessions | Steigt sie, ist meist die Platte der Grund |
-| Fehlgeschlagene Starts | Meist Kapazität oder ein fehlendes Image |
-| Profilgrößen | Frühwarnung vor der Quote |
+| Freier Plattenplatz | Ein volles Dateisystem bringt laufende Arbeitsplätze zum Stehen |
+| Fehlgeschlagene Builds | Meist ein Paketname, den das Image nicht kennt |
+| `ota_agent_up` | Ohne Agent startet nichts, und die Oberfläche sagt es erst beim Versuch |
+
+## Platz: Kontingent und Untergrenze ✅
+
+Unter **Verwaltung → Einstellungen → Platz** stehen zwei Zahlen:
+
+| | Standard | Wirkung |
+|---|---|---|
+| **Kontingent je Zuhause** | 20 GB | Wer darüber liegt, startet **keine neue Session** mehr |
+| **Untergrenze freier Plattenplatz** | 5 GB | Fällt der Host darunter, startet **niemand** mehr eine Session |
+
+**0 schaltet die jeweilige Grenze ab.**
+
+Beides wirkt **beim Start einer Session, nicht beim Schreiben einer Datei**. Es ist kein
+Dateisystem-Kontingent: Wer schon drin sitzt, kann weiter schreiben, und eine laufende Session wird
+nicht abgeschnitten. Der Zweck ist eine verständliche Ablehnung statt eines Containers, der
+irgendwann mitten in der Arbeit beim Schreiben stehenbleibt.
+
+Gemessen wird mit `du` über das Profilverzeichnis, gezählt werden **belegte Blöcke** — die Frage
+lautet ja, wie viel Platz auf der Platte weg ist. Der Wert wird im Agent **zehn Minuten** gepuffert;
+ein Profil wächst zwischen zwei Starts nicht um Gigabytes. Wer in der Nutzerverwaltung nachsieht,
+löst eine frische Messung aus.
+
+**Ab 80 % steht ein Hinweis auf dem Dashboard**, ab 100 % steht dort, dass nichts mehr startet.
+Der Wert wird nachgeladen und ist nicht Teil des ersten Seitenaufbaus — sonst wartete jeder beim
+Anmelden auf eine Messung.
+
+Die Meldung beim Start nennt Zahl und Ausweg:
+
+> Dein Zuhause belegt 21,4 GB und damit die gesamten 20 GB, die dir zustehen. Räume auf —
+> Downloads, Caches, alte Container-Abbilder — oder bitte deinen Administrator um mehr Platz.
+
+In der **Nutzerverwaltung** steht der Verbrauch je Konto — dort frisch gemessen, weil jemand
+ausdrücklich nachsieht.
 
 ## Rückfall auf Kasm
 

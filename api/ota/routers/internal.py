@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session as DbSession
 from ..config import settings
 from ..db import get_db
 from ..models import Session as SessionModel, User
-from ..security import as_uuid, owns_session, read_token
+from ..security import as_uuid, may_attach_to_session, read_token
 
 router = APIRouter(prefix="/api/internal", tags=["internal"])
 
@@ -23,7 +23,8 @@ def authz(request: Request, db: DbSession = Depends(get_db)) -> Response:
 
     Wird vor JEDEM Request auf /s/<id>/... aufgerufen, auch vor dem
     WebSocket-Handshake. Prueft, ob der Cookie zu einem Nutzer gehoert, dem
-    diese Session gehoert. Fremde Sessions ergeben 403.
+    diese Session gehoert. Fremde Sessions ergeben 403 — auch fuer jemanden
+    mit `sessions.view_all`, siehe `may_attach_to_session`.
     """
     uri = request.headers.get("x-forwarded-uri", "")
     match = _SESSION_PATH.match(uri)
@@ -46,7 +47,9 @@ def authz(request: Request, db: DbSession = Depends(get_db)) -> Response:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Sitzung wurde beendet")
 
     sess = db.get(SessionModel, session_id)
-    if not sess or not owns_session(sess, user):
+    # Bewusst nicht `owns_session`: Das Recht, alle Sessions zu *sehen*, ist
+    # nicht das Recht, an einem fremden Bildschirm zu sitzen.
+    if not sess or not may_attach_to_session(sess, user):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Diese Session gehört dir nicht")
 
     return Response(status_code=status.HTTP_200_OK)

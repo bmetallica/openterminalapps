@@ -240,6 +240,34 @@ def _admin_count(db: DbSession) -> int:
     return total
 
 
+@router.get("/users/{username}/usage", dependencies=[Depends(manage_users)])
+def user_usage(username: str, db: DbSession = Depends(get_db)) -> dict:
+    """Wie viel Platz das Zuhause dieses Nutzers belegt.
+
+    Ueber den Namen und nicht ueber die Kennung, weil das Profil im
+    Dateisystem am Namen haengt — und weil hier jemand ausdruecklich
+    nachsieht, wird frisch gemessen statt gepuffert.
+    """
+    user = db.scalar(select(User).where(User.username == username))
+    if user is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Nutzer nicht gefunden")
+
+    quota = settings_store.profile_quota_bytes(db)
+    try:
+        used = int(agent_client.profile_usage(user.username, fresh=True).get("bytes", 0))
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY,
+                            f"Der Platz liess sich nicht messen: {exc}") from exc
+
+    return {
+        "username": user.username,
+        "bytes": used,
+        "quota_bytes": quota,
+        # Ohne Kontingent gibt es keinen Anteil. Null waere gelogen.
+        "percent": round(used / quota * 100, 1) if quota else None,
+    }
+
+
 @router.delete("/users/{user_id}", dependencies=[Depends(manage_users)])
 def delete_user(
     user_id: uuid.UUID,
@@ -345,6 +373,10 @@ def update_group(
         group.description = body.description
         group.priority = body.priority
         group.permissions = body.permissions
+
+    # Der Zwang zum zweiten Faktor gilt auch fuer die Systemgruppen. Gerade
+    # fuer sie: „admins muss Zwei-Faktor haben" ist der haeufigste Wunsch.
+    group.require_totp = body.require_totp
 
     audit.record(db, "group.updated", actor=actor, object_type="group",
                  object_id=group.slug, request=request)
@@ -461,6 +493,8 @@ def read_settings(db: DbSession = Depends(get_db)) -> dict:
     return {
         "auth_idle_minutes": settings_store.idle_minutes(db),
         "auth_idle_steps": list(settings_store.IDLE_STEPS),
+        "profile_quota_gb": settings_store.profile_quota_bytes(db) // 1024 ** 3,
+        "disk_floor_gb": settings_store.disk_floor_bytes(db) // 1024 ** 3,
     }
 
 
@@ -478,6 +512,20 @@ def write_settings(
                 "Diese Anmeldefrist ist nicht vorgesehen.",
             )
         settings_store.put(db, settings_store.AUTH_IDLE_MINUTES, body.auth_idle_minutes)
+
+    # 0 heisst „keine Grenze" und ist damit ein zulaessiger Wert, kein
+    # fehlender. Deshalb `is not None` und nicht `if body.x`.
+    if body.profile_quota_gb is not None:
+        if not 0 <= body.profile_quota_gb <= 10_000:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                                "Ein Kontingent zwischen 0 und 10000 GB, bitte.")
+        settings_store.put(db, settings_store.PROFILE_QUOTA_GB, body.profile_quota_gb)
+
+    if body.disk_floor_gb is not None:
+        if not 0 <= body.disk_floor_gb <= 10_000:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                                "Eine Untergrenze zwischen 0 und 10000 GB, bitte.")
+        settings_store.put(db, settings_store.DISK_FLOOR_GB, body.disk_floor_gb)
 
     audit.record(db, "settings.updated", actor=actor, object_type="settings",
                  object_id="global", request=request)

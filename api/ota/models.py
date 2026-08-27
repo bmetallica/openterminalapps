@@ -104,6 +104,10 @@ class Group(Base):
     # Kleinere Zahl gewinnt bei widersprechenden Abweichungen.
     priority: Mapped[int] = mapped_column(Integer, default=100)
     permissions: Mapped[list] = mapped_column(JSONB, default=list)
+    # Verlangt diese Gruppe einen zweiten Faktor? Durchgesetzt wird das beim
+    # Start einer Session, nicht bei der Anmeldung: Wer sich nicht anmelden
+    # kann, kann auch keinen zweiten Faktor einrichten.
+    require_totp: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     members: Mapped[list[User]] = relationship(

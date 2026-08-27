@@ -10,9 +10,12 @@ from __future__ import annotations
 import base64
 import logging
 import os
+import re
 import shutil
 import secrets
+import subprocess
 import threading
+import time
 from typing import Any
 
 import docker
@@ -360,9 +363,17 @@ def start_container(req: StartRequest) -> dict[str, Any]:
             #
             # Fuer alle anderen bleibt beides scharf. Wer nicht administriert,
             # bekommt auch keinen Weg zu root.
+            #
+            # Kein SYS_ADMIN. Diese Faehigkeit stand hier vom ersten Tag an fuer
+            # den Arbeitsplatz und war nie begruendet — sie erlaubt Mounts und
+            # eigene Namespaces und ist damit praktisch gleichbedeutend mit
+            # root. Sie neben `no-new-privileges` zu setzen und dann zu
+            # behaupten, ein Nicht-Administrator komme nicht an root, war ein
+            # Widerspruch. Der Verdacht war, dass Chrome und Electron sie fuer
+            # ihre Sandbox brauchen; das stimmt nicht — die laufen ueber
+            # `--no-sandbox`, erkannt an `chrome-sandbox` neben dem Programm.
             security_opt=[] if req.elevated else ["no-new-privileges:true"],
             cap_drop=[] if req.elevated else ["ALL"],
-            cap_add=["SYS_ADMIN"] if req.mode == "workspace" and not req.elevated else [],
             pids_limit=4096,
             restart_policy={"Name": "no"},
         )
@@ -944,3 +955,61 @@ def delete_backup(path: str) -> dict[str, str]:
         return backup_ops.delete_file(path)
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+
+# --------------------------------------------------------------------------
+# Platz im Zuhause
+# --------------------------------------------------------------------------
+
+# `du` ueber ein gewachsenes Profil dauert. Nicht lange — aber lange genug,
+# dass es beim Start einer Session auffiele, und der Wert aendert sich
+# waehrend einer Sitzung kaum. Deshalb ein Puffer je Nutzer.
+_USAGE_TTL = 600.0
+_usage: dict[str, tuple[float, int]] = {}
+
+
+def _du(path: str) -> int:
+    """Belegter Platz in Bytes, oder 0, wenn es den Pfad nicht gibt.
+
+    `du` statt eines Spaziergangs in Python: Es zaehlt Hardlinks nur einmal
+    und ist bei zehntausenden kleinen Dateien um Groessenordnungen schneller.
+
+    Gezaehlt werden **belegte Bloecke**, nicht die scheinbare Groesse
+    (`--apparent-size`). Der Unterschied ist bei einer duennen Datei erheblich,
+    und die Frage lautet hier: Wie viel Platz auf der Platte ist weg?
+    """
+    if not os.path.isdir(path):
+        return 0
+    try:
+        out = subprocess.run(
+            ["du", "-s", "--block-size=1", "--", path],
+            capture_output=True, text=True, timeout=120,
+        )
+    except (subprocess.SubprocessError, OSError):
+        return 0
+    head = (out.stdout or "").split("\t", 1)[0].strip()
+    try:
+        return int(head)
+    except ValueError:
+        return 0
+
+
+@app.get("/profiles/{username}/usage", dependencies=[Depends(require_token)])
+def profile_usage(username: str, fresh: bool = False) -> dict[str, Any]:
+    """Wie viel Platz das Zuhause eines Nutzers belegt.
+
+    `fresh=true` umgeht den Puffer — fuer die Anzeige in der Verwaltung, wo
+    jemand ausdruecklich nachsieht und auf eine Sekunde warten kann.
+    """
+    if not re.fullmatch(r"[A-Za-z0-9._-]{1,64}", username or ""):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Kein gültiger Benutzername")
+
+    root = os.path.join(PROFILES_ROOT, username)
+    now = time.monotonic()
+    hit = _usage.get(username)
+    if not fresh and hit is not None and now - hit[0] < _USAGE_TTL:
+        return {"username": username, "bytes": hit[1], "gemessen": "gepuffert"}
+
+    size = _du(root)
+    _usage[username] = (now, size)
+    return {"username": username, "bytes": size, "gemessen": "jetzt"}

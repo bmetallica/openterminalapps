@@ -92,6 +92,8 @@ services:
       OTA_PROFILES_ROOT: "${OTA_PROFILES_ROOT:-/srv/ota/profiles}"
       # Nur, um Images der eigenen Registry als eigene zu erkennen.
       OTA_REGISTRY: "${OTA_REGISTRY:-127.0.0.1:5000}"
+      # Leer heisst: nur Administratoren kommen an /metrics.
+      OTA_METRICS_TOKEN: "${OTA_METRICS_TOKEN:-}"
       OTA_COOKIE_SECURE: "true"
     volumes:
       # Das Handbuch wird eingehaengt statt ins Abbild kopiert: So laesst es
@@ -106,7 +108,9 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=ota_public"
-      - "traefik.http.routers.ota-api.rule=PathPrefix(`/api`)"
+      # /healthz und /metrics liegen bewusst nicht unter /api: Ein
+      # Überwachungssystem soll sie an der Stelle finden, an der es sie sucht.
+      - "traefik.http.routers.ota-api.rule=PathPrefix(`/api`) || Path(`/healthz`) || Path(`/metrics`)"
       - "traefik.http.routers.ota-api.entrypoints=websecure"
       - "traefik.http.routers.ota-api.tls=true"
       - "traefik.http.routers.ota-api.priority=50"
