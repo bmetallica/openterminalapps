@@ -95,6 +95,12 @@ services:
       # Leer heisst: nur Administratoren kommen an /metrics.
       OTA_METRICS_TOKEN: "${OTA_METRICS_TOKEN:-}"
       OTA_COOKIE_SECURE: "true"
+      # Identitaet. Bei "vorhanden" zeigt OTA_KEYCLOAK_URL auf das fremde
+      # Keycloak; leer heisst: der mitgelieferte aus diesem Stack.
+      OTA_IDP_MODE: "${OTA_IDP_MODE:-mitgeliefert}"
+      OTA_KEYCLOAK_URL: "${OTA_KEYCLOAK_URL:-}"
+      OTA_KEYCLOAK_REALM: "${OTA_KEYCLOAK_REALM:-ota}"
+      OTA_KEYCLOAK_SECRET: "${OTA_KEYCLOAK_SECRET:-}"
     volumes:
       # Das Handbuch wird eingehaengt statt ins Abbild kopiert: So laesst es
       # sich nachbessern, ohne das Abbild neu zu bauen — dieselbe Ueberlegung
@@ -228,6 +234,87 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
+
+  # ------------------------------------------------------------------
+  # Keycloak — die zentrale Identität (auth-roadmap.md)
+  #
+  # Steht hier als **mitgelieferte** Betriebsart. Wer schon ein Keycloak
+  # betreibt, setzt OTA_IDP_MODE=vorhanden und OTA_KEYCLOAK_URL; dann bleibt
+  # dieser Dienst ungenutzt stehen und darf abgeschaltet werden.
+  #
+  # In beiden Netzen: `internal` fuer die Datenbank, `public` fuer Traefik —
+  # und weil `internal` keinen Weg nach draussen hat, ein spaeteres Active
+  # Directory aber ausserhalb steht.
+  # ------------------------------------------------------------------
+  keycloak-db-init:
+    image: postgres:16-alpine
+    container_name: ota-keycloak-db-init
+    profiles: ["", "default"]
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD fehlt in deploy/.env}"
+    # Eine eigene Datenbank im vorhandenen Postgres statt eines zweiten
+    # Servers. Idempotent: Beim zweiten Lauf passiert nichts.
+    command: >
+      sh -c 'psql -h db -U "${POSTGRES_USER:-ota}" -d "${POSTGRES_DB:-ota}" -tAc
+      "SELECT 1 FROM pg_database WHERE datname='"'"'keycloak'"'"'" | grep -q 1
+      || psql -h db -U "${POSTGRES_USER:-ota}" -d "${POSTGRES_DB:-ota}" -c "CREATE DATABASE keycloak"'
+    restart: "no"
+    networks:
+      - internal
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.7
+    container_name: ota-keycloak
+    restart: unless-stopped
+    depends_on:
+      keycloak-db-init:
+        condition: service_completed_successfully
+    command: ["start", "--optimized=false"]
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: "jdbc:postgresql://db:5432/keycloak"
+      KC_DB_USERNAME: "${POSTGRES_USER:-ota}"
+      KC_DB_PASSWORD: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD fehlt in deploy/.env}"
+      # Unter /auth, damit OTA und Keycloak sich **eine** Herkunft teilen.
+      # Das ist kein Schoenheitsfehler, sondern der Grund, aus dem die
+      # Desktop-Verknuepfungen den Anmeldeweg spaeter ueberstehen: Ein
+      # Sprung zu einer fremden Herkunft verliesse den Geltungsbereich des
+      # Manifests (auth-roadmap.md §5.6).
+      KC_HTTP_RELATIVE_PATH: /auth
+      KC_HTTP_ENABLED: "true"
+      KC_PROXY_HEADERS: xforwarded
+      # Der Name kommt aus der Anfrage. Diese Anlage ist unter mehreren
+      # Adressen erreichbar — IP im LAN, Name hinter dem Reverse Proxy —
+      # und ein fest verdrahteter Hostname sperrte jeweils die andere aus.
+      KC_HOSTNAME_STRICT: "false"
+      KC_HEALTH_ENABLED: "true"
+      KC_BOOTSTRAP_ADMIN_USERNAME: "${KEYCLOAK_ADMIN_USER:-setup}"
+      KC_BOOTSTRAP_ADMIN_PASSWORD: "${KEYCLOAK_ADMIN_PW:?KEYCLOAK_ADMIN_PW fehlt in deploy/.env}"
+      JAVA_OPTS_APPEND: "${KEYCLOAK_JAVA_OPTS:--Xms256m -Xmx512m}"
+    networks:
+      - public
+      - internal
+    healthcheck:
+      # Das Abbild bringt weder curl noch wget mit. Die Gesundheitsauskunft
+      # liegt seit Fassung 25 auf dem eigenen Verwaltungsport 9000.
+      test: ["CMD-SHELL",
+             "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /auth/health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 && grep -q 'UP' <&3"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=ota_public"
+      # Priorität über der Weboberfläche, die jeden Pfad beantwortet.
+      - "traefik.http.routers.ota-keycloak.rule=PathPrefix(`/auth`)"
+      - "traefik.http.routers.ota-keycloak.entrypoints=websecure"
+      - "traefik.http.routers.ota-keycloak.tls=true"
+      - "traefik.http.routers.ota-keycloak.priority=60"
+      - "traefik.http.services.ota-keycloak.loadbalancer.server.port=8080"
 
 volumes:
   registry-data:

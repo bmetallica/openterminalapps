@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Field, Toggle } from '../components/controls'
-import { ApiError, api, type Group, type IdentityConfig } from '../lib/api'
+import { Field, Led, Toggle } from '../components/controls'
+import { ApiError, api, type Group, type IdentityConfig, type KeycloakStatus } from '../lib/api'
 import { ago } from '../lib/format'
 import { t as tr, useLang } from '../lib/i18n'
 
@@ -12,6 +12,76 @@ import { t as tr, useLang } from '../lib/i18n'
  * Ende und nicht oben — er ist die einzige Einstellung in OTA, bei der ein
  * Fehler Menschen aussperrt, und er soll nicht blind erreichbar sein.
  */
+/**
+ * Zustand des Identity Providers.
+ *
+ * Steht hier oben, weil diese Anbindung ihn ablösen wird (auth-roadmap.md).
+ * Noch **ohne Wirkung auf die Anmeldung** — die macht OTA weiterhin selbst.
+ * Was die Karte beantwortet, ist die Frage vor jedem weiteren Schritt: Läuft
+ * er, und was darf OTA darin?
+ *
+ * Die Fähigkeiten stehen einzeln da und nicht als „verbunden": Bei einem
+ * fremden Keycloak ist OTA Gast, und was es dort nicht darf, soll es hier
+ * lesen können statt später an einem 403 zu scheitern.
+ */
+function KeycloakKarte() {
+  const [st, setSt] = useState<KeycloakStatus | null>(null)
+  const [laedt, setLaedt] = useState(true)
+
+  useEffect(() => {
+    api.keycloakStatus()
+      .then(setSt).catch(() => setSt(null))
+      .finally(() => setLaedt(false))
+  }, [])
+
+  if (laedt || !st) return null
+
+  const NAMEN: Record<string, string> = {
+    konten: tr('Konten'),
+    gruppen: tr('Gruppen'),
+    clients: tr('Anwendungen'),
+    verzeichnis: tr('Verzeichnisanbindung'),
+  }
+
+  return (
+    <>
+      <div className="section__head">
+        <span className="silk">{tr('Zentrale Identität')}</span>
+        <span className="section__rule" />
+        <Led status={st.erreichbar ? 'live' : 'fail'} />
+      </div>
+      <div className="panel" style={{ padding: '16px 20px', marginBottom: 18 }}>
+        <div className="bay__facts" style={{ marginBottom: 12 }}>
+          <span className="bay__fact"><span className="silk">{tr('Betriebsart')}</span>
+            <b>{st.betriebsart === 'mitgeliefert' ? tr('Mitgeliefert') : tr('Vorhanden')}</b></span>
+          <span className="bay__fact"><span className="silk">{tr('Realm')}</span>
+            <b>{st.realm}</b></span>
+          <span className="bay__fact"><span className="silk">{tr('Fassung')}</span>
+            <b>{st.version ?? '—'}</b></span>
+        </div>
+
+        {st.fehler ? (
+          <p className="note-warn" style={{ margin: 0 }}>{st.fehler}</p>
+        ) : (
+          <div className="strip">
+            {Object.entries(st.faehigkeiten).map(([k, v]) => (
+              <span key={k} className={`chip${v ? ' is-on' : ''}`}>
+                {NAMEN[k] ?? k}
+              </span>
+            ))}
+          </div>
+        )}
+
+        <p className="field__hint" style={{ marginTop: 12 }}>
+          {st.betriebsart === 'mitgeliefert'
+            ? tr('Läuft in diesem Stack. Die Anmeldung macht OTA vorerst weiterhin selbst — diese Anbindung wird sie später ablösen.')
+            : tr('Ein fremdes Keycloak. OTA ist dort Gast: Es löscht nichts und fasst nur die eigenen Gruppen an. Was oben grau ist, darf das Dienstkonto nicht.')}
+        </p>
+      </div>
+    </>
+  )
+}
+
 export function Directory({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad') => void }) {
   useLang()
   const [cfg, setCfg] = useState<IdentityConfig | null>(null)
@@ -104,6 +174,8 @@ export function Directory({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad
       <p className="sub" style={{ marginBottom: 16 }}>
         {tr('Konten aus einem Verzeichnis anmelden lassen, statt sie von Hand anzulegen. Lokale Konten bleiben davon unberührt — sie werden weiterhin lokal geprüft, auch wenn im Verzeichnis ein gleichnamiger Eintrag steht.')}
       </p>
+
+      <KeycloakKarte />
 
       <div className="section__head"><span className="silk">{tr('Verbindung')}</span><span className="section__rule" /></div>
       <div className="panel" style={{ padding: '16px 20px', marginBottom: 18 }}>

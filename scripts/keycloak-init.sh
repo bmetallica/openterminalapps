@@ -1,0 +1,205 @@
+#!/usr/bin/env bash
+# Richtet den OTA-Realm im **mitgelieferten** Keycloak ein.
+#
+# Idempotent: Was schon da ist, bleibt. Das Skript lässt sich nach jedem
+# Update gefahrlos erneut aufrufen — genauso wie scripts/setup-env.sh.
+#
+# Läuft **nicht** gegen ein fremdes Keycloak (OTA_IDP_MODE=vorhanden). Dort ist
+# OTA Gast: Realm und Dienstkonto legt die dortige Verwaltung an, und dieses
+# Skript hätte weder die Rechte noch das Recht dazu (auth-roadmap.md §5b).
+#
+#   scripts/keycloak-init.sh          einrichten oder ergänzen
+#   scripts/keycloak-init.sh zeigen   nur nachsehen, nichts ändern
+
+set -uo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+[ -f "$ROOT/deploy/.env" ] && { set -a; . "$ROOT/deploy/.env"; set +a; }
+
+MODE="${OTA_IDP_MODE:-mitgeliefert}"
+REALM="${OTA_KEYCLOAK_REALM:-ota}"
+ADMIN="${KEYCLOAK_ADMIN_USER:-setup}"
+ADMIN_PW="${KEYCLOAK_ADMIN_PW:-}"
+SECRET="${OTA_KEYCLOAK_SECRET:-}"
+# Von aussen über Traefik; im Container-Netz ginge es auch, aber so ist es
+# derselbe Weg, den die API später nimmt.
+BASE="${OTA_KEYCLOAK_INIT_URL:-http://ota-keycloak:8080/auth}"
+
+ok()   { printf '  \033[32m✓\033[0m %s\n' "$1"; }
+info() { printf '  · %s\n' "$1"; }
+bad()  { printf '  \033[31m✗\033[0m %s\n' "$1" >&2; }
+
+if [ "$MODE" != "mitgeliefert" ]; then
+  echo "OTA_IDP_MODE=$MODE — der Realm gehört jemand anderem, hier wird nichts angelegt."
+  exit 0
+fi
+
+if [ -z "$ADMIN_PW" ] || [ -z "$SECRET" ]; then
+  bad "KEYCLOAK_ADMIN_PW oder OTA_KEYCLOAK_SECRET fehlt. Erst: make setup"
+  exit 1
+fi
+
+# Alle Aufrufe laufen aus einem Container im selben Netz — der Agent hat
+# curl an Bord und liegt ohnehin in `internal`.
+kc() {  # kc <methode> <pfad> [daten]
+  local method="$1" path="$2" data="${3:-}"
+  if [ -n "$data" ]; then
+    docker exec -i ota-agent curl -s -o /tmp/kc.out -w '%{http_code}' \
+      -X "$method" "$BASE$path" \
+      -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+      -d "$data"
+  else
+    docker exec -i ota-agent curl -s -o /tmp/kc.out -w '%{http_code}' \
+      -X "$method" "$BASE$path" -H "Authorization: Bearer $TOKEN"
+  fi
+}
+kc_body() { docker exec -i ota-agent cat /tmp/kc.out; }
+
+jq_py() { python3 -c "import sys,json;d=json.load(sys.stdin);print($1)" 2>/dev/null; }
+
+# ------------------------------------------------------------ anmelden
+TOKEN=$(docker exec -i ota-agent curl -s \
+  -d "client_id=admin-cli" -d "username=$ADMIN" \
+  --data-urlencode "password=$ADMIN_PW" -d "grant_type=password" \
+  "$BASE/realms/master/protocol/openid-connect/token" \
+  | jq_py "d.get('access_token','')")
+
+if [ -z "$TOKEN" ]; then
+  bad "Anmeldung am Keycloak fehlgeschlagen. Läuft er? docker logs ota-keycloak"
+  exit 1
+fi
+ok "Am Keycloak angemeldet"
+
+if [ "${1:-}" = "zeigen" ]; then
+  kc GET "/admin/realms/$REALM" >/dev/null
+  echo "Realm $REALM:"; kc_body | python3 -m json.tool 2>/dev/null | head -12
+  kc GET "/admin/realms/$REALM/clients" >/dev/null
+  echo "Clients:"; kc_body | jq_py "[c['clientId'] for c in d]"
+  exit 0
+fi
+
+# -------------------------------------------------------------- Realm
+CODE=$(kc GET "/admin/realms/$REALM")
+if [ "$CODE" = "200" ]; then
+  info "Realm $REALM gibt es schon"
+else
+  CODE=$(kc POST "/admin/realms" "$(cat <<JSON
+{"realm":"$REALM","enabled":true,"displayName":"OpenTerminalApps",
+ "loginTheme":"keycloak","sslRequired":"external",
+ "registrationAllowed":false,"resetPasswordAllowed":false,
+ "bruteForceProtected":true,"permanentLockout":false,
+ "maxFailureWaitSeconds":900,"failureFactor":5,
+ "loginWithEmailAllowed":true,"duplicateEmailsAllowed":false}
+JSON
+)")
+  [ "$CODE" = "201" ] && ok "Realm $REALM angelegt" || { bad "Realm anlegen: HTTP $CODE $(kc_body)"; exit 1; }
+fi
+
+# ------------------------------------------------- Gruppen in den Token
+#
+# Ohne diesen Bereich stünde im Token keine Gruppenzugehörigkeit — und
+# genau daran hängt später der Zugriff auf Anwendungen.
+CODE=$(kc GET "/admin/realms/$REALM/client-scopes")
+if kc_body | jq_py "[s['name'] for s in d]" | grep -q "ota-groups"; then
+  info "Bereich ota-groups gibt es schon"
+else
+  CODE=$(kc POST "/admin/realms/$REALM/client-scopes" "$(cat <<'JSON'
+{"name":"ota-groups","protocol":"openid-connect",
+ "attributes":{"include.in.token.scope":"true","display.on.consent.screen":"false"},
+ "protocolMappers":[{
+   "name":"groups","protocol":"openid-connect",
+   "protocolMapper":"oidc-group-membership-mapper",
+   "config":{"claim.name":"groups","full.path":"false",
+             "id.token.claim":"true","access.token.claim":"true",
+             "userinfo.token.claim":"true"}}]}
+JSON
+)")
+  [ "$CODE" = "201" ] && ok "Bereich ota-groups angelegt (Gruppen im Token)" \
+                      || bad "Bereich anlegen: HTTP $CODE $(kc_body)"
+fi
+
+# ------------------------------------------------------------ Clients
+#
+#   ota-manager  Dienstkonto. Damit verwaltet OTA den Realm.
+#   ota          Die Anmeldung von OTA selbst (ab Etappe B).
+#   ota-tests    Nur für die Prüfreihen: Benutzername und Passwort direkt
+#                gegen ein Token, ohne Browser (auth-roadmap.md §5e).
+client_anlegen() {  # client_anlegen <clientId> <json>
+  local id="$1" body="$2"
+  kc GET "/admin/realms/$REALM/clients?clientId=$id" >/dev/null
+  if [ "$(kc_body | jq_py "len(d)")" != "0" ]; then
+    info "Client $id gibt es schon"
+    return 0
+  fi
+  local code; code=$(kc POST "/admin/realms/$REALM/clients" "$body")
+  [ "$code" = "201" ] && ok "Client $id angelegt" || bad "Client $id: HTTP $code $(kc_body)"
+}
+
+client_anlegen ota-manager "$(cat <<JSON
+{"clientId":"ota-manager","name":"OTA — Verwaltung","enabled":true,
+ "publicClient":false,"secret":"$SECRET",
+ "serviceAccountsEnabled":true,"standardFlowEnabled":false,
+ "directAccessGrantsEnabled":false,"protocol":"openid-connect"}
+JSON
+)"
+
+client_anlegen ota "$(cat <<JSON
+{"clientId":"ota","name":"OpenTerminalApps","enabled":true,
+ "publicClient":false,"secret":"$SECRET-app",
+ "standardFlowEnabled":true,"directAccessGrantsEnabled":false,
+ "serviceAccountsEnabled":false,"protocol":"openid-connect",
+ "redirectUris":["/*"],"webOrigins":["+"],
+ "defaultClientScopes":["profile","email","roles","ota-groups"]}
+JSON
+)"
+
+client_anlegen ota-tests "$(cat <<JSON
+{"clientId":"ota-tests","name":"OTA — Prüfreihen","enabled":true,
+ "publicClient":false,"secret":"$SECRET-tests",
+ "standardFlowEnabled":false,"directAccessGrantsEnabled":true,
+ "serviceAccountsEnabled":false,"protocol":"openid-connect",
+ "defaultClientScopes":["profile","email","roles","ota-groups"]}
+JSON
+)"
+
+# ------------------------------------------- Rechte des Dienstkontos
+#
+# Bewusst benannt und nicht "realm-admin": Was OTA nicht braucht, bekommt es
+# nicht. `manage-realm` ist die einzige breite Berechtigung, und sie ist
+# unvermeidlich — die LDAP-Anbindung liegt unter `components` und hängt genau
+# daran (auth-roadmap.md §5.5). Sie gilt nur für diesen Realm; `master` bleibt
+# ausserhalb.
+RECHTE="manage-users view-users query-users query-groups \
+        manage-clients view-clients query-clients \
+        view-realm manage-realm view-events"
+
+kc GET "/admin/realms/$REALM/clients?clientId=ota-manager" >/dev/null
+MGR_ID=$(kc_body | jq_py "d[0]['id']")
+kc GET "/admin/realms/$REALM/clients?clientId=realm-management" >/dev/null
+RM_ID=$(kc_body | jq_py "d[0]['id']")
+kc GET "/admin/realms/$REALM/clients/$MGR_ID/service-account-user" >/dev/null
+SA_ID=$(kc_body | jq_py "d['id']")
+
+if [ -z "$MGR_ID" ] || [ -z "$RM_ID" ] || [ -z "$SA_ID" ]; then
+  bad "Dienstkonto nicht gefunden — Rechte nicht gesetzt"
+  exit 1
+fi
+
+kc GET "/admin/realms/$REALM/clients/$RM_ID/roles" >/dev/null
+ROLLEN=$(kc_body | RECHTE="$RECHTE" python3 -c "
+import json, os, sys
+gesucht = set(os.environ['RECHTE'].split())
+alle = json.load(sys.stdin)
+print(json.dumps([{'id': r['id'], 'name': r['name']}
+                  for r in alle if r['name'] in gesucht]))")
+
+CODE=$(kc POST "/admin/realms/$REALM/users/$SA_ID/role-mappings/clients/$RM_ID" "$ROLLEN")
+case "$CODE" in
+  204|409) ok "Dienstkonto hat seine Rechte ($(echo "$ROLLEN" | jq_py "len(d)") Rollen)" ;;
+  *)       bad "Rechte setzen: HTTP $CODE $(kc_body)" ;;
+esac
+
+echo
+echo "Bereit. Realm: $REALM"
+echo "  Verwaltung : $BASE/admin/$REALM/console/"
+echo "  Erstkonto  : $ADMIN  (nur zum Einrichten — OTA benutzt ota-manager)"

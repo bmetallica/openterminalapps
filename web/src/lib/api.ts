@@ -222,6 +222,17 @@ export type OnceScriptIn = {
   sort_order: number
 }
 
+/** Zustand des Identity Providers (auth-roadmap.md, Etappe A). */
+export type KeycloakStatus = {
+  betriebsart: string
+  adresse: string
+  realm: string
+  erreichbar: boolean
+  fehler: string | null
+  version: string | null
+  faehigkeiten: Record<string, boolean>
+}
+
 export type SharedListing = {
   path: string
   entries: SharedEntry[]
@@ -555,6 +566,8 @@ export const api = {
     }),
   filesRemove: (path: string) =>
     call<{ status: string }>(`/files?path=${encodeURIComponent(path)}`, { method: 'DELETE' }),
+
+  keycloakStatus: () => call<KeycloakStatus>('/admin/identity/keycloak'),
 
   registries: () => call<Registry[]>('/admin/registries'),
   suggestedRegistries: () =>

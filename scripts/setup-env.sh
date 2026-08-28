@@ -54,6 +54,10 @@ echo "Geheimnisse in deploy/.env:"
 fuellen POSTGRES_PASSWORD 32 "Datenbank"
 fuellen OTA_JWT_SECRET    64 "Anmeldemerkmale"
 fuellen OTA_AGENT_TOKEN   48 "API → Agent"
+# Keycloak. Das erste Konto dient nur dazu, den Realm einzurichten; danach
+# arbeitet OTA ueber sein eigenes Dienstkonto (`ota-manager`).
+fuellen KEYCLOAK_ADMIN_PW 32 "Keycloak-Ersteinrichtung"
+fuellen OTA_KEYCLOAK_SECRET 48 "OTA → Keycloak"
 
 # Nur für die Prüfungen; ohne Wert wird `make test` es einfordern.
 if ! grep -qE "^OTA_TEST_ADMIN_PW=.+" "$ENV"; then

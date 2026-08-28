@@ -676,7 +676,7 @@ Etappe D, wenn es die erste zweite Anwendung überhaupt gibt.
 Jede Etappe endet in einem Zustand, in dem alles läuft. Keine Etappe lässt sich nur zusammen mit
 der nächsten abschliessen.
 
-### A · Keycloak steht daneben, ohne dass jemand es merkt
+### A · Keycloak steht daneben, ohne dass jemand es merkt · ✅ erledigt am 2026-08-28
 - Keycloak im Stack (`deploy/docker-compose.yml`), eigener Realm `ota`, eigene Datenbank
 - **Beide Betriebsarten von Anfang an** (5b): mitgeliefert als Vorgabe, ein vorhandenes anbindbar.
   Nachträglich eingezogen wäre das ein Umbau — die Frage „darf ich das hier überhaupt?" durchzieht
@@ -686,9 +686,23 @@ der nächsten abschliessen.
 - Nur intern erreichbar; Traefik veröffentlicht es unter `/auth`
 - `ota-manager`-Client mit Dienstkonto, Rechte wie oben
 - `make setup` erzeugt das Realm-Grundgerüst
-- Das Notfallkonto (5.2) entsteht **hier**, nicht in E: Ab dem Moment, in dem Keycloak im
-  Anmeldeweg steht, muss der Ausweg schon existieren
-- **Fertig, wenn:** OTA unverändert weiterläuft und niemand einen Unterschied bemerkt
+- [x] Keycloak 26.7 als eigener Dienst, eigene Datenbank `keycloak` im vorhandenen Postgres,
+      unter `/auth` derselben Herkunft — nicht unter einem eigenen Namen, damit der spätere
+      Anmeldeweg die Desktop-Verknüpfungen nicht verlässt (§5.6)
+- [x] `scripts/keycloak-init.sh`: Realm `ota`, Clients `ota-manager`, `ota` und `ota-tests`,
+      Gruppen-Bereich für den Token, benannte Rechte statt `realm-admin`. Idempotent; `make up`
+      ruft es auf, `make identity` von Hand
+- [x] `api/ota/keycloak.py` — die eine Naht zur fremden Software (§5a)
+- [x] Rechteprüfung mit lesenden Aufrufen; die Oberfläche zeigt sie unter Einstellungen →
+      Zentrale Identität
+- [x] `/healthz` meldet Keycloak — mit einem echten Kontakt, nicht aus dem Zwischenspeicher
+- [x] Keycloaks Datenbank in `make backup`
+- [ ] Das Notfallkonto (5.2) wandert nach **B**. In A wäre es ein zweiter Weg zu einer Anmeldung,
+      die ohnehin lokal ist — also ein Duplikat ohne Nutzen. Es entsteht mit der Umstellung, im
+      selben Schritt, und wird gegen genau den Fall geprüft, für den es da ist: Keycloak steht
+- **Fertig:** 125 Prüfungen in der Autorisierungsreihe (10 davon neu für diese Etappe), 90 e2e,
+  18 clipboard, 37 backup — alle grün. Die Anmeldung läuft unverändert über OTA, und bei
+  gestopptem Keycloak melden sich Nutzer weiterhin an; `/healthz` sagt dann „nicht erreichbar"
 
 ### B · OTA meldet sich über Keycloak an
 - Autorisierungs-Code-Fluss mit PKCE; OTA tauscht den Code und setzt sein eigenes Cookie

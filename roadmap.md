@@ -583,7 +583,11 @@ einmalig neue Passwörter; es bleibt ein lokales Notfallkonto mit eigener zweite
 Stufe wandert im Übrigen nach Keycloak; die eigene LDAP-Anbindung bleibt bis zur letzten Etappe als
 Rückweg. Alles Weitere steht im eigenen Dokument.
 
-- [ ] **Nichts hiervon ist umgesetzt.** Erst wird zu Ende gedacht.
+- [x] **Etappe A erledigt am 2026-08-28**: Keycloak 26.7 im Stack unter `/auth`, Realm `ota`,
+      Dienstkonto mit benannten Rechten, Rechteprüfung in der Oberfläche, in `/healthz` und in
+      der Sicherung. **Die Anmeldung ist unverändert** — sie läuft weiterhin über OTA selbst
+- [ ] Etappe B: OTA meldet sich über Keycloak an. Der gefährlichste Schritt — daran hängen
+      Anmeldung, forwardAuth, Streams, Desktop-Verknüpfungen und die Prüfreihen gleichzeitig
 
 ---
 

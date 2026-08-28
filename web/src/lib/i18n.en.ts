@@ -524,6 +524,16 @@ export const EN: Record<string, string> = {
   'Der Browser hat die Verknüpfung abgelehnt.': 'The browser refused the shortcut.',
   '{name} auf den Desktop legen': 'Add {name} to desktop',
   'Meine Ablage': 'My files',
+  'Zentrale Identität': 'Central identity',
+  'Konten': 'Accounts',
+  'Mitgeliefert': 'Bundled',
+  'Vorhanden': 'Existing',
+  'Realm': 'Realm',
+  'Verzeichnisanbindung': 'Directory federation',
+  'Läuft in diesem Stack. Die Anmeldung macht OTA vorerst weiterhin selbst — diese Anbindung wird sie später ablösen.':
+    'Runs in this stack. OTA still handles sign-in itself for now — this connection will take over later.',
+  'Ein fremdes Keycloak. OTA ist dort Gast: Es löscht nichts und fasst nur die eigenen Gruppen an. Was oben grau ist, darf das Dienstkonto nicht.':
+    'Somebody else\'s Keycloak. OTA is a guest there: it deletes nothing and touches only its own groups. Anything greyed out above is something the service account may not do.',
   'Einmal': 'One-time',
   'Einmal-Skript anlegen': 'Add a one-time script',
   'Noch kein Einmal-Skript': 'No one-time script yet',

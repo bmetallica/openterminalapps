@@ -14,7 +14,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session as DbSession
 
-from .. import audit, directory, identity
+from .. import audit, directory, identity, keycloak
 from ..db import get_db
 from ..deps import current_user, require_permission
 from ..models import Group, IdentityConfig, User
@@ -115,3 +115,27 @@ def sync(request: Request, actor: User = Depends(manage),
                  object_id="—", request=request, **ergebnis)
     db.commit()
     return ergebnis
+
+
+# --------------------------------------------------------------------------
+# Keycloak — Zustand und Rechte (auth-roadmap.md, Etappe A)
+#
+# Noch **ohne Wirkung auf die Anmeldung**: OTA meldet sich weiterhin selbst an.
+# Was hier steht, beantwortet nur die Frage, die vor jedem weiteren Schritt
+# steht — läuft es, und was darf OTA darin?
+#
+# Bewusst ein eigener Pfad und nicht ein Feld in der Verzeichniskonfiguration:
+# Die beiden haben nichts miteinander zu tun, solange die Umstellung nicht
+# abgeschlossen ist, und die alte Anbindung soll bis dahin unberührt bleiben.
+# --------------------------------------------------------------------------
+
+@router.get("/keycloak", dependencies=[Depends(manage)])
+def keycloak_status() -> dict:
+    """Erreichbarkeit, Betriebsart und was das Dienstkonto darf.
+
+    Wirft nicht. Ein Keycloak, das gerade schweigt, ist ein Zustand, den die
+    Oberfläche anzeigen soll — nicht ein Fehler, an dem sie stehenbleibt.
+    """
+    zustand = keycloak.probe()
+    zustand["version"] = keycloak.version() if zustand["erreichbar"] else None
+    return zustand

@@ -392,6 +392,44 @@ fi
 
 [ -n "${USID:-}" ] && api "$TMP/user.jar" -X DELETE "$BASE/api/sessions/$USID" >/dev/null
 
+# ---------------------------------------------------- Zentrale Identität
+#
+# Etappe A der auth-roadmap: Keycloak steht im Stack, **ohne** dass sich an
+# der Anmeldung etwas ändert. Geprüft wird genau das — es läuft, OTA darf
+# darin, was es braucht, und der Anmeldeweg ist unberührt.
+echo
+echo "Zentrale Identität"
+
+CODE=$(code "$TMP/user.jar" "$BASE/api/admin/identity/keycloak")
+expect "403" "$CODE" "Der Zustand des Identity Providers ist nichts für jeden"
+
+KC=$(api "$TMP/admin.jar" "$BASE/api/admin/identity/keycloak")
+ERR=$(echo "$KC" | jqp "str(d['erreichbar'])")
+expect "True" "$ERR" "Keycloak ist erreichbar"
+expect "ota" "$(echo "$KC" | jqp "d['realm']")" "Der eigene Realm ist eingerichtet"
+
+for f in konten gruppen clients verzeichnis; do
+  HAT=$(echo "$KC" | jqp "str(d['faehigkeiten']['$f'])")
+  expect "True" "$HAT" "Das Dienstkonto darf: $f"
+done
+
+# `verzeichnis` ist der Punkt, an dem `manage-realm` hängt (§5.5). Ohne dieses
+# Recht liesse sich die AD-Anbindung später nicht über OTA konfigurieren, und
+# es fiele erst dort auf.
+FEHLER=$(echo "$KC" | jqp "str(d['fehler'])")
+expect "None" "$FEHLER" "Keine fehlenden Rechte gemeldet"
+
+HZ=$(curl -s --cacert "$CA" "$BASE/healthz")
+echo "$HZ" | grep -q '"keycloak":"ok"' \
+  && ok "healthz meldet Keycloak" \
+  || bad "healthz meldet Keycloak nicht: $HZ"
+
+# Und der eigentliche Anspruch dieser Etappe: Es hat sich nichts geändert.
+CODE=$(curl -s --cacert "$CA" -o /dev/null -w '%{http_code}' \
+  -X POST "$BASE/api/auth/login" -H 'Content-Type: application/json' \
+  -d "{\"username\":\"$ADMIN_USER\",\"password\":\"$ADMIN_PW\"}")
+expect "200" "$CODE" "Die Anmeldung läuft unverändert über OTA"
+
 # ------------------------------------------------------- Einmal-Skripte
 #
 # Der Fall: Ein neues Golden Image braucht eine Aenderung im Zuhause, die das

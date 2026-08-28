@@ -14,6 +14,7 @@ help:
 	@echo "  make up        Stack bauen und starten"
 	@echo "  make down      Stack stoppen (Sessions laufen weiter)"
 	@echo "  make restart   Dienste neu starten, Sessions bleiben verbunden"
+	@echo "  make identity  Keycloak-Realm einrichten oder ergänzen"
 	@echo "  make logs      Logs aller Dienste mitlesen"
 	@echo "  make ps        Zustand aller Dienste"
 	@echo "  make admin     Ersten Administrator anlegen (NAME=... setzen)"
@@ -34,12 +35,20 @@ setup:
 .PHONY: up
 up:
 	$(COMPOSE) up -d --build
+	@# Der Realm wird nach dem Hochfahren eingerichtet, nicht bei `make setup`:
+	@# Dort läuft Keycloak noch nicht. Idempotent — was da ist, bleibt.
+	@./scripts/keycloak-init.sh 2>/dev/null || \
+	  echo "  (Keycloak noch nicht bereit — später:  make identity)"
 	@echo
 	@$(COMPOSE) ps --format '  {{.Name}}\t{{.Status}}'
 
 .PHONY: down
 down:
 	$(COMPOSE) down
+
+.PHONY: identity
+identity:
+	@./scripts/keycloak-init.sh
 
 .PHONY: restart
 restart:
@@ -94,6 +103,16 @@ backup:
 	@mkdir -p backups
 	@$(COMPOSE) exec -T db pg_dump -U $${POSTGRES_USER:-ota} $${POSTGRES_DB:-ota} \
 	  | zstd -q -o backups/db-$$(date +%F-%H%M).sql.zst
+	@# Keycloak liegt in einer eigenen Datenbank. Ohne sie käme OTA aus einer
+	@# Wiederherstellung mit Nutzern zurück, die auf Identitäten ohne
+	@# Gegenstück zeigen — Sessions, Profile und Kontingente hängen an
+	@# `external_id`. Fehlt die Datenbank (fremdes Keycloak), wird es
+	@# übersprungen; dann sichert sie jemand anders.
+	@$(COMPOSE) exec -T db psql -U $${POSTGRES_USER:-ota} -tAc \
+	  "SELECT 1 FROM pg_database WHERE datname='keycloak'" 2>/dev/null | grep -q 1 \
+	  && $(COMPOSE) exec -T db pg_dump -U $${POSTGRES_USER:-ota} keycloak \
+	     | zstd -q -o backups/keycloak-$$(date +%F-%H%M).sql.zst \
+	  || echo "  (keine eigene Keycloak-Datenbank — übersprungen)"
 	@tar --zstd -cf backups/profiles-$$(date +%F-%H%M).tar.zst \
 	  --exclude='.cache' --exclude='core.*' --exclude='*.sock' \
 	  --exclude='*/Cache*' -C / srv/ota/profiles 2>/dev/null || true
@@ -106,5 +125,5 @@ backup:
 	  --exclude='*.sock' -C / \
 	  $$(cd / && ls -d srv/ota/skeletons srv/ota/shared srv/ota/userfiles \
 	     2>/dev/null) 2>/dev/null || true
-	@ls -la backups/ | tail -4
+	@ls -la backups/ | tail -5
 	@echo "Ein Backup, dessen Wiederherstellung nie getestet wurde, ist kein Backup."

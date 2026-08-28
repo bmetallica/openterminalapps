@@ -45,6 +45,25 @@ class Settings(BaseSettings):
     # ein voreingestelltes Merkmal ist kein Merkmal.
     metrics_token: str = ""
 
+    # --- Identitaet (auth-roadmap.md) -----------------------------------
+    #
+    # Zwei Betriebsarten. "mitgeliefert" ist der Keycloak aus diesem Stack;
+    # dort ist OTA fuehrend und darf den Realm einrichten. "vorhanden" ist ein
+    # fremder; dort ist OTA Gast, loescht nichts und fasst nur die eigenen
+    # Gruppen an (§5b).
+    idp_mode: str = "mitgeliefert"
+    # Leer heisst: der mitgelieferte unter seinem Dienstnamen.
+    keycloak_url: str = ""
+    keycloak_realm: str = "ota"
+    keycloak_secret: str = ""
+
+    @property
+    def keycloak_base(self) -> str:
+        """Wohin die API spricht. Ohne Schraegstrich am Ende."""
+        if self.keycloak_url.strip():
+            return self.keycloak_url.strip().rstrip("/")
+        return "http://keycloak:8080/auth"
+
 
 @lru_cache
 def settings() -> Settings:

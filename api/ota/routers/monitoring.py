@@ -21,7 +21,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session as DbSession
 
-from .. import agent_client
+from .. import agent_client, keycloak
 from ..config import settings
 from ..db import get_db
 from ..deps import current_user
@@ -59,7 +59,7 @@ def healthz(response: Response, db: DbSession = Depends(get_db)) -> dict[str, An
     kein Grund, die API für tot zu erklären; sie kann weiter anmelden und
     anzeigen. Er steht deshalb im Ergebnis, ohne es auf 503 zu ziehen.
     """
-    out: dict[str, Any] = {"status": "ok", "db": "ok", "agent": "ok"}
+    out: dict[str, Any] = {"status": "ok", "db": "ok", "agent": "ok", "keycloak": "ok"}
 
     try:
         db.execute(text("SELECT 1"))
@@ -71,6 +71,16 @@ def healthz(response: Response, db: DbSession = Depends(get_db)) -> dict[str, An
         agent_client.host_info()
     except Exception as exc:  # noqa: BLE001
         out["agent"] = f"fehlt: {type(exc).__name__}"
+
+    # Keycloak steht hier, weil an ihm kuenftig jede Anmeldung haengt — und
+    # weil ein fremdes (auth-roadmap.md §5b) beim Hochfahren gerade schweigen
+    # kann. Solange die Anmeldung noch OTA selbst macht, zieht es nichts auf
+    # 503; sichtbar sein soll es trotzdem, und zwar bevor es weh tut.
+    try:
+        if not keycloak.erreichbar():
+            out["keycloak"] = "nicht erreichbar"
+    except Exception as exc:  # noqa: BLE001
+        out["keycloak"] = f"fehlt: {type(exc).__name__}"
 
     # Ohne Datenbank ist die API nicht benutzbar. Ohne Agent schon — dann
     # laesst sich nur nichts starten.
