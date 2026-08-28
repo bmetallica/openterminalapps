@@ -457,6 +457,111 @@ unten, die ohnehin gebaut wird.
 
 ---
 
+## 5d · Wer Anwendungen anlegen darf — **entschieden**
+
+Ab Etappe D bekommt „Anwendung anlegen" eine zweite Bedeutung. Bisher hiess es: ein Image
+auswählen, Apps freigeben, Gruppen zuweisen — die Reichweite endet am Host. Künftig schreibt OTA
+dabei einen OIDC-Client nach Keycloak, und darin steht eine Zeile, die alles ändert:
+
+```
+Redirect-URI    https://ai.firma.de/oauth/oidc/callback
+```
+
+Dorthin schickt Keycloak nach der Anmeldung den Autorisierungs-Code. **Wer die URI bestimmt,
+bestimmt, wohin die Identität der Nutzer fliesst.**
+
+Das Szenario, gegen das hier abgesichert wird:
+
+```
+Jemand legt an:
+    Name          „Zeiterfassung"
+    Redirect-URI  https://sammel-server.example/abholen
+    Zugriff       alle
+
+Auf dem Dashboard erscheint eine Kachel. Ein Kollege klickt, meldet sich
+wie immer bei Keycloak an — und der Code für seine Identität landet auf
+einem fremden Server. Von dort: Name, E-Mail, Gruppen. Je nach Zuschnitt
+ein Token, dem weitere Anwendungen vertrauen.
+```
+
+Im Protokoll sieht das aus wie „hat eine Anwendung hinzugefügt". Es ist aber kategorisch etwas
+anderes als „hat ein Image freigegeben": Das eine bleibt auf dem Rechner, das andere leitet
+Identitäten nach draussen.
+
+**Entschieden: ein eigenes Recht, und zusätzlich eine technische Schranke.**
+
+### Das Recht
+
+`anwendungen.verwalten`, getrennt von `templates.manage`. Wer Arbeitsplätze zusammenstellt — eine
+Rolle, die man einem IT-Mitarbeiter gibt — erzeugt damit nicht automatisch OIDC-Clients. Beides
+lässt sich derselben Person geben; es muss nur eine Entscheidung sein und keine Nebenwirkung.
+
+### Die Schranke
+
+Eine Liste erlaubter Ziel-Domains in den Einstellungen. Eine Redirect-URI ausserhalb wird
+abgelehnt, **egal wer sie einträgt** — auch ein Administrator.
+
+```
+Erlaubte Ziele für Anwendungen
+    firma.de
+    *.firma.local
+
+→ https://ai.firma.de/oauth/oidc/callback      angenommen
+→ https://sammel-server.example/abholen        abgelehnt
+```
+
+Zwei Schlösser statt einem, und sie sichern gegen Verschiedenes: Das Recht gegen den, der es nicht
+haben soll; die Liste gegen den Tippfehler dessen, der es hat. Der zweite Fall ist der
+wahrscheinlichere.
+
+Drei Regeln, damit die Schranke keine Kulisse wird:
+
+- **Geprüft wird in der API, nicht im Formular.** Eine Prüfung, die nur im Browser stattfindet,
+  ist keine.
+- **Nur `https`**, und keine Platzhalter im Pfad. Keycloak erlaubt `*` in Redirect-URIs; OTA
+  reicht das nicht durch.
+- **Ist die Liste leer, ist nichts erlaubt** — nicht alles. Eine Schranke, die im
+  Auslieferungszustand offen steht, wird nie geschlossen.
+
+Beim Einrichten wird die Liste einmal gefüllt, mit einer Zeile in der Oberfläche, die erklärt,
+warum sie nicht leer bleiben sollte.
+
+---
+
+## 5c · Wann ein Rechteentzug greift — **entschieden**
+
+Fliegt jemand aus einer Gruppe, während er arbeitet: sofort hinauswerfen oder bis zur nächsten
+Anmeldung gelten lassen? **Entschieden: bis zur nächsten Anmeldung.**
+
+Das ist die richtige Antwort, weil die Alternative im Alltag mehr kaputt macht, als sie schützt.
+Eine Gruppenänderung im AD ist in aller Regel eine organisatorische — jemand wechselt die
+Abteilung, ein Projekt endet. Dass dabei mitten im Satz ein Editor verschwindet und ungesicherte
+Arbeit mit ihm, ist kein Sicherheitsgewinn, sondern ein Datenverlust.
+
+**Aber der Entzug einer Gruppe ist nicht dasselbe wie der Entzug eines Kontos.** Diese beiden Fälle
+werden gern in einen Topf geworfen, und genau das wäre der Fehler:
+
+| Was passiert | Wann es greift | Warum |
+|---|---|---|
+| Konto **gesperrt oder deaktiviert** | **sofort**, beim nächsten Aufruf | Jemand geht, wird entlassen, ein Zugang gilt als kompromittiert. Da zählt jede Minute. |
+| **Abmeldung erzwungen** (`token_epoch`) | **sofort** | Ausdrückliche Handlung eines Administrators — sie soll wirken. |
+| Aus einer **Gruppe entfernt** | bei der nächsten Anmeldung | Organisatorische Änderung, kein Vorfall. |
+| Zugriff einer **Anwendung entzogen** | bei der nächsten Anmeldung | Dasselbe. Die Kachel verschwindet sofort, die laufende Sitzung läuft aus. |
+
+Die ersten beiden Zeilen sind heute schon so und bleiben es: `forwardAuth` prüft bei **jedem**
+Aufruf `is_active`, `is_locked` und `token_epoch` — auch vor jedem WebSocket-Handshake. Wer
+gesperrt wird, ist im selben Moment vom Bildschirm weg.
+
+Zwei Dinge gehören zur Ehrlichkeit dieser Entscheidung dazu:
+
+- **Das Fenster ist begrenzt, aber nicht kurz.** Es endet mit der Sitzung, und die endet über
+  `idle_minutes` der Vorlage — bei vier Stunden Leerlauf also frühestens nach vier Stunden.
+- **Es gibt einen Weg, es sofort zu beenden.** Wer eine Gruppenänderung als dringend ansieht,
+  erzwingt zusätzlich die Abmeldung. Der Knopf existiert, er wirkt sofort, und er steht im
+  Protokoll. Das ist die richtige Aufteilung: der Normalfall bequem, der Ausnahmefall möglich.
+
+---
+
 ## 5b · Mitgeliefert **oder** vorhanden — **entschieden**
 
 Keycloak läuft im Stack, wie Datenbank und Registry. Und es muss möglich sein, stattdessen ein
@@ -557,6 +662,8 @@ der nächsten abschliessen.
 
 ### D · Die erste fremde Anwendung
 - Anwendungstyp „Externe Web-Anwendung" neben „Arbeitsplatz" im Katalog
+- Neues Recht `anwendungen.verwalten` und die Liste erlaubter Ziel-Domains (5d) — beides **bevor**
+  der erste Client entstehen kann, nicht danach
 - OTA legt den OIDC-Client in Keycloak an, setzt Redirect-URI und Gruppen-Claim, zeigt die
   Konfiguration zum Übertragen
 - Zugriff je Gruppe; die Kachel erscheint nur bei Berechtigten
@@ -618,15 +725,12 @@ Keycloak steht unter Apache-2.0 und passt damit zur Lizenzlage von OTA. Es gehö
 | 7 | **Welcher Identity Provider** | **Keycloak** — die konservative Wahl: tiefste AD-Föderation, Apache-2.0, CNCF. Zitadel, Authelia, Dex, Ory und Kanidm sind an den Anforderungen gescheitert, authentik unterlag | **entschieden** 2026-08-28 |
 | 7a | Speicherobergrenze für Keycloak | Heap auf 512 MB gedeckelt, Container auf 1 GB, in Etappe A über eine Woche gemessen | ergibt sich aus 5a |
 | 9 | Mitgeliefert oder vorhanden | **Beides** — im Stack als Vorgabe, ein vorhandenes anbindbar; dort ist OTA Gast und löscht nichts | **entschieden** 2026-08-28 |
+| 10 | Wann ein Rechteentzug greift | Gruppen bei der nächsten Anmeldung; Sperre und erzwungene Abmeldung sofort | **entschieden** 2026-08-28 |
+| 11 | Wer Anwendungen anlegen darf | Eigenes Recht `anwendungen.verwalten` **und** eine Liste erlaubter Ziel-Domains; leere Liste erlaubt nichts | **entschieden** 2026-08-28 |
 | 8 | Zugriff über eine eigene schmale Schicht | Ja — die Wahl bleibt damit umkehrbar | ergibt sich aus 5a |
 
 ### Noch offen, aber später zu beantworten
 
 Diese Fragen blockieren die Planung nicht, müssen aber vor der jeweiligen Etappe geklärt sein:
 
-- **Wann wird abgeglichen?** (vor B) Gruppen bei jeder Anmeldung ist gesetzt. Offen ist, was mit
-  jemandem geschieht, der *während* einer laufenden Session aus einer Gruppe fliegt — sofort
-  hinauswerfen oder bis zur nächsten Anmeldung gelten lassen.
-- **Wer darf Anwendungen anlegen?** (vor D) Ein OIDC-Client in Keycloak ist mehr als eine Kachel:
-  Wer ihn anlegt, bestimmt, wohin Token fliessen. Das ist womöglich ein eigenes Recht und nicht
-  einfach `templates.manage`.
+*(Zurzeit keine.)*
