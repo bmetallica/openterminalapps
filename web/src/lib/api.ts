@@ -48,6 +48,7 @@ export type Template = {
   start_script: string
   /** Pfade im Skeleton, die bei jedem Start überschreiben. */
   skeleton_enforce: string[]
+  user_shelf: boolean
   env: Record<string, string>
   is_enabled: boolean
   apps: App[]
@@ -501,6 +502,23 @@ export const api = {
     }),
   sharedRemove: (path: string) =>
     call<{ status: string }>(`/shared?path=${encodeURIComponent(path)}`, { method: 'DELETE' }),
+
+  // Die eigene Ablage. Derselbe Schnitt, ein anderer Ort — und ohne
+  // Empfänger: Wem sie gehört, steht im Cookie und nicht in der Adresse.
+  filesList: (path = '') =>
+    call<SharedListing>(`/files?path=${encodeURIComponent(path)}`),
+  filesUpload: (path: string, file: File) => {
+    const body = new FormData()
+    body.append('file', file)
+    return call<{ name: string; size_bytes: number }>(
+      `/files/upload?path=${encodeURIComponent(path)}`, { method: 'POST', body })
+  },
+  filesMkdir: (path: string, name: string) =>
+    call<{ name: string }>('/files/dir', {
+      method: 'POST', body: JSON.stringify({ path, name }),
+    }),
+  filesRemove: (path: string) =>
+    call<{ status: string }>(`/files?path=${encodeURIComponent(path)}`, { method: 'DELETE' }),
 
   registries: () => call<Registry[]>('/admin/registries'),
   suggestedRegistries: () =>

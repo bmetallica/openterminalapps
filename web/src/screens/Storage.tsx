@@ -4,21 +4,36 @@ import { ago } from '../lib/format'
 import { t as tr, useLang } from '../lib/i18n'
 
 /**
- * Die gemeinsame Ablage.
+ * Eine Ablage — es gibt zwei, und dieselbe Ansicht zeigt beide.
  *
- * Ein Ort für Dateien, die in jedem Arbeitsplatz gebraucht werden: ein
- * Firmenzertifikat, ein Installationspaket, eine Vorlagendatei. In den
- * Containern liegt sie **nur lesbar** unter `/mnt/ota` und als „Gemeinsam" im
- * Home — der Weg hinein führt ausschliesslich hier entlang.
+ * * **Gemeinsam** gehört der Verwaltung. Sie liegt in jedem Arbeitsplatz
+ *   unter `/mnt/ota` und als „Gemeinsam" im Home, dort **nur lesbar**: der
+ *   Weg der Administration zu den Nutzern, nicht umgekehrt.
+ * * **Eigen** gehört einem Menschen. Sie liegt in seinem Arbeitsplatz unter
+ *   `/mnt/austausch` und als „Austausch" im Home, **beschreibbar** — der
+ *   schnelle Weg in den Container hinein und wieder heraus.
+ *
+ * Getrennt sind sie, weil sie verschiedene Fragen beantworten. Zusammen in
+ * einer Ansicht sind sie, weil die Handgriffe dieselben sind: ziehen,
+ * ablegen, herunterladen, löschen.
  *
  * Ziehen und Ablegen als Hauptweg, ein Knopf daneben. Das Ziehen ist bequemer,
  * aber es ist unsichtbar: Wer nicht weiss, dass es geht, findet es nie.
  * Deshalb beides.
  */
-export function Storage({ onToast, canWrite }: {
+export type Shelf = 'gemeinsam' | 'eigen'
+
+export function Storage({ onToast, canWrite, shelf = 'gemeinsam' }: {
   onToast: (m: string, tone?: 'ok' | 'bad') => void
   canWrite: boolean
+  shelf?: Shelf
 }) {
+  const eigen = shelf === 'eigen'
+  const holen = eigen ? api.filesList : api.sharedList
+  const legen = eigen ? api.filesUpload : api.sharedUpload
+  const ordnen = eigen ? api.filesMkdir : api.sharedMkdir
+  const werfen = eigen ? api.filesRemove : api.sharedRemove
+  const quelle = eigen ? '/api/files/file' : '/api/shared/file' 
   useLang()
   const [data, setData] = useState<SharedListing | null>(null)
   const [path, setPath] = useState('')
@@ -29,12 +44,12 @@ export function Storage({ onToast, canWrite }: {
 
   const load = useCallback(async (where: string) => {
     try {
-      setData(await api.sharedList(where))
+      setData(await holen(where))
       setFailed(null)
     } catch (err) {
       setFailed(err instanceof ApiError ? err.message : tr('Laden fehlgeschlagen'))
     }
-  }, [])
+  }, [holen])
 
   useEffect(() => { void load(path) }, [load, path])
 
@@ -44,7 +59,7 @@ export function Storage({ onToast, canWrite }: {
     for (const file of list) {
       setBusy(file.name)
       try {
-        await api.sharedUpload(path, file)
+        await legen(path, file)
       } catch (err) {
         onToast(err instanceof ApiError ? err.message
           : tr('{name} liess sich nicht ablegen.', { name: file.name }), 'bad')
@@ -59,7 +74,7 @@ export function Storage({ onToast, canWrite }: {
     const name = window.prompt(tr('Name des Ordners'))
     if (!name) return
     try {
-      await api.sharedMkdir(path, name)
+      await ordnen(path, name)
       await load(path)
     } catch (err) {
       onToast(err instanceof ApiError ? err.message : tr('Anlegen fehlgeschlagen'), 'bad')
@@ -73,7 +88,7 @@ export function Storage({ onToast, canWrite }: {
       : tr('„{name}" löschen?', { name })
     if (!window.confirm(question)) return
     try {
-      await api.sharedRemove(full)
+      await werfen(full)
       await load(path)
     } catch (err) {
       onToast(err instanceof ApiError ? err.message : tr('Löschen fehlgeschlagen'), 'bad')
@@ -106,8 +121,10 @@ export function Storage({ onToast, canWrite }: {
 
       <header className="topbar">
         <div>
-          <p className="silk" style={{ marginBottom: 6 }}>{tr('Verwaltung')}</p>
-          <h1 className="h-page">{tr('Ablage')}</h1>
+          <p className="silk" style={{ marginBottom: 6 }}>
+            {eigen ? tr('Deine Dateien') : tr('Verwaltung')}
+          </p>
+          <h1 className="h-page">{eigen ? tr('Meine Ablage') : tr('Gemeinsame Ablage')}</h1>
         </div>
         {canWrite && (
           <div style={{ display: 'flex', gap: 10 }}>
@@ -122,12 +139,16 @@ export function Storage({ onToast, canWrite }: {
       </header>
 
       <p className="sub" style={{ marginBottom: 18 }}>
-        {tr('Liegt in jedem Arbeitsplatz unter /mnt/ota und als „Gemeinsam" im Home — dort nur lesbar. Geschrieben wird ausschliesslich hier.')}
+        {eigen
+          ? tr('Liegt in deinem Arbeitsplatz unter /mnt/austausch und als „Austausch" im Home — beschreibbar. Was du hier ablegst, liegt gleich darauf im Container; was du dort hineinlegst, findest du hier.')
+          : tr('Liegt in jedem Arbeitsplatz unter /mnt/ota und als „Gemeinsam" im Home — dort nur lesbar. Geschrieben wird ausschliesslich hier.')}
       </p>
 
       {/* Pfad als Weg zurück, wie im Workspace-Editor. */}
       <nav className="wb__crumb" style={{ marginBottom: 14 }} aria-label={tr('Pfad')}>
-        <button type="button" className="wb__up" onClick={() => setPath('')}>{tr('Ablage')}</button>
+        <button type="button" className="wb__up" onClick={() => setPath('')}>
+          {eigen ? tr('Meine Ablage') : tr('Gemeinsame Ablage')}
+        </button>
         {parts.map((part, i) => (
           <span key={i} style={{ display: 'contents' }}>
             <span className="wb__sep" aria-hidden="true">/</span>
@@ -186,7 +207,7 @@ export function Storage({ onToast, canWrite }: {
                   <td style={{ textAlign: 'right', paddingRight: 20, whiteSpace: 'nowrap' }}>
                     {!e.is_dir && (
                       <a className="btn btn--sm btn--ghost" onClick={(ev) => ev.stopPropagation()}
-                        href={`/api/shared/file?path=${encodeURIComponent(path ? `${path}/${e.name}` : e.name)}`}
+                        href={`${quelle}?path=${encodeURIComponent(path ? `${path}/${e.name}` : e.name)}`}
                         download>{tr('Herunterladen')}</a>
                     )}
                     {canWrite && (
@@ -204,8 +225,11 @@ export function Storage({ onToast, canWrite }: {
       )}
 
       <p className="field__hint" style={{ marginTop: 14 }}>
-        {tr('Belegt insgesamt {size}. Was hier liegt, sieht jeder Nutzer in jedem Arbeitsplatz — es ist kein Ort für Vertrauliches.',
-          { size: size(data.total_bytes) })}
+        {eigen
+          ? tr('Belegt insgesamt {size}. Das hier sieht ausser dir niemand — auch die Administration nicht.',
+              { size: size(data.total_bytes) })
+          : tr('Belegt insgesamt {size}. Was hier liegt, sieht jeder Nutzer in jedem Arbeitsplatz — es ist kein Ort für Vertrauliches.',
+              { size: size(data.total_bytes) })}
       </p>
     </div>
   )

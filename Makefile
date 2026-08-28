@@ -27,7 +27,7 @@ setup:
 	@./scripts/setup-env.sh
 	@./scripts/make-cert.sh
 	@mkdir -p /srv/ota/profiles /srv/ota/skeletons /srv/ota/shared \
-	          /srv/ota/backups /srv/ota/runtime
+	          /srv/ota/backups /srv/ota/runtime /srv/ota/userfiles
 	@echo
 	@echo "Bereit. Weiter mit:  make up"
 

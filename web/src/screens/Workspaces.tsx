@@ -56,6 +56,7 @@ function toPayload(d: Draft) {
     // beim Speichern stillschweigend verworfen.
     start_script: d.start_script,
     skeleton_enforce: d.skeleton_enforce,
+    user_shelf: d.user_shelf,
     is_enabled: d.is_enabled,
     group_ids: d.group_ids,
   }
@@ -354,6 +355,16 @@ function Editor({ tpl, host, groups, images, onSaved, onClose, onToast }: {
                 { value: 'delete' as const, label: tr('Löschen'), tone: 'halt' as const },
               ]}
               onChange={(v) => set('idle_action', v)} />
+          </Field>
+
+          <Field label={tr('Eigene Ablage')}
+            hint={draft.user_shelf
+              ? tr('Liegt im Container unter /mnt/austausch und als „Austausch" im Home. Jeder sieht nur seine eigene.')
+              : tr('Ohne sie führt kein Weg über den Browser in diesen Container hinein oder heraus — ausser dem, den die Rechte ohnehin erlauben.')}>
+            <Toggle on={draft.user_shelf}
+              name={tr('Eigene Ablage einhängen')}
+              note={tr('Der übliche Weg, Dateien hinein und heraus zu bekommen')}
+              onChange={(v) => set('user_shelf', v)} />
           </Field>
 
           <Field label={tr('Persistentes Profil')}

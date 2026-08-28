@@ -6,6 +6,7 @@ import { t, useLang } from '../lib/i18n'
 import { openInTab, viewPath } from '../lib/routes'
 import { extensionPresent, isFirefox } from '../lib/firefoxClipboard'
 import { InstallButton } from '../components/InstallButton'
+import { ShelfPanel } from '../components/ShelfPanel'
 
 /**
  * Der Stream läuft in einem iframe. Zwei Dinge sind dabei nicht optional:
@@ -388,6 +389,8 @@ export function SessionViewer({
               </p>
             </div>
           )}
+
+          {template?.user_shelf !== false && <ShelfPanel onToast={onToast} />}
 
           <div className="viewer__group">
             <span className="silk">{t('Zwischenablage')}</span>

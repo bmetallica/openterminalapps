@@ -392,6 +392,75 @@ fi
 
 [ -n "${USID:-}" ] && api "$TMP/user.jar" -X DELETE "$BASE/api/sessions/$USID" >/dev/null
 
+# ---------------------------------------------------- Die beiden Ablagen
+#
+# Sie sind bewusst getrennt: Die gemeinsame gehoert der Verwaltung und liegt
+# in den Containern nur lesbar, die eigene gehoert je einem Menschen und ist
+# beschreibbar. Geprueft wird beides — und vor allem, dass keiner in die des
+# anderen sieht.
+echo
+echo "Ablagen"
+
+echo "Vom Nutzer $(basename x)" > "$TMP/eigen.txt"
+echo "Vom Administrator" > "$TMP/adm.txt"
+
+CODE=$(code "$TMP/user.jar" "$BASE/api/shared")
+expect "403" "$CODE" "Die gemeinsame Ablage ist für einen normalen Nutzer zu"
+CODE=$(code "$TMP/user.jar" "$BASE/api/shared/file?path=egal")
+expect "403" "$CODE" "Auch einzelne Dateien daraus"
+CODE=$(code "$TMP/admin.jar" "$BASE/api/shared")
+expect "200" "$CODE" "Der Administrator kommt weiterhin heran"
+
+api "$TMP/user.jar" -F "file=@$TMP/eigen.txt" "$BASE/api/files/upload" >/dev/null
+api "$TMP/admin.jar" -F "file=@$TMP/adm.txt" "$BASE/api/files/upload" >/dev/null
+
+U_SIEHT=$(api "$TMP/user.jar" "$BASE/api/files" | jqp "
+','.join(sorted(e['name'] for e in d['entries']))")
+A_SIEHT=$(api "$TMP/admin.jar" "$BASE/api/files" | jqp "
+','.join(sorted(e['name'] for e in d['entries']))")
+
+case "$U_SIEHT" in
+  *eigen.txt*) ok "Der Nutzer sieht seine eigene Datei ($U_SIEHT)" ;;
+  *) bad "Der Nutzer sieht seine eigene Datei nicht ($U_SIEHT)" ;;
+esac
+case "$U_SIEHT" in
+  *adm.txt*) bad "Der Nutzer sieht die Ablage des Administrators ($U_SIEHT)" ;;
+  *) ok "Und nicht die des Administrators" ;;
+esac
+case "$A_SIEHT" in
+  *eigen.txt*) bad "Der Administrator sieht die Ablage des Nutzers ($A_SIEHT)" ;;
+  *) ok "Der Administrator sieht die des Nutzers ebenso wenig" ;;
+esac
+
+# Und der eigentliche Zweck: der Weg in den Container und wieder heraus.
+WS_A=$(api "$TMP/admin.jar" "$BASE/api/templates" | jqp "
+next((t['id'] for t in d if t['mode'] == 'workspace'), '')")
+SID_A=$(api "$TMP/admin.jar" "$BASE/api/sessions" | jqp "
+next((s['id'] for s in d if s['template_id'] == '$WS_A' and s['status'] == 'running'), '')")
+
+if [ -z "$SID_A" ]; then
+  bad "Keine laufende Session für die Ablage-Prüfung"
+else
+  CN_A="ota-s-$(echo "$SID_A" | cut -c1-12)"
+  DRIN=$(docker exec "$CN_A" sh -c 'cat /mnt/austausch/adm.txt 2>/dev/null' | tr -d '\r\n')
+  expect "Vom Administrator" "$DRIN" "Was im Browser landet, liegt im Container"
+
+  MARKE="von-innen-$$"
+  docker exec -u 1000 "$CN_A" sh -c "echo $MARKE > /mnt/austausch/rueckweg.txt" 2>/dev/null
+  RAUS=$(api "$TMP/admin.jar" "$BASE/api/files/file?path=rueckweg.txt" | tr -d '\r\n')
+  expect "$MARKE" "$RAUS" "Und was der Container schreibt, sieht der Browser"
+
+  SCHREIBT=$(docker exec -u 1000 "$CN_A" sh -c 'touch /mnt/ota/darf-nicht 2>&1' | grep -c "Read-only")
+  expect "1" "${SCHREIBT:-0}" "Die gemeinsame Ablage bleibt im Container schreibgeschützt"
+
+  api "$TMP/admin.jar" -X DELETE "$BASE/api/files?path=rueckweg.txt" >/dev/null
+  api "$TMP/admin.jar" -X DELETE "$BASE/api/files?path=adm.txt" >/dev/null
+fi
+
+api "$TMP/user.jar" -X DELETE "$BASE/api/files?path=eigen.txt" >/dev/null
+REST=$(api "$TMP/user.jar" "$BASE/api/files" | jqp "str(len(d['entries']))")
+expect "0" "$REST" "Löschen räumt die eigene Ablage wieder"
+
 # ------------------------------------------- Anwendung ohne Display
 # Stirbt das X-Display einer Anwendung, kehrte der Startaufruf zurück, ohne
 # etwas zu tun: Der Eintrag sagte „läuft". Damit war die Anwendung für immer

@@ -36,7 +36,7 @@ heute schon funktioniert.
 8. [Nutzer, Gruppen und Rechte](08-nutzer-und-gruppen.md)
 9. [Kasm-Images und Registries einbinden](09-kasm-images-und-registries.md)
 16. [Images verwalten](16-images-verwalten.md)
-17. [Ablage und Startskript](17-ablage-und-startskript.md)
+17. [Ablagen und Startskript](17-ablage-und-startskript.md)
 
 **Betrieb**
 10. [Zertifikate und HTTPS](10-zertifikate-und-https.md)

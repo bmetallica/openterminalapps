@@ -225,6 +225,13 @@ class Template(Base):
     # Ein Zuhause gehoert dem Menschen, der darin arbeitet.
     skeleton_enforce: Mapped[list] = mapped_column(JSONB, default=list)
 
+    # Haengt die eigene Ablage des Nutzers beschreibbar in den Container?
+    # Vorgabe an: Sie ist der uebliche Weg, Dateien hinein und heraus zu
+    # bekommen. Abschaltbar bleibt sie fuer Arbeitsplaetze, aus denen bewusst
+    # nichts herausgetragen werden soll.
+    user_shelf: Mapped[bool] = mapped_column(Boolean, default=True,
+                                             server_default="true")
+
     persistence_scope: Mapped[str] = mapped_column(String(16), default="user")
     idle_minutes: Mapped[int] = mapped_column(Integer, default=60)
     idle_action: Mapped[str] = mapped_column(String(16), default="stop")

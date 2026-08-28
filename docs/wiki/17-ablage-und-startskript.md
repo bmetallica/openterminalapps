@@ -1,17 +1,20 @@
-# 17 · Ablage und Startskript
+# 17 · Ablagen und Startskript
 
-*Für Administratoren.* ✅ Gemeinsame Ablage, Skeleton-Profil, Skript beim Sessionstart
+*Für Administratoren.* ✅ Gemeinsame Ablage, eigene Ablage, Skeleton-Profil, Skript beim Sessionstart
 
-Drei Wege, um Dinge in die Arbeitsplätze der Nutzer zu bekommen, ohne dafür jedes Mal ein Image zu
-bauen. Sie gehören zusammen: Die Ablage ist die Quelle, das Skeleton legt den Grundstand, das Skript
-holt sich, was es braucht.
+Wege, um Dinge in die Arbeitsplätze der Nutzer zu bekommen, ohne dafür jedes Mal ein Image zu bauen.
+Sie gehören zusammen: Die gemeinsame Ablage ist die Quelle, das Skeleton legt den Grundstand, das
+Skript holt sich, was es braucht. Die **eigene Ablage** steht daneben und gehört nicht der
+Verwaltung, sondern dem Nutzer — sie ist sein Weg, Dateien in seinen Container und wieder heraus zu
+bekommen.
 
 ## Was wohin gehört
 
 | | Wohin | Warum |
 |---|---|---|
 | Software | **Golden Image** ([Kapitel 7](07-golden-images.md)) | Einmal bauen statt bei jedem Start installieren |
-| Dateien für alle | **Ablage** | Austauschbar, ohne Image-Bau |
+| Dateien für alle | **Gemeinsame Ablage** | Austauschbar, ohne Image-Bau |
+| Dateien eines Nutzers, hin und zurück | **Eigene Ablage** | Sein Weg in den Container und heraus |
 | Womit ein Home anfängt | **Skeleton** | Dateien, die einfach da sein sollen — im Browser sichtbar |
 | Einrichtung im Home | **Startskript** | Für alles, was *ausgeführt* werden muss |
 | Eigene Einstellungen | **Nichts davon** | Das persistente Home hält sie ohnehin |
@@ -61,9 +64,23 @@ Alles landet als `1000:1000` im Home — kopiert wird als root, und ohne diesen 
 Nutzer sein eigenes Zuhause nicht mehr.
 
 
+## Die beiden Ablagen ✅
+
+Es gibt zwei, und sie beantworten verschiedene Fragen. Wer sie verwechselt, legt Vertrauliches an
+den falschen Ort — deshalb sind sie seit dem 2026-08-28 auch in der Oberfläche getrennt.
+
+| | Gemeinsame Ablage | Eigene Ablage |
+|---|---|---|
+| Gehört | der Verwaltung | je einem Nutzer |
+| Sieht sie im Browser | wer Images oder Workspaces verwaltet | nur der Eigentümer |
+| Im Container | `/mnt/ota`, **nur lesbar** | `/mnt/austausch`, **beschreibbar** |
+| Im Home | `~/Gemeinsam` | `~/Austausch` |
+| Wozu | Zertifikate, Pakete, Vorlagen für alle | Dateien hinein und wieder heraus |
+| Abschaltbar | nein | ja, je Workspace |
+
 ## Die gemeinsame Ablage ✅
 
-**Verwaltung → Ablage.**
+**Verwaltung → Gemeinsame Ablage.**
 
 Ein Ort für Dateien, die in jedem Arbeitsplatz gebraucht werden: ein Firmenzertifikat, ein
 Installationspaket, eine Vorlagendatei.
@@ -92,9 +109,51 @@ Datengrab.
 > **Kein Ort für Vertrauliches.** Was hier liegt, sieht jeder Nutzer in jedem Arbeitsplatz. Ein
 > privater Schlüssel gehört nicht hierher, ein öffentliches Zertifikat schon.
 
-Geschrieben wird ausschliesslich über diese Oberfläche, und nur von wem, der Images oder Workspaces
-verwalten darf. Sehen darf sie jeder Angemeldete — er hat sie ohnehin in seinem Container, sie im
-Browser zu verbergen wäre Kulisse statt Sicherheit.
+Geschrieben und **gesehen** wird ausschliesslich über diese Oberfläche, und nur von wem, der Images
+oder Workspaces verwalten darf. Bis zum 2026-08-28 durfte jeder Angemeldete den Inhalt lesen, mit
+dem Argument, er sehe ihn ohnehin in seinem Container. Das Argument stimmt weiterhin — es taugt nur
+nicht als Bauplan für die Oberfläche: Zwei Ablagen nebeneinander, von denen eine nur zum Zusehen da
+ist, erklären sich nicht.
+
+## Die eigene Ablage ✅
+
+**Meine Ablage** — im Menü ganz oben, für jeden, auch für Administratoren.
+
+Der schnelle Weg in den eigenen Container und wieder heraus. Was dort abgelegt wird, liegt eine
+Sekunde später im Container; was der Nutzer im Container hineinlegt, findet er im Browser.
+
+```
+/mnt/austausch                  der Einhängepunkt, beschreibbar
+~/Austausch                     ein Verweis darauf, im Home
+```
+
+**Jeder sieht nur seine eigene.** Es gibt keinen Weg, über den jemand eine fremde benennen könnte —
+auch nicht als Administrator. Der Name kommt nie aus der Anfrage, sondern aus dem Anmeldecookie.
+Das ist Absicht und keine Lücke: Wer an fremde Dateien muss, hat mit Sicherung und
+Wiederherstellung einen Weg, der im Protokoll steht ([Kapitel 14](14-sicherung.md)). Ein stiller
+Blick ins Zuhause eines Kollegen soll keiner sein.
+
+Sie liegt neben dem Home und nicht darin — aus zwei Gründen: Der Browser und der Container sollen
+denselben Ort sehen, und beim Sichern des Profils soll sie nicht ein zweites Mal auftauchen.
+
+### Auch während der Arbeit
+
+In der Kontrollleiste einer laufenden Session (Griff am rechten Rand) steht dieselbe Ablage: ziehen
+und ablegen, herunterladen, löschen. Wer mitten in der Arbeit eine Datei braucht, muss nicht zurück
+ins Dashboard.
+
+Das Ziehen funktioniert dabei im **Fenster**, nicht im Bild der Session. Das ist keine Bequemlichkeit
+weniger, sondern die Grenze des eingebetteten Streams: Ein Ziehvorgang aus dem Betriebssystem endet
+dort, wo der ferne Desktop anfängt. Die Leiste liegt davor und fängt ihn auf.
+
+### Abschalten je Workspace
+
+Im Workspace-Editor unter **Ressourcen → Eigene Ablage**. Vorgabe ist **an**. Aus ergibt Sinn für
+Arbeitsplätze, aus denen bewusst nichts herausgetragen werden soll; dann fehlt der Einhängepunkt
+ganz, und ein Verweis aus einem früheren Start wird beim nächsten Start aufgeräumt.
+
+Der Schalter wirkt beim **nächsten** Start der Session — ein laufender Container wird nicht
+umgehängt.
 
 ## Das Startskript ✅
 

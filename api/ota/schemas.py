@@ -133,6 +133,7 @@ class TemplateOut(BaseModel):
     env: dict
     start_script: str = ""
     skeleton_enforce: list[str] = []
+    user_shelf: bool = True
     is_enabled: bool
     apps: list[AppOut] = []
     group_ids: list[uuid.UUID] = []
@@ -159,6 +160,7 @@ class TemplateIn(BaseModel):
     env: dict = {}
     start_script: str = ""
     skeleton_enforce: list[str] = []
+    user_shelf: bool = True
     is_enabled: bool = True
     # `None` heisst „nicht mitgeschickt" und laesst die Zuweisung stehen; eine
     # leere Liste heisst „niemand mehr". Ohne diese Unterscheidung nimmt ein

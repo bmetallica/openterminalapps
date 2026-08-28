@@ -335,8 +335,12 @@ try {
       // nachsehen. Beides ausserhalb des Browsers zu erzeugen ist der einzige
       // Weg, der den echten Fall trifft — ein Klick im Stream wuerde nur die
       // Anwendung im Container bedienen, nicht ihre Zwischenablage.
-      const cn = execSync(`docker ps --filter "label=ota.session_id" --format '{{.Names}}'`)
-        .toString().trim().split('\n')[0]
+      // Der Container **dieser** Session, nicht der erste, den docker ps
+      // nennt: Auf einem Host mit mehreren laufenden Sessions — etwa der
+      // eines Testnutzers aus der Autorisierungsreihe — wäre das der
+      // falsche, und die Richtung Session → Browser schlüge grundlos fehl.
+      const sid = /\/view\/s\/([0-9a-f-]{36})/.exec(view.url())?.[1] ?? ''
+      const cn = sid ? `ota-s-${sid.slice(0, 12)}` : ''
       const inbound = `AUS-DER-SESSION-${Date.now()} äöü ß`
       if (cn) {
         execSync(`docker exec -u 1000 ${cn} bash -c ` +

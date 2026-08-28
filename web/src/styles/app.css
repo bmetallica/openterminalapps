@@ -1430,3 +1430,59 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
 .place__body { color: var(--label); line-height: 1.55; margin: 0; }
 .place__hint { color: var(--mute); line-height: 1.5; margin: 0; font-size: 13px; }
+
+/* --- Die Ablage in der Kontrollleiste ---------------------------------- */
+
+/* Eine kurze Liste, keine Tabelle: In der Leiste ist Breite knapp, und was
+   hier zählt, ist der Name und ein Weg, ihn wieder loszuwerden. */
+.drop--sm { padding: 12px; font-size: 13px; }
+
+.shelf {
+  margin-top: 8px;
+  max-height: 190px;
+  overflow-y: auto;
+  border: 1px solid var(--edge);
+  border-radius: 8px;
+}
+
+.shelf:empty { display: none; }
+.shelf > .field__hint { padding: 10px 12px; margin: 0; }
+
+.shelf__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-bottom: 1px solid var(--edge);
+}
+
+.shelf__row:last-child { border-bottom: 0; }
+
+.shelf__name {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  text-align: left;
+  color: var(--text);
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  background: none;
+  border: 0;
+  font: inherit;
+}
+
+.shelf__name:hover { background: var(--bay-2); }
+.shelf__name span { color: var(--mute); margin-right: 6px; }
+
+.shelf__drop {
+  flex: none;
+  padding: 8px 10px;
+  color: var(--mute);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.shelf__drop:hover { color: var(--halt); }

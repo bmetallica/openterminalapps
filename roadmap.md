@@ -226,6 +226,13 @@ Der Entwurf steht bereits (`web/`, `plan.md` §13). Hier wird er verkabelt.
 - [x] **Jede Anwendung in einem eigenen Tab.** Eigene Adressen `/view/s/<id>[/<display>]`;
       das Dashboard bleibt im ersten Tab stehen
 - [x] **Verknüpfung auf dem Desktop** (PWA): Manifest je Vorlage und App aus der API
+- [x] **Zwei getrennte Ablagen** (2026-08-28): Die gemeinsame gehört der Verwaltung — sichtbar
+      und beschreibbar nur für die, die Images oder Vorlagen verwalten, im Container weiterhin
+      `/mnt/ota` nur lesbar. Die eigene gehört je einem Nutzer, liegt beschreibbar unter
+      `/mnt/austausch` und als `~/Austausch` im Home, und ist je Workspace abschaltbar
+      (Vorgabe an). Der Eigentümer kommt aus dem Anmeldecookie, nie aus der Anfrage: Es gibt
+      keinen Weg in eine fremde Ablage, auch nicht für Administratoren. Zusätzlich in der
+      Kontrollleiste einer laufenden Session, mit Ziehen und Ablegen
 - [x] **Jede Anwendung einzeln ablegbar** (2026-08-28): Katalog im Dashboard, eigene Ablage-Seite
       je Anwendung unter `/launch/<vorlage>/<app>?ablegen`, eigene Kennung im Manifest. Der
       frühere Knopf im Viewer konnte nicht halten, was er versprach: Der Browser liest das

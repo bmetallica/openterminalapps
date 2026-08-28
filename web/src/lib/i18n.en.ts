@@ -523,6 +523,24 @@ export const EN: Record<string, string> = {
   '{name} liegt jetzt auf deinem Desktop.': '{name} is on your desktop now.',
   'Der Browser hat die Verknüpfung abgelehnt.': 'The browser refused the shortcut.',
   '{name} auf den Desktop legen': 'Add {name} to desktop',
+  'Meine Ablage': 'My files',
+  'Gemeinsame Ablage': 'Shared files',
+  'Deine Dateien': 'Your files',
+  'Eigene Ablage': 'Personal shelf',
+  'Eigene Ablage einhängen': 'Mount the personal shelf',
+  'Der übliche Weg, Dateien hinein und heraus zu bekommen':
+    'The usual way to get files in and out',
+  'Im Container unter /mnt/austausch und als „Austausch" im Home.':
+    'In the container at /mnt/austausch and as "Austausch" in the home directory.',
+  'Liegt in deinem Arbeitsplatz unter /mnt/austausch und als „Austausch" im Home — beschreibbar. Was du hier ablegst, liegt gleich darauf im Container; was du dort hineinlegst, findest du hier.':
+    'Sits in your workspace at /mnt/austausch and as "Austausch" in your home directory — writable. What you put here shows up in the container moments later; what you put there shows up here.',
+  'Liegt im Container unter /mnt/austausch und als „Austausch" im Home. Jeder sieht nur seine eigene.':
+    'Sits in the container at /mnt/austausch and as "Austausch" in the home directory. Everyone sees only their own.',
+  'Ohne sie führt kein Weg über den Browser in diesen Container hinein oder heraus — ausser dem, den die Rechte ohnehin erlauben.':
+    'Without it there is no route through the browser into this container or out of it — beyond whatever the permissions already allow.',
+  'Belegt insgesamt {size}. Das hier sieht ausser dir niemand — auch die Administration nicht.':
+    'Using {size} in total. Nobody but you sees this — not even the administration.',
+  '{name} löschen': 'Delete {name}',
   'Auf dem Desktop': 'On your desktop',
   'Verknüpfung anlegen': 'Add a shortcut',
   'Zuklappen': 'Close',

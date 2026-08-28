@@ -47,6 +47,9 @@ REGISTRY = os.environ.get("OTA_REGISTRY", "").strip()
 # der Weg der Administration zu den Nutzern, nicht umgekehrt.
 SHARED_ROOT = os.environ.get("OTA_SHARED_ROOT", "/srv/ota/shared")
 SHARED_MOUNT = "/mnt/ota"
+# Die eigene Ablage des Nutzers. Anders als die gemeinsame ist sie
+# **beschreibbar** — sie ist der Weg in den Container und wieder heraus.
+USERFILES_MOUNT = "/mnt/austausch"
 SESSION_NETWORK = os.environ.get("OTA_SESSION_NETWORK", "ota_sessions")
 PUBLIC_NETWORK = os.environ.get("OTA_PUBLIC_NETWORK", "ota_public")
 
@@ -137,6 +140,10 @@ class StartRequest(BaseModel):
     # API fuer Administratoren. Siehe `_elevate()` — das ist eine bewusste
     # Lockerung, keine Nebenwirkung.
     elevated: bool = False
+    # Wem die eigene Ablage gehoert, die eingehaengt werden soll. Leer heisst:
+    # keine. Die Vorlage kann das abschalten, und die API entscheidet es —
+    # der Agent haengt nur ein, was ihm gesagt wird.
+    shelf_user: str = ""
 
 
 @app.get("/healthz")
@@ -216,6 +223,59 @@ def shared_remove(path: str) -> dict[str, Any]:
 @app.get("/shared/file", dependencies=[Depends(require_token)])
 def shared_read(path: str) -> Response:
     name, data = _shared(shared_store.read, path)
+    return Response(
+        content=data, media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{name}"'},
+    )
+
+
+# --------------------------------------------------------------------------
+# Eigene Ablage je Nutzer (siehe shared.py)
+#
+# Derselbe Code, andere Wurzel — und beschreibbar. Wem welche Ablage gehoert,
+# entscheidet die API; hier steht nur der Name im Pfad. Er wird trotzdem
+# geprueft: Der Agent ist die Stelle, an der aus einer Zeichenkette ein
+# Verzeichnis wird, und die darf nichts durchlassen.
+# --------------------------------------------------------------------------
+
+class UserNameRequest(BaseModel):
+    path: str = ""
+    name: str
+
+
+def _user_base(username: str):
+    try:
+        return shared_store.user_root(username)
+    except shared_store.SharedError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+
+@app.get("/userfiles/{username}", dependencies=[Depends(require_token)])
+def user_list(username: str, path: str = "") -> dict[str, Any]:
+    return _shared(shared_store.listing, path, _user_base(username))
+
+
+@app.post("/userfiles/{username}/upload", dependencies=[Depends(require_token)])
+async def user_upload(username: str, path: str = Form(default=""),
+                      file: UploadFile = File(...)) -> dict[str, Any]:
+    data = await file.read()
+    return _shared(shared_store.save, path, file.filename or "datei", data,
+                   _user_base(username))
+
+
+@app.post("/userfiles/{username}/dir", dependencies=[Depends(require_token)])
+def user_mkdir(username: str, req: UserNameRequest) -> dict[str, Any]:
+    return _shared(shared_store.make_dir, req.path, req.name, _user_base(username))
+
+
+@app.delete("/userfiles/{username}", dependencies=[Depends(require_token)])
+def user_remove(username: str, path: str) -> dict[str, Any]:
+    return _shared(shared_store.remove, path, _user_base(username))
+
+
+@app.get("/userfiles/{username}/file", dependencies=[Depends(require_token)])
+def user_read(username: str, path: str) -> Response:
+    name, data = _shared(shared_store.read, path, _user_base(username))
     return Response(
         content=data, media_type="application/octet-stream",
         headers={"Content-Disposition": f'attachment; filename="{name}"'},
@@ -350,6 +410,20 @@ def start_container(req: StartRequest) -> dict[str, Any]:
             target=SHARED_MOUNT, source=SHARED_ROOT, type="bind", read_only=True,
         ))
 
+    # Die eigene Ablage, beschreibbar. Sie liegt aus demselben Grund neben dem
+    # Home und nicht darin: Was der Browser sieht und was der Container sieht,
+    # soll derselbe Ort sein — und der soll sich beim Sichern des Profils
+    # nicht doppelt wiederfinden.
+    if req.shelf_user:
+        try:
+            mounts.append(docker.types.Mount(
+                target=USERFILES_MOUNT, source=str(shared_store.user_root(req.shelf_user)),
+                type="bind",
+            ))
+        except shared_store.SharedError as exc:
+            log.warning("Eigene Ablage fuer %s nicht einhaengbar: %s",
+                        req.shelf_user, exc)
+
     try:
         container = client.containers.run(
             req.image,
@@ -426,19 +500,32 @@ def start_container(req: StartRequest) -> dict[str, Any]:
 
 
 def _link_shared(container) -> None:
-    """Legt einen Verweis auf die gemeinsame Ablage ins Home.
+    """Legt Verweise auf die beiden Ablagen ins Home.
 
-    Der eigentliche Einhaengepunkt liegt ausserhalb des Home, damit niemand
-    ein unbeschreibbares Verzeichnis mitten in seinen eigenen Dateien hat.
-    Findbar soll die Ablage trotzdem sein — deshalb der Verweis.
+    Die eigentlichen Einhaengepunkte liegen ausserhalb des Home: Ein
+    unbeschreibbares Verzeichnis mitten in den eigenen Dateien verwirrt mehr,
+    als es hilft — und die eigene Ablage soll beim Sichern des Profils nicht
+    ein zweites Mal auftauchen. Findbar sollen beide trotzdem sein, deshalb
+    die Verweise: „Gemeinsam" und „Austausch".
 
-    Nur wenn dort noch nichts liegt: Wer einen eigenen Ordner „Gemeinsam"
+    Nur wenn dort noch nichts liegt: Wer einen eigenen Ordner dieses Namens
     angelegt hat, behaelt ihn.
     """
+    # Der zweite Teil raeumt auf. Wird die eigene Ablage in der Vorlage
+    # abgeschaltet, bleibt sonst der Verweis von einem frueheren Start im
+    # Zuhause stehen und zeigt ins Leere — das Zuhause ueberdauert ja. Entfernt
+    # wird nur ein Symlink, der genau auf den Einhaengepunkt zeigt: Ein echter
+    # Ordner dieses Namens gehoert dem Nutzer und wird nicht angefasst.
     script = (
-        f'[ -d {SHARED_MOUNT} ] || exit 0; '
-        '[ -e "$HOME/Gemeinsam" ] && exit 0; '
-        f'ln -s {SHARED_MOUNT} "$HOME/Gemeinsam"'
+        f'[ -d {SHARED_MOUNT} ] && [ ! -e "$HOME/Gemeinsam" ] '
+        f'&& ln -s {SHARED_MOUNT} "$HOME/Gemeinsam"; '
+        f'if [ -d {USERFILES_MOUNT} ]; then '
+        f'  [ -e "$HOME/Austausch" ] || ln -s {USERFILES_MOUNT} "$HOME/Austausch"; '
+        f'elif [ -L "$HOME/Austausch" ] '
+        f'  && [ "$(readlink "$HOME/Austausch")" = "{USERFILES_MOUNT}" ]; then '
+        f'  rm -f "$HOME/Austausch"; '
+        f'fi; '
+        'exit 0'
     )
     try:
         container.exec_run(["bash", "-lc", script], user="1000")

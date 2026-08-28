@@ -65,8 +65,24 @@ ensure_workspace() {
   return 0
 }
 
+# Der Container, der zu **diesem** Konto gehoert — nicht einfach der erste,
+# den `docker ps` nennt.
+#
+# Auf einem Host, auf dem gerade auch die Autorisierungstests gelaufen sind,
+# steht die Session eines Testnutzers vorn in der Liste. Der Rest dieses
+# Skripts fragt die API nach dieser Session, findet sie nicht (sie gehoert ja
+# einem anderen) und meldet „keine laufende Anwendung" — ein Fehlschlag, der
+# nichts mit der Zwischenablage zu tun hat. Gemessen am 2026-08-28.
+mein_container() {
+  api "$BASE/api/sessions" | jqp "
+next(('ota-s-' + s['id'][:12] for s in d if s['status'] == 'running'), '')"
+}
+
+api -X POST "$BASE/api/auth/login" -H 'Content-Type: application/json' \
+    -d "{\"username\":\"$ADMIN\",\"password\":\"$ADMIN_PW\"}" >/dev/null
+
 SID=""
-CN=$(docker ps --filter "label=ota.session_id" --format '{{.Names}}' | head -1)
+CN=$(mein_container)
 DISPLAY_COUNT=0
 [ -n "$CN" ] && DISPLAY_COUNT=$(docker exec "$CN" bash -c 'ls /tmp/.X11-unix/ 2>/dev/null | wc -l' 2>/dev/null || echo 0)
 
@@ -74,7 +90,7 @@ if [ "${DISPLAY_COUNT:-0}" -lt 2 ]; then
   echo "Weniger als zwei Displays offen — der Test stellt den Zustand selbst her."
   ensure_workspace || { echo "Kein Arbeitsplatz verfügbar."; exit 1; }
   sleep 4
-  CN=$(docker ps --filter "label=ota.session_id" --format '{{.Names}}' | head -1)
+  CN=$(mein_container)
 fi
 
 if [ -z "$SID" ] && [ -n "$CN" ]; then

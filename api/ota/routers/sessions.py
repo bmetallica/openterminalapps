@@ -390,6 +390,11 @@ def start_session(
             # koennten sie dort nichts nachinstallieren. Die Entscheidung faellt
             # hier und nicht im Agent: Der Agent kennt keine Rollen.
             "elevated": user.is_admin,
+            # Die eigene Ablage des Nutzers, beschreibbar unter
+            # /mnt/austausch. Die Vorlage kann sie abschalten — fuer
+            # Arbeitsplaetze, aus denen bewusst nichts herausgetragen werden
+            # soll. Leer heisst: nicht einhaengen.
+            "shelf_user": user.username if tpl.user_shelf else "",
             # Womit ein Zuhause anfaengt. Beim ersten Start der ganze Baum,
             # danach nur die durchgesetzten Pfade.
             "template_slug": tpl.slug,

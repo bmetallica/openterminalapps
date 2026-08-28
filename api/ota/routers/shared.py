@@ -1,13 +1,15 @@
-"""Die gemeinsame Ablage — Verwaltung über die Oberfläche.
+"""Die gemeinsame Ablage — der Weg der Administration zu den Nutzern.
 
-Die Aufteilung ist der Punkt dieser Datei:
+**Diese Ablage gehört der Verwaltung.** Wer sie im Browser sieht, sieht sie
+ganz: lesen, hochladen, Ordner anlegen, löschen. Wer sie nicht verwalten darf,
+hat hier nichts zu suchen und bekommt seine [eigene](files.py).
 
-* **Lesen** darf jeder Angemeldete. Er sieht die Ablage ohnehin in seinem
-  Container unter ``/mnt/ota`` (und als „Gemeinsam" in seinem Home); sie im
-  Browser zu verbergen wäre eine Kulisse, keine Sicherheit.
-* **Schreiben** darf nur, wer Dateien verwalten darf. In den Containern liegt
-  die Ablage schreibgeschützt — der Weg hinein führt ausschliesslich hier
-  entlang.
+Das war einmal anders — bis zum 2026-08-28 durfte jeder Angemeldete den
+Inhalt lesen, mit dem Argument, er sehe ihn ohnehin in seinem Container. Das
+Argument stimmt weiterhin, taugt aber nicht als Bauplan für die Oberfläche:
+Zwei Ablagen nebeneinander, von denen eine nur zum Zusehen da ist, erklären
+sich nicht. Der lesende Zugriff im Container über ``/mnt/ota`` bleibt davon
+unberührt — dafür ist sie da.
 
 Ausgeführt wird alles im Agent (`agent/otaagent/shared.py`). Die API fasst das
 Dateisystem des Hosts nicht an; sie entscheidet, wer was darf.
@@ -21,7 +23,7 @@ from sqlalchemy.orm import Session as DbSession
 
 from .. import agent_client, audit
 from ..db import get_db
-from ..deps import current_user, require_permission
+from ..deps import require_permission
 from ..models import User
 from ..schemas import SharedDirIn
 
@@ -31,13 +33,13 @@ router = APIRouter(prefix="/api/shared", tags=["shared"])
 manage = require_permission("images.manage", "templates.manage")
 
 
-@router.get("")
-def listing(path: str = "", _: User = Depends(current_user)) -> dict:
+@router.get("", dependencies=[Depends(manage)])
+def listing(path: str = "") -> dict:
     return agent_client.shared_list(path)
 
 
-@router.get("/file")
-def download(path: str, _: User = Depends(current_user)) -> Response:
+@router.get("/file", dependencies=[Depends(manage)])
+def download(path: str) -> Response:
     data, name = agent_client.shared_read(path)
     return Response(
         content=data, media_type="application/octet-stream",

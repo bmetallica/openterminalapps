@@ -18,7 +18,7 @@ import { setLang, t, useLang, type Lang } from './lib/i18n'
 import './styles/app.css'
 
 type View = 'dashboard' | 'workspaces' | 'images' | 'registries' | 'storage'
-  | 'people' | 'monitor' | 'settings' | 'account' | 'help'
+  | 'files' | 'people' | 'monitor' | 'settings' | 'account' | 'help'
 type Toast = { id: number; msg: string; tone: 'ok' | 'bad' }
 
 const NAV: { id: View; glyph: string; cap: string; adminOnly: boolean }[] = [
@@ -26,9 +26,14 @@ const NAV: { id: View; glyph: string; cap: string; adminOnly: boolean }[] = [
   { id: 'workspaces', glyph: '⬡', cap: 'Workspaces', adminOnly: true },
   { id: 'images', glyph: '⬢', cap: 'Images', adminOnly: true },
   { id: 'registries', glyph: '◇', cap: 'Registries', adminOnly: true },
-  // Die Ablage sehen alle: Sie liegt ohnehin in jedem Container. Nur
-  // schreiben darf, wer darf — das entscheidet die API, nicht dieses Menü.
-  { id: 'storage', glyph: '▦', cap: 'Ablage', adminOnly: false },
+  // Zwei Ablagen, zwei Zwecke — deshalb zwei Einträge.
+  //
+  // Die eigene gehört jedem, auch Administratoren: Sie ist der Weg, Dateien
+  // in den eigenen Container und wieder heraus zu bekommen. Die gemeinsame
+  // ist der Weg der Verwaltung zu allen; wer sie nicht verwaltet, hat dort
+  // nichts zu bestellen und sieht sie ohnehin in seinem Container.
+  { id: 'files', glyph: '▤', cap: 'Meine Ablage', adminOnly: false },
+  { id: 'storage', glyph: '▦', cap: 'Gemeinsame Ablage', adminOnly: true },
   { id: 'people', glyph: '◔', cap: 'Nutzer', adminOnly: true },
   { id: 'monitor', glyph: '◈', cap: 'Betrieb', adminOnly: true },
   { id: 'settings', glyph: '⚙', cap: 'Einstellungen', adminOnly: true },
@@ -123,7 +128,13 @@ export default function App() {
     )
   }
 
-  const visible = NAV.filter((n) => !n.adminOnly || me.is_admin)
+  // Die gemeinsame Ablage hängt nicht am Administrator, sondern am Recht:
+  // Wer Images oder Vorlagen verwaltet, verteilt auch, was hineingehört.
+  const darfVerteilen = me.is_admin
+    || me.permissions.includes('images.manage')
+    || me.permissions.includes('templates.manage')
+  const visible = NAV.filter((n) =>
+    n.id === 'storage' ? darfVerteilen : !n.adminOnly || me.is_admin)
 
   /* Der Rückfall auf das Dashboard fängt den Fall ab, dass jemand seine
      Rechte verliert, während eine Verwaltungsansicht offen ist.
@@ -205,6 +216,9 @@ export default function App() {
           <Storage onToast={toast}
             canWrite={me.is_admin || me.permissions.includes('images.manage')
               || me.permissions.includes('templates.manage')} />
+        )}
+        {current === 'files' && (
+          <Storage onToast={toast} shelf="eigen" canWrite />
         )}
         {current === 'people' && <People onToast={toast} />}
         {current === 'monitor' && <Monitor onToast={toast} />}

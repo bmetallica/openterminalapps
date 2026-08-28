@@ -192,6 +192,39 @@ def shared_read(path: str) -> tuple[bytes, str]:
     return resp.content, name
 
 
+# --- Eigene Ablage je Nutzer ---------------------------------------------
+
+def user_list(username: str, path: str = "") -> dict[str, Any]:
+    return _call("GET", f"/userfiles/{username}", params={"path": path})
+
+
+def user_upload(username: str, path: str, name: str, data: bytes) -> dict[str, Any]:
+    return _call("POST", f"/userfiles/{username}/upload", data={"path": path},
+                 files={"file": (name, data)})
+
+
+def user_mkdir(username: str, path: str, name: str) -> dict[str, Any]:
+    return _call("POST", f"/userfiles/{username}/dir",
+                 json={"path": path, "name": name})
+
+
+def user_remove(username: str, path: str) -> dict[str, Any]:
+    return _call("DELETE", f"/userfiles/{username}", params={"path": path})
+
+
+def user_read(username: str, path: str) -> tuple[bytes, str]:
+    """Der Inhalt einer Datei und ihr Name. Kein JSON, deshalb der eigene Weg."""
+    import httpx
+
+    url = f"{settings().agent_url.rstrip('/')}/userfiles/{username}/file"
+    with httpx.Client(timeout=300.0) as client:
+        resp = client.get(url, headers=_headers(), params={"path": path})
+    if resp.status_code >= 400:
+        raise HTTPException(resp.status_code, "Die Datei liess sich nicht lesen.")
+    name = path.rsplit("/", 1)[-1] or "datei"
+    return resp.content, name
+
+
 def pull_image(ref: str) -> dict[str, Any]:
     return _call("POST", "/images/pull", json={"ref": ref})
 
