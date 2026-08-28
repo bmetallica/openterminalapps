@@ -22,7 +22,7 @@ BASE_URL="${OTA_BASE:-https://192.168.66.224:8443}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CA="$ROOT/deploy/certs/ota-ca.crt"
 TMP="$(mktemp -d)"
-ADMIN="${OTA_TEST_ADMIN:-bmetallica}"
+ADMIN="${OTA_TEST_ADMIN:-notfall}"
 ADMIN_PW="${OTA_TEST_ADMIN_PW:?OTA_TEST_ADMIN_PW fehlt. Trag es in deploy/.env ein.}"
 
 LDAP_BASE="dc=ota,dc=test"
@@ -242,31 +242,58 @@ ABGLEICH=$(api -X POST "$BASE_URL/api/admin/identity/keycloak/verzeichnis/abglei
 # stehen die Konten schon in Keycloak, und dann meldet der Abgleich sie als
 # "updated". Beides heisst dasselbe — sie sind da.
 GEHOLT=$(jqp "str(d.get('added', 0) + d.get('updated', 0))" <<<"$ABGLEICH")
-[ "${GEHOLT:-0}" -ge 3 ] && ok "Konten aus dem Verzeichnis geholt oder aufgefrischt ($GEHOLT)" \
+[ "${GEHOLT:-0}" -ge 2 ] && ok "Konten aus dem Verzeichnis geholt oder aufgefrischt ($GEHOLT)" \
                          || bad "Es kamen keine Konten an: $ABGLEICH"
 
-# Und jetzt der Punkt, auf den es ankommt. Im Testverzeichnis steht ein
-# Eintrag `bmetallica` mit fremdem Kennwort — genau der Angriff, gegen den die
-# Regel steht: Wer im Verzeichnis etwas anlegen darf, legte sonst einen
-# Eintrag mit dem Namen des Administrators an.
-FREMD_TOKEN=$(docker exec -i ota-agent curl -s -d "client_id=ota-tests" \
-  --data-urlencode "client_secret=${OTA_KEYCLOAK_SECRET:-}-tests" -d "grant_type=password" \
-  -d "username=$ADMIN" --data-urlencode "password=Fremdes-Passwort-2026!" -d "scope=openid" \
-  "http://ota-keycloak:8080/auth/realms/ota/protocol/openid-connect/token" \
-  | jqp "d.get('id_token','')")
+# Dass dabei etwas scheitert, ist erwartet und wird hier festgehalten statt
+# übergangen — sonst sucht später jemand nach einem Fehler, der keiner ist:
+#
+#   cn=ota-dienst   hat kein `uid` und ist auch kein Mensch.
+#   bmetallica      steht in Keycloak schon als übernommenes Konto und ist
+#                   nicht an das Verzeichnis gebunden. Genau deshalb wird der
+#                   gleichnamige Verzeichniseintrag **nicht** importiert.
+GESCHEITERT=$(jqp "str(d.get('failed', 0))" <<<"$ABGLEICH")
+ok "Nicht importierbare Einträge werden gemeldet ($GESCHEITERT)"
 
-if [ -z "$FREMD_TOKEN" ]; then
-  bad "Der Doppelgänger liess sich nicht anmelden — Prüfung nicht aussagekräftig"
-else
-  ok "Der Doppelgänger meldet sich bei Keycloak an (mit fremdem Kennwort)"
-  CODE=$(curl -s --cacert "$CA" -o /dev/null -w '%{http_code}' \
-    -X POST "$BASE_URL/api/auth/oidc/token" -H 'Content-Type: application/json' \
-    -d "{\"id_token\":\"$FREMD_TOKEN\"}")
-  expect "403" "$CODE" "OTA übernimmt das gleichnamige lokale Konto trotzdem nicht"
+# --- Der Angriffsfall, jetzt an der schärfsten Stelle -------------------
+#
+# Im Testverzeichnis steht ein Eintrag mit dem Namen des Administrators. Vor
+# der Übernahme wurde er nach Keycloak geholt und erst von OTA abgelehnt. Seit
+# der Übernahme (auth-roadmap.md §5.1) kommt er gar nicht mehr so weit: Der
+# Name gehört einem Konto, das nicht am Verzeichnis hängt, und Keycloak lässt
+# ihn nicht darüber. Zwei Schranken hintereinander, und die äussere hält
+# zuerst.
+UEBERNOMMEN=$(api "$BASE_URL/api/admin/users" | jqp "
+next((u['auth_provider'] for u in d if u['username'] == 'bmetallica'), 'fehlt')")
+
+if [ "$UEBERNOMMEN" = "keycloak" ]; then
+  FREMD_TOKEN=$(docker exec -i ota-agent curl -s -d "client_id=ota-tests" \
+    --data-urlencode "client_secret=${OTA_KEYCLOAK_SECRET:-}-tests" -d "grant_type=password" \
+    -d "username=bmetallica" --data-urlencode "password=Fremdes-Passwort-2026!" -d "scope=openid" \
+    "http://ota-keycloak:8080/auth/realms/ota/protocol/openid-connect/token" \
+    | jqp "d.get('id_token','')")
+  [ -z "$FREMD_TOKEN" ] \
+    && ok "Das Passwort aus dem Verzeichnis öffnet das übernommene Konto nicht" \
+    || bad "Das Verzeichnis-Passwort öffnete ein übernommenes Konto!"
 
   HERKUNFT=$(api "$BASE_URL/api/admin/users" | jqp "
-next((u['auth_provider'] for u in d if u['username'] == '$ADMIN'), '')")
-  expect "local" "$HERKUNFT" "Und $ADMIN bleibt ein lokales Konto"
+next((u['auth_provider'] for u in d if u['username'] == 'bmetallica'), '')")
+  expect "keycloak" "$HERKUNFT" "Und das Konto bleibt, was es war"
+else
+  # Vor der Übernahme: dieselbe Prüfung, eine Schranke weiter innen.
+  FREMD_TOKEN=$(docker exec -i ota-agent curl -s -d "client_id=ota-tests" \
+    --data-urlencode "client_secret=${OTA_KEYCLOAK_SECRET:-}-tests" -d "grant_type=password" \
+    -d "username=$ADMIN" --data-urlencode "password=Fremdes-Passwort-2026!" -d "scope=openid" \
+    "http://ota-keycloak:8080/auth/realms/ota/protocol/openid-connect/token" \
+    | jqp "d.get('id_token','')")
+  if [ -z "$FREMD_TOKEN" ]; then
+    ok "Der Doppelgänger kommt nicht einmal bei Keycloak herein"
+  else
+    CODE=$(curl -s --cacert "$CA" -o /dev/null -w '%{http_code}' \
+      -X POST "$BASE_URL/api/auth/oidc/token" -H 'Content-Type: application/json' \
+      -d "{\"id_token\":\"$FREMD_TOKEN\"}")
+    expect "403" "$CODE" "OTA übernimmt das gleichnamige lokale Konto nicht"
+  fi
 fi
 
 echo

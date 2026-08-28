@@ -146,6 +146,15 @@ def login(
     if not user.is_active or user.is_locked:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Dieses Konto ist deaktiviert.")
 
+    if weg == "none" and user.auth_provider == identity.KEYCLOAK:
+        # Kein 401: Hier ist nichts falsch eingegeben, hier steht jemand am
+        # falschen Eingang. Die Meldung sagt, wo der richtige ist.
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Dieses Konto meldet sich über die zentrale Anmeldung an. "
+            "Ruf OTA ohne /login auf, dann geht es von selbst weiter.",
+        )
+
     if weg == identity.LDAP and user.auth_provider == identity.LDAP:
         # Das Verzeichnis entscheidet, nicht wir. Faellt es aus, kommt dieses
         # Konto nicht herein — und das ist richtig so: Ein Ausweichen auf

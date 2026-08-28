@@ -10,7 +10,13 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import puppeteer from 'puppeteer-core'
 
 const BASE = process.env.OTA_BASE ?? 'https://192.168.66.224:8443'
-const USER = process.env.OTA_USER ?? 'bmetallica'
+// Der Notzugang, nicht ein Mensch.
+//
+// Seit der Übernahme (auth-roadmap.md §5.1) melden sich Menschen über
+// Keycloak an. Diese Reihe prüft OTA und nicht Keycloak — und ganz nebenbei
+// prüft sie damit bei jedem Lauf, dass der Notausgang offen ist. Das ist die
+// Eigenschaft, die man am ehesten stillschweigend verliert.
+const USER = process.env.OTA_USER ?? process.env.OTA_TEST_ADMIN ?? 'notfall'
 /* Kein Vorgabewert: Ein Passwort im Quelltext ist eines, das irgendwann in
    einem Repository steht. Es kommt aus deploy/.env, die der Makefile-Ziel
    `test` einliest. */

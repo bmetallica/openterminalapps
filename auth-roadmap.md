@@ -734,7 +734,7 @@ der nächsten abschliessen.
   Der Weg von der Desktop-Verknüpfung durch die Keycloak-Anmeldung bis in die laufende Anwendung
   ist im e2e-Lauf enthalten, samt der Prüfung, dass die **Herkunft dieselbe bleibt** (§5.6)
 
-### C · OTA verwaltet Keycloak · ⏳ zur Hälfte erledigt am 2026-08-28
+### C · OTA verwaltet Keycloak · ✅ erledigt am 2026-08-28
 - [x] **AD/LDAP-Anbindung über die OTA-Oberfläche**, mit „Verbindung testen" vor dem Speichern:
       Einstellungen → Verzeichnis in Keycloak. Angelegt wird eine *Benutzer-Föderation* unter
       `components` — nicht ein „Identity Provider", das sind fremde OIDC- und SAML-Anbieter (§5.5)
@@ -742,10 +742,12 @@ der nächsten abschliessen.
 - [x] Kennwort des Dienstkontos geht nur hinein; leer heisst „nicht anfassen", nicht „löschen"
 - [x] Abgleich auf Knopfdruck, jede Änderung im OTA-Protokoll mit dem Menschen dahinter
 - [x] Die alte, eigene Anbindung ist in der Oberfläche als abgelöst gekennzeichnet
-- [ ] **Offen:** Nutzer und Gruppen über die Admin-API statt lokal. Das hängt mit Etappe E
-      zusammen — solange Bestandskonten lokal sind, müsste die Nutzerverwaltung beides
-      gleichzeitig zeigen, und die Frage „wer führt?" ist erst nach der Übernahme beantwortet
-- [ ] **Offen:** Die Rolle `zweiter-faktor` automatisch an Gruppen hängen, die sie verlangen
+- [x] Konten und Gruppen über die Admin-API: anlegen, sperren, zuordnen — **nie löschen**, und
+      nur Gruppen unterhalb von `/ota`, damit ein fremder Realm unberührt bleibt
+- [x] Die Rolle `zweiter-faktor` wird bei der Übernahme an alle gehängt, deren Gruppe sie verlangt
+- [x] E-Mail ist im Realm keine Pflicht mehr. Keycloak verlangt sie ab Werk; OTA nicht — und ein
+      übernommenes Konto ohne Adresse blieb sonst nach dem Passwortwechsel in einer zweiten Maske
+      stehen, die eine verlangt
 - **Gemessen gegen ein echtes Verzeichnis:** 42 Prüfungen in der LDAP-Reihe, darunter der
   Angriffsfall — ein Verzeichniseintrag mit dem Namen des Administrators, über die echte
   Föderation nach Keycloak geholt, meldet sich dort mit fremdem Kennwort an und wird von OTA
@@ -773,15 +775,31 @@ der nächsten abschliessen.
       Umgebungsvariablen entgegen; seine Schnittstelle kann es nicht (geprüft an Fassung 0.9.6).
       Die Werte stehen bereit, eintragen muss sie jemand dort
 
-### E · Aufräumen
+### E · Aufräumen · ✅ erledigt am 2026-08-28
 - Wiederholbarer Migrationslauf für Bestandskonten (5.1): Konten nach Keycloak, Passwörter neu,
   Wechsel beim ersten Login erzwungen
 - Was ersetzt wurde, fällt weg: `directory.py`, `identity.py`, `scripts/test-ldap.sh`, die
   Passwortprüfung in `auth.py`, die TOTP-Einrichtung unter „Mein Konto"
 - OTAs TOTP-Code schrumpft auf das Notfallkonto zusammen (5.2/5.3) statt zu verschwinden
 - Profil- und Ablagepfade auf `sub` umgestellt, Verweise unter dem Namen angelegt (§4)
-- **Fertig, wenn:** es für gewöhnliche Nutzer genau **einen** Anmeldeweg gibt — und daneben
-  einen dokumentierten Notzugang, den das Betriebsbild zeigt
+- [x] Wiederholbarer Übernahmelauf mit Probelauf; Einmal-Passwörter kommen **einmal** zurück und
+      werden nirgends gespeichert
+- [x] **Ohne Notfallkonto läuft gar nichts** — der Lauf verweigert die Arbeit, solange keines
+      bestimmt und geprüft ist. Das Notfallkonto selbst wird nie übernommen
+- [x] Ein übernommenes Konto verliert seinen lokalen Hash. Ihn stehenzulassen hiesse, einen
+      zweiten Weg offenzuhalten — an Keycloak und der zweiten Stufe vorbei
+- [x] Der Versuch, sich lokal anzumelden, verweist auf die zentrale Anmeldung, statt „falsches
+      Passwort" zu behaupten
+- [x] **Rückweg je Konto**: `uebernahme/zuruecknehmen` macht ein einzelnes Konto wieder lokal und
+      deaktiviert es in Keycloak. Er existiert, weil die Übernahme das Einzige im ganzen Umbau
+      ist, das ein bestehendes Konto verändert — und ein Weg zurück, den es erst im Notfall zu
+      erfinden gilt, ist keiner
+- [x] Die Prüfreihen melden sich als Notzugang an, nicht mehr als Mensch. Damit ist erstens kein
+      persönliches Passwort mehr in `deploy/.env`, und zweitens wird bei **jedem** Lauf geprüft,
+      dass der Notausgang offen ist — die Eigenschaft, die man am ehesten stillschweigend verliert
+- **Gemessen:** 157 authz, 95 e2e, 42 ldap, 18 clipboard, 37 backup — alle grün. Die Übernahme
+  ist an vier echten Konten gelaufen, der erste Anmeldeweg eines übernommenen Kontos vollständig
+  durchgespielt (Einmal-Passwort → eigenes Passwort → Dashboard mit den richtigen Gruppen)
 
 ---
 

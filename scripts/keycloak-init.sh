@@ -346,8 +346,50 @@ next((e['id'] for e in d if e.get('providerId') == 'conditional-user-role'), '')
   fi
 }
 
+# ------------------------------------------ Was ein Konto haben muss
+#
+# Keycloak verlangt ab Werk eine E-Mail-Adresse von jedem Konto. OTA verlangt
+# sie nicht — und wo OTA sie nicht kennt, kann sie auch niemand mitgeben.
+#
+# Die Folge ohne diese Anpassung ist unangenehm und faellt erst spaet auf: Ein
+# uebernommenes Konto ohne E-Mail aendert brav sein Passwort und landet dann
+# in einer zweiten Maske, die eine Adresse verlangt. Wer keine hat oder keine
+# angeben will, kommt nicht weiter. Gemessen am 2026-08-28.
+profil_lockern() {
+  kc GET "/admin/realms/$REALM/users/profile" >/dev/null
+  local profil; profil=$(kc_body)
+
+  if ! grep -q '"name": *"email"' <<<"$profil" && ! grep -q '"name":"email"' <<<"$profil"; then
+    info "Das Kontenprofil sieht anders aus als erwartet — unveraendert gelassen"
+    return 0
+  fi
+
+  local neu
+  neu=$(python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+geaendert = False
+for a in d.get('attributes', []):
+    if a.get('name') == 'email' and a.get('required'):
+        a.pop('required', None)
+        geaendert = True
+print(json.dumps(d) if geaendert else '')" <<<"$profil")
+
+  if [ -z "$neu" ]; then
+    info "E-Mail ist bereits keine Pflicht"
+    return 0
+  fi
+
+  local code; code=$(kc PUT "/admin/realms/$REALM/users/profile" "$neu")
+  case "$code" in
+    200|204) ok "E-Mail ist keine Pflicht mehr — wie in OTA" ;;
+    *)       bad "Kontenprofil aendern: HTTP $code $(kc_body)" ;;
+  esac
+}
+
 rolle_anlegen
 fluss_einrichten
+profil_lockern
 
 echo
 echo "Bereit. Realm: $REALM"

@@ -590,12 +590,15 @@ Rückweg. Alles Weitere steht im eigenen Dokument.
       PKCE, Token-Tausch ohne Browser für die Prüfreihen, Back-Channel-Logout, zweite Stufe je
       Rolle. Die Desktop-Verknüpfungen überstehen es, weil Keycloak unter `/auth` **derselben**
       Herkunft liegt; das ist im e2e-Lauf gemessen. `/login` bleibt bis Etappe E die lokale Maske
-- [~] **Etappe C zur Hälfte am 2026-08-28**: Die AD-Anbindung lässt sich in OTAs Oberfläche
-      einrichten, prüfen und abgleichen — die Keycloak-Konsole bleibt dafür zu. Offen bleibt die
-      Nutzer- und Gruppenverwaltung; sie hängt an Etappe E
-- [ ] Etappe D: die erste fremde Anwendung (Open WebUI) als OIDC-Client
-- [ ] Etappe E: Bestandskonten übernehmen und aufräumen. **Berührt jedes vorhandene Konto** —
-      hier ist eine ausdrückliche Freigabe nötig, bevor es losgeht
+- [x] **Etappe C erledigt am 2026-08-28**: Die AD-Anbindung lässt sich in OTAs Oberfläche
+      einrichten, prüfen und abgleichen; Konten und Gruppen verwaltet OTA über die Admin-API —
+      die Keycloak-Konsole bleibt für den Alltag zu
+- [x] **Etappe D erledigt am 2026-08-28** (bis auf einen Schritt auf dem anderen Rechner): Fremde
+      Web-Anwendungen im Katalog, eigenes Recht, Liste erlaubter Ziele, OIDC-Client aus OTA heraus.
+      Open WebUI 0.9.6 nimmt OIDC nur über Umgebungsvariablen — die muss jemand dort eintragen
+- [x] **Etappe E erledigt am 2026-08-28**: Vier Bestandskonten übernommen, Notzugang `notfall`
+      eingerichtet und geprüft, Rückweg je Konto vorhanden. Die Prüfreihen melden sich als
+      Notzugang an — damit steht kein persönliches Passwort mehr in `deploy/.env`
 
 ---
 

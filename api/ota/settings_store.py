@@ -45,6 +45,13 @@ DISK_FLOOR_GB = "storage.disk_floor_gb"
 # `http://` sichtbar eine Entscheidung ist und kein Versehen.
 APP_ORIGINS = "apps.allowed_origins"
 
+# Das eine lokale Konto, das bleibt, wenn alles andere ueber Keycloak laeuft.
+#
+# Es steht hier und nicht als Feld am Konto, weil es genau **eines** sein
+# soll: Ein Feld liesse sich an beliebig viele Konten haengen, und aus einem
+# Notausgang wuerden viele (auth-roadmap.md §5.2).
+BREAKGLASS = "auth.breakglass"
+
 DEFAULTS: dict[str, Any] = {
     # Acht Stunden: ein Arbeitstag. Wer morgens kommt, meldet sich einmal an.
     AUTH_IDLE_MINUTES: 480,
@@ -119,3 +126,8 @@ def allowed_origins(db: DbSession) -> list[str]:
     if isinstance(wert, list):
         return [str(x).strip().rstrip("/") for x in wert if str(x).strip()]
     return []
+
+
+def breakglass(db: DbSession) -> str:
+    """Der Name des Notfallkontos. Leer heisst: keines bestimmt."""
+    return str(get(db, BREAKGLASS) or "")

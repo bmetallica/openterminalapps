@@ -664,3 +664,138 @@ def client_neues_geheimnis(client_id: str) -> str:
 def client_da(client_id: str) -> bool:
     resp = ruf("GET", f"/clients?clientId={client_id}")
     return resp.status_code == 200 and bool(resp.json())
+
+
+# --- Konten und Gruppen (Etappe C, zweite Hälfte) -----------------------
+#
+# Ab hier legt OTA in Keycloak an, statt nur zu lesen. Zwei Regeln, die aus
+# §5b folgen und hier nicht verhandelbar sind:
+#
+#   * **Nichts löschen.** Ein Konto wird deaktiviert, nicht entfernt. In einem
+#     fremden Realm gehört es womöglich noch drei anderen Anwendungen.
+#   * **Nur die eigenen Gruppen.** OTA arbeitet unterhalb eines vereinbarten
+#     Pfads und lässt alles daneben in Ruhe.
+
+GRUPPEN_WURZEL = "ota"
+
+
+def konto_finden(username: str) -> dict[str, Any] | None:
+    resp = ruf("GET", "/users", params={"username": username, "exact": "true"})
+    if resp.status_code != 200:
+        raise KeycloakFehler("Die Kontenliste liess sich nicht lesen.")
+    treffer = resp.json()
+    return treffer[0] if treffer else None
+
+
+def konto_anlegen(username: str, *, email: str | None, anzeigename: str | None,
+                  passwort: str, wechseln: bool = True) -> str:
+    """Legt ein Konto an und gibt seine Kennung zurück.
+
+    `wechseln` setzt die erforderliche Aktion „Passwort ändern". Das ist der
+    Normalfall bei der Übernahme (§5.1): Der Mensch bekommt ein Einmal-Passwort
+    und vergibt beim ersten Anmelden sein eigenes.
+
+    Vor- und Nachname werden mitgegeben, auch wenn OTA sie nicht kennt.
+    Keycloak verlangt ein vollständiges Profil, sonst lehnt es die Anmeldung
+    mit „Account is not fully set up" ab — eine Meldung, die niemand mit einem
+    fehlenden Nachnamen in Verbindung bringt. Gemessen am 2026-08-28.
+    """
+    teile = (anzeigename or username).split(" ", 1)
+    korpus = {
+        "username": username,
+        "enabled": True,
+        "emailVerified": True,
+        "firstName": teile[0][:64] or username,
+        "lastName": (teile[1] if len(teile) > 1 else username)[:64],
+        "requiredActions": ["UPDATE_PASSWORD"] if wechseln else [],
+        "credentials": [{"type": "password", "value": passwort, "temporary": False}],
+    }
+    if email:
+        korpus["email"] = email
+
+    resp = ruf("POST", "/users", json=korpus)
+    if resp.status_code == 409:
+        raise KeycloakFehler(f"Ein Konto {username} gibt es in Keycloak schon.")
+    if resp.status_code != 201:
+        raise KeycloakFehler(f"Konto anlegen abgelehnt: {resp.text[:200]}")
+
+    angelegt = konto_finden(username)
+    if angelegt is None:
+        raise KeycloakFehler("Das Konto wurde angelegt, ist aber nicht auffindbar.")
+    return str(angelegt["id"])
+
+
+def konto_sperren(sub: str, gesperrt: bool = True) -> None:
+    """Deaktiviert ein Konto — und löscht es nie."""
+    resp = ruf("PUT", f"/users/{sub}", json={"enabled": not gesperrt})
+    if resp.status_code not in (204, 200):
+        raise KeycloakFehler(f"Das Konto liess sich nicht ändern: {resp.text[:150]}")
+
+
+def gruppe_sorgen(name: str) -> str:
+    """Die OTA-Gruppe mit diesem Namen — angelegt, falls es sie nicht gibt.
+
+    Unterhalb von `/ota`, damit in einem fremden Realm klar ist, was OTA
+    gehört und was nicht anzufassen ist.
+    """
+    resp = ruf("GET", "/groups", params={"search": GRUPPEN_WURZEL})
+    wurzel = None
+    if resp.status_code == 200:
+        wurzel = next((g for g in resp.json() if g["name"] == GRUPPEN_WURZEL), None)
+
+    if wurzel is None:
+        neu = ruf("POST", "/groups", json={"name": GRUPPEN_WURZEL})
+        if neu.status_code not in (201, 409):
+            raise KeycloakFehler(f"Gruppenwurzel anlegen: {neu.text[:150]}")
+        resp = ruf("GET", "/groups", params={"search": GRUPPEN_WURZEL})
+        wurzel = next((g for g in resp.json() if g["name"] == GRUPPEN_WURZEL), None)
+    if wurzel is None:
+        raise KeycloakFehler("Die Gruppenwurzel ist nicht auffindbar.")
+
+    kinder = ruf("GET", f"/groups/{wurzel['id']}/children")
+    if kinder.status_code == 200:
+        treffer = next((g for g in kinder.json() if g["name"] == name), None)
+        if treffer:
+            return str(treffer["id"])
+
+    angelegt = ruf("POST", f"/groups/{wurzel['id']}/children", json={"name": name})
+    if angelegt.status_code not in (201, 409):
+        raise KeycloakFehler(f"Gruppe {name} anlegen: {angelegt.text[:150]}")
+
+    kinder = ruf("GET", f"/groups/{wurzel['id']}/children")
+    treffer = next((g for g in kinder.json() if g["name"] == name), None)
+    if treffer is None:
+        raise KeycloakFehler(f"Die Gruppe {name} ist nach dem Anlegen nicht auffindbar.")
+    return str(treffer["id"])
+
+
+def gruppen_setzen(sub: str, namen: list[str]) -> None:
+    """Setzt die OTA-Gruppen eines Kontos — und lässt fremde in Ruhe."""
+    ist = ruf("GET", f"/users/{sub}/groups")
+    if ist.status_code != 200:
+        raise KeycloakFehler("Die Gruppen des Kontos liessen sich nicht lesen.")
+
+    # Nur, was unterhalb von /ota liegt. Alles andere gehört jemand anderem.
+    unsere = {g["name"]: g["id"] for g in ist.json()
+              if str(g.get("path", "")).startswith(f"/{GRUPPEN_WURZEL}/")}
+
+    for name in namen:
+        if name not in unsere:
+            gid = gruppe_sorgen(name)
+            ruf("PUT", f"/users/{sub}/groups/{gid}")
+
+    for name, gid in unsere.items():
+        if name not in namen:
+            ruf("DELETE", f"/users/{sub}/groups/{gid}")
+
+
+def rolle_setzen(sub: str, rolle: str, an: bool) -> None:
+    """Weist eine Realm-Rolle zu oder nimmt sie weg. Für `zweiter-faktor`."""
+    r = ruf("GET", f"/roles/{rolle}")
+    if r.status_code != 200:
+        raise KeycloakFehler(f"Die Rolle {rolle} gibt es nicht.")
+    korpus = [r.json()]
+    weg = "POST" if an else "DELETE"
+    resp = ruf(weg, f"/users/{sub}/role-mappings/realm", json=korpus)
+    if resp.status_code not in (204, 200):
+        raise KeycloakFehler(f"Rolle {rolle} setzen: {resp.text[:150]}")

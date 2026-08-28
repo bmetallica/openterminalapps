@@ -12,9 +12,10 @@ Oberfläche zeigt statt dessen, ob eines hinterlegt ist.
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session as DbSession
 
-from .. import audit, directory, identity, keycloak
+from .. import audit, directory, identity, keycloak, settings_store, uebernahme
 from ..db import get_db
 from ..deps import current_user, require_permission
 from ..models import Group, IdentityConfig, User
@@ -222,3 +223,136 @@ def kc_verzeichnis_abgleich(request: Request, voll: bool = False,
                  voll=voll)
     db.commit()
     return ergebnis
+
+
+# --------------------------------------------------------------------------
+# Notfallkonto und Übernahme (auth-roadmap.md, Etappe E)
+#
+# Die Reihenfolge ist hier kein Vorschlag: Erst muss ein Notfallkonto stehen,
+# dann darf übernommen werden. Wer alle Konten auf einen Dienst umstellt, der
+# ausfallen kann, braucht vorher einen Weg zurück.
+# --------------------------------------------------------------------------
+
+
+@router.get("/notfallkonto", dependencies=[Depends(manage)])
+def notfallkonto(db: DbSession = Depends(get_db)) -> dict:
+    name = settings_store.breakglass(db)
+    konto = db.scalar(select(User).where(User.username == name)) if name else None
+    return {
+        "name": name,
+        "vorhanden": konto is not None,
+        "brauchbar": bool(konto and konto.auth_provider == "local"
+                          and konto.password_hash and konto.is_admin
+                          and konto.is_active and not konto.is_locked),
+    }
+
+
+@router.put("/notfallkonto", dependencies=[Depends(manage)])
+def notfallkonto_setzen(body: dict, request: Request,
+                        actor: User = Depends(current_user),
+                        db: DbSession = Depends(get_db)) -> dict:
+    """Bestimmt das eine lokale Konto, das bleibt.
+
+    Geprüft wird sofort und vollständig — ein Notausgang, der erst im Ernstfall
+    als verschlossen auffällt, ist schlimmer als keiner.
+    """
+    name = str(body.get("name") or "").strip().lower()
+    if not name:
+        settings_store.put(db, settings_store.BREAKGLASS, "")
+        audit.record(db, "notfallkonto.entfernt", actor=actor, request=request)
+        db.commit()
+        return {"name": "", "vorhanden": False, "brauchbar": False}
+
+    konto = db.scalar(select(User).where(User.username == name))
+    if konto is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"„{name}“ gibt es nicht.")
+    if konto.auth_provider != "local" or not konto.password_hash:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"„{name}“ hat kein lokales Passwort. Genau das ist aber sein Zweck — "
+            "es soll auch dann funktionieren, wenn Keycloak schweigt.")
+    if not konto.is_admin:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            f"„{name}“ ist kein Administrator.")
+
+    settings_store.put(db, settings_store.BREAKGLASS, name)
+    audit.record(db, "notfallkonto.gesetzt", actor=actor, request=request, konto=name)
+    db.commit()
+    return {"name": name, "vorhanden": True, "brauchbar": True}
+
+
+@router.get("/uebernahme", dependencies=[Depends(manage)])
+def uebernahme_stand(db: DbSession = Depends(get_db)) -> dict:
+    """Was noch zu übernehmen wäre — ohne etwas zu ändern."""
+    try:
+        return uebernahme.lauf(db, probe=True)
+    except uebernahme.NichtBereit as exc:
+        return {"bereit": False, "grund": str(exc),
+                "offen": len(uebernahme.offen(db))}
+
+
+@router.post("/uebernahme", dependencies=[Depends(manage)])
+def uebernahme_starten(request: Request, actor: User = Depends(current_user),
+                       db: DbSession = Depends(get_db)) -> dict:
+    """Übernimmt die Bestandskonten. Die Einmal-Passwörter kommen **einmal**."""
+    try:
+        ergebnis = uebernahme.lauf(db, probe=False)
+    except uebernahme.NichtBereit as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+
+    audit.record(db, "uebernahme.gelaufen", actor=actor, request=request,
+                 uebernommen=len(ergebnis["uebernommen"]),
+                 gescheitert=len(ergebnis["gescheitert"]))
+    db.commit()
+    return ergebnis
+
+
+@router.post("/uebernahme/zuruecknehmen", dependencies=[Depends(manage)])
+def uebernahme_zurueck(body: dict, request: Request,
+                       actor: User = Depends(current_user),
+                       db: DbSession = Depends(get_db)) -> dict:
+    """Ein einzelnes Konto wieder lokal machen.
+
+    Der Rückweg, den man hoffentlich nie braucht. Er existiert, weil die
+    Übernahme das Einzige im ganzen Umbau ist, das ein bestehendes Konto
+    verändert — und weil ein Weg zurück, den es erst im Notfall zu erfinden
+    gilt, kein Weg ist.
+
+    Das Konto in Keycloak bleibt stehen und wird nur **deaktiviert**: Löschen
+    wäre in einem fremden Realm nicht unsere Sache, und hier wäre es die
+    Vernichtung des Beweises, dass es die Übernahme gab.
+    """
+    from ..security import hash_password, password_problem
+
+    name = str(body.get("username") or "").strip().lower()
+    passwort = str(body.get("password") or "")
+
+    konto = db.scalar(select(User).where(User.username == name))
+    if konto is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"„{name}“ gibt es nicht.")
+    if konto.auth_provider != identity.KEYCLOAK:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            f"„{name}“ ist gar kein übernommenes Konto.")
+
+    problem = password_problem(passwort)
+    if problem:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, problem)
+
+    if konto.external_id:
+        try:
+            keycloak.konto_sperren(konto.external_id, True)
+        except keycloak.KeycloakFehler:
+            # Keycloak schweigt womöglich — und genau dann braucht man diesen
+            # Weg. Das darf ihn nicht blockieren.
+            pass
+
+    konto.auth_provider = identity.LOCAL
+    konto.external_id = None
+    konto.password_hash = hash_password(passwort)
+    konto.must_change_password = True
+    konto.token_epoch = (konto.token_epoch or 0) + 1
+
+    audit.record(db, "uebernahme.zurueckgenommen", actor=actor, request=request,
+                 konto=name)
+    db.commit()
+    return {"username": name, "auth_provider": konto.auth_provider}

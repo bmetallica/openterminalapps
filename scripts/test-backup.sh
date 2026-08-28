@@ -13,7 +13,7 @@ CA="$ROOT/deploy/certs/ota-ca.crt"
 JAR="$(mktemp)"
 trap 'rm -f "$JAR"' EXIT
 
-USER_NAME="${OTA_TEST_ADMIN:-bmetallica}"
+USER_NAME="${OTA_TEST_ADMIN:-notfall}"
 USER_PW="${OTA_TEST_ADMIN_PW:?OTA_TEST_ADMIN_PW fehlt. Trag es in deploy/.env ein.}"
 
 pass=0; fail=0

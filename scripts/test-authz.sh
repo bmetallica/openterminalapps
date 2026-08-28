@@ -12,7 +12,7 @@ CA="$ROOT/deploy/certs/ota-ca.crt"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-ADMIN_USER="${OTA_TEST_ADMIN:-bmetallica}"
+ADMIN_USER="${OTA_TEST_ADMIN:-notfall}"
 ADMIN_PW="${OTA_TEST_ADMIN_PW:?OTA_TEST_ADMIN_PW fehlt. Trag es in deploy/.env ein.}"
 TEST_USER="ota-testnutzer"
 TEST_PW="TestNutzer2026!ab"
@@ -399,8 +399,15 @@ fi
 # Und die Gegenprobe: Der Container eines Administrators laeuft absichtlich
 # ohne diese beiden Sperren, sonst liefe dort kein sudo. Faellt das zusammen,
 # ist entweder die Haertung kaputt oder das Nachinstallieren.
-ACNAME=$(docker ps --filter "name=ota-s-" --format '{{.Names}}' \
-  | grep -v "^${USER_CNAME:-nichts}$" | head -1)
+#
+# Der Container **dieses** Kontos, nicht irgendein anderer. Vorher wurde der
+# erste genommen, der nicht dem Testnutzer gehoert — und sobald ein drittes
+# Konto eine Session hatte, war das ein beliebiger. Gemeldet wurde dann eine
+# kaputte Haertung, wo nur der falsche Container betrachtet wurde.
+ADMIN_SID=$(api "$TMP/admin.jar" "$BASE/api/sessions" | jqp "
+next((s['id'] for s in d if s['status'] == 'running'), '')")
+ACNAME=""
+[ -n "$ADMIN_SID" ] && ACNAME="ota-s-$(echo "$ADMIN_SID" | cut -c1-12)"
 if [ -n "$ACNAME" ]; then
   docker inspect "$ACNAME" | grep -q '"no-new-privileges:true"' \
     && bad "Der Container des Administrators ist mitgehärtet — sudo liefe dort nicht" \
@@ -446,6 +453,73 @@ CODE=$(curl -s --cacert "$CA" -o /dev/null -w '%{http_code}' \
   -X POST "$BASE/api/auth/login" -H 'Content-Type: application/json' \
   -d "{\"username\":\"$ADMIN_USER\",\"password\":\"$ADMIN_PW\"}")
 expect "200" "$CODE" "Die Anmeldung läuft unverändert über OTA"
+
+# ------------------------------------------- Übernahme und Notzugang
+#
+# Etappe E. Das Einzige im ganzen Umbau, das ein **bestehendes** Konto
+# verändert — deshalb hier die meisten Prüfungen auf das, was nicht passieren
+# darf.
+echo
+echo "Übernahme und Notzugang"
+
+NOTFALL=$(api "$TMP/admin.jar" "$BASE/api/admin/identity/notfallkonto")
+expect "True" "$(jqp "str(d['brauchbar'])" <<<"$NOTFALL")" "Ein Notfallkonto ist bestimmt und brauchbar"
+NOTFALL_NAME=$(jqp "d['name']" <<<"$NOTFALL")
+
+# Der Notzugang ist ein lokales Konto — und muss es bleiben.
+HERK=$(api "$TMP/admin.jar" "$BASE/api/admin/users" | jqp "
+next((u['auth_provider'] for u in d if u['username'] == '$NOTFALL_NAME'), '')")
+expect "local" "$HERK" "Er meldet sich lokal an, ohne Keycloak"
+
+# Und er darf nicht übernommen werden. Ein Ausweg, der durch dieselbe Tür
+# führt wie der Weg hinein, ist keiner.
+OFFEN=$(api "$TMP/admin.jar" "$BASE/api/admin/identity/uebernahme" | jqp "
+','.join(u['username'] for u in d.get('uebernommen', []))")
+case ",$OFFEN," in
+  *",$NOTFALL_NAME,"*) bad "Das Notfallkonto stünde zur Übernahme an" ;;
+  *) ok "Das Notfallkonto steht nicht zur Übernahme an" ;;
+esac
+
+# Ohne bestimmtes Notfallkonto verweigert die Übernahme die Arbeit.
+api "$TMP/admin.jar" -X PUT "$BASE/api/admin/identity/notfallkonto" \
+  -H 'Content-Type: application/json' -d '{"name":""}' >/dev/null
+CODE=$(code "$TMP/admin.jar" -X POST "$BASE/api/admin/identity/uebernahme")
+expect "409" "$CODE" "Ohne Notfallkonto läuft keine Übernahme"
+api "$TMP/admin.jar" -X PUT "$BASE/api/admin/identity/notfallkonto" \
+  -H 'Content-Type: application/json' -d "{\"name\":\"$NOTFALL_NAME\"}" >/dev/null
+WIEDER=$(api "$TMP/admin.jar" "$BASE/api/admin/identity/notfallkonto" | jqp "d['name']")
+expect "$NOTFALL_NAME" "$WIEDER" "Das Notfallkonto steht wieder"
+
+# Ein übernommenes Konto hat hier kein Passwort mehr — und der Versuch sagt,
+# wo der richtige Eingang ist, statt „falsches Passwort" zu behaupten.
+UEBER=$(api "$TMP/admin.jar" "$BASE/api/admin/users" | jqp "
+next((u['username'] for u in d if u['auth_provider'] == 'keycloak'), '')")
+if [ -n "$UEBER" ]; then
+  ANTWORT=$(curl -s --cacert "$CA" -X POST "$BASE/api/auth/login" \
+    -H 'Content-Type: application/json' \
+    -d "{\"username\":\"$UEBER\",\"password\":\"völlig-egal\"}")
+  grep -q "zentrale Anmeldung" <<<"$ANTWORT" \
+    && ok "Ein übernommenes Konto wird an die zentrale Anmeldung verwiesen" \
+    || bad "Die Meldung hilft nicht weiter: $ANTWORT"
+
+  KEIN_HASH=$(docker compose -f deploy/docker-compose.yml --env-file deploy/.env \
+    exec -T db psql -U "${POSTGRES_USER:-ota}" -d "${POSTGRES_DB:-ota}" -tAc \
+    "SELECT COALESCE(password_hash,'—') FROM users WHERE username='$UEBER'" 2>/dev/null | tr -d ' \r')
+  expect "—" "$KEIN_HASH" "Und der lokale Hash ist weg, nicht bloss übergangen"
+else
+  bad "Kein übernommenes Konto vorhanden — Prüfung nicht aussagekräftig"
+fi
+
+# Der Rückweg gilt nur für übernommene Konten.
+ANTWORT=$(api "$TMP/admin.jar" -X POST "$BASE/api/admin/identity/uebernahme/zuruecknehmen" \
+  -H 'Content-Type: application/json' \
+  -d "{\"username\":\"$NOTFALL_NAME\",\"password\":\"Egal-Aber-Lang-2026!\"}")
+grep -q "gar kein übernommenes Konto" <<<"$ANTWORT" \
+  && ok "Der Rückweg fasst nur übernommene Konten an" \
+  || bad "Der Rückweg griff nach einem lokalen Konto: $ANTWORT"
+
+CODE=$(code "$TMP/user.jar" "$BASE/api/admin/identity/uebernahme")
+expect "403" "$CODE" "Ein normaler Nutzer sieht die Übernahme nicht"
 
 # ------------------------------------------------ Fremde Anwendungen
 #

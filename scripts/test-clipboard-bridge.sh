@@ -26,7 +26,7 @@ aufraeumen() {
   return 0
 }
 trap aufraeumen EXIT
-ADMIN="${OTA_TEST_ADMIN:-bmetallica}"
+ADMIN="${OTA_TEST_ADMIN:-notfall}"
 ADMIN_PW="${OTA_TEST_ADMIN_PW:?OTA_TEST_ADMIN_PW fehlt. Trag es in deploy/.env ein.}"
 
 api() { curl -s --cacert "$CA" -b "$JAR" -c "$JAR" "$@"; }

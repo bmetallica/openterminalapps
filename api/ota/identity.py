@@ -33,6 +33,9 @@ log = logging.getLogger("ota.identity")
 
 LOCAL = "local"
 LDAP = "ldap"
+# Seit der Umstellung (auth-roadmap.md, Etappe B) gibt es eine dritte
+# Herkunft. Sie hat hier kein Passwort — geprueft wird bei Keycloak.
+KEYCLOAK = "keycloak"
 
 
 def config(db: DbSession) -> IdentityConfig | None:
@@ -57,6 +60,14 @@ def where_to_check(user: User | None, cfg: IdentityConfig | None) -> str:
     für einen Namen, zu dem es gar kein Konto gibt, kommt das Verzeichnis in
     Frage — und auch dann nur, wenn es eingeschaltet ist.
     """
+    if user is not None and user.auth_provider == KEYCLOAK:
+        # Ein Konto, das ueber die zentrale Anmeldung kommt, hat hier gar kein
+        # Passwort mehr. Es lokal zu pruefen waere nicht nur zwecklos, sondern
+        # gefaehrlich: Ein `password_hash`, der versehentlich wieder gesetzt
+        # wuerde, oeffnete einen zweiten Weg an Keycloak vorbei — samt der
+        # zweiten Stufe, die dort haengt.
+        return "none"
+
     if user is not None:
         # Der Kern der Sache. `auth_provider` ist die einzige Instanz, die
         # hierüber entscheidet, und sie ändert sich nie von selbst.
