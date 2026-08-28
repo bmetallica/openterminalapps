@@ -81,6 +81,11 @@ test:
 	@echo
 	@cd tests && npm install --silent --no-audit --no-fund && node e2e.mjs
 	@echo
+	@# Startet ein Wegwerf-Verzeichnis, richtet die Anbindung ein und nimmt
+	@# beides danach wieder zurück. Läuft vor der Sicherung, damit die
+	@# angelegten Verzeichniskonten nicht in einem Sicherungsstand landen.
+	@./scripts/test-ldap.sh
+	@echo
 	@# Zuletzt, weil dieser Test Sessions beendet, um die Wiederherstellung
 	@# überhaupt prüfen zu können.
 	@./scripts/test-backup.sh

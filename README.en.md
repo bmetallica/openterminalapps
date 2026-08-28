@@ -15,7 +15,7 @@ key, the same clipboard.
 Alongside that, single applications can run as throwaway containers, and existing Kasm images and
 whole registries can be attached — as an addition, not as the foundation.
 
-> **Status:** running and in use. 219 automated checks, 76 of them in a real browser. What is still
+> **Status:** running and in use. 251 automated checks, 76 of them in a real browser. What is still
 > missing is listed openly in [roadmap.md](roadmap.md) — nothing there is dressed up.
 >
 > The documentation is written in German. This file is the exception.
@@ -52,6 +52,8 @@ after any later certificate change.
 - **Visibility per application and group**, for when a licence does not cover everyone
 - **Two-factor enforceable per group**; `/healthz` and `/metrics` for monitoring
 - Users, groups and permissions; administrators are `root` inside their own container
+- **Sign-in against LDAP or Active Directory**, with group mapping and a check button. Local
+  accounts stay untouched — an entry of the same name cannot take one over
 - Sign-in limit configurable (30 min to 48 h), rolling — nobody working is ever signed out
 - Interface in German and English, switchable before signing in as well
 - The handbook lives **inside the application**, filtered by permission
@@ -122,13 +124,14 @@ were.
 make test
 ```
 
-**219 checks in four suites**, each one setting up its own preconditions:
+**251 checks in five suites**, each one setting up its own preconditions:
 
 | Suite | Checks |
 |---|---|
 | `test-authz.sh` | An ordinary user provably cannot do anything administrative and cannot sit at anyone else's screen; plus container hardening, metrics, quotas and two-factor |
 | `test-clipboard-bridge.sh` | Copying between two applications in one workspace: both directions, umlauts, an image, a megabyte, after a pause, and switched off |
 | `tests/e2e.mjs` | The interface in a real browser — down to whether the stream actually connects |
+| `test-ldap.sh` | Directory sign-in against a real OpenLDAP in a container — above all that a local account stays untouchable and an outage does not take it down |
 | `test-backup.sh` | Backup and restore of profile, container and database |
 
 The test credentials live in `deploy/.env` as `OTA_TEST_ADMIN_PW`, not in the source.
@@ -142,8 +145,13 @@ real browser. Each suite can be run on its own (`bash scripts/test-authz.sh`).
 operator, an explicit patent grant, and the same choice as the closest related open project (Apache
 Guacamole).
 
-OTA does **not** bundle third-party software; its components are pulled at runtime as container
-images and keep their own terms — see [NOTICE](NOTICE).
+OTA does **not** bundle third-party software: dependencies are fetched at build time, components
+pulled at runtime as container images. **They keep their own licences and are not relicensed under
+Apache-2.0 by OTA** — broken down into three layers in
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md), briefly in [NOTICE](NOTICE).
+
+A workspace **image** is a composite work: OTA configuration, KasmVNC (GPL-2.0), XFCE, hundreds of
+distribution packages, the installed applications. It is **not** "Apache-2.0".
 
 **Applications inside a golden image keep their own licence.** For Microsoft VS Code, use within
 your own corporate network is explicitly permitted; passing it on to third parties is not. Checked

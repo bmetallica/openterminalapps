@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { CapacityFader, Field } from '../components/controls'
 import { ApiError, api, type GlobalSettings } from '../lib/api'
 import { idleLabel } from '../lib/format'
+import { Directory } from './Directory'
 import { t, useLang } from '../lib/i18n'
 
 /**
@@ -119,6 +120,14 @@ export function Settings({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad'
         <p className="note-info" style={{ marginTop: 6 }}>
           {t('Beides wirkt beim Start einer Session, nicht beim Schreiben einer Datei. Es ist kein Dateisystem-Kontingent — wer schon drin ist, kann weiter schreiben.')}
         </p>
+      </div>
+
+      <div className="section__head" style={{ marginTop: 30 }}>
+        <span className="silk">{t('Verzeichnis (LDAP / Active Directory)')}</span>
+        <span className="section__rule" />
+      </div>
+      <div style={{ maxWidth: 620 }}>
+        <Directory onToast={onToast} />
       </div>
     </div>
   )

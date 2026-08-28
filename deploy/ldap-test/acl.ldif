@@ -1,0 +1,19 @@
+# Dem Dienstkonto Leserecht auf den Baum geben.
+#
+# Ohne das antwortet OpenLDAP auf jede Suche mit „No such object" — nicht mit
+# „keine Berechtigung". Das ist die Meldung, an der man beim Anbinden eines
+# echten Verzeichnisses am längsten sucht: Sie sieht aus, als wäre die Basis
+# falsch, dabei fehlt dem Dienstkonto schlicht das Leserecht.
+dn: olcDatabase={1}mdb,cn=config
+changetype: modify
+replace: olcAccess
+olcAccess: {0}to attrs=userPassword,shadowLastChange
+  by self write
+  by dn="cn=admin,dc=ota,dc=test" write
+  by anonymous auth
+  by * none
+olcAccess: {1}to *
+  by self read
+  by dn="cn=admin,dc=ota,dc=test" write
+  by dn="cn=ota-dienst,dc=ota,dc=test" read
+  by * none

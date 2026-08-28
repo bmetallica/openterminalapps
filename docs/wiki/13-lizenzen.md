@@ -18,10 +18,32 @@ sondern bei der Weitergabe nach außen.
 | **IntelliJ Ultimate** | proprietär | **Named-User-Lizenz je Entwickler**, Aktivierung durch den Nutzer |
 | **opencode** | MIT | frei |
 | **Cursor** | proprietär | **vor Aufnahme prüfen** — siehe unten |
-| **KasmVNC** | GPL-2.0 | Eigenbetrieb uneingeschränkt frei |
-| **Kasm-Workspace-Images** | MIT | frei, Copyright-Vermerk erhalten |
+| **KasmVNC** | GPL-2.0 | Eigenbetrieb uneingeschränkt frei; bei **Weitergabe** greifen die GPL-Pflichten |
+| **Kasm-Workspace-Images** | MIT **nur für die Baurezepte** | Das fertige Image ist nicht MIT — siehe unten |
 | **Kasm Workspaces Server** | kommerzieller EULA | **wird durch OTA ersetzt** |
 | Docker, Traefik, PostgreSQL, XFCE | Apache-2.0 / MIT / PostgreSQL / GPL | frei |
+
+> **Ein Image ist ein zusammengesetztes Werk.** Die Zeilen dieser Tabelle beschreiben einzelne
+> Bestandteile, nicht das Ergebnis. Ein Arbeitsplatz-Image enthält OTA-Konfiguration, KasmVNC,
+> XFCE, hunderte Distributionspakete und die installierten Anwendungen — jedes mit seiner eigenen
+> Lizenz. **Nichts davon wird durch OTA neu lizenziert.** Die Aufstellung in drei Ebenen steht in
+> [THIRD-PARTY-NOTICES.md](../../THIRD-PARTY-NOTICES.md).
+
+## Betrieb oder Weitergabe — die Linie, auf die es ankommt
+
+Fast jede Frage in diesem Kapitel hat zwei Antworten, je nachdem auf welcher Seite dieser Linie man
+steht:
+
+| | Eigenes Haus | Weitergabe nach aussen |
+|---|---|---|
+| Was gemeint ist | Eigene Mitarbeitende greifen über den Browser auf eine intern betriebene Anlage zu | Ein Image veröffentlichen, ein Angebot für Dritte betreiben, eine Anlage ausliefern |
+| KasmVNC (GPL-2.0) | frei, keine Pflichten | Lizenztext und Hinweise mitgeben, Quellcode verfügbar halten |
+| Kasm-Baurezepte (MIT) | frei | Copyright-Vermerk erhalten |
+| Microsoft VS Code | **ausdrücklich erlaubt** | **nicht gedeckt** |
+| Distributionspakete | frei | jeweilige Pflichten, in Summe nur mit einer Stückliste zu überblicken |
+
+**OTA ist für die linke Spalte gebaut** (`plan.md` §17.4b). Wer in die rechte will, hat damit kein
+Lizenzproblem des Projekts, sondern eine Reihe eigener Prüfungen vor sich — angefangen bei VS Code.
 
 ## Microsoft VS Code
 
@@ -92,7 +114,13 @@ DSGVO-Thema. Empfehlung: im Skeleton-Profil `"telemetry.telemetryLevel": "off"` 
   Instanz zugreifen zu lassen ist keine Weitergabe. GPLv2 hat auch keine Netzwerkklausel
 - **OTA selbst muss nicht GPL sein** — es spricht nur über HTTPS und WebSocket mit KasmVNC, linkt
   keinen GPL-Code und bettet keinen ein
-- Nur wer KasmVNC **ändert und weitergibt**, muss den Quellcode bereitstellen
+- Wer KasmVNC **weitergibt** — und das tut, wer ein Image damit veröffentlicht —, muss Lizenztext
+  und Hinweise erhalten und den zugehörigen Quellcode verfügbar halten. Das macht **nicht das ganze
+  Image zu GPL**; es heisst, dass der GPL-Teil ein GPL-Teil bleibt
+- KasmVNC führt neben der GPL eine **eigene Liste von Drittanbieter-Hinweisen**, und Kasm merkt
+  selbst an, dass sie nicht zwingend vollständig ist. Wer ein KasmVNC-haltiges Image verteilt, gibt
+  deshalb die Lizenz- und Hinweisdateien der jeweiligen Fassung mit, statt sich auf
+  „KasmVNC = GPL-2.0" zu verlassen
 
 ## Kasm-Images — MIT
 
@@ -103,6 +131,9 @@ Die Build-Rezepte stehen unter MIT. Der Disclaimer der Lizenzdatei ist wichtig:
 
 MIT gilt also für die **Dockerfiles**, nicht für den Inhalt der fertigen Images. Jedes enthaltene
 Paket behält seine eigene Lizenz.
+
+GitHub führt die Kasm-Image-Repositorien folgerichtig nicht als „MIT", sondern als *Other* —
+nachgeprüft am 2026-08-28 über die GitHub-Lizenz-Schnittstelle.
 
 **Marken**: „Kasm" und „Kasm Workspaces" sind geschützt; MIT erteilt keine Markenrechte. OTA darf sie
 nicht im Produktnamen, Logo oder in Domains führen. Der MIT-Copyright-Vermerk muss in abgeleiteten

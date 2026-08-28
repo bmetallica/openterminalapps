@@ -15,7 +15,7 @@ Projekte, denselben SSH-Schlüssel, dieselbe Zwischenablage.
 Daneben lassen sich einzelne Anwendungen als Wegwerf-Container starten und vorhandene Kasm-Images
 sowie ganze Registries einbinden — als Zusatz, nicht als Fundament.
 
-> **Stand:** läuft und wird benutzt. 219 automatische Prüfungen, davon 76 in einem echten Browser.
+> **Stand:** läuft und wird benutzt. 251 automatische Prüfungen, davon 76 in einem echten Browser.
 > Was noch fehlt, steht offen in [roadmap.md](roadmap.md) — nichts davon ist beschönigt.
 
 ---
@@ -50,6 +50,8 @@ nicht mehr — auch nach jedem späteren Zertifikatswechsel.
 - **Sichtbarkeit je Anwendung und Gruppe**, für den Fall, dass eine Lizenz nicht für alle reicht
 - **Zwei-Faktor je Gruppe erzwingbar**; `/healthz` und `/metrics` für die Überwachung
 - Nutzer, Gruppen und Rechte; Administratoren sind in ihrem eigenen Container `root`
+- **Anmeldung gegen LDAP oder Active Directory**, mit Gruppen-Zuordnung und Prüf-Knopf. Lokale
+  Konten bleiben davon unberührt — ein gleichnamiger Verzeichniseintrag kann keines übernehmen
 - Anmeldefrist einstellbar (30 min bis 48 h), rollend — wer arbeitet, wird nicht abgemeldet
 - Oberfläche auf Deutsch und Englisch, umschaltbar auch vor der Anmeldung
 - Das Handbuch liegt **im Programm**, gefiltert nach Rechten
@@ -119,13 +121,14 @@ aussahen, als sie waren.
 make test
 ```
 
-**219 Prüfungen in vier Suiten**, jede stellt ihren Vorzustand selbst her:
+**251 Prüfungen in fünf Suiten**, jede stellt ihren Vorzustand selbst her:
 
 | Suite | Prüft |
 |---|---|
 | `test-authz.sh` | Ein normaler Nutzer kann beweisbar nichts Administratives tun und an keinem fremden Bildschirm sitzen; dazu Container-Härtung, Kennzahlen, Kontingente und zweiter Faktor |
 | `test-clipboard-bridge.sh` | Kopieren zwischen zwei Anwendungen im selben Arbeitsplatz: beide Richtungen, Umlaute, ein Bild, ein Megabyte, nach Pause, und abgeschaltet |
 | `tests/e2e.mjs` | Die Oberfläche in einem echten Browser — bis zur Frage, ob der Stream wirklich verbindet |
+| `test-ldap.sh` | Verzeichnis-Anmeldung gegen ein echtes OpenLDAP im Container — vor allem, dass ein lokales Konto unantastbar bleibt und ein Ausfall es nicht mitreisst |
 | `test-backup.sh` | Sicherung und Wiederherstellung von Profil, Container und Datenbank |
 
 Die Zugangsdaten der Prüfung stehen in `deploy/.env` als `OTA_TEST_ADMIN_PW`, nicht im Quelltext.
@@ -139,8 +142,13 @@ misst im Browser nach. Jede Suite lässt sich einzeln starten (`bash scripts/tes
 den Betreiber, ausdrückliche Patentfreigabe, und dieselbe Wahl wie beim nächstverwandten offenen
 Projekt (Apache Guacamole).
 
-OTA **enthält** keine fremde Software; die Bestandteile werden zur Laufzeit als Container-Images
-bezogen und behalten ihre eigenen Bedingungen — siehe [NOTICE](NOTICE).
+OTA **enthält** keine fremde Software: Abhängigkeiten werden beim Bauen geholt, Bestandteile zur
+Laufzeit als Container-Images bezogen. **Sie behalten ihre eigenen Lizenzen und werden von OTA nicht
+neu lizenziert** — aufgeschlüsselt in drei Ebenen in
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md), knapp in [NOTICE](NOTICE).
+
+Ein Arbeitsplatz-**Image** ist ein zusammengesetztes Werk: OTA-Konfiguration, KasmVNC (GPL-2.0),
+XFCE, hunderte Distributionspakete, die installierten Anwendungen. Es ist **nicht** „Apache-2.0".
 
 **Für die Anwendungen in einem Golden Image gilt deren eigene Lizenz.** Bei Microsoft VS Code ist
 der Betrieb im eigenen Unternehmensnetz ausdrücklich erlaubt, die Weitergabe an Dritte nicht.

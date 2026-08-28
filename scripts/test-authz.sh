@@ -392,6 +392,50 @@ fi
 
 [ -n "${USID:-}" ] && api "$TMP/user.jar" -X DELETE "$BASE/api/sessions/$USID" >/dev/null
 
+# ---------------------------------------- Session ohne Container
+# Eine Session, deren Container verschwunden ist, darf nicht im Weg stehen.
+# Sie zählt sonst als „live", der nächste Startversuch bekommt sie zurück
+# statt einer neuen — und der Arbeitsplatz lässt sich stundenlang nicht mehr
+# starten, während die Oberfläche „starting" zeigt. Gemessen am 2026-08-28.
+echo
+echo "Session, deren Container verschwunden ist"
+
+WS_L=$(api "$TMP/admin.jar" "$BASE/api/templates" | jqp "
+next((t['id'] for t in d if t['mode'] == 'workspace' and t['apps']), '')")
+SID_L=$(api "$TMP/admin.jar" "$BASE/api/sessions" | jqp "
+next((s['id'] for s in d if s['template_id'] == '$WS_L'), '')")
+if [ -z "$SID_L" ]; then
+  SID_L=$(api "$TMP/admin.jar" -X POST "$BASE/api/sessions" -H 'Content-Type: application/json' \
+    -d "{\"template_id\":\"$WS_L\"}" | jqp "d.get('id','')")
+fi
+
+if [ -z "$SID_L" ]; then
+  bad "Keine Session für die Prüfung"
+else
+  CN_L="ota-s-$(echo "$SID_L" | cut -c1-12)"
+  # Am Rücken von OTA vorbei entfernen — genau wie es ein fremder Aufräumer
+  # oder ein Neustart des Docker-Dienstes täte.
+  docker rm -f "$CN_L" >/dev/null 2>&1
+  STAND=$(api "$TMP/admin.jar" "$BASE/api/sessions" | jqp "
+next((s['status'] for s in d if s['id'] == '$SID_L'), 'weg')")
+  ok "Die Datenbank führt sie noch als „$STAND“ — sie weiß es ja nicht besser"
+
+  NEU=$(api "$TMP/admin.jar" -X POST "$BASE/api/sessions" -H 'Content-Type: application/json' \
+    -d "{\"template_id\":\"$WS_L\"}")
+  SID_N=$(echo "$NEU" | jqp "d.get('id','')")
+  if [ -n "$SID_N" ] && [ "$SID_N" != "$SID_L" ]; then
+    ok "Der nächste Start bekommt eine neue Session statt der Leiche"
+  else
+    bad "Der Start gab die tote Session zurück: $(echo "$NEU" | head -c 140)"
+  fi
+  ALT=$(api "$TMP/admin.jar" "$BASE/api/sessions?all_users=true" | jqp "
+next((s['status'] for s in d if s['id'] == '$SID_L'), 'weg')")
+  case "$ALT" in
+    running|starting|paused) bad "Die alte Session gilt weiter als lebendig ($ALT)" ;;
+    *)                       ok "Und die alte ist geschlossen ($ALT)" ;;
+  esac
+fi
+
 # ------------------------------------------------------- Skeleton-Profil
 # Womit ein Zuhause anfaengt. Geprueft wird beides: dass ein durchgesetzter
 # Pfad bei jedem Start ankommt, und dass niemand aus dem Skeleton herauskommt.
@@ -448,10 +492,24 @@ print(json.dumps(b))')" >/dev/null
 
   SID_S=$(api "$TMP/admin.jar" "$BASE/api/sessions" | jqp "
 next((s['id'] for s in d if s['template_id'] == '$WS_S'), '')")
-  [ -n "$SID_S" ] && api "$TMP/admin.jar" -X DELETE "$BASE/api/sessions/$SID_S" >/dev/null
-  sleep 4
-  SID_S=$(api "$TMP/admin.jar" -X POST "$BASE/api/sessions" -H 'Content-Type: application/json' \
-    -d "{\"template_id\":\"$WS_S\"}" | jqp "d.get('id','')")
+  # Erst wirklich weg, dann neu. Zwei Sessions auf demselben Zuhause weist
+  # OTA ab (plan.md §15.2) — und ein DELETE, das noch nachläuft, sieht für
+  # den nächsten Start genauso aus wie eine laufende zweite Session. Der
+  # Testlauf meldete dann „keine Session", und daran war nichts falsch
+  # ausser der Wartezeit.
+  if [ -n "$SID_S" ]; then
+    ALT="ota-s-$(echo "$SID_S" | cut -c1-12)"
+    api "$TMP/admin.jar" -X DELETE "$BASE/api/sessions/$SID_S" >/dev/null
+    for _ in $(seq 1 20); do
+      docker inspect "$ALT" >/dev/null 2>&1 || break
+      sleep 2
+    done
+  fi
+
+  ANTWORT=$(api "$TMP/admin.jar" -X POST "$BASE/api/sessions" -H 'Content-Type: application/json' \
+    -d "{\"template_id\":\"$WS_S\"}")
+  SID_S=$(echo "$ANTWORT" | jqp "d.get('id','')")
+  [ -z "$SID_S" ] && echo "    Start abgelehnt: $(echo "$ANTWORT" | head -c 160)"
 
   # Auf den Container warten statt auf gut Glück ein paar Sekunden zu
   # schlafen. Ein `sleep 4` hat hier einmal danebengegriffen — und der
@@ -622,9 +680,14 @@ if [ -n "$LAST_B" ]; then
   echo "$OUT" | grep -q '^data: {"chunk"' \
     && ok "Das Protokoll kommt als Zuwachs statt als Ganzes" \
     || bad "Keine Protokoll-Ereignisse im Strom"
-  echo "$OUT" | grep -q "^event: status" \
-    && ok "Der Zustand wird gemeldet" \
-    || bad "Kein Zustandsereignis im Strom"
+  if echo "$OUT" | grep -q "event: status"; then
+    ok "Der Zustand wird gemeldet"
+  else
+    # Mit Anfang des Stroms, sonst ist der Befund nicht nachvollziehbar:
+    # Diese Prüfung schlug einmal fehl, während der Strom von Hand geprüft
+    # genau dieses Ereignis als allererste Zeile lieferte.
+    bad "Kein Zustandsereignis im Strom — Anfang: $(echo "$OUT" | head -c 120 | tr '\n' '|')"
+  fi
 
   expect "403" "$(code "$TMP/user.jar" "$BASE/api/templates/$WS_B/builds/$LAST_B/stream")" \
     "Der Strom ist für einen normalen Nutzer gesperrt"

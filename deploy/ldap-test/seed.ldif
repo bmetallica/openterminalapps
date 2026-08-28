@@ -1,0 +1,97 @@
+# Ein kleines Verzeichnis, das aussieht wie ein echtes: Menschen unter
+# ou=people, Gruppen unter ou=groups, ein Dienstkonto zum Anbinden.
+#
+# Der Eintrag `bmetallica` ist Absicht. Er trägt denselben Namen wie ein
+# lokales Konto in OTA — und genau daran wird geprüft, dass ein
+# Verzeichniseintrag ein bestehendes lokales Konto nicht übernehmen kann.
+
+dn: ou=people,dc=ota,dc=test
+objectClass: organizationalUnit
+ou: people
+
+dn: ou=groups,dc=ota,dc=test
+objectClass: organizationalUnit
+ou: groups
+
+# Das Dienstkonto. Es darf lesen, mehr nicht.
+dn: cn=ota-dienst,dc=ota,dc=test
+objectClass: inetOrgPerson
+cn: ota-dienst
+sn: Dienstkonto
+userPassword: dienst-geheim-2026
+
+dn: uid=lena.brandt,ou=people,dc=ota,dc=test
+objectClass: inetOrgPerson
+objectClass: posixAccount
+uid: lena.brandt
+cn: Lena Brandt
+sn: Brandt
+givenName: Lena
+mail: lena.brandt@ota.test
+uidNumber: 5001
+gidNumber: 5000
+homeDirectory: /home/lena.brandt
+userPassword: Lena-Pruef-2026!
+
+dn: uid=piet.holm,ou=people,dc=ota,dc=test
+objectClass: inetOrgPerson
+objectClass: posixAccount
+uid: piet.holm
+cn: Piet Holm
+sn: Holm
+givenName: Piet
+mail: piet.holm@ota.test
+uidNumber: 5002
+gidNumber: 5000
+homeDirectory: /home/piet.holm
+userPassword: Piet-Pruef-2026!
+
+dn: uid=ruth.mayer,ou=people,dc=ota,dc=test
+objectClass: inetOrgPerson
+objectClass: posixAccount
+uid: ruth.mayer
+cn: Ruth Mayer
+sn: Mayer
+givenName: Ruth
+mail: ruth.mayer@ota.test
+uidNumber: 5003
+gidNumber: 5000
+homeDirectory: /home/ruth.mayer
+userPassword: Ruth-Pruef-2026!
+
+# Gleicher Name wie ein lokales Konto in OTA. Absicht: Er darf es nicht
+# übernehmen, und er darf sich nicht mit dem Verzeichnispasswort anmelden.
+dn: uid=bmetallica,ou=people,dc=ota,dc=test
+objectClass: inetOrgPerson
+objectClass: posixAccount
+uid: bmetallica
+cn: Namensgleicher Eintrag
+sn: Namensgleich
+mail: fremd@ota.test
+uidNumber: 5004
+gidNumber: 5000
+homeDirectory: /home/bmetallica
+userPassword: Fremdes-Passwort-2026!
+
+dn: cn=entwicklung,ou=groups,dc=ota,dc=test
+objectClass: groupOfNames
+cn: entwicklung
+member: uid=lena.brandt,ou=people,dc=ota,dc=test
+member: uid=ruth.mayer,ou=people,dc=ota,dc=test
+
+dn: cn=design,ou=groups,dc=ota,dc=test
+objectClass: groupOfNames
+cn: design
+member: uid=piet.holm,ou=people,dc=ota,dc=test
+
+dn: cn=verwaltung,ou=groups,dc=ota,dc=test
+objectClass: groupOfNames
+cn: verwaltung
+member: uid=ruth.mayer,ou=people,dc=ota,dc=test
+
+# Eine Gruppe, die auf nichts in OTA abgebildet wird. Sie muss beim
+# Abgleich schlicht ignoriert werden, statt einen Fehler zu erzeugen.
+dn: cn=hausmeisterei,ou=groups,dc=ota,dc=test
+objectClass: groupOfNames
+cn: hausmeisterei
+member: uid=piet.holm,ou=people,dc=ota,dc=test

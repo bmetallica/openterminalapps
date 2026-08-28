@@ -1337,3 +1337,18 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .filerow__link:hover { text-decoration: underline; }
 .filerow__size { font-size: 11.5px; color: var(--mute); font-variant-numeric: tabular-nums; }
 .chip--sm { padding: 2px 8px; font-size: 11px; }
+
+/* Gruppen-Zuordnung: links der Name aus dem Verzeichnis, rechts die Gruppe
+   in OTA. Die Pfeilrichtung ist die Leserichtung — dort kommt es her, hier
+   landet es. */
+.maprows { display: flex; flex-direction: column; gap: 6px; }
+.maprow { display: flex; align-items: center; gap: 10px; }
+.maprow__from { flex: 1; min-width: 0; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; }
+.maprow__arrow { color: var(--mute); }
+.maprow__to {
+  flex: 1; padding: 6px 9px;
+  background: var(--well); border: 1px solid var(--edge); border-radius: 6px;
+  color: var(--text); font: inherit; font-size: 12.5px;
+}
+.maprow__to:hover { border-color: var(--edge-lit); }
+.maprow__to:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }

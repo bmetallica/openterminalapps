@@ -14,7 +14,8 @@ from . import agent_client, migrate, recipes, schema_sync
 from .db import Base, SessionLocal, engine
 from .models import ImageBuild, Session as SessionModel
 from .routers import (
-    admin, auth, backups, builds, help as help_router, internal, monitoring,
+    admin, auth, backups, builds, help as help_router,
+    identity as identity_router, internal, monitoring,
     pwa, recipes as recipes_router, registries as registries_router,
     sessions, shared as shared_router, skeleton as skeleton_router, templates,
 )
@@ -23,6 +24,23 @@ log = logging.getLogger("ota")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 
 REAP_INTERVAL = 60
+
+
+def _container_da(sess) -> bool:
+    """Existiert der Container dieser Session noch?
+
+    Bei Zweifeln ja: Antwortet der Agent nicht, ist die Aussage „weg" nicht
+    gedeckt, und eine Session faelschlich zu schliessen ist schlimmer als
+    eine Leiche eine Runde laenger stehen zu lassen.
+    """
+    if not sess.container_id:
+        return False
+    try:
+        return agent_client.container_status(sess.container_id).get("status") not in (
+            "gone", "exited", "dead", "removing",
+        )
+    except Exception:  # noqa: BLE001
+        return True
 
 
 def _reap_once() -> None:
@@ -50,6 +68,17 @@ def _reap_once() -> None:
         for sess in live:
             if sess.container_id:
                 known.add(sess.container_id)
+
+            # Eine Session, deren Container nicht mehr existiert, ist keine
+            # Session mehr. Sie hier stehen zu lassen hat einen konkreten
+            # Preis: Sie zaehlt als „live", und der naechste Startversuch auf
+            # derselben Vorlage bekommt sie zurueck statt einer neuen.
+            if not _container_da(sess):
+                sess.status = "stopped"
+                sess.ended_at = now
+                sess.end_reason = "container_weg"
+                log.info("Session %s hatte keinen Container mehr", sess.id)
+                continue
 
             if sess.template_id in beschaeftigt:
                 continue
@@ -136,6 +165,44 @@ def _backup_due() -> bool:
         return True
 
 
+# Wann der Verzeichnis-Abgleich laeuft: einmal taeglich, nachts.
+#
+# Fest verdrahtet und nicht einstellbar, solange es genau einen Grund gibt,
+# ihn zu verschieben — und den gibt es hier nicht. Ein Verzeichnis mit ein
+# paar hundert Konten ist in Sekunden durch.
+SYNC_HOUR = 3
+_sync_done_on: str = ""
+
+
+def _sync_due() -> bool:
+    """Ist heute schon abgeglichen worden?
+
+    Ueber das Datum und nicht ueber einen Zaehler: Ein Neustart der API um
+    03:05 soll den Lauf nicht ein zweites Mal ausloesen, und einer um 02:55
+    soll ihn nicht verschlucken.
+    """
+    global _sync_done_on
+    now = datetime.now(timezone.utc)
+    heute = now.strftime("%Y-%m-%d")
+    if _sync_done_on == heute or now.hour != SYNC_HOUR:
+        return False
+
+    from . import identity
+
+    with SessionLocal() as db:
+        if identity.active(db) is None:
+            return False
+    _sync_done_on = heute
+    return True
+
+
+def _sync_directory() -> dict:
+    from . import identity
+
+    with SessionLocal() as db:
+        return identity.sync_all(db)
+
+
 async def _scheduler() -> None:
     from .routers.backups import run_scheduled
 
@@ -148,6 +215,14 @@ async def _scheduler() -> None:
                 log.info("Geplante Sicherung fertig: %s", counts)
         except Exception as exc:  # noqa: BLE001 — der Zeitplaner darf nie sterben
             log.warning("Geplante Sicherung fehlgeschlagen: %s", exc)
+
+        try:
+            if await asyncio.to_thread(_sync_due):
+                log.info("Nächtlicher Verzeichnis-Abgleich startet")
+                ergebnis = await asyncio.to_thread(_sync_directory)
+                log.info("Verzeichnis-Abgleich fertig: %s", ergebnis)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Verzeichnis-Abgleich fehlgeschlagen: %s", exc)
 
 
 async def _reaper() -> None:
@@ -221,6 +296,7 @@ app.include_router(pwa.router)
 app.include_router(recipes_router.router)
 app.include_router(shared_router.router)
 app.include_router(skeleton_router.router)
+app.include_router(identity_router.router)
 app.include_router(registries_router.router)
 app.include_router(internal.router)
 app.include_router(monitoring.router)

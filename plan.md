@@ -708,10 +708,52 @@ genau das lässt sich verwalten.
    Images zusammen ähnlich viel belegen. Auf diesem Host mit 60 GB frei ist es zu budgetieren, aber
    kein Argument gegen das Modell.
 
-### 9.4 AD-Anmeldedaten in den Container reichen
+### 9.4a Anmeldung gegen ein Verzeichnis — umgesetzt
+
+**Stand 2026-08-28: gebaut und geprüft** (`api/ota/directory.py`, `api/ota/identity.py`,
+Oberfläche unter *Einstellungen → Verzeichnis*). Geprüft gegen ein echtes OpenLDAP im Container;
+`scripts/ldap-test-server.sh` startet es, `scripts/test-ldap.sh` fährt 29 Prüfungen dagegen und
+räumt hinterher auf.
+
+**Die eine Regel, die alles andere überlagert:**
+
+> Ein lokales Konto wird niemals über das Verzeichnis angemeldet, und ein Verzeichniseintrag kann
+> ein lokales Konto niemals übernehmen.
+
+Wo ein Passwort geprüft wird, entscheidet allein `users.auth_provider` — nicht die Anfrage, nicht
+das Verzeichnis, und der Wert ändert sich nie von selbst. Der Angriff dahinter ist unspektakulär
+und deshalb leicht zu übersehen: Wer im Verzeichnis einen Eintrag anlegen darf, legt einen mit dem
+Namen des ersten Administrators an und meldet sich mit seinem eigenen Passwort als dieser an. Das
+Testverzeichnis enthält deshalb absichtlich einen Eintrag `bmetallica`; die Prüfung besteht darin,
+dass er **nicht** hereinkommt.
+
+**Drei Entscheidungen, die beim Bauen gefallen sind:**
+
+*Der Code liegt in der API, nicht im Agent.* Das widerspricht
+[ADR-002](docs/adr/002-nur-der-agent-fasst-docker-an.md), und der Grund ist der Inhalt: Beim
+Anmelden wandert das Passwort eines Menschen durch diesen Code. Es zusätzlich über eine interne
+HTTP-Verbindung an einen zweiten Dienst zu reichen, verteilt ein Geheimnis auf mehr Stellen, statt
+es zu schützen. Die Trennung dient der Angriffsfläche; sie hier anzuwenden würde ihr schaden.
+
+*Kein Ausweichen auf einen lokalen Hash, wenn das Verzeichnis ausfällt.* Das wäre ein zweiter Weg
+an der Stelle, an der es genau einen geben soll — und er wäre genau dann offen, wenn das
+Verzeichnis nicht widersprechen kann. Lokale Konten sind von einem Ausfall ohnehin nicht betroffen;
+gemessen 33 ms bis zur Ablehnung eines Verzeichniskontos, kein Zeitablauf.
+
+*Ein leeres Passwort wird abgelehnt, bevor es hingeht.* Ein LDAP-Bind ohne Passwort gilt als
+anonyme Anmeldung und **gelingt**. Wer das übersieht, baut eine Anmeldung, bei der ein leeres Feld
+jeden hereinlässt.
+
+**Wer im Verzeichnis verschwindet, wird deaktiviert — nicht gelöscht.** Zuhause, Sicherungen und
+Protokollspur bleiben. Löschen ist eine Entscheidung, die ein Mensch trifft.
+
+### 9.4 AD-Anmeldedaten in den Container reichen — offen
 
 Das ist der sicherheitskritischste Teil des ganzen Projekts, deshalb ausführlich.
 Ziel: Der Nutzer erreicht im Container seine gewohnten Netzlaufwerke.
+
+**Nichts davon ist gebaut.** Dafür reicht ein LDAP-Server nicht: Es braucht ein echtes AD mit KDC
+und Dateiservern, und ohne eines lässt sich keiner der vier Wege ehrlich prüfen.
 
 **Vier Wege, absteigend nach Sauberkeit:**
 

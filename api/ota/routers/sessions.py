@@ -225,11 +225,26 @@ def start_session(
                             "Dieser Workspace ist derzeit abgeschaltet.")
 
     # Laeuft schon eine? Dann diese zurueckgeben statt eine zweite zu starten.
+    #
+    # Aber nur, wenn sie auch wirklich laeuft. Eine Session, deren Container
+    # nicht mehr da ist, steht sonst fuer immer im Weg: Sie zaehlt als „live",
+    # wird hier zurueckgegeben, und der naechste Startversuch bekommt wieder
+    # dieselbe Leiche. Gemessen am 2026-08-28 — ein Arbeitsplatz liess sich
+    # stundenlang nicht mehr starten, und die Oberflaeche sagte nur
+    # „starting".
     existing = db.scalar(select(SessionModel).where(
         SessionModel.user_id == user.id,
         SessionModel.template_id == tpl.id,
         SessionModel.status.in_(LIVE),
     ))
+    if existing is not None and not _really_alive(existing):
+        log.info("Session %s zeigt ins Leere — wird geschlossen und neu gestartet",
+                 existing.id)
+        existing.status = "stopped"
+        existing.ended_at = datetime.now(timezone.utc)
+        existing.end_reason = "container_weg"
+        db.commit()
+        existing = None
     if existing:
         return _out(existing)
 
@@ -367,6 +382,25 @@ def start_session(
                  template=tpl.slug, cores=cores, memory_bytes=memory)
     db.commit()
     return _out(sess)
+
+
+def _really_alive(sess: SessionModel) -> bool:
+    """Gibt es den Container dieser Session ueberhaupt noch?
+
+    Die Datenbank weiss nur, was ihr zuletzt gesagt wurde. Ein Container kann
+    verschwinden, ohne dass jemand OTA davon erzaehlt — ein Neustart des
+    Docker-Dienstes, ein fremder Aufraeumer, ein `docker rm` von Hand. Danach
+    steht in der Datenbank „laeuft", und in Wirklichkeit laeuft nichts.
+    """
+    if not sess.container_id:
+        return False
+    try:
+        zustand = agent_client.container_status(sess.container_id).get("status", "")
+    except HTTPException:
+        # Der Agent antwortet nicht. Dann ist die Aussage „der Container ist
+        # weg" nicht gedeckt — im Zweifel die Session stehen lassen.
+        return True
+    return zustand not in ("gone", "exited", "dead", "removing")
 
 
 def _load(session_id: uuid.UUID, user: User, db: DbSession) -> SessionModel:

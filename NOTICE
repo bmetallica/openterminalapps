@@ -1,22 +1,35 @@
 OpenTerminalApps (OTA)
 Copyright 2026 OpenTerminalApps contributors
 
-Dieses Werk steht unter der Apache-Lizenz 2.0 (siehe LICENSE).
+Der Quellcode in diesem Repository steht unter der Apache-Lizenz 2.0
+(siehe LICENSE).
 
-Es setzt Bestandteile ein, die es NICHT enthält und die eigenen Lizenzen
-unterliegen. Sie werden zur Laufzeit als Container-Images bezogen:
+  Fremde Software behält ihre eigene Lizenz. OTA lizenziert nichts davon
+  unter Apache-2.0 neu — weder Bestandteile, die zur Laufzeit verwendet
+  werden, noch Software in Container-Images, die OTA startet oder baut.
 
-  KasmVNC                      GPL-2.0
-  Kasm-Workspaces-Images       MIT
-  Traefik                      MIT
-  PostgreSQL                   PostgreSQL-Lizenz
-  Docker Registry              Apache-2.0
-  XFCE                         GPL-2.0 / LGPL-2.1
+Diese Unterscheidung ist bei OTA nicht theoretisch: Ein Arbeitsplatz-Image
+enthält hunderte Pakete, die niemand hier geschrieben hat. Die vollständige
+Aufstellung in drei Ebenen steht in THIRD-PARTY-NOTICES.md; das Wichtigste
+in Kürze:
 
-Anwendungen in einem Golden Image behalten ihre eigenen Bedingungen. Für
-Microsoft Visual Studio Code gilt dessen EULA: Der Betrieb im eigenen
-Unternehmensnetz ist ausdrücklich erlaubt, die Weitergabe an Dritte nicht.
-Einzelheiten mit Originalzitaten in docs/wiki/13-lizenzen.md.
+  Ebene 1 — dieses Repository            Apache-2.0
+  Ebene 2 — mitbetriebene Dienste        eigene Lizenzen (Traefik, PostgreSQL,
+                                         Docker Registry, Bibliotheken)
+  Ebene 3 — Inhalt der Workspace-Images  eigene Lizenzen (KasmVNC GPL-2.0,
+                                         XFCE GPL/LGPL, VS Code Microsoft-EULA,
+                                         Distributionspakete)
+
+Zwei Punkte, die erfahrungsgemäß falsch verstanden werden:
+
+  * **Kasm-Workspaces-Images.** Die MIT-Lizenz von Kasm gilt ausdrücklich nur
+    für den Quellcode in Kasms Repository, nicht für den Inhalt der fertigen
+    Images. Kasm schreibt das selbst in die erste Zeile seiner Lizenzdatei.
+
+  * **Microsoft Visual Studio Code.** Der Betrieb im eigenen Unternehmensnetz
+    ist ausdrücklich erlaubt, die Weitergabe an Dritte nicht. Wer ein Golden
+    Image mit VS Code veröffentlicht oder als Angebot bereitstellt, ist davon
+    nicht gedeckt. Mit Originalzitaten in docs/wiki/13-lizenzen.md.
 
 "Kasm" ist eine Marke von Kasm Technologies. OTA ist kein Kasm-Produkt und
 steht in keiner Verbindung zu Kasm Technologies.

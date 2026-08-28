@@ -22,7 +22,7 @@ früh. Die Einbindung vorhandener **Kasm-Images und -Registries** ist ein Featur
 | **M3** | Oberfläche | Entwurf an echte Daten angeschlossen | ✅ **erledigt** |
 | **M4** | **Der Arbeitsplatz** | Ein Linux je Nutzer, Apps einzeln gestreamt | ✅ **Grundfunktion steht** |
 | **M5** | Golden Images | Build-Pipeline, Versionen, App-Katalog, Skeleton | 2–3 Wochen |
-| **M6** | Identität & Netzlaufwerke | AD/LDAP, Kerberos, Shares im Arbeitsplatz | 2–3 Wochen |
+| **M6** | Identität & Netzlaufwerke | AD/LDAP ✅, Kerberos und Shares offen | 1–2 Wochen |
 | **M7** | Migration & Härtung | Profil umgezogen ✅, Härtung, Monitoring | 1–2 Wochen |
 | **M8** | Kasm-Kompatibilität | Einzelimages und ganze Registries einbinden | ✅ **erledigt** |
 | **M9** | Optionale Erweiterungen | OIDC, Guacamole, WebAuthn, code-server | 2–3 Wochen |
@@ -35,7 +35,7 @@ die Sicherung aus M7. Ein Nutzer meldet sich an, startet seinen Arbeitsplatz und
 öffnet darin VS Code, ein Terminal und den Dateimanager — jedes formatfüllend auf
 eigenem Display, alle im selben Container mit gemeinsamem `/home`. Ein
 Administrator baut Software ins Image, bindet fremde Kataloge ein und stellt
-Sicherungen wieder her. Geprüft durch **219 automatische Prüfungen in vier
+Sicherungen wieder her. Geprüft durch **251 automatische Prüfungen in fünf
 Suiten**, davon 76 in einem echten Browser (`make test`). Ein voller Lauf
 dauert rund eine halbe Stunde — er baut Container, friert ein Image ein und
 misst im Browser nach.
@@ -399,9 +399,31 @@ Session-Prozesse, und die ereignisgesteuerte statt abfragende Brücke (braucht e
 
 Erst mit dem Arbeitsplatz sinnvoll (`plan.md` §9.4).
 
-- [ ] **LDAP/AD**: `ldap3` mit LDAPS/StartTLS, Login-Attribut wählbar, Gruppen-Mapping,
-      JIT-Anlage, nächtlicher Sync, **Test-Button mit Vorschau der gemappten Gruppen**
-- [ ] `identity_configs` mit den vier Modi; Standard ist `none`
+- [x] **Eine Session ohne Container stand für immer im Weg.** Sie zählte als „live", der nächste
+      Startversuch bekam sie zurück statt einer neuen — und der Arbeitsplatz liess sich nicht mehr
+      starten, während die Oberfläche „starting" zeigte. Dorthin führte ein Zeitablauf beim Warten
+      auf die Traefik-Route; danach prüfte nichts mehr nach. Jetzt sieht der Start selbst nach, ob
+      der Container überhaupt noch existiert, und der Aufräumer räumt solche Leichen weg
+- [x] **LDAP/AD** (`api/ota/directory.py`, `api/ota/identity.py`): LDAPS und StartTLS,
+      Login-Attribut wählbar, Gruppen-Zuordnung, Anlage beim ersten Anmelden, Auffrischen bei
+      jeder Anmeldung, nächtlicher Abgleich um 3 Uhr, Prüf-Knopf mit Vorschau der Gruppen.
+      Geprüft gegen ein echtes OpenLDAP im Container (`scripts/test-ldap.sh`, 29 Prüfungen)
+- [x] **Ein lokales Konto ist unantastbar.** Wo ein Passwort geprüft wird, entscheidet allein
+      `users.auth_provider` — nie die Anfrage, nie das Verzeichnis. Ein gleichnamiger
+      Verzeichniseintrag kann ein lokales Konto weder übernehmen noch verändern. Das
+      Testverzeichnis enthält deshalb absichtlich einen Eintrag `bmetallica`; die Prüfung besteht
+      darin, dass er **nicht** hereinkommt
+- [x] **Ein Ausfall des Verzeichnisses reisst die lokale Anmeldung nicht mit** — und läuft nicht
+      in einen Zeitablauf: gemessen 33 ms bis zur Ablehnung. Ein Ausweichen auf einen lokal
+      gespeicherten Hash gibt es bewusst nicht; das wäre ein zweiter Weg genau dann offen, wenn
+      das Verzeichnis nicht widersprechen kann
+- [x] **Wer im Verzeichnis verschwindet, wird deaktiviert — nicht gelöscht.** Zuhause,
+      Sicherungen und Protokollspur bleiben; Löschen entscheidet ein Mensch
+- [x] `identity_configs`; Standard ist **abgeschaltet** — die einzige Einstellung, bei der ein
+      Fehler Menschen aussperrt
+**Kerberos und Netzlaufwerke bleiben offen.** Dafür reicht ein LDAP-Server nicht — es braucht ein
+echtes AD mit KDC und Dateiservern, und ohne eines lässt sich nichts davon ehrlich prüfen.
+
 - [ ] **Weg 2 (Kerberos-Ticket-Injektion)** als Standard, Mount per `sec=krb5`
 - [ ] Ticket-Erneuerung im Container per `k5start`
 - [ ] UID/GID aus dem Verzeichnis (`uidNumber`/`gidNumber`) beim Start setzen
@@ -535,6 +557,12 @@ Erst mit Hardware für die Zielgröße (`plan.md` §17.1).
 
 ## Querschnittsthemen (laufend)
 
+- **Stückliste (SBOM) für veröffentlichte Images** 🔨 — eine von Hand gepflegte Liste kann mit
+  einem Image aus hunderten Paketen nicht Schritt halten. Wer ein Image weitergibt, braucht eine
+  erzeugte Stückliste (SPDX oder CycloneDX, etwa `syft`). Für den Betrieb im eigenen Haus, für den
+  OTA gebaut ist, stellt sich die Frage nicht — dort wird nichts weitergegeben
+  ([THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md))
+
 - **Tests**: je Endpunkt ein Autorisierungstest; Integrationstest „Session starten → verbinden →
   stoppen" gegen echtes Docker; CI vor jedem Merge
 - **Wiki**: `docs/wiki/` wird mit jedem Meilenstein fortgeschrieben und im Admin-Bereich ausgeliefert
@@ -546,11 +574,14 @@ Erst mit Hardware für die Zielgröße (`plan.md` §17.1).
 
 ## Nächster Schritt
 
-**M6 — Identität und Netzlaufwerke.** Der einzige grosse Block, der noch aussteht und den niemand
-umgehen kann: Solange Konten von Hand angelegt werden, skaliert nichts. Er braucht als Erstes eine
-Entscheidung, die nicht am Schreibtisch fällt — ein Testkonto im Verzeichnisdienst und die Antwort,
-ob Kerberos dort überhaupt zur Verfügung steht (`plan.md` §9.4). **Die Passwort-Durchreichung
-bleibt draussen** (§17.9), auch wenn sie der kürzeste Weg wäre.
+**Ein echtes Active Directory anbinden.** Die Anmeldung steht und ist gegen ein OpenLDAP im
+Container geprüft — aber ein AD ist kein OpenLDAP: `sAMAccountName` statt `uid`, verschachtelte
+Gruppen, ein Dienstkonto, das jemand anlegen muss. Der erste Schritt ist eine halbe Stunde am
+echten Verzeichnis mit dem Prüf-Knopf.
+
+Danach **Kerberos und Netzlaufwerke** — dafür braucht es KDC und Dateiserver, und ohne die lässt
+sich nichts davon ehrlich prüfen. **Die Passwort-Durchreichung bleibt draussen** (§17.9), auch
+wenn sie der kürzeste Weg wäre.
 
 Aus M5 steht nur noch das **eigene Basisimage** `ota/base-xfce` offen. An ihm hängen zwei
 Kleinigkeiten, die sonst nicht gehen: eine ereignisgesteuerte Zwischenablage-Brücke (`clipnotify`

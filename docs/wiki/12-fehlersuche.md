@@ -537,6 +537,32 @@ docker ps --filter "name=ota-s-" --format '{{.Names}} {{.Status}}'
 docker unpause <container>     # die Aufnahme läuft dann weiter
 ```
 
+## Ein Arbeitsplatz lässt sich nicht mehr starten, es steht nur „starting"
+
+**Symptom.** Der Startknopf tut nichts Sichtbares. Die Session steht auf `starting` und bleibt
+dort — auch nach Minuten, auch nach einem Neuladen. Ein Container ist keiner zu sehen.
+
+**Ursache.** Eine frühere Session derselben Vorlage steht in der Datenbank noch als lebendig, ihr
+Container ist aber weg. OTA gibt beim Start eine bereits laufende Session zurück, statt eine
+zweite anzulegen — und bekam damit jedes Mal dieselbe Leiche.
+
+Dorthin führte ein Zeitablauf: Meldet Traefik die Route eines neuen Containers nicht innerhalb von
+25 Sekunden, bleibt die Session auf `starting`. Danach prüfte nichts mehr nach.
+
+**Nachsehen.**
+
+```bash
+docker compose -f deploy/docker-compose.yml exec -T db psql -U ota -d ota \
+  -c "SELECT id, status, container_id FROM sessions WHERE status IN ('starting','running');"
+docker ps --filter "label=ota.session_id" --format '{{.Names}}'
+```
+
+Steht dort eine Session, zu der kein Container gehört, ist es das.
+
+**Behoben am 2026-08-28**, an zwei Stellen: Der Start sieht selbst nach, ob der Container noch
+existiert, und schliesst die Session, wenn nicht. Und der Aufräumer räumt solche Leichen bei jedem
+Durchlauf weg — auch ohne dass jemand einen Start versucht.
+
 ## Nützliche Befehle
 
 ```bash

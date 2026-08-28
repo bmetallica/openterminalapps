@@ -115,6 +115,72 @@ class Group(Base):
     )
 
 
+
+class IdentityConfig(Base):
+    """Die Anbindung an ein Verzeichnis (plan.md §9.4).
+
+    Genau eine Zeile. Ein zweites Verzeichnis waere ein anderes Feature —
+    dann muss entschieden werden, welches bei gleichem Namen gewinnt, und
+    diese Frage hat noch niemand gestellt.
+
+    **Abgeschaltet ist die Voreinstellung.** Solange `is_enabled` falsch ist,
+    aendert sich an der Anmeldung nichts. Das ist keine Vorsicht, sondern die
+    einzige Einstellung, bei der ein Fehler niemanden aussperrt.
+    """
+
+    __tablename__ = "identity_configs"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    is_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    # ldap://host:389 oder ldaps://host:636
+    server_uri: Mapped[str] = mapped_column(String(512), default="")
+    # none | starttls  (bei ldaps:// ist die Verbindung ohnehin verschluesselt)
+    tls_mode: Mapped[str] = mapped_column(String(16), default="starttls")
+    # Ob das Zertifikat des Verzeichnisses geprueft wird. Abschalten laesst
+    # sich das, aber es steht als Warnung in der Oberflaeche: Eine
+    # unverifizierte TLS-Verbindung schuetzt gegen Mitlesen, nicht gegen
+    # jemanden, der sich dazwischensetzt — und dann geht das Passwort an ihn.
+    tls_verify: Mapped[bool] = mapped_column(Boolean, default=True)
+    ca_cert: Mapped[str] = mapped_column(Text, default="")
+
+    # Dienstkonto zum Suchen. Es braucht nur Leserecht.
+    bind_dn: Mapped[str] = mapped_column(String(512), default="")
+    bind_password: Mapped[str] = mapped_column(Text, default="")
+
+    base_dn: Mapped[str] = mapped_column(String(512), default="")
+    # Womit sich jemand anmeldet: `uid` bei OpenLDAP,
+    # `sAMAccountName` oder `userPrincipalName` im Active Directory.
+    login_attribute: Mapped[str] = mapped_column(String(64), default="uid")
+    user_filter: Mapped[str] = mapped_column(String(512), default="(objectClass=inetOrgPerson)")
+    mail_attribute: Mapped[str] = mapped_column(String(64), default="mail")
+    name_attribute: Mapped[str] = mapped_column(String(64), default="cn")
+
+    group_base_dn: Mapped[str] = mapped_column(String(512), default="")
+    group_filter: Mapped[str] = mapped_column(String(512), default="(objectClass=groupOfNames)")
+    # Wie eine Gruppe ihre Mitglieder nennt: `member` bei groupOfNames,
+    # `memberUid` bei posixGroup.
+    member_attribute: Mapped[str] = mapped_column(String(64), default="member")
+    group_name_attribute: Mapped[str] = mapped_column(String(64), default="cn")
+
+    # {"<gruppenname im verzeichnis>": "<gruppen-uuid in ota>"}
+    #
+    # Ausdrueckliche Abbildung statt automatischer Uebernahme: Eine Gruppe im
+    # Verzeichnis heisst selten so wie eine in OTA, und wer sie automatisch
+    # anlegen liesse, haette nach dem ersten Abgleich vierzig Gruppen, die
+    # niemand wollte.
+    group_map: Mapped[dict] = mapped_column(JSONB, default=dict)
+
+    # Beim ersten erfolgreichen Anmelden ein Konto anlegen.
+    jit_create: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Naechtlicher Abgleich der Mitgliedschaften.
+    sync_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    last_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error: Mapped[str | None] = mapped_column(Text)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class GroupMember(Base):
     __tablename__ = "group_members"
     group_id: Mapped[uuid.UUID] = mapped_column(

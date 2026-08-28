@@ -1,6 +1,6 @@
 # 8 · Nutzer, Gruppen und Rechte
 
-*Für Administratoren.* AD-Anbindung 🔨 M6
+*Für Administratoren.* AD-Anbindung ✅, Kerberos 🔨 M6
 
 ## Grundsatz
 
@@ -153,21 +153,100 @@ Zwei-Faktor haben"* ist der häufigste Wunsch.
 
 WebAuthn und Passkeys sind weiterhin 🔨 offen (M9).
 
-## Active Directory und LDAP 🔨 M6
+## Active Directory und LDAP ✅
 
-Unter *Authentifizierung → LDAP/AD*:
+Unter **Verwaltung → Einstellungen → Verzeichnis**. Die Reihenfolge auf dem Bildschirm ist die, in
+der man das tatsächlich einrichtet: verbinden, prüfen, zuordnen, einschalten.
 
-- LDAPS oder StartTLS, Bind-DN und Suchbasis
-- Login-Attribut wählbar (`sAMAccountName` oder `userPrincipalName`)
-- **Gruppen-Mapping**: AD-Gruppe → OTA-Gruppe
-- Nutzeranlage beim ersten Login, optional
-- Nächtlicher Abgleich für Deaktivierungen
+### Die Regel, die über allem steht
 
-Der **Test-Button** prüft die Verbindung und zeigt für einen Beispielnutzer, welche OTA-Gruppen sich
-daraus ergäben — bevor gespeichert wird.
+> **Ein lokales Konto wird niemals über das Verzeichnis angemeldet, und ein Verzeichniseintrag kann
+> ein lokales Konto niemals übernehmen.**
 
-> **Ein lokaler Administrator bleibt immer aktiv.** Die Oberfläche verhindert das Löschen des letzten
-> lokalen Admin-Kontos. Ein LDAP-Ausfall darf niemanden aussperren.
+Wo ein Passwort geprüft wird, entscheidet allein das Konto selbst (`auth_provider`) — nicht die
+Anfrage und nicht das Verzeichnis. Dieser Wert ändert sich nie von selbst.
+
+Der Angriff, gegen den das steht, ist unspektakulär und deshalb leicht zu übersehen: Wer im
+Verzeichnis einen Eintrag anlegen darf, legt einen mit dem Namen des ersten Administrators an und
+meldet sich mit seinem eigenen Passwort als dieser an. Ohne diese Regel funktioniert das.
+
+Das Testverzeichnis (`scripts/ldap-test-server.sh`) enthält deshalb absichtlich einen Eintrag
+`bmetallica` mit einem anderen Passwort. Die Prüfung besteht darin, dass er **nicht** hereinkommt.
+
+### Einrichten
+
+| Feld | Was hineingehört |
+|---|---|
+| **Adresse** | `ldaps://dc01.firma.local:636` — oder `ldap://…:389` mit StartTLS |
+| **Verschlüsselung** | StartTLS. „ohne" ist möglich und wird gewarnt: Dann geht jedes Anmeldepasswort im Klartext über das Netz |
+| **Dienstkonto** | Ein Konto mit **Leserecht**, mehr nicht. Es sucht die Einträge — der Mensch, der sich anmeldet, kennt seinen eigenen DN nicht |
+| **Basis** | Ab wo gesucht wird |
+| **Anmeldemerkmal** | `uid` bei OpenLDAP, `sAMAccountName` oder `userPrincipalName` im Active Directory |
+| **Gruppen-Basis** | Leer lassen, wenn die Gruppen unter derselben Basis liegen |
+
+### Der Prüf-Knopf
+
+Er meldet **keinen** Erfolg, wenn nur die Verbindung steht. Ein Dienstkonto, das sich anmelden kann,
+aber nichts sieht, ist der häufigste Fall beim Anbinden — und der, den eine reine
+Verbindungsprüfung übersieht. Gezeigt wird deshalb: wie viele Einträge sichtbar sind, welche
+Gruppen es gibt, und für einen Namen zur Probe dessen Gruppen im Verzeichnis.
+
+> **„No such object" heißt fast nie, dass die Basis falsch ist.** OpenLDAP meldet fehlende
+> Leserechte mit derselben Antwort wie einen nicht vorhandenen Zweig. Wer daran sucht, sucht meist
+> an der falschen Stelle — es fehlt dem Dienstkonto das Leserecht.
+
+### Gruppen zuordnen
+
+**Was nicht zugeordnet ist, bringt keine Rechte mit.** Ein Verzeichnis hat Dutzende Gruppen, die
+OTA nichts angehen; sie automatisch zu übernehmen hieße, nach dem ersten Abgleich vierzig Gruppen
+zu haben, die niemand wollte.
+
+Die Zuordnung bleibt sichtbar, auch ohne erneutes Prüfen.
+
+### Im Betrieb
+
+- **Konten beim ersten Anmelden anlegen** — sonst muss jedes Konto vorher von Hand entstehen.
+- **Bei jeder Anmeldung** werden Name, Mail und Gruppen aufgefrischt. Wer versetzt wird, merkt es
+  beim nächsten Anmelden; der nächtliche Abgleich ist dafür keine Voraussetzung.
+- **Nächtlich um 3 Uhr** läuft der Abgleich über alle Verzeichniskonten.
+- Wer im Verzeichnis **verschwindet**, wird **deaktiviert, nicht gelöscht**. Sein Zuhause, seine
+  Sicherungen und seine Spur im Protokoll bleiben. Löschen ist eine Entscheidung, die ein Mensch
+  trifft (siehe *Offboarding*).
+- Von Hand vergebene **Systemgruppen bleiben**. Der Abgleich bildet das Verzeichnis ab; er soll
+  keine Entscheidung überschreiben, die es dort gar nicht abzubilden gibt.
+
+### Wenn das Verzeichnis ausfällt
+
+**Lokale Konten sind davon nicht betroffen** — sie werden lokal geprüft und melden sich weiter an.
+Verzeichniskonten kommen nicht herein, und zwar **sofort** und nicht nach einem Zeitablauf: Die
+Verbindung läuft in fünf Sekunden aus, ein nicht erreichbarer Server antwortet in Millisekunden.
+
+Ein Ausweichen auf einen lokal gespeicherten Hash gibt es bewusst nicht. Das wäre ein zweiter Weg
+an der Stelle, an der es genau einen geben soll — und er wäre genau dann offen, wenn das
+Verzeichnis nicht widersprechen kann.
+
+Kommt das Verzeichnis zurück, geht es von selbst weiter.
+
+### Selbst ausprobieren
+
+```bash
+scripts/ldap-test-server.sh start   # Wegwerf-Verzeichnis mit vier Konten
+./scripts/test-ldap.sh              # 29 Prüfungen, räumt hinterher auf
+scripts/ldap-test-server.sh stop
+```
+
+Der Testserver gehört **nicht** zum Stack: Ein Verzeichnisdienst, der beim `make up` mitstartet,
+wäre eine Einladung, gegen ihn zu produzieren.
+
+### Was noch fehlt 🔨
+
+**Kerberos und Netzlaufwerke** (`sec=krb5`, `k5start`, UID/GID aus dem Verzeichnis) sind nicht
+gebaut. Dafür reicht ein LDAP-Server nicht — es braucht ein echtes AD mit KDC und Dateiservern,
+und ohne eines lässt sich nichts davon ehrlich prüfen.
+
+**Die Passwort-Durchreichung bleibt draußen.** Sie wäre der kürzeste Weg zu eingehängten
+Laufwerken und der einzige, bei dem OTA das Anmeldepasswort eines Menschen aufbewahren müsste
+(`plan.md` §17.9).
 
 ## Netzlaufwerke im Arbeitsplatz 🔨 M6
 
