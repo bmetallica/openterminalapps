@@ -263,6 +263,54 @@ def freeze(
     return _out(build)
 
 
+@router.delete("/{template_id}/builds/{build_id}", dependencies=[Depends(manage)])
+def delete_build(
+    template_id: uuid.UUID, build_id: uuid.UUID, request: Request,
+    actor: User = Depends(current_user),
+    db: DbSession = Depends(get_db),
+) -> dict[str, str]:
+    """Entfernt eine Fassung samt Image.
+
+    Das Aufraeumen erledigt das sonst von selbst (die letzten drei bleiben),
+    aber es gibt Gruende, eine einzelne loszuwerden: ein Fehlversuch, ein
+    Probelauf, ein Image, dessen Inhalt nicht verteilt werden soll.
+
+    **Die aktive Fassung bleibt.** Sie zu loeschen wuerde die Vorlage auf ein
+    Image zeigen lassen, das es nicht mehr gibt — und der naechste Start
+    scheiterte mit einer Meldung, die niemand mit diesem Klick in Verbindung
+    braechte.
+    """
+    tpl = db.get(Template, template_id)
+    build = db.get(ImageBuild, build_id)
+    if not tpl or not build or build.template_id != template_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Fassung nicht gefunden")
+    if build.is_current or (build.image_ref and tpl.image_ref == build.image_ref):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"Fassung v{build.version} ist in Betrieb. Aktiviere erst eine "
+            "andere, dann lässt sie sich entfernen.",
+        )
+    if build.status in ("queued", "building"):
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            "Diese Fassung wird gerade gebaut.")
+
+    version = build.version
+    # Beide Namen: den lokalen und den mit Registry-Vorsatz. Wer nur einen
+    # loescht, laesst den anderen als Waise stehen.
+    for ref in {r for r in (build.image_ref, (build.image_ref or "").split("/", 1)[-1]) if r}:
+        try:
+            agent_client.remove_image(ref)
+        except HTTPException:
+            pass          # schon weg, oder in Benutzung — beides in Ordnung
+
+    db.delete(build)
+    audit.record(db, "build.deleted", actor=actor, object_type="template",
+                 object_id=tpl.slug, request=request,
+                 version=version, image=build.image_ref)
+    db.commit()
+    return {"status": f"Fassung v{version} entfernt."}
+
+
 def _prune_versions(db: DbSession, tpl: Template) -> list[str]:
     """Raeumt alte Fassungen weg — Datenbankeintrag und Image.
 

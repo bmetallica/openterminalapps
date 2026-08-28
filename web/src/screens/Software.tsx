@@ -314,6 +314,20 @@ export function Software({ tpl, onToast, onChanged }: {
     }
   }
 
+  async function removeBuild(b: Build) {
+    setBusy(true)
+    try {
+      const res = await api.deleteBuild(tpl.id, b.id)
+      setBuilds(await api.builds(tpl.id))
+      if (watching?.id === b.id) setWatching(null)
+      onToast(res.status)
+    } catch (err) {
+      onToast(err instanceof ApiError ? err.message : tr('Entfernen fehlgeschlagen'), 'bad')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function saveApps() {
     if (!apps) return
     setBusy(true)
@@ -631,6 +645,13 @@ export function Software({ tpl, onToast, onChanged }: {
                       {b.status === 'ok' && !b.is_current && (
                         <button className="btn btn--sm" disabled={busy}
                           onClick={() => void activate(b)}>{tr('Aktivieren')}</button>
+                      )}
+                      {/* Die aktive Fassung nicht: Sie zu löschen liesse die
+                          Vorlage auf ein Image zeigen, das es nicht gibt. */}
+                      {!b.is_current && (
+                        <button className="btn btn--sm btn--halt" disabled={busy}
+                          style={{ marginLeft: 8 }}
+                          onClick={() => void removeBuild(b)}>{tr('Entfernen')}</button>
                       )}
                     </td>
                   </tr>

@@ -924,4 +924,5 @@ export const EN: Record<string, string> = {
     'Whatever the user changes there is gone at the next start. Right for a root certificate, rarely right for settings.',
   'Änderungen an „durchsetzen“ gelten erst nach dem Speichern. Die Dateien selbst sind sofort abgelegt.':
     'Changes to “enforce” take effect only after saving. The files themselves are stored immediately.',
+  'Entfernen fehlgeschlagen': 'Removal failed',
 }

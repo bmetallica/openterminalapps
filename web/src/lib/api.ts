@@ -545,7 +545,8 @@ export const api = {
   activateBuild: (templateId: string, id: string) =>
     call<Build>(`/templates/${templateId}/builds/${id}/activate`, { method: 'POST' }),
   deleteBuild: (templateId: string, id: string) =>
-    call<void>(`/templates/${templateId}/builds/${id}`, { method: 'DELETE' }),
+    call<{ status: string }>(`/templates/${templateId}/builds/${id}`,
+      { method: 'DELETE' }),
 
   setApps: (templateId: string, apps: unknown[]) =>
     call<Template>(`/templates/${templateId}/apps`, {

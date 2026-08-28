@@ -338,7 +338,9 @@ sleep 3
 # noch eingefroren, weil `docker pause` alle Prozesse anhaelt.
 api -X POST "$BASE/api/sessions/$SID/unpause" >/dev/null
 for _ in 1 2 3 4 5 6 7 8 9 10; do
-  ST=$(api "$BASE/api/sessions/$SID" 2>/dev/null | jqp "d.get('status','')")
+  # Aus der Liste: Eine einzelne Session hat keinen eigenen GET-Endpunkt.
+  ST=$(api "$BASE/api/sessions" 2>/dev/null | jqp "
+next((s['status'] for s in d if s['id'] == '$SID'), '')")
   [ "$ST" = "running" ] && break
   sleep 3
 done

@@ -95,6 +95,11 @@ Jeder Build erzeugt `ota/<name>:v<N>` mit Digest, Größe und vollständigem Log
 - Alte Versionen werden aufgeräumt: **die letzten drei bleiben**, dazu immer die aktive, auch wenn
   sie älter ist. Eine Fassung, auf die man zurückfallen könnte, ist der halbe Sinn der Versionierung
 
+Eine einzelne Fassung lässt sich auch **von Hand entfernen** — für einen Fehlversuch, einen
+Probelauf, ein Image, dessen Inhalt nicht verteilt werden soll. Die **aktive** nicht: Sie zu löschen
+liesse die Vorlage auf ein Image zeigen, das es nicht mehr gibt, und der nächste Start scheiterte
+mit einer Meldung, die niemand mit diesem Klick in Verbindung brächte.
+
 > Das Aufräumen lief bis zum 2026-08-28 gar nicht — die Regel stand im Code und wurde nie
 > angewendet. Aufgefallen ist es erst, als das Einfrieren dazukam und Fassungen schneller wuchsen
 > als beim Bauen. Jede belegt Platz, und auf einem Host mit 25 GB frei ist das nach ein paar Wochen

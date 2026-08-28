@@ -35,7 +35,7 @@ die Sicherung aus M7. Ein Nutzer meldet sich an, startet seinen Arbeitsplatz und
 öffnet darin VS Code, ein Terminal und den Dateimanager — jedes formatfüllend auf
 eigenem Display, alle im selben Container mit gemeinsamem `/home`. Ein
 Administrator baut Software ins Image, bindet fremde Kataloge ein und stellt
-Sicherungen wieder her. Geprüft durch **217 automatische Prüfungen in vier
+Sicherungen wieder her. Geprüft durch **219 automatische Prüfungen in vier
 Suiten**, davon 76 in einem echten Browser (`make test`). Ein voller Lauf
 dauert rund eine halbe Stunde — er baut Container, friert ein Image ein und
 misst im Browser nach.
@@ -344,6 +344,10 @@ Session-Prozesse, und die ereignisgesteuerte statt abfragende Brücke (braucht e
       jedem Start. Dass Letzteres die Ausnahme ist, steht auch so in der Oberfläche — ein Zuhause
       gehört dem Menschen, der darin arbeitet. Punktdateien sind hier erlaubt (anders als in der
       gemeinsamen Ablage): Ein Skeleton besteht grösstenteils aus ihnen
+- [x] **Eine einzelne Fassung von Hand entfernen** — für einen Fehlversuch oder einen Probelauf.
+      Die aktive nicht: Sie zu löschen liesse die Vorlage auf ein Image zeigen, das es nicht mehr
+      gibt. Nebenbei räumt der Testlauf damit hinter sich auf, statt bei jedem Durchgang eine
+      „Prüflauf"-Fassung in der Liste des Administrators zu hinterlassen
 - [x] **Alte Fassungen werden wirklich aufgeräumt.** `KEEP_VERSIONS = 3` stand seit dem ersten Tag
       im Code und wurde nie angewendet; aufgefallen ist das erst, als das Einfrieren dazukam und
       Fassungen schneller wuchsen als beim Bauen. Die aktive bleibt immer, auch wenn sie älter ist.

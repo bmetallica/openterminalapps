@@ -277,7 +277,12 @@ print(json.dumps({k: d[k] for k in keep if k in d}))')" >/dev/null
     | jqp "d.get('id','')")
   if [ -n "$USID" ]; then
     for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do
-      ST=$(api "$TMP/user.jar" "$BASE/api/sessions/$USID" | jqp "d.get('status','')")
+      # Aus der Liste lesen: Eine einzelne Session hat keinen eigenen
+      # GET-Endpunkt. Der frühere Aufruf lief in „Method Not Allowed" und
+      # wartete deshalb jedes Mal die vollen 36 Sekunden ab, ohne je etwas
+      # zu erfahren.
+      ST=$(api "$TMP/user.jar" "$BASE/api/sessions" | jqp "
+next((s['status'] for s in d if s['id'] == '$USID'), '')")
       [ "$ST" = "running" ] && break
       sleep 3
     done
@@ -291,9 +296,13 @@ print(next((a["slug"] for a in d["apps"]
             if a["slug"] != os.environ["APP"] and a["is_enabled"]
             and not a.get("blocked_reason")), ""))')
     if [ -n "$OTHER" ]; then
+      OUT=$(api "$TMP/user.jar" -X POST "$BASE/api/sessions/$USID/apps/$OTHER")
       RC=$(code "$TMP/user.jar" -X POST "$BASE/api/sessions/$USID/apps/$OTHER")
-      [ "$RC" != "403" ] && ok "Eine freie Anwendung bleibt startbar ($OTHER, HTTP $RC)" \
-                         || bad "Auch die freie Anwendung $OTHER wurde abgewiesen"
+      # Ausdruecklich 200 und nicht „irgendwas ausser 403": Ein 404 hat den
+      # Test einmal bestehen lassen, obwohl die Session gar nicht mehr da war
+      # — die Prueflogik war dann eine Kulisse.
+      expect "200" "$RC" "Eine freie Anwendung ($OTHER) bleibt startbar"
+      [ "$RC" = "200" ] || echo "    Antwort: $(echo "$OUT" | head -c 200)"
     fi
     USER_CNAME="ota-s-$(echo "$USID" | cut -c1-12)"
   else
@@ -443,9 +452,17 @@ next((s['id'] for s in d if s['template_id'] == '$WS_S'), '')")
   sleep 4
   SID_S=$(api "$TMP/admin.jar" -X POST "$BASE/api/sessions" -H 'Content-Type: application/json' \
     -d "{\"template_id\":\"$WS_S\"}" | jqp "d.get('id','')")
-  sleep 4
-  CN_S=$(docker ps --filter "label=ota.session_id" --format '{{.Names}}' \
-    | grep "$(echo "$SID_S" | cut -c1-12)" | head -1)
+
+  # Auf den Container warten statt auf gut Glück ein paar Sekunden zu
+  # schlafen. Ein `sleep 4` hat hier einmal danebengegriffen — und der
+  # Folgetest suchte dann einen Container, den es nie gab.
+  CN_S=""
+  for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+    CN_S=$(docker ps --filter "label=ota.session_id" --format '{{.Names}}' \
+      | grep "$(echo "$SID_S" | cut -c1-12)" | head -1)
+    [ -n "$CN_S" ] && break
+    sleep 3
+  done
   if [ -n "$CN_S" ]; then
     docker exec "$CN_S" test -f "/home/kasm-user/$MARKE" \
       && ok "Der durchgesetzte Pfad ist beim Start im Zuhause" \
@@ -487,10 +504,18 @@ next((t['id'] for t in d if t['mode'] == 'workspace' and t['apps']), '')")
 SID_F=$(api "$TMP/admin.jar" "$BASE/api/sessions" | jqp "
 next((s['id'] for s in d if s['template_id'] == '$WS_F' and s['status'] == 'running'), '')")
 
-if [ -z "$SID_F" ]; then
+CN_F=""
+if [ -n "$SID_F" ]; then
+  CN_F="ota-s-$(echo "$SID_F" | cut -c1-12)"
+  # Die Datenbank kann eine Session als laufend fuehren, deren Container es
+  # nicht mehr gibt — etwa nach einem abgebrochenen Lauf. Dann ist nicht das
+  # Einfrieren kaputt, sondern der Vorzustand.
+  docker inspect "$CN_F" >/dev/null 2>&1 || CN_F=""
+fi
+
+if [ -z "$CN_F" ]; then
   ok "Kein eigener Arbeitsplatz am Laufen — Einfrieren übersprungen"
 else
-  CN_F="ota-s-$(echo "$SID_F" | cut -c1-12)"
 
   # Etwas, das nach einem Geheimnis aussieht. Die Vorschau muss es finden.
   docker exec -u 0 "$CN_F" sh -c 'mkdir -p /root/.ssh && echo x > /root/.ssh/id_pruef' \
@@ -549,7 +574,25 @@ else
     docker exec "$CN_F" test -f /etc/sudoers.d/ota-admin \
       && ok "Im laufenden Container liegt sie wieder da" \
       || bad "Dem Administrator wurde sein sudo genommen"
+    # Aufräumen über die Schnittstelle statt mit `docker rmi`: So verschwindet
+    # auch der Eintrag, und der Test hinterlässt keine „Prüflauf"-Fassung in
+    # der Liste des Administrators.
+    BID_F=$(echo "$OUT" | jqp "d.get('id','')")
+    RES=$(api "$TMP/admin.jar" -X DELETE "$BASE/api/templates/$WS_F/builds/$BID_F")
+    echo "$RES" | grep -q "entfernt" \
+      && ok "Die Prüf-Fassung lässt sich wieder entfernen" \
+      || bad "Die Prüf-Fassung blieb stehen: $(echo "$RES" | head -c 120)"
     docker rmi -f "$IMG" >/dev/null 2>&1
+
+    # Und die aktive Fassung bleibt, was auch immer man anklickt.
+    CUR=$(api "$TMP/admin.jar" "$BASE/api/templates/$WS_F/builds" | jqp "
+next((b['id'] for b in d if b['is_current']), '')")
+    if [ -n "$CUR" ]; then
+      RES=$(api "$TMP/admin.jar" -X DELETE "$BASE/api/templates/$WS_F/builds/$CUR")
+      echo "$RES" | grep -q "in Betrieb" \
+        && ok "Die aktive Fassung lässt sich nicht löschen" \
+        || bad "Die aktive Fassung liess sich löschen — der nächste Start bräche ab"
+    fi
   else
     bad "Einfrieren schlug fehl: $(echo "$OUT" | head -c 160)"
   fi
