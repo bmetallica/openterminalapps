@@ -36,7 +36,9 @@ Der vierte Weg ist der hier: **OTA hört auf, Identity Provider zu sein, und wir
 
 ```
                          ┌───────────────────────┐
-                         │       Keycloak        │
+                         │   Identity Provider   │
+                         │  (Keycloak/authentik  │
+                         │      — siehe 5a)      │
                          │                       │
                          │ lokale Benutzer       │
                          │ LDAP/AD-Föderation    │
@@ -314,12 +316,117 @@ OIDC-Client werden; das ist kein Teil dieses Umbaus.
 
 ---
 
+## 5a · Welcher Identity Provider? *(offen — Entscheidung nach Messung)*
+
+Keycloak stand im Zielbild, weil es das naheliegendste ist — nicht, weil es geprüft wurde. Also
+geprüft.
+
+### Zwei Anforderungen entscheiden fast alles
+
+Der Kandidatenkreis wird nicht durch OIDC-Fähigkeiten bestimmt — das können alle. Er wird durch
+zwei Dinge bestimmt, die aus OTAs Rolle als **Verwalter** folgen:
+
+1. **AD/LDAP-Föderation mit Gruppen, zur Laufzeit über eine Schnittstelle konfigurierbar.** Nicht
+   „kann LDAP", sondern: Gruppen kommen mit, und ein Administrator richtet es in OTAs Oberfläche
+   ein, nicht in einer YAML-Datei auf dem Host.
+2. **Nutzer, Gruppen und OIDC-Clients zur Laufzeit über eine Schnittstelle anlegbar.** Ohne das
+   gibt es kein „Anwendung hinzufügen" in OTA.
+
+An diesen beiden Punkten scheitern die meisten:
+
+| Kandidat | Woran es scheitert |
+|---|---|
+| **Authelia** | Konfiguration liegt in YAML-Dateien auf der Platte. Keine Schnittstelle, über die OTA Nutzer oder Clients anlegen könnte. Damit fällt OTAs ganze Rolle als Verwalter weg. |
+| **Dex** | Reiner Vermittler ohne eigenen Nutzerbestand — „lokale Benutzer ohne AD" gäbe es nur als statische Einträge in einer Datei. Konfiguration ebenfalls dateibasiert. |
+| **Ory Hydra + Kratos** | Ausgezeichnete Schnittstellen, aber Hydra ist reines OAuth2 ohne Nutzer, Kratos Nutzer ohne OIDC-Provider, LDAP-Föderation gibt es nicht, und die Anmeldemasken schreibt man selbst. Also genau die Arbeit, die dieser Umbau vermeiden soll. |
+| **Kanidm** | Will selbst die führende Quelle sein und ist ein LDAP-*Server*, kein Vermittler. AD-Föderation ist nicht sein Zweck. |
+| **Zitadel** | Der knappste Fall — und ein klares Nein: LDAP nur als externe Anmeldung, **ohne Abgleich**, und ein Gruppenfilter fehlt. Damit kommen AD-Gruppen nicht mit, und OTAs gruppengesteuerter Zugriff hätte keine Grundlage. |
+
+Übrig bleiben zwei ernsthafte Kandidaten.
+
+### Keycloak
+
+- Apache-2.0, CNCF, Red Hat im Rücken — die konservative Wahl für etwas, das zehn Jahre laufen soll
+- Die **tiefste LDAP/AD-Föderation** im Feld: Abgleich, Gruppen-Mapper, Rückschreiben
+- Die LDAP-Anbindung liegt unter `components` und ist über die Admin-API vollständig
+  konfigurierbar (siehe 5.5 — mit der Folge, dass `manage-realm` nötig ist)
+- **Der Preis ist Gewicht.** Empfohlen werden 4 GB, für den Produktivbetrieb mehr. Auf einem
+  Rechner, auf dem schon Arbeitsplatz-Container mit je 2 GB laufen, ist das kein Detail.
+- Erstkonfiguration ist erfahrungsgemäss ein halber Tag, nicht eine Stunde
+
+### authentik
+
+- MIT. LDAP-Quelle, OIDC-Provider, Gruppen, MFA, Flows sind im offenen Kern; kostenpflichtig sind
+  Dinge, die OTA nicht braucht (KI-Risikoerkennung, Support-Zusagen, erweiterte Protokollierung).
+  Der Anbieter sagt zu, **keine** Funktion aus dem offenen Teil herauszulösen.
+- **Die Schnittstelle ist vollständig, und zwar nachweislich:** Die eigene Verwaltungsoberfläche
+  läuft auf derselben öffentlichen API. Was ein Administrator dort tun kann, kann OTA auch —
+  das ist genau die Garantie, die dieser Umbau braucht.
+- **Deutlich leichter:** rund 250–350 MB für den ganzen Stapel einschliesslich Datenbank; seit
+  Fassung 2025.10 ohne Redis.
+- Risiko: ein Unternehmen, kein Konsortium. Für Infrastruktur, die zehn Jahre tragen soll, ist das
+  der ernstzunehmende Gegeneinwand.
+
+### Vorsicht bei zwei Begriffen
+
+authentik unterscheidet **LDAP-Quelle** (Nutzer aus AD holen — das braucht OTA) von
+**LDAP-Provider** (authentik selbst als LDAP-Server anbieten). Verwechslung führt zu einer
+Konfiguration, die genau das Gegenteil tut.
+
+### Wie entschieden wird: durch Messen, nicht durch Lesen
+
+Beide Kandidaten behaupten, was OTA braucht. Die Frage ist nicht, ob sie es können, sondern ob der
+**Weg über die Schnittstelle** so trägt, wie OTA ihn braucht. Das ist in einem Nachmittag
+entscheidbar — mit demselben Vorgehen, das sich schon beim eigenen LDAP bewährt hat
+(`scripts/ldap-test-server.sh`): ein Wegwerf-Verzeichnis im Container, und dagegen gemessen.
+
+**Etappe 0 — Vergleich am lebenden Objekt.** Für beide Kandidaten dieselben fünf Fragen,
+ausschliesslich über die Schnittstelle, kein Klick in der fremden Oberfläche:
+
+1. AD-Föderation anlegen und die Verbindung testen
+2. Eine AD-Gruppe erscheint als Gruppe, und ihre Mitglieder stimmen
+3. Einen OIDC-Client anlegen, samt Redirect-URI und Gruppen-Claim
+4. Ein lokales Konto anlegen, mit erzwungenem Passwortwechsel beim ersten Login
+5. Ein Konto sperren, und die laufende Sitzung endet
+
+Dazu gemessen: Arbeitsspeicher im Leerlauf, Startzeit, Grösse des Abbilds.
+
+Wer beide Läufe besteht, gewinnt über die weichen Kriterien. Wer bei 1 oder 3 stolpert, ist raus —
+egal wie gut der Rest aussieht.
+
+### Und die Entscheidung bleibt umkehrbar
+
+Unabhängig vom Ausgang: OTA spricht mit dem Identity Provider **nicht direkt**, sondern durch eine
+schmale eigene Schicht — dieselbe Idee wie `agent_client.py` gegenüber Docker. Ungefähr zehn
+Vorgänge:
+
+```
+konto_anlegen · konto_sperren · konto_finden
+gruppe_anlegen · gruppe_zuordnen · gruppen_eines_kontos
+verzeichnis_konfigurieren · verzeichnis_testen
+client_anlegen · client_entfernen
+```
+
+Dahinter liegt eine Umsetzung je Kandidat. Damit ist die Wahl eine Implementierungsfrage und keine
+Architekturentscheidung — und ein späterer Wechsel kostet eine Datei, nicht den Umbau.
+
+**Bis zur Messung bleibt Keycloak die Annahme in diesem Dokument**, aber die Neigung geht nach der
+Aktenlage zu authentik: Das Gewicht ist auf einem Rechner, der nebenher Desktops streamt, ein
+echtes Argument, und eine Verwaltungsoberfläche, die selbst auf der öffentlichen Schnittstelle
+läuft, ist die beste verfügbare Zusage, dass OTA nichts fehlen wird.
+
+---
+
 ## 6 · Etappen
 
 Jede Etappe endet in einem Zustand, in dem alles läuft. Keine Etappe lässt sich nur zusammen mit
 der nächsten abschliessen.
 
-### A · Keycloak steht daneben, ohne dass jemand es merkt
+### 0 · Der Vergleich (siehe 5a)
+- Beide Kandidaten als Wegwerf-Container, fünf Fragen ausschliesslich über die Schnittstelle
+- **Fertig, wenn:** die Wahl auf einer Messung beruht und nicht auf einer Broschüre
+
+### A · Der Identity Provider steht daneben, ohne dass jemand es merkt
 - Keycloak im Stack (`deploy/docker-compose.yml`), eigener Realm `ota`, eigene Datenbank
 - Nur intern erreichbar; Traefik veröffentlicht es unter `/auth`
 - `ota-manager`-Client mit Dienstkonto, Rechte wie oben
@@ -366,9 +473,10 @@ der nächsten abschliessen.
 
 Damit die Entscheidung mit offenen Augen fällt:
 
-- **Ein weiterer Dienst.** Keycloak ist eine Java-Anwendung: rund 500 MB Abbild, 512 MB bis 1 GB
-  Arbeitsspeicher im Betrieb, eigenes Datenbankschema, eigene Aktualisierungen. Auf einem
-  selbstgehosteten Rechner ist das spürbar.
+- **Ein weiterer Dienst.** Wie teuer, hängt von der Wahl ab (5a): Für Keycloak werden 4 GB
+  empfohlen, authentik kommt mit rund 250–350 MB für den ganzen Stapel aus. Auf einem Rechner, der
+  nebenher Arbeitsplatz-Container mit je 2 GB streamt, ist das kein Detail, sondern womöglich das
+  ausschlaggebende Kriterium.
 - **Ein zweiter Ort für Wahrheit.** Nutzer stehen künftig in Keycloak *und* — als Projektion — in
   OTA. Jede Projektion kann veralten. Wann abgeglichen wird und was bei Widerspruch gilt, muss
   festgeschrieben sein, sonst wird es zur Fehlerquelle.
@@ -378,8 +486,8 @@ Damit die Entscheidung mit offenen Augen fällt:
 Dagegen steht: **ein** Anmeldeweg für beliebig viele Anwendungen, keine Passwortweitergabe, AD
 ohne eigenen LDAP-Code, und OTA wird das, wonach es ohnehin aussieht — ein Anwendungsportal.
 
-Keycloak steht unter Apache-2.0 und passt damit zur Lizenzlage von OTA. Es gehört dann in
-[`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).
+Beide Kandidaten passen zur Lizenzlage von OTA — Keycloak steht unter Apache-2.0, authentik unter
+MIT. Der Gewinner gehört in [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).
 
 ---
 
@@ -401,7 +509,9 @@ Keycloak steht unter Apache-2.0 und passt damit zur Lizenzlage von OTA. Es gehö
 | 3 | Ort der zweiten Stufe | Keycloak — bis auf das Notfallkonto | **entschieden** 2026-08-28 |
 | 4 | Eigene LDAP-Anbindung | Bis Etappe E Rückweg, dort entfernt; ab sofort eingefroren | **entschieden** 2026-08-28 |
 | 5 | Profil- und Ablagepfade | Nach `sub` benannt, Verweis unter dem Namen | Vorschlag (§4) |
-| 6 | Eigener Realm statt `master` | Ja, zwingend | ergibt sich aus 5.5 |
+| 6 | Eigener Realm statt `master` | Ja, zwingend (falls Keycloak) | ergibt sich aus 5.5 |
+| 7 | **Welcher Identity Provider** | Keycloak oder authentik — Zitadel, Authelia, Dex, Ory, Kanidm sind ausgeschieden | **offen**, Etappe 0 entscheidet |
+| 8 | Zugriff über eine eigene schmale Schicht | Ja — die Wahl bleibt damit umkehrbar | ergibt sich aus 5a |
 
 ### Noch offen, aber später zu beantworten
 

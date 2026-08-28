@@ -568,7 +568,8 @@ Das Feature aus `plan.md` §1.2 und §9.8. Gegen alle drei echten Registries gep
 **Eigenes Dokument:** [`auth-roadmap.md`](auth-roadmap.md).
 
 Der Umbau von „OTA ist sein eigener Identity Provider" zu „OTA ist das Anwendungsportal über einem
-zentralen Keycloak". Anlass ist Open WebUI: Sobald eine zweite Anwendung dazukommt, gibt es nur
+zentralen Identity Provider" — welcher, entscheidet eine Messung (Keycloak oder authentik; Zitadel,
+Authelia, Dex, Ory und Kanidm sind an OTAs Anforderungen gescheitert). Anlass ist Open WebUI: Sobald eine zweite Anwendung dazukommt, gibt es nur
 noch schlechte Antworten — dreimal dieselben Menschen pflegen, Passwörter weiterreichen, oder
 selbst OIDC-Provider werden.
 
