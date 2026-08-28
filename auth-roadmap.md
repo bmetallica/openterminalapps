@@ -751,14 +751,27 @@ der nächsten abschliessen.
   Föderation nach Keycloak geholt, meldet sich dort mit fremdem Kennwort an und wird von OTA
   **abgelehnt** (403). Das lokale Konto bleibt unangetastet
 
-### D · Die erste fremde Anwendung
+### D · Die erste fremde Anwendung · ⏳ OTA-Seite fertig am 2026-08-28
 - Anwendungstyp „Externe Web-Anwendung" neben „Arbeitsplatz" im Katalog
 - Neues Recht `anwendungen.verwalten` und die Liste erlaubter Ziel-Domains (5d) — beides **bevor**
   der erste Client entstehen kann, nicht danach
 - OTA legt den OIDC-Client in Keycloak an, setzt Redirect-URI und Gruppen-Claim, zeigt die
   Konfiguration zum Übertragen
 - Zugriff je Gruppe; die Kachel erscheint nur bei Berechtigten
-- **Fertig, wenn:** Open WebUI ohne eigene Benutzerpflege läuft und Gruppen mitkommen
+- [x] Anwendungstyp „Web-Anwendung" mit eigenem Bildschirm, Kacheln im Dashboard je Gruppe
+- [x] Neues Recht `anwendungen.verwalten`, getrennt von `templates.manage`
+- [x] Liste erlaubter Ziele in den Einstellungen; **leer erlaubt nichts**, Platzhalter werden
+      abgewiesen, geprüft wird in der API und nicht im Formular
+- [x] OTA legt den OIDC-Client in Keycloak an, das Geheimnis kommt **einmal** zurück und steht
+      danach nur noch dort; Löschen nimmt den Client mit
+- [x] Client für das echte Open WebUI angelegt und gegen Keycloak geprüft: die eingetragene
+      Adresse wird angenommen, eine fremde mit 400 abgewiesen
+- [x] **Reverse-Proxy-Falle gefunden und behoben** (siehe Wiki 10): Traefik ersetzte die
+      Kopfzeilen des vorgelagerten Proxys, und die Anmeldung führte an die interne IP — eine
+      andere Herkunft, an der die Desktop-Verknüpfungen hängen
+- [ ] **Offen, und zwar auf dem anderen Rechner:** Open WebUI nimmt OIDC ausschliesslich über
+      Umgebungsvariablen entgegen; seine Schnittstelle kann es nicht (geprüft an Fassung 0.9.6).
+      Die Werte stehen bereit, eintragen muss sie jemand dort
 
 ### E · Aufräumen
 - Wiederholbarer Migrationslauf für Bestandskonten (5.1): Konten nach Keycloak, Passwörter neu,

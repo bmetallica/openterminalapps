@@ -525,6 +525,41 @@ export const EN: Record<string, string> = {
   '{name} auf den Desktop legen': 'Add {name} to desktop',
   'Meine Ablage': 'My files',
   'Zentrale Identität': 'Central identity',
+  'Weitere Anwendungen': 'Other applications',
+  'Web-Anwendungen': 'Web applications',
+  'Anwendung hinzufügen': 'Add an application',
+  'Noch keine Anwendung': 'No application yet',
+  'Neues Geheimnis': 'New secret',
+  'Öffnen': 'Open',
+  'sichtbar': 'visible',
+  'aus': 'off',
+  'alle': 'everyone',
+  'Symbol': 'Icon',
+  'Adresse der Anwendung': 'Address of the application',
+  'Rückadresse der Anmeldung': 'Sign-in return address',
+  'Im Dashboard anzeigen': 'Show on the dashboard',
+  'Anmeldung geht zurück an': 'Sign-in returns to',
+  '{name} wird geöffnet…': 'Opening {name}…',
+  'So heisst die Kachel im Dashboard.': 'This is what the tile is called on the dashboard.',
+  'Ein Zeichen. Es steht auf der Kachel.': 'A single character. It goes on the tile.',
+  'Wohin die Kachel führt.': 'Where the tile leads.',
+  'Ohne Auswahl sehen alle die Kachel.': 'With nothing selected, everyone sees the tile.',
+  'Diese Anwendungen laufen woanders und benutzen dieselbe Anmeldung. Ein Klick öffnet sie in einem eigenen Tab.':
+    'These applications run elsewhere and use the same sign-in. A click opens them in their own tab.',
+  'Fremde Anwendungen, die dieselbe Anmeldung benutzen. OTA legt den Zugang in Keycloak an und entscheidet, wer die Kachel sieht — was jemand darin darf, entscheidet die Anwendung selbst.':
+    'Other applications that use the same sign-in. OTA creates the access in Keycloak and decides who sees the tile — what someone may do inside is up to the application.',
+  'Dorthin schickt Keycloak nach der Anmeldung. Wer sie bestimmt, bestimmt, wohin die Identität der Nutzer fliesst — sie muss auf der Liste erlaubter Ziele stehen.':
+    'This is where Keycloak sends people after sign-in. Whoever sets it decides where your users\' identity flows — it must be on the list of allowed targets.',
+  'Das Geheimnis für {name} — es wird nur dieses eine Mal gezeigt.':
+    'The secret for {name} — it is shown this one time only.',
+  'Trag es jetzt in der Anwendung ein. Danach steht es nur noch in Keycloak; verloren heisst: ein neues erzeugen.':
+    'Enter it in the application now. After that it lives only in Keycloak; losing it means generating a new one.',
+  'Bevor die erste entstehen kann, muss unter Einstellungen stehen, wohin Anwendungen ihre Anmeldung schicken dürfen. Solange dort nichts steht, ist nichts erlaubt.':
+    'Before the first one can exist, Settings must say where applications may send their sign-in. As long as nothing is listed there, nothing is allowed.',
+  'Ein neues Geheimnis erzeugen? Das alte gilt danach nicht mehr, und die Anwendung meldet sich erst wieder an, wenn das neue dort eingetragen ist.':
+    'Generate a new secret? The old one stops working, and the application will not sign anyone in until the new one is entered there.',
+  '„{name}" entfernen? Der Zugang in Keycloak geht mit.':
+    'Remove "{name}"? The access in Keycloak goes with it.',
   'Verzeichnis in Keycloak': 'Directory in Keycloak',
   'eingerichtet': 'configured',
   'nicht eingerichtet': 'not configured',

@@ -37,6 +37,14 @@ PROFILE_QUOTA_GB = "storage.profile_quota_gb"
 # versteht — es ist ein Container, der beim Schreiben stehenbleibt.
 DISK_FLOOR_GB = "storage.disk_floor_gb"
 
+# Wohin eine externe Anwendung ihre Token bekommen darf.
+#
+# **Leer heisst: nichts ist erlaubt** — nicht: alles. Eine Schranke, die im
+# Auslieferungszustand offen steht, wird nie geschlossen (auth-roadmap.md
+# §5d). Eingetragen werden vollstaendige Herkuenfte mit Schema, damit ein
+# `http://` sichtbar eine Entscheidung ist und kein Versehen.
+APP_ORIGINS = "apps.allowed_origins"
+
 DEFAULTS: dict[str, Any] = {
     # Acht Stunden: ein Arbeitstag. Wer morgens kommt, meldet sich einmal an.
     AUTH_IDLE_MINUTES: 480,
@@ -103,3 +111,11 @@ def disk_floor_bytes(db: DbSession) -> int:
     except (TypeError, ValueError):
         gb = DEFAULTS[DISK_FLOOR_GB]
     return gb * 1024 ** 3
+
+
+def allowed_origins(db: DbSession) -> list[str]:
+    """Die erlaubten Ziele fuer externe Anwendungen. Leer heisst: keine."""
+    wert = get(db, APP_ORIGINS)
+    if isinstance(wert, list):
+        return [str(x).strip().rstrip("/") for x in wert if str(x).strip()]
+    return []

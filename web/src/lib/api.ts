@@ -257,6 +257,35 @@ export type KcVerzeichnisIn = {
   is_enabled: boolean
 }
 
+/** Eine fremde Web-Anwendung im Katalog. */
+export type WebApp = {
+  id: string
+  slug: string
+  name: string
+  description: string
+  icon: string
+  url: string
+  redirect_uri: string
+  client_id: string
+  is_enabled: boolean
+  sort_order: number
+  group_ids: string[]
+  /** Nur beim Anlegen gefüllt — danach steht es allein in Keycloak. */
+  client_secret: string | null
+}
+
+export type WebAppIn = {
+  name: string
+  slug?: string
+  description: string
+  icon: string
+  url: string
+  redirect_uri: string
+  is_enabled: boolean
+  sort_order: number
+  group_ids?: string[] | null
+}
+
 export type SharedListing = {
   path: string
   entries: SharedEntry[]
@@ -590,6 +619,16 @@ export const api = {
     }),
   filesRemove: (path: string) =>
     call<{ status: string }>(`/files?path=${encodeURIComponent(path)}`, { method: 'DELETE' }),
+
+  webApps: () => call<WebApp[]>('/webapps'),
+  addWebApp: (b: WebAppIn) =>
+    call<WebApp>('/webapps', { method: 'POST', body: JSON.stringify(b) }),
+  saveWebApp: (id: string, b: WebAppIn) =>
+    call<WebApp>(`/webapps/${id}`, { method: 'PUT', body: JSON.stringify(b) }),
+  removeWebApp: (id: string) =>
+    call<{ status: string }>(`/webapps/${id}`, { method: 'DELETE' }),
+  newWebAppSecret: (id: string) =>
+    call<{ client_secret: string }>(`/webapps/${id}/geheimnis`, { method: 'POST' }),
 
   keycloakStatus: () => call<KeycloakStatus>('/admin/identity/keycloak'),
   kcVerzeichnis: () => call<KcVerzeichnis>('/admin/identity/keycloak/verzeichnis'),

@@ -170,6 +170,37 @@ class TemplateIn(BaseModel):
     group_ids: list[uuid.UUID] | None = None
 
 
+class WebAppOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    slug: str
+    name: str
+    description: str
+    icon: str
+    url: str
+    redirect_uri: str
+    client_id: str
+    is_enabled: bool
+    sort_order: int
+    group_ids: list[uuid.UUID] = []
+    # Nur beim Anlegen gefuellt. Danach steht es allein in Keycloak — ein
+    # zweiter Ort waere ein zweiter Ort, an dem es verlorengehen kann.
+    client_secret: str | None = None
+
+
+class WebAppIn(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    slug: str = ""
+    description: str = ""
+    icon: str = "\u25c7"
+    url: str = Field(min_length=8)
+    redirect_uri: str = Field(min_length=8)
+    is_enabled: bool = True
+    sort_order: int = 0
+    group_ids: list[uuid.UUID] | None = None
+
+
 class KcVerzeichnisIn(BaseModel):
     """Eine Verzeichnisanbindung, wie sie die Oberfläche schickt.
 
@@ -446,6 +477,7 @@ class SettingsIn(BaseModel):
     # Optional, damit spaetere Einstellungen einzeln gesetzt werden koennen,
     # ohne die uebrigen mitzuschicken.
     auth_idle_minutes: int | None = None
+    app_origins: list[str] | None = None
     # 0 heisst jeweils: keine Grenze.
     profile_quota_gb: int | None = None
     disk_floor_gb: int | None = None

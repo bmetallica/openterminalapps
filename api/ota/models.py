@@ -40,6 +40,12 @@ PERMISSIONS = (
     "settings.manage",
     "audit.view",
     "registries.manage",
+    # Externe Anwendungen anlegen heisst: einen OIDC-Client in Keycloak
+    # erzeugen und bestimmen, wohin dessen Token fliessen. Das ist
+    # kategorisch etwas anderes als einen Arbeitsplatz zusammenzustellen —
+    # das eine bleibt auf dem Rechner, das andere leitet Identitaeten nach
+    # draussen (auth-roadmap.md §5d). Deshalb ein eigenes Recht.
+    "anwendungen.verwalten",
 )
 
 
@@ -379,6 +385,46 @@ class TemplateApp(Base):
     group_ids: Mapped[list] = mapped_column(JSONB, default=list)
 
     template: Mapped[Template] = relationship(back_populates="apps")
+
+
+class WebApp(Base):
+    """Eine fremde Web-Anwendung im Katalog (auth-roadmap.md, Etappe D).
+
+    OTA betreibt sie nicht — es kennt sie nur, entscheidet, wer sie sieht, und
+    hat in Keycloak den OIDC-Client dafuer angelegt. Was jemand *innerhalb*
+    der Anwendung darf, entscheidet die Anwendung selbst; OTA baut ihr
+    Rechtemodell nicht nach.
+    """
+
+    __tablename__ = "web_apps"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    slug: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(255))
+    description: Mapped[str] = mapped_column(Text, default="")
+    icon: Mapped[str] = mapped_column(String(16), default="◇")
+    # Wohin die Kachel fuehrt.
+    url: Mapped[str] = mapped_column(String(512))
+    # Wohin Keycloak den Code schickt. Der eigentlich heikle Wert.
+    redirect_uri: Mapped[str] = mapped_column(String(512))
+    # Der Client in Keycloak. Das Geheimnis steht **nicht** hier: Es wird beim
+    # Anlegen einmal gezeigt und danach nur noch in Keycloak gehalten.
+    client_id: Mapped[str] = mapped_column(String(128))
+    is_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    groups: Mapped[list[Group]] = relationship(secondary="group_web_apps", lazy="selectin")
+
+
+class GroupWebApp(Base):
+    __tablename__ = "group_web_apps"
+    group_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("groups.id", ondelete="CASCADE"), primary_key=True
+    )
+    web_app_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("web_apps.id", ondelete="CASCADE"), primary_key=True
+    )
 
 
 class GroupTemplate(Base):

@@ -602,3 +602,65 @@ def verzeichnis_abgleichen(voll: bool = False) -> dict[str, Any]:
         return resp.json()
     except Exception:  # noqa: BLE001
         return {"status": "ok"}
+
+
+# --- Clients für fremde Anwendungen (Etappe D) --------------------------
+
+def client_anlegen(client_id: str, name: str, redirect_uri: str) -> str:
+    """Legt einen OIDC-Client an und gibt sein Geheimnis zurück — einmal.
+
+    Das Geheimnis wird hier erzeugt und **nicht** in OTA gespeichert. Es steht
+    danach nur noch in Keycloak; wer es verliert, lässt ein neues erzeugen.
+    Ein zweiter Ort, an dem es liegt, wäre ein zweiter Ort, an dem es
+    verlorengehen kann.
+
+    Der Gruppen-Bereich `ota-groups` ist voreingestellt: Ohne ihn stünde im
+    Token keine Gruppenzugehörigkeit, und die fremde Anwendung könnte ihre
+    eigenen Rechte nicht daran hängen.
+    """
+    import secrets as _secrets
+
+    geheimnis = _secrets.token_urlsafe(32)
+    resp = ruf("POST", "/clients", json={
+        "clientId": client_id,
+        "name": name,
+        "enabled": True,
+        "publicClient": False,
+        "secret": geheimnis,
+        "standardFlowEnabled": True,
+        "directAccessGrantsEnabled": False,
+        "serviceAccountsEnabled": False,
+        "protocol": "openid-connect",
+        "redirectUris": [redirect_uri],
+        "webOrigins": ["+"],
+        "defaultClientScopes": ["profile", "email", "roles", "ota-groups"],
+    })
+    if resp.status_code == 409:
+        raise KeycloakFehler(f"Den Client \u201e{client_id}\u201c gibt es in Keycloak schon.")
+    if resp.status_code != 201:
+        raise KeycloakFehler(f"Client anlegen abgelehnt: {resp.text[:200]}")
+    return geheimnis
+
+
+def client_entfernen(client_id: str) -> None:
+    resp = ruf("GET", f"/clients?clientId={client_id}")
+    if resp.status_code != 200 or not resp.json():
+        return
+    kid = resp.json()[0]["id"]
+    ruf("DELETE", f"/clients/{kid}")
+
+
+def client_neues_geheimnis(client_id: str) -> str:
+    resp = ruf("GET", f"/clients?clientId={client_id}")
+    if resp.status_code != 200 or not resp.json():
+        raise KeycloakFehler(f"Den Client \u201e{client_id}\u201c gibt es in Keycloak nicht.")
+    kid = resp.json()[0]["id"]
+    neu = ruf("POST", f"/clients/{kid}/client-secret")
+    if neu.status_code not in (200, 201):
+        raise KeycloakFehler("Ein neues Geheimnis liess sich nicht erzeugen.")
+    return str(neu.json().get("value") or "")
+
+
+def client_da(client_id: str) -> bool:
+    resp = ruf("GET", f"/clients?clientId={client_id}")
+    return resp.status_code == 200 and bool(resp.json())

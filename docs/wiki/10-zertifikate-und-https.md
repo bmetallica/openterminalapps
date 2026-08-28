@@ -115,3 +115,71 @@ curl -o /dev/null -w "%{http_code} %{ssl_verify_result}\n" \
 # Enthält das Zertifikat die richtigen Namen?
 openssl x509 -in deploy/certs/ota.crt -noout -subject -dates -ext subjectAltName
 ```
+
+
+## OTA hinter einem weiteren Reverse Proxy ✅
+
+*Gemessen am 2026-08-28 mit Caddy unter `ota.boden.home`.*
+
+Steht vor OTA noch ein Reverse Proxy — weil dort ein Zertifikat liegt, dem alle Rechner ohnehin
+vertrauen —, sind zwei Einstellungen nötig. Ohne sie läuft OTA zwar, aber die Anmeldung führt an
+die **interne Adresse**, und das ist mehr als ein Schönheitsfehler: Es ist eine andere Herkunft,
+und daran hängt, dass die Desktop-Verknüpfungen in ihrem eigenen Fenster bleiben
+([Kapitel 3](03-arbeitsplatz.md)).
+
+### 1 · Der Proxy schickt Name und Port mit
+
+```caddy
+ota.boden.home {
+	reverse_proxy https://192.168.66.224:8443 {
+		transport http {
+			tls_trusted_ca_certs /etc/caddy/ota-ca.crt
+		}
+		# Ohne diese Zeile trägt Traefik seinen eigenen Port ein, und der
+		# Aussteller der Anmeldung heisst dann „…:8443" statt „…". Für einen
+		# OIDC-Client ist das ein anderer Aussteller, und er lehnt ab.
+		header_up X-Forwarded-Port 443
+		flush_interval -1
+	}
+}
+```
+
+`X-Forwarded-Host` setzt Caddy von selbst; den Port nicht.
+
+### 2 · Traefik muss dem Proxy glauben
+
+In `deploy/traefik/traefik.yml`:
+
+```yaml
+entryPoints:
+  websecure:
+    forwardedHeaders:
+      trustedIPs:
+        - "192.168.66.251/32"
+```
+
+Ohne diesen Eintrag **ersetzt** Traefik die Kopfzeilen des Proxys durch seine eigenen — er traut
+ihnen nicht, und das ist die richtige Vorgabe. Wer hier steht, darf behaupten, von wo eine Anfrage
+kommt, einschliesslich der Absender-IP, die in Protokollen und Sperren landet. Deshalb: nur der
+eigene Proxy.
+
+> **Die Adresse, unter der der Name auflöst, ist nicht unbedingt die, von der die Anfrage kommt.**
+> Hier löste `ota.boden.home` auf `192.168.66.1` auf, verbunden hat sich aber `192.168.66.251`.
+> Nachsehen statt raten:
+>
+> ```bash
+> curl -sk https://<name>/api/gibtsnicht -o /dev/null
+> docker logs ota-traefik --tail 5 | grep gibtsnicht
+> ```
+>
+> Die erste Spalte ist der Absender.
+
+### Prüfen, ob es stimmt
+
+```bash
+curl -sk https://<name>/auth/realms/ota/.well-known/openid-configuration \
+  | python3 -c "import json,sys; print(json.load(sys.stdin)['issuer'])"
+```
+
+Dort muss **genau** die Adresse stehen, unter der der Browser OTA sieht — ohne Port, wenn es 443
+ist. Steht dort die interne IP, fehlt Punkt 2; steht dort ein `:8443`, fehlt Punkt 1.

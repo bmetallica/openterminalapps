@@ -12,6 +12,36 @@ entryPoints:
     address: ":8443"
     http:
       tls: {}
+    # Wem wir glauben, wenn er sagt, unter welchem Namen der Browser uns sieht.
+    #
+    # Steht OTA hinter einem weiteren Reverse Proxy (hier Caddy unter
+    # ota.boden.home), schickt der die urspruengliche Adresse in
+    # X-Forwarded-Host mit. Traefik **ersetzt** solche Kopfzeilen aber, solange
+    # der Absender nicht ausdruecklich als vertrauenswuerdig gilt — und dann
+    # sieht Keycloak nur noch Traefik selbst.
+    #
+    # Die Folge war messbar und unangenehm: Wer ueber ota.boden.home kam, wurde
+    # zur Anmeldung an https://192.168.66.224:8443 geschickt. Das ist eine
+    # **andere Herkunft** — und genau daran haengt, dass die
+    # Desktop-Verknuepfungen in ihrem Fenster bleiben (auth-roadmap.md §5.6).
+    # Nebenbei stand die interne Adresse in der Adresszeile.
+    #
+    # Hier gehoert **nur** der eigene Reverse Proxy hinein. Wer hier steht,
+    # darf behaupten, von wo eine Anfrage kommt — inklusive der Absender-IP,
+    # die in Protokollen und Sperrlisten landet. Leer lassen, wenn OTA direkt
+    # erreichbar ist.
+    #
+    # **Die Adresse, unter der der Name aufloest, ist nicht unbedingt die, von
+    # der die Anfrage kommt.** Hier loest ota.boden.home auf 192.168.66.1 auf,
+    # der Proxy verbindet sich aber von 192.168.66.251. Nachsehen statt raten:
+    #
+    #   curl -sk https://<name>/api/gibtsnicht -o /dev/null
+    #   docker logs ota-traefik --tail 5 | grep gibtsnicht
+    #
+    # Die erste Spalte ist der Absender.
+    forwardedHeaders:
+      trustedIPs:
+        - "192.168.66.251/32"
   # Dashboard. Der Name MUSS "traefik" lauten — an diesen Entrypoint bindet
   # sich api.insecure fest. Im Compose nur an 127.0.0.1 gebunden.
   traefik:

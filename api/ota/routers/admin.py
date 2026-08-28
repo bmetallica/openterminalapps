@@ -535,6 +535,7 @@ def read_settings(db: DbSession = Depends(get_db)) -> dict:
         "auth_idle_steps": list(settings_store.IDLE_STEPS),
         "profile_quota_gb": settings_store.profile_quota_bytes(db) // 1024 ** 3,
         "disk_floor_gb": settings_store.disk_floor_bytes(db) // 1024 ** 3,
+        "app_origins": settings_store.allowed_origins(db),
     }
 
 
@@ -555,6 +556,27 @@ def write_settings(
 
     # 0 heisst „keine Grenze" und ist damit ein zulaessiger Wert, kein
     # fehlender. Deshalb `is not None` und nicht `if body.x`.
+    if body.app_origins is not None:
+        # Wohin externe Anwendungen ihre Anmeldung schicken duerfen.
+        #
+        # Geprueft wird hier und nicht im Formular: Eine Pruefung, die nur im
+        # Browser stattfindet, ist keine. Vollstaendige Herkuenfte, damit ein
+        # `http://` sichtbar eine Entscheidung ist und kein Versehen — ueber
+        # eine unverschluesselte Verbindung wandert ein Anmeldecode im Klartext.
+        from urllib.parse import urlparse
+
+        sauber: list[str] = []
+        for eintrag in body.app_origins:
+            teil = urlparse(str(eintrag).strip().rstrip("/"))
+            if teil.scheme not in ("http", "https") or not teil.netloc or teil.path:
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    f"„{eintrag}“ ist keine Herkunft. Erwartet wird etwas wie "
+                    "https://ai.firma.de — mit Schema, ohne Pfad.",
+                )
+            sauber.append(f"{teil.scheme}://{teil.netloc}")
+        settings_store.put(db, settings_store.APP_ORIGINS, sorted(set(sauber)))
+
     if body.profile_quota_gb is not None:
         if not 0 <= body.profile_quota_gb <= 10_000:
             raise HTTPException(status.HTTP_400_BAD_REQUEST,

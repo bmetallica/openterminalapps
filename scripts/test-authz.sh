@@ -447,6 +447,102 @@ CODE=$(curl -s --cacert "$CA" -o /dev/null -w '%{http_code}' \
   -d "{\"username\":\"$ADMIN_USER\",\"password\":\"$ADMIN_PW\"}")
 expect "200" "$CODE" "Die Anmeldung läuft unverändert über OTA"
 
+# ------------------------------------------------ Fremde Anwendungen
+#
+# Etappe D. Eine Anwendung anzulegen heisst, in Keycloak einen OIDC-Client zu
+# erzeugen — und darin steht, wohin die Identität der Nutzer fliesst. Geprüft
+# werden deshalb vor allem die beiden Schlösser (§5d): das Recht und die Liste
+# erlaubter Ziele.
+echo
+echo "Fremde Anwendungen"
+
+CODE=$(code "$TMP/user.jar" -X POST "$BASE/api/webapps" \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Fremd","url":"https://x.example/","redirect_uri":"https://x.example/cb"}')
+expect "403" "$CODE" "Ohne das eigene Recht entsteht keine Anwendung"
+
+VORHER=$(api "$TMP/admin.jar" "$BASE/api/admin/settings" | jqp "
+__import__('json').dumps(d.get('app_origins') or [])")
+
+# Erstes Schloss: die Liste. Leer heisst nichts erlaubt — nicht alles.
+api "$TMP/admin.jar" -X PUT "$BASE/api/admin/settings" -H 'Content-Type: application/json' \
+  -d '{"app_origins":[]}' >/dev/null
+ANTWORT=$(api "$TMP/admin.jar" -X POST "$BASE/api/webapps" -H 'Content-Type: application/json' \
+  -d '{"name":"Pruef","url":"https://pruef.example/","redirect_uri":"https://pruef.example/cb"}')
+grep -q "kein Ziel freigegeben" <<<"$ANTWORT" \
+  && ok "Eine leere Liste erlaubt nichts, nicht alles" \
+  || bad "Ohne Freigabe entstand etwas: $ANTWORT"
+
+api "$TMP/admin.jar" -X PUT "$BASE/api/admin/settings" -H 'Content-Type: application/json' \
+  -d '{"app_origins":["https://pruef.example"]}' >/dev/null
+
+ANTWORT=$(api "$TMP/admin.jar" -X POST "$BASE/api/webapps" -H 'Content-Type: application/json' \
+  -d '{"name":"Umleitung","url":"https://pruef.example/","redirect_uri":"https://sammel-server.example/abholen"}')
+grep -q "erlaubter Ziele" <<<"$ANTWORT" \
+  && ok "Ein Ziel neben der Liste wird abgelehnt" \
+  || bad "Ein fremdes Ziel wurde angenommen: $ANTWORT"
+
+ANTWORT=$(api "$TMP/admin.jar" -X POST "$BASE/api/webapps" -H 'Content-Type: application/json' \
+  -d '{"name":"Platzhalter","url":"https://pruef.example/","redirect_uri":"https://pruef.example/*"}')
+grep -q "Platzhalter" <<<"$ANTWORT" \
+  && ok "Ein Platzhalter in der Adresse ebenso" \
+  || bad "Ein Platzhalter kam durch: $ANTWORT"
+
+NEU=$(api "$TMP/admin.jar" -X POST "$BASE/api/webapps" -H 'Content-Type: application/json' \
+  -d '{"name":"Prüfanwendung","url":"https://pruef.example/","redirect_uri":"https://pruef.example/oauth/callback"}')
+APP_ID=$(jqp "d.get('id','')" <<<"$NEU")
+CLIENT=$(jqp "d.get('client_id','')" <<<"$NEU")
+GEHEIM=$(jqp "d.get('client_secret') or ''" <<<"$NEU")
+
+if [ -z "$APP_ID" ]; then
+  bad "Die Anwendung liess sich nicht anlegen: $NEU"
+else
+  ok "Anwendung angelegt ($CLIENT)"
+  [ ${#GEHEIM} -ge 20 ] && ok "Das Geheimnis kommt einmal zurück (${#GEHEIM} Zeichen)" \
+                        || bad "Kein Geheimnis in der Antwort"
+
+  NOCHMAL=$(api "$TMP/admin.jar" "$BASE/api/webapps" | jqp "
+next((str(a.get('client_secret')) for a in d if a['id'] == '$APP_ID'), '')")
+  expect "None" "$NOCHMAL" "Und danach nie wieder"
+
+  # Der Client muss in Keycloak wirklich stehen — und nur die eingetragene
+  # Adresse annehmen. Das ist die Schranke, die zählt: Sie liegt nicht in OTA.
+  KCC=$(docker exec -i ota-agent curl -s -o /dev/null -w '%{http_code}' \
+    "http://ota-keycloak:8080/auth/realms/ota/protocol/openid-connect/auth?client_id=$CLIENT&response_type=code&scope=openid&redirect_uri=https%3A%2F%2Fpruef.example%2Foauth%2Fcallback&state=x")
+  expect "200" "$KCC" "Keycloak kennt den Client und nimmt seine Adresse an"
+
+  KCF=$(docker exec -i ota-agent curl -s -o /dev/null -w '%{http_code}' \
+    "http://ota-keycloak:8080/auth/realms/ota/protocol/openid-connect/auth?client_id=$CLIENT&response_type=code&scope=openid&redirect_uri=https%3A%2F%2Fsammel-server.example%2Fweg&state=x")
+  expect "400" "$KCF" "Eine fremde Adresse weist Keycloak zurück"
+
+  # Sichtbarkeit je Gruppe.
+  GID=$(api "$TMP/admin.jar" "$BASE/api/admin/groups" | jqp "
+next((g['id'] for g in d if g['name'] == 'admins'), '')")
+  if [ -n "$GID" ]; then
+    api "$TMP/admin.jar" -X PUT "$BASE/api/webapps/$APP_ID" -H 'Content-Type: application/json' \
+      -d "{\"name\":\"Prüfanwendung\",\"url\":\"https://pruef.example/\",
+           \"redirect_uri\":\"https://pruef.example/oauth/callback\",
+           \"description\":\"\",\"icon\":\"◇\",\"is_enabled\":true,\"sort_order\":0,
+           \"group_ids\":[\"$GID\"]}" >/dev/null
+    SIEHT=$(api "$TMP/user.jar" "$BASE/api/webapps" | jqp "
+str(len([a for a in d if a['id'] == '$APP_ID']))")
+    expect "0" "$SIEHT" "Wer nicht in der Gruppe ist, sieht die Kachel nicht"
+  fi
+
+  api "$TMP/admin.jar" -X DELETE "$BASE/api/webapps/$APP_ID" >/dev/null
+  WEGKC=$(docker exec -i ota-agent curl -s -o /dev/null -w '%{http_code}' \
+    "http://ota-keycloak:8080/auth/realms/ota/protocol/openid-connect/auth?client_id=$CLIENT&response_type=code&scope=openid&redirect_uri=https%3A%2F%2Fpruef.example%2Foauth%2Fcallback&state=x")
+  [ "$WEGKC" != "200" ] && ok "Löschen nimmt den Zugang in Keycloak mit ($WEGKC)" \
+                        || bad "Der Client lebt in Keycloak weiter"
+fi
+
+# Die Liste wieder auf den alten Stand — dieser Test hinterlässt keine Spuren.
+api "$TMP/admin.jar" -X PUT "$BASE/api/admin/settings" -H 'Content-Type: application/json' \
+  -d "{\"app_origins\": $VORHER}" >/dev/null
+ZURUECK=$(api "$TMP/admin.jar" "$BASE/api/admin/settings" | jqp "
+__import__('json').dumps(d.get('app_origins') or [])")
+expect "$VORHER" "$ZURUECK" "Die Liste erlaubter Ziele steht wieder wie vorher"
+
 # ------------------------------------------- Anmeldung über Keycloak
 #
 # Etappe B: Ein Token von Keycloak wird zum Nachweis. Das ist die Stelle, an

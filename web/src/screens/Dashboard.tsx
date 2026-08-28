@@ -3,6 +3,7 @@ import { Led, stateClass } from '../components/controls'
 import {
   ApiError, api,
   type Me, type MyStorage, type Session, type Stream, type Template,
+  type WebApp as WebAppT,
 } from '../lib/api'
 import { ago, duration, gb } from '../lib/format'
 import { t as tr, useLang } from '../lib/i18n'
@@ -94,6 +95,58 @@ function Bay({ session, template, onOpen, onAct, onApp, busy, busyApp }: {
           onClick={() => onAct(session, 'stop')}>■</button>
       </div>
     </article>
+  )
+}
+
+/**
+ * Fremde Web-Anwendungen (auth-roadmap.md, Etappe D).
+ *
+ * Sie stehen neben den Arbeitsplätzen und sehen ähnlich aus, sind aber etwas
+ * anderes: Hier startet nichts, hier wird nur eine Tür aufgemacht. Deshalb
+ * ein eigener Abschnitt und keine Kachel dazwischen — eine Kachel, die
+ * manchmal einen Container hochfährt und manchmal einen Tab öffnet, wäre
+ * unberechenbar.
+ *
+ * Wer nichts zugewiesen bekommen hat, sieht den Abschnitt gar nicht.
+ */
+function WebAppSection({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad') => void }) {
+  const [apps, setApps] = useState<WebAppT[]>([])
+
+  useEffect(() => {
+    api.webApps().then((a) => setApps(a.filter((x) => x.is_enabled))).catch(() => setApps([]))
+  }, [])
+
+  if (apps.length === 0) return null
+
+  return (
+    <section className="section">
+      <div className="section__head">
+        <span className="silk">{tr('Weitere Anwendungen')}</span>
+        <span className="section__rule" />
+        <span className="silk data">{apps.length}</span>
+      </div>
+      <div className="tiles">
+        {apps.map((a) => (
+          <button key={a.id} className="tile" onClick={() => {
+            onToast(tr('{name} wird geöffnet…', { name: a.name }))
+            openInTab(a.url)
+          }}>
+            <span className="tile__top">
+              <span className="tile__icon" aria-hidden="true">{a.icon}</span>
+              <span className="tile__name">{a.name}</span>
+            </span>
+            <span className="tile__desc">{a.description}</span>
+            <span className="tile__foot">
+              <span className="silk data">{new URL(a.url).host}</span>
+              <span className="silk" style={{ color: 'var(--key)' }}>{tr('Öffnen')}</span>
+            </span>
+          </button>
+        ))}
+      </div>
+      <p className="field__hint" style={{ marginTop: 10 }}>
+        {tr('Diese Anwendungen laufen woanders und benutzen dieselbe Anmeldung. Ein Klick öffnet sie in einem eigenen Tab.')}
+      </p>
+    </section>
   )
 }
 
@@ -331,6 +384,8 @@ export function Dashboard({ me, onOpen, onToast }: {
           </div>
         )}
       </section>
+
+      <WebAppSection onToast={onToast} />
 
       <ShortcutSection templates={available} />
 
