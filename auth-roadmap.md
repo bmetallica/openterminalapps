@@ -399,11 +399,12 @@ Dazu gemessen: Arbeitsspeicher im Leerlauf, Startzeit, Grösse des Abbilds.
 Wer beide Läufe besteht, gewinnt über die weichen Kriterien. Wer bei 1 oder 3 stolpert, ist raus —
 egal wie gut der Rest aussieht.
 
-### Und die Entscheidung bleibt umkehrbar
+### Eine schmale Schicht dazwischen
 
-Unabhängig vom Ausgang: OTA spricht mit dem Identity Provider **nicht direkt**, sondern durch eine
-schmale eigene Schicht — dieselbe Idee wie `agent_client.py` gegenüber Docker. Ungefähr zehn
-Vorgänge:
+OTA spricht mit Keycloak **nicht verstreut**, sondern durch eine eigene Schicht — dieselbe Idee wie
+`agent_client.py` gegenüber Docker. Nicht als Notausgang, sondern aus demselben Grund wie dort:
+Keycloak-Eigenheiten sollen an **einer** Stelle stehen und nicht in fünfzehn Routern, und diese
+Stelle lässt sich in den Prüfreihen ersetzen. Ungefähr zehn Vorgänge:
 
 ```
 konto_anlegen · konto_sperren · konto_finden
@@ -412,48 +413,28 @@ verzeichnis_konfigurieren · verzeichnis_testen
 client_anlegen · client_entfernen
 ```
 
-Dahinter liegt eine Umsetzung je Kandidat. Damit ist die Wahl eine Implementierungsfrage und keine
-Architekturentscheidung — und ein späterer Wechsel kostet eine Datei, nicht den Umbau.
+Damit hat der Umbau genau eine Naht zur fremden Software, und die Prüfreihen können sie
+durchtrennen, ohne ein echtes Keycloak zu brauchen.
 
-### Was die Entscheidung für Keycloak kostet — und was daraus folgt
+### Was die Entscheidung für Keycloak kostet
 
-Der Punkt, an dem authentik vorn lag, verschwindet durch die Entscheidung nicht. Er wird zur
-Auflage.
+Keycloak ist der schwerste Dienst im Stapel; empfohlen werden 4 GB, im Produktivbetrieb mehr. Das
+ist eingepreist und **keine offene Frage**: Wenn die Anlage produktiv 8 GB dafür braucht, bekommt
+sie 8 GB. Eine Identitätsschicht, durch die jede Anmeldung läuft, ist keine Stelle zum Sparen.
 
-Gemessen auf diesem Rechner am 2026-08-28:
+Für **diese Entwicklungsmaschine** ist ein Deckel trotzdem sinnvoll, damit Keycloak beim Entwickeln
+nicht die Arbeitsplatz-Container verdrängt — hier sind 15 GiB gesamt und 6,9 GiB frei, bei 3 GiB
+Deckel je Arbeitsplatz:
 
+```yaml
+# nur für die Entwicklungsmaschine; produktiv unbegrenzt
+environment:
+  JAVA_OPTS_APPEND: "-Xms256m -Xmx512m"
+mem_limit: 1g
 ```
-Gesamt              15 GiB
-belegt               8,4 GiB
-verfügbar            6,9 GiB
 
-davon OTA-Sessions   2,2 GiB   (zwei Arbeitsplätze, Deckel je 3 GiB)
-alle Container       5,3 GiB   (samt Kasm und allem übrigen)
-```
-
-Zwei weitere Arbeitsplätze schöpfen den Rest aus. Keycloak mit den empfohlenen 4 GB obendrauf
-**passt hier nicht nebenher** — jedenfalls nicht, wenn man es unbeaufsichtigt lässt.
-
-Daraus folgen zwei Auflagen für Etappe A, und beide sind nicht verhandelbar:
-
-1. **Der Heap wird ausdrücklich gedeckelt.** Die JVM bemisst ihren Heap standardmässig an dem, was
-   sie im Container sieht (`MaxRAMPercentage`). Ohne Deckel greift Keycloak auf einem 15-GiB-Host
-   grosszügig zu — und zwar nicht, weil es das braucht, sondern weil es darf. Für eine Anlage
-   dieser Grösse sind 512 MB Heap reichlich:
-
-   ```yaml
-   environment:
-     JAVA_OPTS_APPEND: "-Xms256m -Xmx512m"
-   mem_limit: 1g
-   ```
-
-2. **Gemessen wird, bevor gebaut wird.** Etappe A endet erst, wenn Keycloak unter dieser Grenze
-   über eine Woche stabil läuft — mit angebundenem Verzeichnis, nicht im Leerlauf. Bleibt es nicht
-   darunter, ist das der Zeitpunkt, an dem die Entscheidung ehrlich noch einmal aufgemacht wird,
-   und nicht später.
-
-Damit bleibt die Wahl auch praktisch reversibel — zusammen mit der schmalen Zwischenschicht
-unten, die ohnehin gebaut wird.
+Ohne Angabe bemisst die JVM ihren Heap an dem, was sie im Container sieht. Das ist produktiv
+richtig und beim Entwickeln lästig — mehr steckt nicht dahinter.
 
 ---
 
@@ -625,6 +606,71 @@ zusammen, und hier zahlt sich die Entscheidung von vorhin aus.
 
 ---
 
+## 5e · Vier Dinge, die noch niemand angefasst hat
+
+Beim Durchgehen des Bestands gefunden. Keine Entscheidungen — Arbeit, die im Plan fehlte.
+
+### Die Prüfreihen melden sich mit Benutzername und Passwort an
+
+Alle vier Skriptreihen tun das, `scripts/test-authz.sh` allein neunmal:
+
+```bash
+api -X POST "$BASE/api/auth/login" -d '{"username":…,"password":…}'
+```
+
+Mit der Umstellung gibt es diesen Endpunkt so nicht mehr — und damit brechen **257 Prüfungen** auf
+einen Schlag. Das ist kein Randproblem: Ohne Prüfreihen lässt sich der Umbau nicht verantworten,
+und ausgerechnet er braucht sie am dringendsten.
+
+Der Weg dafür ist vorgesehen: Keycloak kann für einen Client **Direct Access Grants** erlauben —
+Benutzername und Passwort direkt gegen ein Token, ohne Browser. Ein eigener Client `ota-tests`,
+nur dafür, im mitgelieferten Realm. Die Reihen tauschen dann eine Zeile aus und laufen weiter.
+
+Gehört in **Etappe B**, zusammen mit der Umstellung selbst. Nicht danach.
+
+### Keycloaks Daten sind nicht in der Sicherung
+
+`make backup` sichert genau eine Datenbank und die Profile:
+
+```makefile
+pg_dump -U $POSTGRES_USER $POSTGRES_DB          # nur "ota"
+tar … -C / srv/ota/profiles
+```
+
+Läuft Keycloak in einem eigenen Schema oder einer eigenen Datenbank, ist es **nicht dabei**. Eine
+Wiederherstellung brächte dann OTA zurück, dessen Nutzer auf Identitäten zeigen, die es nicht mehr
+gibt — Sessions, Profile und Kontingente hingen an `external_id`-Werten ohne Gegenstück.
+
+Gehört in **Etappe A**, mit dem Dienst selbst. Und zusätzlich in die Wiederherstellungsprobe: Ein
+Backup, dessen Wiederherstellung nie geprüft wurde, ist kein Backup.
+
+### Zwei Uhren, die nichts voneinander wissen
+
+Keycloak hat eigene Sitzungsdauern (SSO-Session, Token-Lebensdauer), OTA hat `idle_minutes` je
+Vorlage und ein rollendes Cookie. Nach der Umstellung laufen beide nebeneinander.
+
+Der unangenehme Fall: Keycloaks Sitzung läuft ab, OTAs Cookie ist frisch. Dann arbeitet jemand in
+OTA weiter, während der Provider ihn längst nicht mehr kennt.
+
+Vorschlag, in Etappe B zu bestätigen: **Innerhalb von OTA gilt OTAs Uhr.** Keycloaks Sitzung
+entscheidet über die *Anmeldung*, nicht über die Weiterarbeit; ein Widerruf wirkt über
+Back-Channel-Logout, nicht über Ablauf. Das ist verständlich und hat keine Lücke — vorausgesetzt,
+Back-Channel-Logout funktioniert wirklich, und genau das ist zu prüfen.
+
+### Abmelden — nur hier oder überall?
+
+Klickt jemand in OTA auf **Abmelden**: gilt das nur für OTA, oder auch für Open WebUI und alles
+Weitere?
+
+Beides ist vertretbar. Für ein Portal spricht einiges dafür, dass „Abmelden" wirklich abmeldet —
+sonst bleibt an einem geteilten Rechner eine offene Sitzung zurück, die niemand vermutet. Dagegen
+spricht die Überraschung, dass ein Klick in OTA drei andere Fenster mitnimmt.
+
+Vorschlag: **beides anbieten** — „Abmelden" für OTA, „Überall abmelden" daneben. Zu entscheiden in
+Etappe D, wenn es die erste zweite Anwendung überhaupt gibt.
+
+---
+
 ## 6 · Etappen
 
 Jede Etappe endet in einem Zustand, in dem alles läuft. Keine Etappe lässt sich nur zusammen mit
@@ -636,14 +682,13 @@ der nächsten abschliessen.
   Nachträglich eingezogen wäre das ein Umbau — die Frage „darf ich das hier überhaupt?" durchzieht
   jeden Aufruf gegen die Admin-API
 - Rechteprüfung beim Verbinden; die Oberfläche zeigt nur, was wirklich geht
+- **Keycloaks Daten in `make backup`** und in die Wiederherstellungsprobe (5e)
 - Nur intern erreichbar; Traefik veröffentlicht es unter `/auth`
 - `ota-manager`-Client mit Dienstkonto, Rechte wie oben
 - `make setup` erzeugt das Realm-Grundgerüst
 - Das Notfallkonto (5.2) entsteht **hier**, nicht in E: Ab dem Moment, in dem Keycloak im
   Anmeldeweg steht, muss der Ausweg schon existieren
-- Heap gedeckelt, Container begrenzt, Speicherverbrauch über eine Woche beobachtet (5a)
-- **Fertig, wenn:** OTA unverändert weiterläuft, niemand einen Unterschied bemerkt — und der
-  Rechner die zusätzliche Last trägt, ohne dass Arbeitsplätze knapp werden
+- **Fertig, wenn:** OTA unverändert weiterläuft und niemand einen Unterschied bemerkt
 
 ### B · OTA meldet sich über Keycloak an
 - Autorisierungs-Code-Fluss mit PKCE; OTA tauscht den Code und setzt sein eigenes Cookie
@@ -651,6 +696,8 @@ der nächsten abschliessen.
 - Abmeldung in Keycloak beendet OTA-Sitzungen über Back-Channel-Logout (`token_epoch` +1)
 - Die Gruppenpflicht zur zweiten Stufe (`require_totp`) als Keycloak-Authentifizierungsfluss
   nachgebaut und geprüft — das ist mehr als eine Übersetzung (5.3)
+- **Client `ota-tests` mit Direct Access Grants**, damit die vier Skriptreihen weiterlaufen (5e).
+  Zusammen mit der Umstellung, nicht danach — sonst steht der Umbau ohne Prüfung da
 - **Fertig, wenn:** Anmeldung, Streams, `forwardAuth` und die Desktop-Verknüpfungen unverändert
   funktionieren — gemessen, nicht vermutet
 
@@ -686,9 +733,8 @@ der nächsten abschliessen.
 Damit die Entscheidung mit offenen Augen fällt:
 
 - **Ein weiterer Dienst, und zwar der schwerste im Stapel.** Keycloak ist eine Java-Anwendung;
-  empfohlen werden 4 GB. Dieser Rechner hat 6,9 GiB frei, und zwei Arbeitsplätze belegen davon
-  schon 2,2 GiB. Deshalb die Auflage aus 5a: Heap gedeckelt, Container begrenzt, in Etappe A eine
-  Woche lang gemessen.
+  empfohlen werden 4 GB, produktiv mehr. Das ist eingepreist — eine Identitätsschicht ist keine
+  Stelle zum Sparen. Auf der Entwicklungsmaschine gedeckelt, produktiv nicht (5a).
 - **Ein zweiter Ort für Wahrheit.** Nutzer stehen künftig in Keycloak *und* — als Projektion — in
   OTA. Jede Projektion kann veralten. Wann abgeglichen wird und was bei Widerspruch gilt, muss
   festgeschrieben sein, sonst wird es zur Fehlerquelle.
@@ -723,11 +769,11 @@ Keycloak steht unter Apache-2.0 und passt damit zur Lizenzlage von OTA. Es gehö
 | 5 | Profil- und Ablagepfade | Nach `sub` benannt, Verweis unter dem Namen | Vorschlag (§4) |
 | 6 | Eigener Realm statt `master` | Ja, zwingend (falls Keycloak) | ergibt sich aus 5.5 |
 | 7 | **Welcher Identity Provider** | **Keycloak** — die konservative Wahl: tiefste AD-Föderation, Apache-2.0, CNCF. Zitadel, Authelia, Dex, Ory und Kanidm sind an den Anforderungen gescheitert, authentik unterlag | **entschieden** 2026-08-28 |
-| 7a | Speicherobergrenze für Keycloak | Heap auf 512 MB gedeckelt, Container auf 1 GB, in Etappe A über eine Woche gemessen | ergibt sich aus 5a |
+| 7a | Speicherbedarf | Eingepreist. Produktiv bekommt Keycloak, was es braucht; auf der Entwicklungsmaschine ein Deckel, damit es die Arbeitsplätze nicht verdrängt | ergibt sich aus 5a |
 | 9 | Mitgeliefert oder vorhanden | **Beides** — im Stack als Vorgabe, ein vorhandenes anbindbar; dort ist OTA Gast und löscht nichts | **entschieden** 2026-08-28 |
 | 10 | Wann ein Rechteentzug greift | Gruppen bei der nächsten Anmeldung; Sperre und erzwungene Abmeldung sofort | **entschieden** 2026-08-28 |
 | 11 | Wer Anwendungen anlegen darf | Eigenes Recht `anwendungen.verwalten` **und** eine Liste erlaubter Ziel-Domains; leere Liste erlaubt nichts | **entschieden** 2026-08-28 |
-| 8 | Zugriff über eine eigene schmale Schicht | Ja — die Wahl bleibt damit umkehrbar | ergibt sich aus 5a |
+| 8 | Zugriff über eine eigene schmale Schicht | Ja — eine Naht zur fremden Software, in Prüfreihen ersetzbar | ergibt sich aus 5a |
 
 ### Noch offen, aber später zu beantworten
 
