@@ -51,9 +51,39 @@ MAX_APP_DISPLAYS = 6
 # `clipboard_seamless` bleibt bewusst aus: den Abgleich mit der System-
 # zwischenablage macht die Bruecke im Elternfenster, das dafuer auch die
 # Rechte hat.
+#
+# `idle_disconnect` ist der vierte — und der teuerste. KasmVNC trennt von
+# sich aus nach 20 Minuten **ohne Eingabe**:
+#
+#     const s = (Date.now() - rfb.lastActiveAt) / 1000
+#     let l = 1200
+#     if (Number.isFinite(parseFloat(rfb.idleDisconnect)))
+#         l = parseFloat(rfb.idleDisconnect) * 60
+#     if (s > l) window.location.replace("disconnect…")
+#
+# Gezaehlt werden nur Maus und Tastatur. Wer einem langen Build zusieht, ohne
+# das Fenster anzufassen, fliegt heraus — und weil `reconnect` im Client aus
+# ist, bleibt das Bild danach einfach weg. Fuer den Benutzer sah das aus, als
+# haette OTA die Session beendet, lange vor der eingestellten Grenze.
+#
+# Ueber die Laufzeit einer Session entscheidet OTA, nicht der Client: Solange
+# ein Fenster offen ist, kommt alle 30 Sekunden ein Herzschlag, und erst wenn
+# der ausbleibt, greift `idle_minutes` der Vorlage (api/ota/main.py).
+#
+# Ueber die Adresse laesst sich die Uhr nur bis 60 Minuten stellen: Das Feld
+# ist im Client ein `<select>` mit genau vier Werten (10, 20, 30, 60). Ein
+# Wert, den es dort nicht gibt, wird nicht etwa uebernommen, sondern faellt
+# auf den **ersten** Eintrag zurueck — aus einem gut gemeinten `525600` wurden
+# gemessene 10 Minuten, also die Halbierung dessen, was ohne den Parameter da
+# gestanden haette. Eine `0` waere noch schlimmer: `parseFloat("0")` ist
+# endlich, die Grenze damit null Sekunden, die Verbindung faellt sofort.
+#
+# 60 Minuten sind deshalb nur die Untergrenze. Ganz aus macht sie der Viewer,
+# sobald das Bild steht — er schickt dem Client eine Nachricht, die an dem
+# `<select>` vorbeigeht (siehe web/src/screens/SessionViewer.tsx).
 STREAM_ARGS = (
     "&clipboard_up=1&clipboard_down=1&clipboard_seamless=0"
-    "&resize=remote"
+    "&resize=remote&idle_disconnect=60"
 )
 
 
@@ -384,6 +414,25 @@ def start_session(
     return _out(sess)
 
 
+def _display_lebt(sess: SessionModel, stream) -> bool:
+    """Gibt es das X-Display dieses Streams im Container ueberhaupt noch?
+
+    Ein Display kann sterben, ohne dass jemand OTA davon erzaehlt: Die
+    Anwendung stuerzt ab, jemand beendet `Xvnc` von Hand, der Speicher geht
+    aus. Danach steht in der Datenbank „running", und der Browser zeigt einen
+    abgerissenen Stream.
+
+    Bei Zweifeln ja: Antwortet der Agent nicht, ist die Aussage „das Display
+    ist weg" nicht gedeckt.
+    """
+    if not sess.container_id:
+        return False
+    try:
+        return stream.display_num in agent_client.list_displays(sess.container_id)
+    except HTTPException:
+        return True
+
+
 def _really_alive(sess: SessionModel) -> bool:
     """Gibt es den Container dieser Session ueberhaupt noch?
 
@@ -540,10 +589,19 @@ def start_app(
     _ensure_clipboard_bridge(sess)
 
     existing = next((s for s in sess.streams if s.app_slug == slug), None)
-    if existing and existing.status == "running":
+    if existing and existing.status == "running" and _display_lebt(sess, existing):
         existing.last_seen_at = datetime.now(timezone.utc)
         db.commit()
         return _out(sess)
+    if existing and existing.status == "running":
+        # Der Eintrag sagt „laeuft", das Display gibt es nicht mehr. Ohne
+        # diese Pruefung kehrte der Start hier zurueck, ohne etwas zu tun —
+        # und die Anwendung waere fuer immer tot: Der Tab zeigt einen
+        # abgerissenen Stream, und der Startknopf im Dashboard bewirkt
+        # nichts. Gemessen am 2026-08-28.
+        log.info("Display :%s von %s ist weg — wird neu aufgemacht",
+                 existing.display_num, slug)
+        existing.status = "stopped"
 
     rights = sess.template.rights or {}
 

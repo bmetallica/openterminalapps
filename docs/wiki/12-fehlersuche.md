@@ -20,6 +20,61 @@ statt auf `running` — das Dashboard versucht es dann weiter, statt eine Sackga
 Kommt die Seite trotzdem, ist die Session wirklich weg: beendet, aufgeräumt oder der Container
 gestorben. Ein Blick in **Betrieb → Sessions** zeigt, was gilt.
 
+## Der Stream bricht nach Minuten ab, obwohl die Grenze bei Stunden steht
+
+Zwei Ursachen, die zusammen genau das Bild ergaben: Man sieht einem Build zu oder liest ein langes
+Dokument, fasst dabei weder Maus noch Tastatur an — und irgendwann ist das Bild weg und kommt nicht
+wieder. In **Betrieb → Sessions** steht die Session weiter auf `running`.
+
+**Erstens: Der Client hatte seine eigene Uhr.** KasmVNC trennt von sich aus nach 20 Minuten *ohne
+Eingabe*; gezählt werden nur Maus und Tastatur, nicht der Bildinhalt. Zusehen zählt dort als
+Nichtstun. Weil `reconnect` im Client aus ist, blieb es danach schwarz.
+
+```js
+// aus dem Client, /usr/share/kasmvnc/www/assets/ui-*.js
+const s = (Date.now() - rfb.lastActiveAt) / 1000
+let l = 1200                                     // 20 Minuten, wenn nichts gesetzt ist
+if (Number.isFinite(parseFloat(rfb.idleDisconnect))) l = parseFloat(rfb.idleDisconnect) * 60
+if (s > l) window.location.replace("disconnect…")
+```
+
+**Behoben:** Über die Laufzeit einer Session entscheidet OTA, nicht der Client. Der Viewer stellt
+die Uhr beim Verbinden auf ein Jahr (`set_idle_timeout` in
+`web/src/screens/SessionViewer.tsx`), und die Stream-Adresse hebt sie zusätzlich auf 60 Minuten
+(`STREAM_ARGS` in `api/ota/routers/sessions.py`). Solange ein Fenster offen ist, kommt alle 30
+Sekunden ein Herzschlag; erst wenn der ausbleibt, greift `idle_minutes` der Vorlage.
+
+Eine Falle dabei: `idle_disconnect` ist im Client ein Auswahlfeld mit genau vier Werten
+(10, 20, 30, 60). Ein anderer Wert in der Adresse wird nicht übernommen, sondern fällt auf den
+**ersten** Eintrag zurück — aus einem gut gemeinten `525600` wurden gemessene 10 Minuten. Eine `0`
+ist noch schlimmer: Die Grenze ist dann null Sekunden, und die Verbindung fällt sofort. Deshalb der
+Umweg über die Nachricht an den laufenden Client, die am Auswahlfeld vorbeigeht.
+
+**Zweitens: Ein Abbruch heilte nicht.** Riss die Verbindung aus einem Grund ab, den OTA nicht kennt
+— ein Zwischenstück im Netz, das eine schweigende Verbindung abräumt, ein Rechner, der schlafen geht
+—, blieb KasmVNCs eigener Abbruchbildschirm im iframe stehen. Der ist ausgeblendet; im Fenster sah
+man nur ein eingefrorenes Bild.
+
+**Behoben:** Der Viewer beobachtet die Verbindung von aussen. Solange sie steht, trägt das
+Wurzelelement im iframe die Klasse `noVNC_connected`; ihr Verschwinden ist das Signal. Danach lädt
+er den Stream neu, mit wachsendem Abstand und höchstens acht Mal, und zeigt währenddessen ein
+Banner mit einem Knopf für „sofort versuchen". Ist die Session inzwischen wirklich beendet, sagt er
+das, statt weiter zu versuchen.
+
+Gemessen: Abbruch erkannt nach 5 Sekunden, wieder verbunden im zweiten Versuch, Banner von selbst
+weg. Geprüft wird der ganze Weg in `tests/e2e.mjs` (Abschnitt Session-Viewer).
+
+## Eine Anwendung lässt sich nicht mehr starten und der Tab bleibt tot
+
+Stirbt das X-Display einer Anwendung im Arbeitsplatz — Absturz, `Xvnc` weg —, führte OTA sie
+weiterhin als `running`. Der Startknopf tat dann scheinbar nichts: Der Aufruf sah den Eintrag, hielt
+alles für in Ordnung und kehrte sofort zurück. Damit war die Anwendung für immer tot.
+
+**Behoben:** Der Start sieht beim Agent nach, ob es das Display wirklich noch gibt
+(`_display_lebt()` in `api/ota/routers/sessions.py`). Fehlt es, wird der Eintrag auf `stopped`
+gesetzt und die Anwendung neu aufgemacht. Antwortet der Agent gar nicht, gilt das Display als
+lebendig — eine Störung beim Nachsehen darf keine laufende Anwendung abräumen.
+
 ## Zwischenablage funktioniert nicht
 
 In dieser Reihenfolge prüfen:

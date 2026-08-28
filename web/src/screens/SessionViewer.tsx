@@ -15,6 +15,20 @@ import { InstallButton } from '../components/InstallButton'
  * 2. Der Fokus muss im iframe liegen, sonst erreichen Tastenanschläge den
  *    Stream nie.
  */
+/** Was OTA über die Verbindung zum Stream weiss. */
+type Link =
+  | { phase: 'wartet'; versuche: number }     // Rahmen lädt, noch kein Urteil
+  | { phase: 'steht'; versuche: number }      // verbunden
+  | { phase: 'weg'; versuche: number }        // abgerissen, gleich neuer Versuch
+  | { phase: 'verbindet'; versuche: number }  // Rahmen lädt neu
+  | { phase: 'beendet'; versuche: number }    // die Session gibt es nicht mehr
+
+/** Zustände, in denen sich eine Session noch verbinden lässt. */
+const LEBT = new Set(['running', 'starting', 'paused'])
+
+/** Wie oft OTA von selbst nachfasst, bevor es beim Knopf bleibt. */
+const MAX_VERSUCHE = 8
+
 export function SessionViewer({
   session, stream, template, standalone = false, onSwitch, onClose, onToast,
 }: {
@@ -45,6 +59,10 @@ export function SessionViewer({
   const frame = useRef<HTMLIFrameElement>(null)
   const bridge = useRef<Bridge | null>(null)
 
+  // Zustand der Verbindung, von aussen beobachtet. Siehe `useEffect` unten.
+  const [link, setLink] = useState<Link>({ phase: 'wartet', versuche: 0 })
+  const [nonce, setNonce] = useState(0)
+
   // Lebenszeichen, damit der Leerlauf-Aufräumer die Session nicht beendet,
   // während jemand danebensitzt und liest.
   useEffect(() => {
@@ -53,6 +71,37 @@ export function SessionViewer({
     const timer = setInterval(beat, 30_000)
     return () => clearInterval(timer)
   }, [session.id])
+
+  /* --------------------------------------------- Die Uhr im Client stellen
+   *
+   * KasmVNC bringt eine eigene Leerlaufabschaltung mit und stellt sie ohne
+   * Zutun auf 20 Minuten. Gezaehlt werden nur Maus und Tastatur: Wer einem
+   * Build zusieht oder ein langes Dokument liest, ohne etwas anzufassen,
+   * fliegt heraus — weit vor der Grenze, die in der Vorlage steht. Genau
+   * dieser Abbruch ist gemeldet worden.
+   *
+   * Ueber die Adresse laesst sich das nur bis 60 Minuten heben (dort ist es
+   * ein Auswahlfeld mit vier Werten). Diese Nachricht geht daran vorbei: Sie
+   * schreibt den Wert direkt in den laufenden Client. Ein Jahr heisst hier
+   * „nie" — abschalten laesst sich die Uhr nicht, nur weit stellen.
+   *
+   * Ueber die Laufzeit einer Session entscheidet damit allein OTA: solange
+   * dieses Fenster offen ist, schlaegt oben das Herz.
+   */
+  useEffect(() => {
+    if (!frameReady) return
+    const stellen = () => {
+      try {
+        frame.current?.contentWindow?.postMessage(
+          { action: 'set_idle_timeout', value: 365 * 24 * 3600 }, '*')
+      } catch { /* andere Herkunft — dann bleiben die 60 Minuten aus der Adresse */ }
+    }
+    // Zweimal: einmal sofort und einmal, wenn der Client seine Einstellungen
+    // fertig eingelesen hat. Die erste Nachricht kann sonst ins Leere gehen.
+    stellen()
+    const t = setTimeout(stellen, 3000)
+    return () => clearTimeout(t)
+  }, [frameReady, nonce])
 
   // Strg+Alt+Shift schaltet die Leiste um — solange der Fokus NICHT im Stream
   // liegt.
@@ -97,6 +146,99 @@ export function SessionViewer({
       try { innerWin?.removeEventListener('keydown', onKey, true) } catch { /* egal */ }
     }
   }, [frameReady])
+
+  /* ------------------------------------------------ Verbindung überwachen
+   *
+   * Der Stream kann aus Gründen abreissen, die OTA nicht kennt und nicht
+   * beeinflusst: ein Zwischenstück im Netz, das eine schweigende Verbindung
+   * abräumt, ein Rechner, der schlafen geht, ein Wechsel des WLAN. Ohne
+   * Gegenmassnahme bleibt dann KasmVNCs eigener Abbruchbildschirm stehen —
+   * und der bietet nichts an ausser dem Wort „Disconnected".
+   *
+   * Erkannt wird das am **positiven** Merkmal: Solange die Verbindung steht,
+   * trägt das Wurzelelement im iframe die Klasse `noVNC_connected`. Ihr
+   * Verschwinden ist das Signal. Auf die genaue Gestalt des Abbruch-Dialogs
+   * verlässt sich hier nichts — die kann sich mit jeder KasmVNC-Fassung
+   * ändern, die Klasse ist der stabile Teil.
+   *
+   * Zwei Messungen hintereinander, bevor etwas passiert: Beim Laden ist die
+   * Klasse kurz weg, und ein Neuladen mitten im Verbindungsaufbau wäre eine
+   * Schleife.
+   */
+  useEffect(() => {
+    if (!frameReady) return
+    let fehlt = 0
+
+    const timer = setInterval(() => {
+      const wurzel = frame.current?.contentDocument?.documentElement
+      // Kein Dokument: Der Rahmen lädt gerade. Das ist kein Abbruch.
+      if (!wurzel) return
+
+      if (wurzel.classList.contains('noVNC_connected')) {
+        fehlt = 0
+        setLink((l) => (l.phase === 'steht' ? l : { phase: 'steht', versuche: 0 }))
+        return
+      }
+
+      fehlt += 1
+
+      setLink((l) => {
+        if (l.phase === 'beendet' || l.phase === 'weg') return l
+        // Waehrend eines Neuversuchs mehr Geduld: Ein Verbindungsaufbau
+        // dauert ein paar Sekunden, und ihn abzubrechen, um ihn neu zu
+        // beginnen, waere eine Schleife, die nie ankommt.
+        const geduld = l.phase === 'verbindet' ? 6 : 2
+        if (fehlt < geduld) return l
+        fehlt = 0
+        return { phase: 'weg', versuche: l.versuche }
+      })
+    }, 2500)
+
+    return () => clearInterval(timer)
+  }, [frameReady, nonce])
+
+  /* Wieder verbinden — aber nur, wenn es noch etwas zu verbinden gibt.
+   *
+   * Erst die Session fragen, dann den Rahmen neu laden. Andersherum liefe
+   * OTA gegen eine beendete Session an und zeigte alle drei Sekunden
+   * dieselbe Fehlerseite; der Mensch davor erführe nicht, was los ist. */
+  useEffect(() => {
+    if (link.phase !== 'weg') return
+
+    let abgebrochen = false
+    const versuch = link.versuche + 1
+
+    // Nach genug vergeblichen Versuchen aufhoeren, von selbst zu ziehen.
+    // Ein Tab, der stundenlang im Hintergrund alle zehn Sekunden neu laedt,
+    // ist niemandem eine Hilfe — der Knopf bleibt.
+    if (versuch > MAX_VERSUCHE) {
+      setLink({ phase: 'verbindet', versuche: link.versuche })
+      return
+    }
+
+    const wartezeit = Math.min(2000 * versuch, 10000)
+    const t = setTimeout(() => {
+      void (async () => {
+        try {
+          const alle = await api.sessions()
+          const noch = alle.find((s) => s.id === session.id)
+          if (abgebrochen) return
+          if (!noch || !LEBT.has(noch.status)) {
+            setLink({ phase: 'beendet', versuche: versuch })
+            return
+          }
+        } catch {
+          // Auch die API ist nicht erreichbar. Dann ist der Abbruch weiter
+          // draussen, und ein neuer Versuch ist trotzdem richtig.
+        }
+        if (abgebrochen) return
+        setLink({ phase: 'verbindet', versuche: versuch })
+        setNonce((n) => n + 1)
+      })()
+    }, wartezeit)
+
+    return () => { abgebrochen = true; clearTimeout(t) }
+  }, [link.phase, link.versuche, session.id])
 
   // Zwischenablage-Brücke. KasmVNCs eigene nahtlose Übertragung springt nur
   // an, wenn der Browser `clipboard-read` freigegeben hat, und bleibt sonst
@@ -159,13 +301,44 @@ export function SessionViewer({
       <iframe
         ref={frame}
         className="viewer__frame"
-        key={src}
+        /* `nonce` erzwingt einen frischen Rahmen beim Wiederverbinden. Ohne
+           Wechsel des Schlüssels behielte React das alte Element samt seiner
+           toten Verbindung. */
+        key={`${src}#${nonce}`}
         src={src}
         title={t('{name} — Sitzung', { name: label })}
         onLoad={() => { setFrameReady((n) => n + 1); focusFrame() }}
         /* Ohne diese Zeile funktioniert die Zwischenablage nicht. */
         allow="clipboard-read; clipboard-write; fullscreen; autoplay; microphone; camera"
       />
+
+      {(link.phase === 'weg' || link.phase === 'verbindet' || link.phase === 'beendet') && (
+        <div className="linkloss" role="status" aria-live="polite">
+          {link.phase === 'beendet' ? (
+            <>
+              <b>{t('Diese Sitzung läuft nicht mehr.')}</b>
+              <span>{t('Deine Dateien sind davon nicht betroffen — sie liegen im Profil, nicht in der Sitzung.')}</span>
+              <button className="btn btn--sm btn--primary"
+                onClick={() => { window.location.href = '/' }}>
+                {t('Zum Dashboard')}
+              </button>
+            </>
+          ) : (
+            <>
+              <b>{t('Verbindung unterbrochen.')}</b>
+              <span>
+                {link.versuche <= 1
+                  ? t('Wird neu verbunden…')
+                  : t('Wird neu verbunden — Versuch {n}.', { n: String(link.versuche) })}
+              </span>
+              <button className="btn btn--sm" disabled={link.phase === 'verbindet'}
+                onClick={() => { setLink({ phase: 'verbindet', versuche: 0 }); setNonce((n) => n + 1) }}>
+                {t('Sofort versuchen')}
+              </button>
+            </>
+          )}
+        </div>
+      )}
 
       <button
         className={`viewer__handle${barOpen ? ' is-open' : ''}`}

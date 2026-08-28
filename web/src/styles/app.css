@@ -1352,3 +1352,23 @@ button, input, select, textarea { font: inherit; color: inherit; }
 }
 .maprow__to:hover { border-color: var(--edge-lit); }
 .maprow__to:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* Meldung bei abgerissener Verbindung. Sie liegt über dem Stream, verdeckt
+   ihn aber nicht: Kommt die Verbindung von selbst zurück, soll man sehen,
+   dass das Bild wieder da ist, ohne erst etwas wegklicken zu müssen. */
+.linkloss {
+  position: absolute;
+  top: 14px; left: 50%; transform: translateX(-50%);
+  z-index: 30;
+  display: flex; align-items: center; gap: 12px;
+  max-width: min(560px, calc(100% - 28px));
+  padding: 10px 16px;
+  border: 1px solid var(--caution);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--caution) 12%, var(--bay));
+  box-shadow: 0 6px 22px rgba(0,0,0,.45);
+  font-size: 13px;
+}
+.linkloss b { color: var(--text); font-weight: 600; white-space: nowrap; }
+.linkloss span { color: var(--label); }
+.linkloss .btn { margin-left: auto; white-space: nowrap; }

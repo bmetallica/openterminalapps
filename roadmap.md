@@ -189,6 +189,17 @@ Der Entwurf steht bereits (`web/`, `plan.md` §13). Hier wird er verkabelt.
       `scripts/test-clipboard-bridge.sh`, weil genau das einmal fehlte — `xfce4-panel` war aus dem
       gebauten Image gefallen, und übrig blieb ein schwarzes Bild mit Mauszeiger
 - [x] App-Umschalter im Viewer; laufende und nicht gestartete Apps unterscheidbar
+- [x] **Abbruch heilt von selbst** (2026-08-28): Der Viewer erkennt am Verschwinden von
+      `noVNC_connected`, dass der Stream weg ist, lädt ihn mit wachsendem Abstand höchstens acht
+      Mal neu und sagt es, wenn die Session wirklich beendet ist. Vorher blieb KasmVNCs
+      ausgeblendeter Abbruchbildschirm stehen — sichtbar war nur ein eingefrorenes Bild
+- [x] **Die Leerlaufuhr gehört OTA, nicht dem Client** (2026-08-28): KasmVNC trennte nach 20
+      Minuten ohne Maus oder Tastatur; Zusehen zählte dort als Nichtstun. Der Viewer stellt sie
+      jetzt beim Verbinden auf ein Jahr, die Stream-Adresse hebt sie zusätzlich auf das erlaubte
+      Maximum. Über die Laufzeit entscheidet `idle_minutes` der Vorlage
+- [x] **Totes Display wird wiederbelebt** (2026-08-28): War das `Xvnc` einer Anwendung
+      abgestürzt, führte OTA sie weiter als `running`, und der Start kehrte wortlos zurück — die
+      Anwendung war für immer tot. Der Start sieht jetzt beim Agent nach
 
 **Zwischenablage** — der kritische Teil dieses Meilensteins
 - [x] **Brücke zwischen den Displays** (`plan.md` §10.4): spiegelt CLIPBOARD über alle offenen

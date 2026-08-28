@@ -113,6 +113,10 @@ def start_app(cid: str, payload: dict[str, Any]) -> dict[str, Any]:
     return _call("POST", f"/containers/{cid}/apps", json=payload)
 
 
+def list_displays(cid: str) -> list[int]:
+    return _call("GET", f"/containers/{cid}/apps")
+
+
 def stop_app(cid: str, display: int) -> dict[str, Any]:
     return _call("DELETE", f"/containers/{cid}/apps/{display}")
 

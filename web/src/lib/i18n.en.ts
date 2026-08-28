@@ -975,4 +975,9 @@ export const EN: Record<string, string> = {
   'Verzeichnis-Anmeldung abgeschaltet.': 'Directory sign-in turned off.',
   'Das Passwort eines lokalen Kontos wird nie gegen das Verzeichnis geprüft — auch dann nicht, wenn dort ein Eintrag mit demselben Namen steht. Sonst könnte jeder, der im Verzeichnis einen Eintrag anlegen darf, ein bestehendes Konto übernehmen.': 'A local account\u2019s password is never checked against the directory — not even when an entry with the same name exists there. Otherwise anyone who can create a directory entry could take over an existing account.',
   'Gespeichert.': 'Saved.',
+  'Verbindung unterbrochen.': 'Connection lost.',
+  'Wird neu verbunden…': 'Reconnecting…',
+  'Wird neu verbunden — Versuch {n}.': 'Reconnecting — attempt {n}.',
+  'Sofort versuchen': 'Try now',
+  'Deine Dateien sind davon nicht betroffen — sie liegen im Profil, nicht in der Sitzung.': 'Your files are unaffected — they live in the profile, not in the session.',
 }

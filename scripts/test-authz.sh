@@ -392,6 +392,57 @@ fi
 
 [ -n "${USID:-}" ] && api "$TMP/user.jar" -X DELETE "$BASE/api/sessions/$USID" >/dev/null
 
+# ------------------------------------------- Anwendung ohne Display
+# Stirbt das X-Display einer Anwendung, kehrte der Startaufruf zurück, ohne
+# etwas zu tun: Der Eintrag sagte „läuft". Damit war die Anwendung für immer
+# tot — der Tab zeigte einen abgerissenen Stream, und der Startknopf im
+# Dashboard bewirkte nichts. Gemessen am 2026-08-28.
+echo
+echo "Anwendung, deren Display verschwunden ist"
+
+WS_D=$(api "$TMP/admin.jar" "$BASE/api/templates" | jqp "
+next((t['id'] for t in d if t['mode'] == 'workspace' and t['apps']), '')")
+SID_D=$(api "$TMP/admin.jar" "$BASE/api/sessions" | jqp "
+next((s['id'] for s in d if s['template_id'] == '$WS_D' and s['status'] == 'running'), '')")
+APP_D=$(api "$TMP/admin.jar" "$BASE/api/templates/$WS_D" | jqp "
+next((a['slug'] for a in d['apps'] if a['is_enabled'] and not a.get('blocked_reason')), '')")
+
+if [ -z "$SID_D" ] || [ -z "$APP_D" ]; then
+  bad "Keine laufende Session für die Prüfung"
+else
+  CN_D="ota-s-$(echo "$SID_D" | cut -c1-12)"
+  api "$TMP/admin.jar" -X POST "$BASE/api/sessions/$SID_D/apps/$APP_D" >/dev/null
+  sleep 5
+  D_NUM=$(api "$TMP/admin.jar" "$BASE/api/sessions" | jqp "
+next((str(st['display_num']) for s in d if s['id'] == '$SID_D'
+      for st in s['streams'] if st['app_slug'] == '$APP_D'), '')")
+
+  if [ -z "$D_NUM" ]; then
+    bad "Die Anwendung liess sich nicht starten"
+  else
+    ok "$APP_D läuft auf Display :$D_NUM"
+
+    # Am Rücken von OTA vorbei kappen — wie ein Absturz der Anwendung.
+    # Der Klammertrick verhindert, dass das Muster die eigene Kommandozeile
+    # trifft; ohne ihn bringt pkill die aufrufende Shell um.
+    docker exec "$CN_D" sh -c "pkill -f '[X]vnc :$D_NUM'; exit 0" >/dev/null 2>&1
+    sleep 3
+    WEG=$(docker exec "$CN_D" sh -c "ls /tmp/.X11-unix/X$D_NUM 2>/dev/null | wc -l")
+    expect "0" "${WEG:-?}" "Das Display ist weg"
+
+    GLAUBT=$(api "$TMP/admin.jar" "$BASE/api/sessions" | jqp "
+next((st['status'] for s in d if s['id'] == '$SID_D'
+      for st in s['streams'] if st['app_slug'] == '$APP_D'), '')")
+    ok "OTA führt es noch als „$GLAUBT“ — es weiss es ja nicht besser"
+
+    # Und jetzt der Punkt: Der Start muss das merken und neu aufmachen.
+    api "$TMP/admin.jar" -X POST "$BASE/api/sessions/$SID_D/apps/$APP_D" >/dev/null
+    sleep 6
+    DA=$(docker exec "$CN_D" sh -c "ls /tmp/.X11-unix/X$D_NUM 2>/dev/null | wc -l")
+    expect "1" "${DA:-?}" "Ein erneuter Start macht das Display wieder auf"
+  fi
+fi
+
 # ---------------------------------------- Session ohne Container
 # Eine Session, deren Container verschwunden ist, darf nicht im Weg stehen.
 # Sie zählt sonst als „live", der nächste Startversuch bekommt sie zurück

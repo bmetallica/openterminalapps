@@ -255,6 +255,11 @@ try {
   }
 
   const view = await opened
+  // Der Client meldet die gestellte Leerlaufuhr in der Konsole. Das ist der
+  // einzige Weg, an den **wirksamen** Wert heranzukommen: Im Auswahlfeld
+  // steht danach weiter 60, weil es den grossen Wert gar nicht anbietet.
+  const viewLogs = []
+  view?.on('console', (m) => viewLogs.push(m.text()))
   check(!!view, 'Session öffnet in einem eigenen Tab')
   check(/\/view\/s\/[0-9a-f-]{36}/.test(view.url()),
     `Der Tab hat eine eigene Adresse (${new URL(view.url()).pathname})`)
@@ -358,6 +363,70 @@ try {
             buttons.some((b) => b?.includes('Aus der Session')),
         'Beide Richtungen sind als Rueckfallweg bedienbar')
     }
+
+    // Abbruch und Selbstheilung.
+    //
+    // Bis zum 2026-08-28 blieb ein abgerissener Stream schwarz stehen: Der
+    // Client meldet den Abbruch nur in seiner eigenen Oberflaeche — und die
+    // liegt im iframe und ist ausgeblendet. Fuer den Benutzer sah es aus, als
+    // haette OTA die Session nach wenigen Minuten beendet.
+    //
+    // Getrennt wird deshalb von innen, wie bei einem echten Leitungsabbruch,
+    // und nicht etwa die Klasse entfernt, an der das Elternfenster erkennt,
+    // ob es steht — das wuerde nur das Signal faelschen.
+    // Zuvor der Grund, aus dem der Abbruch ueberhaupt auffiel: KasmVNC
+    // trennt von sich aus nach 20 Minuten ohne Maus oder Tastatur. Die Uhr
+    // muss aus sein, sonst entscheidet der Client ueber die Laufzeit und
+    // nicht OTA (siehe STREAM_ARGS in api/ota/routers/sessions.py).
+    const leerlauf = await view.evaluate(() => {
+      const d = document.querySelector('.viewer__frame').contentDocument
+      return d.getElementById('noVNC_setting_idle_disconnect')?.value ?? null
+    })
+    check(Number(leerlauf) >= 60,
+      `Der Client trennt nicht mehr nach 20 Minuten ohne Eingabe (${leerlauf})`)
+
+    const gestellt = viewLogs.map((t) => t.match(/idle timeout to (\d+)s/))
+      .filter(Boolean).map((m) => Number(m[1]))
+    check(gestellt.some((v) => v >= 86400),
+      `Der Viewer stellt die Uhr im Client weit (${gestellt.join(', ') || 'keine Meldung'})`)
+
+    const getrennt = await view.evaluate(() => {
+      const d = document.querySelector('.viewer__frame').contentDocument
+      const b = d.getElementById('noVNC_disconnect_button')
+      if (!b) return null
+      b.click()
+      return 'Trennknopf'
+    })
+    check(!!getrennt, `Der Stream laesst sich von innen trennen (${getrennt})`)
+
+    let banner = ''
+    for (let i = 0; i < 12; i++) {
+      await new Promise((r) => setTimeout(r, 1000))
+      banner = await view.$eval('.linkloss', (el) => el.textContent).catch(() => '')
+      if (banner) break
+    }
+    check(/unterbrochen|lost/i.test(banner),
+      `Der Abbruch wird im Fenster gemeldet (${banner.slice(0, 40) || 'nichts'})`)
+
+    let wieder = false
+    for (let i = 0; i < 20; i++) {
+      await new Promise((r) => setTimeout(r, 2000))
+      wieder = await view.evaluate(() => {
+        const d = document.querySelector('.viewer__frame')?.contentDocument
+        return d?.documentElement.classList.contains('noVNC_connected') === true
+      })
+      if (wieder) break
+    }
+    check(wieder, 'Der Stream verbindet sich von selbst wieder')
+    // Das Elternfenster sieht alle 2,5 Sekunden nach — das Banner geht
+    // deshalb nicht in derselben Sekunde weg wie der Stream wiederkommt.
+    let bannerWeg = false
+    for (let i = 0; i < 6; i++) {
+      await new Promise((r) => setTimeout(r, 1500))
+      bannerWeg = !(await view.$('.linkloss'))
+      if (bannerWeg) break
+    }
+    check(bannerWeg, 'Danach ist das Banner wieder weg')
 
     await view.close()
     await page.bringToFront()
