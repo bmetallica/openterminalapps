@@ -522,8 +522,21 @@ export const EN: Record<string, string> = {
   'Wird auf dem Desktop abgelegt…': 'Adding to your desktop…',
   '{name} liegt jetzt auf deinem Desktop.': '{name} is on your desktop now.',
   'Der Browser hat die Verknüpfung abgelehnt.': 'The browser refused the shortcut.',
-  'Diese Anwendung lässt sich als Verknüpfung ablegen — in Firefox über das Browsermenü, in Chrome über das Symbol in der Adressleiste.':
-    'This application can be added as a shortcut — in Firefox through the browser menu, in Chrome through the icon in the address bar.',
+  '{name} auf den Desktop legen': 'Add {name} to desktop',
+  'Auf dem Desktop': 'On your desktop',
+  'Verknüpfung anlegen': 'Add a shortcut',
+  'Zuklappen': 'Close',
+  'Ganzer Arbeitsplatz': 'Whole workspace',
+  'Jetzt öffnen': 'Open it now',
+  'Abgebrochen. Du kannst es jederzeit erneut versuchen.':
+    'Cancelled. You can try again any time.',
+  'Diese Anwendung gibt es nicht.': 'There is no such application.',
+  'Jede Anwendung lässt sich als Symbol ablegen und startet dann in einem eigenen Fenster ohne Browserleiste. Wer nicht angemeldet ist, meldet sich beim Öffnen an.':
+    'Every application can be added as an icon and then opens in its own window without browser chrome. If you are not signed in, you sign in when you open it.',
+  'Als eigenes Fenster ohne Browserleiste. Wer noch nicht angemeldet ist, meldet sich beim Öffnen an — danach geht es direkt weiter.':
+    'Its own window, no browser chrome. If you are not signed in yet, you sign in when you open it — and carry straight on.',
+  'Dein Browser bietet das Ablegen über sein eigenes Menü an — in Chrome und Edge über das Symbol rechts in der Adressleiste, in Firefox über „Diese Seite installieren".':
+    'Your browser offers this through its own menu — in Chrome and Edge via the icon at the right of the address bar, in Firefox via "Install this site".',
   '{name} wird gestartet…': 'Starting {name}…',
   'Das lässt sich gerade nicht öffnen': 'That cannot be opened right now',
   'Diese Sitzung gibt es nicht mehr.': 'That session no longer exists.',

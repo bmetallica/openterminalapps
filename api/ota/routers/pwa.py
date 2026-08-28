@@ -71,9 +71,22 @@ def manifest(
     icon = f"/api/pwa/icon.svg?template={template}" + (f"&app={app}" if app else "")
 
     body = {
+        # Die Kennung entscheidet, ob der Browser zwei Verknuepfungen als zwei
+        # Programme fuehrt oder als eines. Ohne sie faellt er auf `start_url`
+        # zurueck — was hier zufaellig auch stimmen wuerde, aber sich mit jeder
+        # Aenderung am Weg verschoebe: Eine bereits abgelegte Verknuepfung
+        # gaelte dann als andere Anwendung, und der Benutzer haette ploetzlich
+        # zwei Symbole fuer dasselbe. Deshalb steht sie ausdruecklich da und
+        # aendert sich nie.
+        "id": f"ota-{template}" + (f"-{app}" if app else ""),
         "name": f"{name} · OTA",
         "short_name": name[:12],
         "start_url": start,
+        # Der Geltungsbereich ist mit Absicht die ganze Anwendung und nicht nur
+        # der Startpunkt: Wer die Verknuepfung anklickt, ohne angemeldet zu
+        # sein, landet zuerst auf `/login`. Bei einem engen Bereich risse der
+        # Browser genau dort aus dem eigenen Fenster heraus und schoebe einen
+        # Tab davor — die Anmeldung waere dann das Gegenteil von „vorgeschaltet".
         "scope": "/",
         # "standalone": eigenes Fenster ohne Adressleiste. Genau das macht den
         # Unterschied zwischen "Lesezeichen" und "sieht aus wie ein Programm".

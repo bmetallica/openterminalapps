@@ -68,15 +68,28 @@ skaliert. Was du siehst, ist die echte Auflösung.
 
 ### Auf den Desktop legen ✅
 
-In der Kontrollleiste steht unter **Sitzung** der Knopf **Auf den Desktop legen**. Damit wird aus der
-Anwendung eine Verknüpfung mit eigenem Symbol und eigenem Fenster — ohne Adressleiste, ohne Tabs.
+Im Dashboard steht über den Kacheln der Abschnitt **Auf dem Desktop** mit dem Knopf **Verknüpfung
+anlegen**. Darunter liegt jede Anwendung einzeln: Terminal, VS Code, Firefox, GIMP — und für
+Vorlagen ohne Apps der ganze Arbeitsplatz. Ein Klick öffnet die Ablage-Seite dieser einen
+Anwendung; dort legst du sie ab.
 
-Ein Klick darauf startet die Anwendung. Läuft noch nichts, wird der Container zuerst gestartet; bist
-du nicht angemeldet, kommt zuerst die Anmeldung und danach die Anwendung.
+Danach hast du ein Symbol wie bei einem lokalen Programm. Ein Klick darauf öffnet **ein eigenes
+Fenster ohne Adressleiste und ohne Tabs**, startet den Container, falls noch keiner läuft, und
+öffnet die Anwendung darin. Bist du nicht angemeldet, kommt zuerst die Anmeldung — in demselben
+Fenster, und danach geht es direkt weiter. Die Adresse bleibt dabei stehen; es wird nichts
+umgeleitet.
 
-Der Knopf erscheint nur, wenn der Browser die Installation anbietet. In Firefox geht es über das
-Browsermenü, in Chrome über das Symbol in der Adressleiste. Auf welche Adresse eine Verknüpfung
-zeigt, steht in ihr selbst: `/launch/<workspace>/<app>`.
+**Warum eine eigene Seite und kein Knopf an Ort und Stelle:** Der Browser entscheidet über die
+Ablage anhand des Manifests, das beim Laden im Dokument steht — was danach hineingetauscht wird,
+ändert an seiner Entscheidung nichts mehr. Ein Knopf mitten im Viewer, der „diese Anwendung"
+verspricht, legte in Wahrheit das Dashboard ab. Deshalb hat jede Anwendung ihre eigene Adresse,
+deren Manifest von Anfang an sie meint: `/launch/<workspace>/<app>?ablegen`. Ohne `?ablegen` ist
+dieselbe Adresse der Start — das ist die, auf die das Symbol zeigt.
+
+Auf der Ablage-Seite wird **nichts gestartet**. Wer ein Symbol anlegt, will noch nicht arbeiten.
+
+Bietet der Browser die Ablage nicht selbst an, steht dort der Weg über sein Menü: in Chrome und
+Edge über das Symbol rechts in der Adressleiste, in Firefox über „Diese Seite installieren".
 
 ## Die gemeinsame Ablage ✅
 

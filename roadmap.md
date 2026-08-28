@@ -226,6 +226,12 @@ Der Entwurf steht bereits (`web/`, `plan.md` §13). Hier wird er verkabelt.
 - [x] **Jede Anwendung in einem eigenen Tab.** Eigene Adressen `/view/s/<id>[/<display>]`;
       das Dashboard bleibt im ersten Tab stehen
 - [x] **Verknüpfung auf dem Desktop** (PWA): Manifest je Vorlage und App aus der API
+- [x] **Jede Anwendung einzeln ablegbar** (2026-08-28): Katalog im Dashboard, eigene Ablage-Seite
+      je Anwendung unter `/launch/<vorlage>/<app>?ablegen`, eigene Kennung im Manifest. Der
+      frühere Knopf im Viewer konnte nicht halten, was er versprach: Der Browser liest das
+      Manifest einmal beim Laden, ein späterer Austausch aus React heraus änderte daran nichts —
+      abgelegt wurde das Dashboard. Gemessen mit `Page.getInstallabilityErrors`: keine Hindernisse,
+      Kennung `ota-<vorlage>-<app>`, und die Ablage startet keinen Container
       (`api/ota/routers/pwa.py`), Startadresse `/launch/<vorlage>/<app>` startet notfalls den
       Container, Anmeldung davor bleibt erhalten
 - [x] **Administratoren sind root im eigenen Container.** Ohne `no-new-privileges`, ohne

@@ -434,6 +434,75 @@ try {
     ok('Das Dashboard bleibt im ersten Tab stehen')
   }
 
+  // ------------------------------------------------ Auf den Desktop legen
+  //
+  // Der Anspruch: Eine Anwendung soll sich als Symbol ablegen lassen, in
+  // einem eigenen Fenster ohne Browserleiste starten und vorher nach der
+  // Anmeldung fragen, falls noch keine besteht. Alle drei Teile werden hier
+  // gemessen, keiner davon geglaubt.
+  console.log('\nVerknüpfungen')
+  {
+    const geoeffnet = await page.evaluate(() => {
+      const kopf = [...document.querySelectorAll('.section__head')]
+        .find((x) => /Desktop/i.test(x.textContent ?? ''))
+      const b = kopf?.querySelector('.btn--sm')
+      if (!b) return false
+      b.click()
+      return true
+    })
+    check(geoeffnet, 'Das Dashboard bietet Verknüpfungen an')
+
+    await new Promise((r) => setTimeout(r, 600))
+    const eintraege = await page.$$eval('.shortcut', (els) => els.length)
+    check(eintraege > 0, `${eintraege} Anwendungen lassen sich einzeln ablegen`)
+    if (eintraege > 0) await shot(page, '09-verknuepfungen')
+
+    // Die Ablege-Seite. Sie ist der eigentliche Trick: Der Browser
+    // entscheidet über die Ablage anhand des Manifests, das beim Laden im
+    // Dokument steht — nicht anhand dessen, was später hineingetauscht wird.
+    const vorher = execSync('docker ps --filter "label=ota.session_id" -q')
+      .toString().trim().split('\n').filter(Boolean).length
+    const legen = new Promise((resolve) => browser.once('targetcreated',
+      (t) => resolve(t.page())))
+    await page.click('.shortcut')
+    const ablage = await legen
+    await ablage.waitForSelector('.place', { timeout: 20000 })
+    ok('Die Ablege-Seite öffnet sich')
+
+    const cdp = await ablage.createCDPSession()
+    await cdp.send('Page.enable')
+    const man = await cdp.send('Page.getAppManifest')
+    check(/\/api\/pwa\/manifest\.webmanifest\?template=/.test(man.url ?? ''),
+      `Das Manifest gehört der Anwendung, nicht dem Dashboard (${(man.url ?? '').split('?')[1] ?? '—'})`)
+    const kennung = /"id":\s*"([^"]+)"/.exec(man.data ?? '')?.[1]
+    check(!!kennung && kennung !== 'ota', `Die Verknüpfung hat eine eigene Kennung (${kennung})`)
+
+    const hindernisse = await cdp.send('Page.getInstallabilityErrors')
+    check((hindernisse.installabilityErrors ?? []).length === 0,
+      `Der Browser sieht nichts, was der Ablage im Weg steht (${
+        JSON.stringify(hindernisse.installabilityErrors)})`)
+
+    const nachher = execSync('docker ps --filter "label=ota.session_id" -q')
+      .toString().trim().split('\n').filter(Boolean).length
+    check(nachher === vorher,
+      `Ablegen startet nichts (Container vorher ${vorher}, nachher ${nachher})`)
+    await shot(ablage, '10-ablegen')
+    const ablagePfad = new URL(ablage.url()).pathname
+    await ablage.close()
+    await page.bringToFront()
+
+    // Und der Weg vom Symbol aus, ohne Anmeldung. Ein eigener Browserkontext,
+    // weil es genau darum geht: kein Cookie, keine Sitzung.
+    const fremd = await browser.createBrowserContext()
+    const kalt = await fremd.newPage()
+    await kalt.goto(BASE + ablagePfad, { waitUntil: 'domcontentloaded' })
+    await kalt.waitForSelector('.login', { timeout: 20000 })
+    check(new URL(kalt.url()).pathname === ablagePfad,
+      `Ohne Anmeldung kommt die Anmeldung — und die Adresse bleibt stehen (${ablagePfad})`)
+    await kalt.close()
+    await fremd.close()
+  }
+
   // ------------------------------------------------- Nutzer und Gruppen
   console.log('\nNutzer und Gruppen')
   await page.evaluate(() => {

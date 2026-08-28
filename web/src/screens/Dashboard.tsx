@@ -6,6 +6,7 @@ import {
 } from '../lib/api'
 import { ago, duration, gb } from '../lib/format'
 import { t as tr, useLang } from '../lib/i18n'
+import { installPath, openInTab } from '../lib/routes'
 
 function greeting(): string {
   const h = new Date().getHours()
@@ -93,6 +94,78 @@ function Bay({ session, template, onOpen, onAct, onApp, busy, busyApp }: {
           onClick={() => onAct(session, 'stop')}>■</button>
       </div>
     </article>
+  )
+}
+
+/**
+ * „Auf den Desktop legen" — der Katalog der Verknüpfungen.
+ *
+ * Warum das hier steht und nicht im Viewer: Ein Symbol legt man an, bevor
+ * man etwas braucht, nicht mittendrin. Und der Browser entscheidet über die
+ * Ablage anhand der Seite, auf der man gerade steht — deshalb führt jeder
+ * Eintrag auf seine eigene Adresse, deren Manifest von Anfang an genau diese
+ * Anwendung meint. Ein Knopf, der das an Ort und Stelle verspricht, legte
+ * in Wahrheit das Dashboard ab.
+ *
+ * Aufgeführt sind einzelne Anwendungen und, für Vorlagen ohne Apps, die
+ * Vorlage selbst. Was gesperrt oder abgeschaltet ist, steht nicht dabei:
+ * Ein Symbol, das beim Anklicken „darfst du nicht" sagt, ist eine Falle.
+ */
+function ShortcutSection({ templates }: { templates: Template[] }) {
+  const [offen, setOffen] = useState(false)
+
+  const eintraege = templates.flatMap((t) => {
+    const apps = t.apps.filter((a) => a.is_enabled && !a.blocked_reason)
+    if (t.mode === 'workspace' && apps.length > 0) {
+      return apps.map((a) => ({
+        key: `${t.slug}/${a.slug}`,
+        name: a.name,
+        icon: a.icon || '▢',
+        von: t.friendly_name,
+        pfad: installPath(t.slug, a.slug),
+      }))
+    }
+    return [{
+      key: t.slug,
+      name: t.friendly_name,
+      icon: t.icon || '▣',
+      von: tr('Ganzer Arbeitsplatz'),
+      pfad: installPath(t.slug),
+    }]
+  })
+
+  if (eintraege.length === 0) return null
+
+  return (
+    <section className="section">
+      <div className="section__head">
+        <span className="silk">{tr('Auf dem Desktop')}</span>
+        <span className="section__rule" />
+        <button className="btn btn--sm" onClick={() => setOffen((v) => !v)}>
+          {offen ? tr('Zuklappen') : tr('Verknüpfung anlegen')}
+        </button>
+      </div>
+
+      {offen && (
+        <>
+          <p className="field__hint" style={{ margin: '0 0 12px' }}>
+            {tr('Jede Anwendung lässt sich als Symbol ablegen und startet dann in einem eigenen Fenster ohne Browserleiste. Wer nicht angemeldet ist, meldet sich beim Öffnen an.')}
+          </p>
+          <div className="shortcuts">
+            {eintraege.map((e) => (
+              <button key={e.key} className="shortcut" onClick={() => openInTab(e.pfad)}>
+                <span className="shortcut__icon" aria-hidden="true">{e.icon}</span>
+                <span className="shortcut__text">
+                  <span className="shortcut__name">{e.name}</span>
+                  <span className="silk">{e.von}</span>
+                </span>
+                <span className="shortcut__go" aria-hidden="true">→</span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </section>
   )
 }
 
@@ -258,6 +331,8 @@ export function Dashboard({ me, onOpen, onToast }: {
           </div>
         )}
       </section>
+
+      <ShortcutSection templates={available} />
 
       <section className="section">
         <div className="section__head">

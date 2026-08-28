@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { SessionViewer } from './SessionViewer'
+import { InstallCard } from '../components/InstallButton'
 import { ApiError, api, type Session, type Stream, type Template } from '../lib/api'
 import { t, useLang } from '../lib/i18n'
 import { viewPath, type Route } from '../lib/routes'
 
 type State =
+  | { phase: 'ablegen'; name: string; icon: string }
   | { phase: 'busy'; note: string }
   | { phase: 'ready'; session: Session; stream?: Stream }
   | { phase: 'failed'; note: string }
@@ -36,6 +38,13 @@ export function StandaloneViewer({ route, onToast }: {
     return { phase: 'ready', session, stream }
   }, [])
 
+  // „Jetzt öffnen" auf der Ablege-Seite: dieselbe Adresse ohne `?ablegen`.
+  // Neu geladen und nicht weitergeschaltet, weil der Startlauf unten genau
+  // einmal läuft — und zwar beim Laden.
+  const oeffnen = useCallback(() => {
+    window.location.href = window.location.pathname
+  }, [])
+
   useEffect(() => {
     if (started.current) return
     started.current = true
@@ -44,6 +53,28 @@ export function StandaloneViewer({ route, onToast }: {
       try {
         const list = await api.templates()
         setTemplates(list)
+
+        // Ablegen heisst ablegen — hier wird nichts gestartet.
+        if (route.kind === 'launch' && route.install) {
+          const tpl = list.find((x) => x.slug === route.templateSlug)
+          if (!tpl) {
+            setState({ phase: 'failed', note: t('Diesen Arbeitsplatz gibt es nicht.') })
+            return
+          }
+          const app = route.appSlug
+            ? tpl.apps.find((a) => a.slug === route.appSlug)
+            : undefined
+          if (route.appSlug && !app) {
+            setState({ phase: 'failed', note: t('Diese Anwendung gibt es nicht.') })
+            return
+          }
+          setState({
+            phase: 'ablegen',
+            name: app?.name ?? tpl.friendly_name,
+            icon: app?.icon || tpl.icon || '▣',
+          })
+          return
+        }
 
         if (route.kind === 'view') {
           const sessions = await api.sessions()
@@ -94,6 +125,10 @@ export function StandaloneViewer({ route, onToast }: {
       }
     })()
   }, [route, pick])
+
+  if (state.phase === 'ablegen') {
+    return <InstallCard name={state.name} icon={state.icon} onOpen={oeffnen} />
+  }
 
   if (state.phase === 'busy') {
     return (

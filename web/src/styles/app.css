@@ -1372,3 +1372,61 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .linkloss b { color: var(--text); font-weight: 600; white-space: nowrap; }
 .linkloss span { color: var(--label); }
 .linkloss .btn { margin-left: auto; white-space: nowrap; }
+
+/* --- Verknüpfungen auf dem Desktop ------------------------------------- */
+
+/* Die Liste im Dashboard. Bewusst keine Kacheln: Eine Kachel verspricht
+   Starten, und das tut hier nichts — jeder Eintrag führt auf eine Seite, auf
+   der man ein Symbol anlegt. Eine Zeile mit Pfeil sagt genau das. */
+.shortcuts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 8px;
+}
+
+.shortcut {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  text-align: left;
+  background: var(--bay);
+  border: 1px solid var(--edge);
+  border-radius: 8px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.shortcut:hover { background: var(--bay-2); border-color: var(--edge-lit); }
+.shortcut__icon { font-size: 20px; line-height: 1; flex: none; }
+.shortcut__text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.shortcut__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shortcut__go { margin-left: auto; color: var(--mute); flex: none; }
+.shortcut:hover .shortcut__go { color: var(--text); }
+
+/* Die Ablege-Seite. Sie steht für sich allein in einem Tab und darf deshalb
+   Platz nehmen — sie ist die einzige Sache auf dem Schirm. */
+.place {
+  max-width: 42ch;
+  margin: 14vh auto 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  text-align: center;
+}
+
+.place__icon {
+  font-size: 56px;
+  line-height: 1;
+  width: 96px;
+  height: 96px;
+  display: grid;
+  place-items: center;
+  background: var(--bay);
+  border: 1px solid var(--edge);
+  border-radius: 22px;
+}
+
+.place__body { color: var(--label); line-height: 1.55; margin: 0; }
+.place__hint { color: var(--mute); line-height: 1.5; margin: 0; font-size: 13px; }

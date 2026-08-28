@@ -23,12 +23,15 @@
 export type Route =
   | { kind: 'app' }
   | { kind: 'view'; sessionId: string; display?: number }
-  | { kind: 'launch'; templateSlug: string; appSlug?: string }
+  | { kind: 'launch'; templateSlug: string; appSlug?: string; install?: boolean }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/
 
-export function parseRoute(path = window.location.pathname): Route {
+export function parseRoute(
+  path = window.location.pathname,
+  search = window.location.search,
+): Route {
   const parts = path.split('/').filter(Boolean)
 
   if (parts[0] === 'view' && parts[1] === 's' && UUID.test(parts[2] ?? '')) {
@@ -45,6 +48,12 @@ export function parseRoute(path = window.location.pathname): Route {
       kind: 'launch',
       templateSlug: parts[1],
       appSlug: SLUG.test(parts[2] ?? '') ? parts[2] : undefined,
+      // `?ablegen` ist dieselbe Adresse, nur ohne den Start. Sie muss es
+      // sein: Der Browser bietet das Ablegen nur auf der Seite an, deren
+      // Manifest die Anwendung meint — und das ist genau diese hier. Etwas
+      // hochzufahren, nur damit jemand ein Symbol anlegen kann, wäre die
+      // teuerste Art, nichts zu tun.
+      install: new URLSearchParams(search).has('ablegen'),
     }
   }
 
@@ -57,6 +66,11 @@ export function viewPath(sessionId: string, display?: number): string {
 
 export function launchPath(templateSlug: string, appSlug?: string): string {
   return appSlug ? `/launch/${templateSlug}/${appSlug}` : `/launch/${templateSlug}`
+}
+
+/** Dieselbe Adresse, aber zum Ablegen statt zum Starten. */
+export function installPath(templateSlug: string, appSlug?: string): string {
+  return `${launchPath(templateSlug, appSlug)}?ablegen`
 }
 
 /** Öffnet eine Adresse in einem eigenen Tab.
