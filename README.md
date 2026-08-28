@@ -22,16 +22,60 @@ sowie ganze Registries einbinden — als Zusatz, nicht als Fundament.
 
 ## Schnellstart
 
+**Voraussetzungen** auf einem Linux-Host: `docker` mit dem Compose-Plugin (`docker compose version`
+muss antworten), dazu `git`, `make` und `openssl`. Die Ports **8443** und **8081** müssen frei sein
+— 443 bleibt bewusst unbelegt, damit ein bestehendes Kasm daneben weiterlaufen kann. Beide sind über
+`OTA_HTTPS_PORT` und `OTA_HTTP_PORT` in `deploy/.env` änderbar.
+
 ```bash
-make setup                 # Zertifikat und .env erzeugen
-make up                    # Stack bauen und starten
-make admin NAME=deinname   # ersten Administrator anlegen
+git clone https://github.com/bmetallica/openterminalapps.git
+cd openterminalapps
+
+sudo make setup                  # .env mit Geheimnissen, Zertifikat, Verzeichnisse
+sudo make up                     # Stack bauen und starten (beim ersten Mal einige Minuten)
+sudo make admin NAME=deinname    # erstes Administratorkonto
 ```
 
-Danach `https://<host>:8443/` öffnen.
+`make setup` **erzeugt die Geheimnisse und trägt sie selbst ein** — nachträglich ist nichts von Hand
+zu ergänzen. Ein zweiter Aufruf lässt vorhandene Werte unangetastet.
 
-Das Wurzelzertifikat aus `deploy/certs/ota-ca.crt` einmalig importieren, dann warnt der Browser
-nicht mehr — auch nach jedem späteren Zertifikatswechsel.
+`sudo` braucht es, weil OTA Verzeichnisse unter `/srv/ota` anlegt und mit dem Docker-Socket spricht.
+Wer in der Gruppe `docker` ist und `/srv/ota` selbst angelegt hat, kann es weglassen.
+
+`make admin` legt das Konto an und **druckt ein erzeugtes Passwort**. Es gilt genau einmal: Beim
+ersten Anmelden verlangt OTA ein neues. Danach:
+
+```
+https://<host>:8443/
+```
+
+**Einmalig das Wurzelzertifikat importieren**, dann warnt der Browser nicht mehr — auch nach jedem
+späteren Zertifikatswechsel:
+
+```bash
+sudo cp deploy/certs/ota-ca.crt /usr/local/share/ca-certificates/ota-ca.crt   # Linux, systemweit
+sudo update-ca-certificates
+```
+
+Im Browser: Einstellungen → Zertifikate → Zertifizierungsstellen → `deploy/certs/ota-ca.crt`
+importieren, „Websites vertrauen" ankreuzen.
+
+**Läuft es?**
+
+```bash
+make ps                          # alle Dienste sollten "healthy" sein
+curl -k https://localhost:8443/healthz
+```
+
+Wenn etwas klemmt: `make logs` und [Handbuch, Kapitel 12](docs/wiki/12-fehlersuche.md) — dort stehen
+echte Fehler aus dem Betrieb mit Symptom, Ursache und Reparatur.
+
+### Der erste Arbeitsplatz
+
+Nach der Anmeldung: **Workspaces → Anlegen**, ein Image eintragen (etwa
+`kasmweb/core-ubuntu-jammy:1.16.0`), der Gruppe `users` zuweisen, einschalten. Danach unter **Start**
+starten und über **Software → Im Image nachsehen** die Anwendungen freigeben.
+Ausführlich in [Handbuch, Kapitel 2](docs/wiki/02-erste-schritte.md).
 
 ## Was es kann
 

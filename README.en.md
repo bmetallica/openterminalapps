@@ -24,16 +24,60 @@ whole registries can be attached — as an addition, not as the foundation.
 
 ## Quick start
 
+**Prerequisites** on a Linux host: `docker` with the compose plugin (`docker compose version` must
+answer), plus `git`, `make` and `openssl`. Ports **8443** and **8081** must be free — 443 is left
+alone on purpose so an existing Kasm can keep running alongside. Both are changeable via
+`OTA_HTTPS_PORT` and `OTA_HTTP_PORT` in `deploy/.env`.
+
 ```bash
-make setup                 # generate certificate and .env
-make up                    # build and start the stack
-make admin NAME=yourname   # create the first administrator
+git clone https://github.com/bmetallica/openterminalapps.git
+cd openterminalapps
+
+sudo make setup                  # .env with secrets, certificate, directories
+sudo make up                     # build and start (a few minutes the first time)
+sudo make admin NAME=yourname    # first administrator account
 ```
 
-Then open `https://<host>:8443/`.
+`make setup` **generates the secrets and writes them in itself** — nothing to fill in by hand
+afterwards. Running it again leaves existing values untouched.
 
-Import the root certificate from `deploy/certs/ota-ca.crt` once and the browser stops warning — also
-after any later certificate change.
+`sudo` is needed because OTA creates directories under `/srv/ota` and talks to the Docker socket.
+If you are in the `docker` group and created `/srv/ota` yourself, you can drop it.
+
+`make admin` creates the account and **prints a generated password**. It is good exactly once: OTA
+asks for a new one at first sign-in. Then:
+
+```
+https://<host>:8443/
+```
+
+**Import the root certificate once** and the browser stops warning — also after any later
+certificate change:
+
+```bash
+sudo cp deploy/certs/ota-ca.crt /usr/local/share/ca-certificates/ota-ca.crt   # Linux, system-wide
+sudo update-ca-certificates
+```
+
+In the browser: Settings → Certificates → Authorities → import `deploy/certs/ota-ca.crt` and tick
+"trust this CA to identify websites".
+
+**Is it running?**
+
+```bash
+make ps                          # every service should be "healthy"
+curl -k https://localhost:8443/healthz
+```
+
+If something is stuck: `make logs` and [handbook chapter 12](docs/wiki/12-fehlersuche.md) — real
+failures from operation with symptom, cause and repair.
+
+### Your first workspace
+
+After signing in: **Workspaces → Create**, enter an image (for example
+`kasmweb/core-ubuntu-jammy:1.16.0`), assign it to the `users` group, enable it. Then start it under
+**Start** and publish its applications via **Software → Look inside the image**.
+In detail in [handbook chapter 2](docs/wiki/02-erste-schritte.md) (German).
 
 ## What it does
 

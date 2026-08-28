@@ -24,13 +24,12 @@ help:
 
 .PHONY: setup
 setup:
-	@test -f deploy/.env || { cp deploy/.env.example deploy/.env; \
-	  echo "deploy/.env angelegt — bitte Geheimnisse eintragen:"; \
-	  echo "  POSTGRES_PASSWORD=$$(openssl rand -base64 32)"; \
-	  echo "  OTA_JWT_SECRET=$$(openssl rand -base64 48 | tr -d '\n=+/' | head -c 64)"; \
-	  echo "  OTA_AGENT_TOKEN=$$(openssl rand -base64 36 | tr -d '\n=+/' | head -c 48)"; }
+	@./scripts/setup-env.sh
 	@./scripts/make-cert.sh
-	@mkdir -p /srv/ota/profiles
+	@mkdir -p /srv/ota/profiles /srv/ota/skeletons /srv/ota/shared \
+	          /srv/ota/backups /srv/ota/runtime
+	@echo
+	@echo "Bereit. Weiter mit:  make up"
 
 .PHONY: up
 up:
