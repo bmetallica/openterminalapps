@@ -568,8 +568,8 @@ Das Feature aus `plan.md` §1.2 und §9.8. Gegen alle drei echten Registries gep
 **Eigenes Dokument:** [`auth-roadmap.md`](auth-roadmap.md).
 
 Der Umbau von „OTA ist sein eigener Identity Provider" zu „OTA ist das Anwendungsportal über einem
-zentralen Identity Provider" — welcher, entscheidet eine Messung (Keycloak oder authentik; Zitadel,
-Authelia, Dex, Ory und Kanidm sind an OTAs Anforderungen gescheitert). Anlass ist Open WebUI: Sobald eine zweite Anwendung dazukommt, gibt es nur
+zentralen **Keycloak**" (entschieden 2026-08-28; Zitadel, Authelia, Dex, Ory und Kanidm sind an
+OTAs Anforderungen gescheitert, authentik unterlag der konservativeren Wahl). Anlass ist Open WebUI: Sobald eine zweite Anwendung dazukommt, gibt es nur
 noch schlechte Antworten — dreimal dieselben Menschen pflegen, Passwörter weiterreichen, oder
 selbst OIDC-Provider werden.
 
@@ -577,7 +577,8 @@ Betrifft M6 unmittelbar: Die eigene LDAP-Anbindung ist ab 2026-08-28 **eingefror
 dem Umstieg weg. Neue Wünsche an die AD-Anbindung sind ab jetzt Argumente für M11, keine Arbeit an
 `directory.py`.
 
-Vier Entscheidungen sind getroffen (2026-08-28): Bestandskonten werden übernommen und bekommen
+Sechs Entscheidungen sind getroffen (2026-08-28): Keycloak als Identity Provider, mitgeliefert im
+Stack und wahlweise ein vorhandenes anbindbar — Bestandskonten werden übernommen und bekommen
 einmalig neue Passwörter; es bleibt ein lokales Notfallkonto mit eigener zweiter Stufe; die zweite
 Stufe wandert im Übrigen nach Keycloak; die eigene LDAP-Anbindung bleibt bis zur letzten Etappe als
 Rückweg. Alles Weitere steht im eigenen Dokument.

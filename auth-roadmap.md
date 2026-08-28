@@ -36,9 +36,7 @@ Der vierte Weg ist der hier: **OTA hört auf, Identity Provider zu sein, und wir
 
 ```
                          ┌───────────────────────┐
-                         │   Identity Provider   │
-                         │  (Keycloak/authentik  │
-                         │      — siehe 5a)      │
+                         │       Keycloak        │
                          │                       │
                          │ lokale Benutzer       │
                          │ LDAP/AD-Föderation    │
@@ -316,10 +314,17 @@ OIDC-Client werden; das ist kein Teil dieses Umbaus.
 
 ---
 
-## 5a · Welcher Identity Provider? *(offen — Entscheidung nach Messung)*
+## 5a · Welcher Identity Provider: Keycloak — **entschieden**
 
 Keycloak stand im Zielbild, weil es das naheliegendste ist — nicht, weil es geprüft wurde. Also
-geprüft.
+geprüft, und danach bewusst bestätigt: **Keycloak**, entschieden am 2026-08-28.
+
+Die Begründung ist die konservative: die tiefste AD-Föderation im Feld, Apache-2.0, CNCF und Red
+Hat statt eines einzelnen Unternehmens. Für eine Schicht, durch die künftig **jede** Anmeldung
+läuft und die zehn Jahre tragen soll, wiegt Beständigkeit schwerer als Bequemlichkeit.
+
+Der unterlegene Kandidat war authentik, und der Vollständigkeit halber steht unten, womit er
+gepunktet hätte — falls die Entscheidung je überdacht wird.
 
 ### Zwei Anforderungen entscheiden fast alles
 
@@ -410,10 +415,108 @@ client_anlegen · client_entfernen
 Dahinter liegt eine Umsetzung je Kandidat. Damit ist die Wahl eine Implementierungsfrage und keine
 Architekturentscheidung — und ein späterer Wechsel kostet eine Datei, nicht den Umbau.
 
-**Bis zur Messung bleibt Keycloak die Annahme in diesem Dokument**, aber die Neigung geht nach der
-Aktenlage zu authentik: Das Gewicht ist auf einem Rechner, der nebenher Desktops streamt, ein
-echtes Argument, und eine Verwaltungsoberfläche, die selbst auf der öffentlichen Schnittstelle
-läuft, ist die beste verfügbare Zusage, dass OTA nichts fehlen wird.
+### Was die Entscheidung für Keycloak kostet — und was daraus folgt
+
+Der Punkt, an dem authentik vorn lag, verschwindet durch die Entscheidung nicht. Er wird zur
+Auflage.
+
+Gemessen auf diesem Rechner am 2026-08-28:
+
+```
+Gesamt              15 GiB
+belegt               8,4 GiB
+verfügbar            6,9 GiB
+
+davon OTA-Sessions   2,2 GiB   (zwei Arbeitsplätze, Deckel je 3 GiB)
+alle Container       5,3 GiB   (samt Kasm und allem übrigen)
+```
+
+Zwei weitere Arbeitsplätze schöpfen den Rest aus. Keycloak mit den empfohlenen 4 GB obendrauf
+**passt hier nicht nebenher** — jedenfalls nicht, wenn man es unbeaufsichtigt lässt.
+
+Daraus folgen zwei Auflagen für Etappe A, und beide sind nicht verhandelbar:
+
+1. **Der Heap wird ausdrücklich gedeckelt.** Die JVM bemisst ihren Heap standardmässig an dem, was
+   sie im Container sieht (`MaxRAMPercentage`). Ohne Deckel greift Keycloak auf einem 15-GiB-Host
+   grosszügig zu — und zwar nicht, weil es das braucht, sondern weil es darf. Für eine Anlage
+   dieser Grösse sind 512 MB Heap reichlich:
+
+   ```yaml
+   environment:
+     JAVA_OPTS_APPEND: "-Xms256m -Xmx512m"
+   mem_limit: 1g
+   ```
+
+2. **Gemessen wird, bevor gebaut wird.** Etappe A endet erst, wenn Keycloak unter dieser Grenze
+   über eine Woche stabil läuft — mit angebundenem Verzeichnis, nicht im Leerlauf. Bleibt es nicht
+   darunter, ist das der Zeitpunkt, an dem die Entscheidung ehrlich noch einmal aufgemacht wird,
+   und nicht später.
+
+Damit bleibt die Wahl auch praktisch reversibel — zusammen mit der schmalen Zwischenschicht
+unten, die ohnehin gebaut wird.
+
+---
+
+## 5b · Mitgeliefert **oder** vorhanden — **entschieden**
+
+Keycloak läuft im Stack, wie Datenbank und Registry. Und es muss möglich sein, stattdessen ein
+**bereits vorhandenes** Keycloak anzubinden — wer eines betreibt, soll nicht ein zweites bekommen.
+
+Das sind zwei Betriebsarten, und der Unterschied ist grösser, als er aussieht: Er entscheidet, was
+OTA in dem Realm überhaupt darf.
+
+| | **Mitgeliefert** (Vorgabe) | **Vorhanden** |
+|---|---|---|
+| Wer startet es | `make up`, wie die Datenbank | jemand anderes, vorher |
+| Realm | OTA legt `ota` bei `make setup` an | muss existieren, wird angegeben |
+| `ota-manager` | OTA erzeugt ihn samt Rechten | legt die dortige Administration an, OTA bekommt die Zugangsdaten |
+| Datenbank | eigenes Schema in OTAs Postgres | fremd, geht OTA nichts an |
+| Aktualisierung | mit OTA | fremd, geht OTA nichts an |
+| OTA ist im Realm | führend | **Gast** |
+
+### „Gast" ist der Teil, den man leicht übersieht
+
+In einem fremden Keycloak teilt OTA sich den Realm womöglich mit anderen Systemen. Daraus folgt
+dreierlei, und wer es übergeht, baut ein Werkzeug, das fremde Anlagen beschädigt:
+
+- **Kein Löschen ohne Not.** Ein in OTA entferntes Konto wird im fremden Realm *deaktiviert* oder
+  nur aus OTAs Gruppen genommen — nicht gelöscht. Es könnte drei anderen Anwendungen gehören.
+- **Nur die eigenen Gruppen anfassen.** OTA arbeitet unterhalb eines vereinbarten Pfads
+  (`/ota/...`) und lässt alles daneben in Ruhe.
+- **Die Verzeichnisanbindung gehört womöglich nicht OTA.** Betreibt jemand schon ein Keycloak,
+  hängt sein AD mit hoher Wahrscheinlichkeit längst daran. Dann hat OTA dort nichts zu
+  konfigurieren, sondern nur zu verwenden.
+
+### Was daraus für die Oberfläche folgt
+
+OTA muss beim Start **feststellen, was es darf**, und die Oberfläche danach richten — statt einem
+Administrator einen Knopf anzubieten, der in einem 403 endet:
+
+```
+beim Verbinden:
+  darf ich Konten verwalten?      manage-users
+  darf ich Clients verwalten?     manage-clients
+  darf ich Föderation ändern?     manage-realm
+
+Oberfläche:
+  fehlt manage-realm   →  „Active Directory konfigurieren" ist nicht da,
+                          stattdessen: „Wird vom vorhandenen Keycloak verwaltet."
+  fehlt manage-clients →  Anwendungen anlegen zeigt die nötige Konfiguration
+                          zum Übertragen an, statt sie selbst zu schreiben
+```
+
+Das ist keine Fleissarbeit am Rand, sondern der Unterschied zwischen einem Werkzeug, das man in
+eine gewachsene Umgebung stellen kann, und einem, das man nur auf der grünen Wiese betreibt.
+
+### Und es darf nicht abstürzen, wenn das fremde Keycloak schweigt
+
+Beim mitgelieferten regelt das der Healthcheck: Die API startet nach Keycloak. Bei einem fremden
+gibt es diese Gewissheit nicht — es kann beim Hochfahren von OTA gerade neu starten, wegen einer
+Wartung stehen oder hinter einem VPN liegen, das noch nicht oben ist.
+
+OTA startet dann trotzdem, meldet den Zustand unter **Betrieb** und lässt die Anmeldung scheitern,
+solange es so bleibt. **Genau dafür gibt es das Notfallkonto aus 5.2** — hier fällt beides
+zusammen, und hier zahlt sich die Entscheidung von vorhin aus.
 
 ---
 
@@ -422,18 +525,20 @@ läuft, ist die beste verfügbare Zusage, dass OTA nichts fehlen wird.
 Jede Etappe endet in einem Zustand, in dem alles läuft. Keine Etappe lässt sich nur zusammen mit
 der nächsten abschliessen.
 
-### 0 · Der Vergleich (siehe 5a)
-- Beide Kandidaten als Wegwerf-Container, fünf Fragen ausschliesslich über die Schnittstelle
-- **Fertig, wenn:** die Wahl auf einer Messung beruht und nicht auf einer Broschüre
-
-### A · Der Identity Provider steht daneben, ohne dass jemand es merkt
+### A · Keycloak steht daneben, ohne dass jemand es merkt
 - Keycloak im Stack (`deploy/docker-compose.yml`), eigener Realm `ota`, eigene Datenbank
+- **Beide Betriebsarten von Anfang an** (5b): mitgeliefert als Vorgabe, ein vorhandenes anbindbar.
+  Nachträglich eingezogen wäre das ein Umbau — die Frage „darf ich das hier überhaupt?" durchzieht
+  jeden Aufruf gegen die Admin-API
+- Rechteprüfung beim Verbinden; die Oberfläche zeigt nur, was wirklich geht
 - Nur intern erreichbar; Traefik veröffentlicht es unter `/auth`
 - `ota-manager`-Client mit Dienstkonto, Rechte wie oben
 - `make setup` erzeugt das Realm-Grundgerüst
 - Das Notfallkonto (5.2) entsteht **hier**, nicht in E: Ab dem Moment, in dem Keycloak im
   Anmeldeweg steht, muss der Ausweg schon existieren
-- **Fertig, wenn:** OTA unverändert weiterläuft und niemand einen Unterschied bemerkt
+- Heap gedeckelt, Container begrenzt, Speicherverbrauch über eine Woche beobachtet (5a)
+- **Fertig, wenn:** OTA unverändert weiterläuft, niemand einen Unterschied bemerkt — und der
+  Rechner die zusätzliche Last trägt, ohne dass Arbeitsplätze knapp werden
 
 ### B · OTA meldet sich über Keycloak an
 - Autorisierungs-Code-Fluss mit PKCE; OTA tauscht den Code und setzt sein eigenes Cookie
@@ -473,10 +578,10 @@ der nächsten abschliessen.
 
 Damit die Entscheidung mit offenen Augen fällt:
 
-- **Ein weiterer Dienst.** Wie teuer, hängt von der Wahl ab (5a): Für Keycloak werden 4 GB
-  empfohlen, authentik kommt mit rund 250–350 MB für den ganzen Stapel aus. Auf einem Rechner, der
-  nebenher Arbeitsplatz-Container mit je 2 GB streamt, ist das kein Detail, sondern womöglich das
-  ausschlaggebende Kriterium.
+- **Ein weiterer Dienst, und zwar der schwerste im Stapel.** Keycloak ist eine Java-Anwendung;
+  empfohlen werden 4 GB. Dieser Rechner hat 6,9 GiB frei, und zwei Arbeitsplätze belegen davon
+  schon 2,2 GiB. Deshalb die Auflage aus 5a: Heap gedeckelt, Container begrenzt, in Etappe A eine
+  Woche lang gemessen.
 - **Ein zweiter Ort für Wahrheit.** Nutzer stehen künftig in Keycloak *und* — als Projektion — in
   OTA. Jede Projektion kann veralten. Wann abgeglichen wird und was bei Widerspruch gilt, muss
   festgeschrieben sein, sonst wird es zur Fehlerquelle.
@@ -486,8 +591,8 @@ Damit die Entscheidung mit offenen Augen fällt:
 Dagegen steht: **ein** Anmeldeweg für beliebig viele Anwendungen, keine Passwortweitergabe, AD
 ohne eigenen LDAP-Code, und OTA wird das, wonach es ohnehin aussieht — ein Anwendungsportal.
 
-Beide Kandidaten passen zur Lizenzlage von OTA — Keycloak steht unter Apache-2.0, authentik unter
-MIT. Der Gewinner gehört in [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).
+Keycloak steht unter Apache-2.0 und passt damit zur Lizenzlage von OTA. Es gehört ab Etappe A in
+[`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).
 
 ---
 
@@ -510,16 +615,15 @@ MIT. Der Gewinner gehört in [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).
 | 4 | Eigene LDAP-Anbindung | Bis Etappe E Rückweg, dort entfernt; ab sofort eingefroren | **entschieden** 2026-08-28 |
 | 5 | Profil- und Ablagepfade | Nach `sub` benannt, Verweis unter dem Namen | Vorschlag (§4) |
 | 6 | Eigener Realm statt `master` | Ja, zwingend (falls Keycloak) | ergibt sich aus 5.5 |
-| 7 | **Welcher Identity Provider** | Keycloak oder authentik — Zitadel, Authelia, Dex, Ory, Kanidm sind ausgeschieden | **offen**, Etappe 0 entscheidet |
+| 7 | **Welcher Identity Provider** | **Keycloak** — die konservative Wahl: tiefste AD-Föderation, Apache-2.0, CNCF. Zitadel, Authelia, Dex, Ory und Kanidm sind an den Anforderungen gescheitert, authentik unterlag | **entschieden** 2026-08-28 |
+| 7a | Speicherobergrenze für Keycloak | Heap auf 512 MB gedeckelt, Container auf 1 GB, in Etappe A über eine Woche gemessen | ergibt sich aus 5a |
+| 9 | Mitgeliefert oder vorhanden | **Beides** — im Stack als Vorgabe, ein vorhandenes anbindbar; dort ist OTA Gast und löscht nichts | **entschieden** 2026-08-28 |
 | 8 | Zugriff über eine eigene schmale Schicht | Ja — die Wahl bleibt damit umkehrbar | ergibt sich aus 5a |
 
 ### Noch offen, aber später zu beantworten
 
 Diese Fragen blockieren die Planung nicht, müssen aber vor der jeweiligen Etappe geklärt sein:
 
-- **Keycloak im Stack oder daneben?** (vor A) Vorgesehen ist der eigene Container im Compose-Stack.
-  Wer schon ein Keycloak betreibt, sollte es anbinden können — dann entfällt die Realm-Erzeugung
-  in `make setup` und wird zu einer Eingabe im Einrichtungsdialog.
 - **Wann wird abgeglichen?** (vor B) Gruppen bei jeder Anmeldung ist gesetzt. Offen ist, was mit
   jemandem geschieht, der *während* einer laufenden Session aus einer Gruppe fliegt — sofort
   hinauswerfen oder bis zur nächsten Anmeldung gelten lassen.
