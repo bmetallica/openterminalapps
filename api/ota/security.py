@@ -181,6 +181,18 @@ def needs_totp(user: User) -> bool:
     """
     if user.totp_secret:
         return False
+
+    # Konten aus Keycloak sind hiervon ausgenommen, und zwar ohne Ausnahme:
+    # Ihre zweite Stufe steht in Keycloak, nicht hier (auth-roadmap.md §5.3).
+    # Ohne diese Zeile schickte OTA sie in seine eigene TOTP-Einrichtung —
+    # ein zweiter Faktor neben dem, den sie beim Anmelden schon hatten, und
+    # eine Sperre, die sich mit dem falschen Schlüssel öffnen liesse.
+    #
+    # Die Gruppenpflicht selbst verschwindet damit nicht; sie zieht in Etappe
+    # B als Authentifizierungsfluss nach Keycloak um.
+    if user.auth_provider == "keycloak":
+        return False
+
     return any(getattr(g, "require_totp", False) for g in user.groups)
 
 

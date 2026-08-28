@@ -22,6 +22,8 @@
 
 export type Route =
   | { kind: 'app' }
+  | { kind: 'login'; fehler?: string }
+  | { kind: 'notfall' }
   | { kind: 'view'; sessionId: string; display?: number }
   | { kind: 'launch'; templateSlug: string; appSlug?: string; install?: boolean }
 
@@ -42,6 +44,16 @@ export function parseRoute(
       display: Number.isInteger(display) && display! > 0 ? display : undefined,
     }
   }
+
+  // Die Anmeldeseite ist der Landeplatz, wenn bei der Anmeldung über
+  // Keycloak etwas schiefging — sonst käme der Mensch in einer Schleife an.
+  if (parts[0] === 'login') {
+    return { kind: 'login', fehler: new URLSearchParams(search).get('fehler') ?? undefined }
+  }
+
+  // Der Notzugang. Eigene Adresse mit Absicht: Wer den regulären Weg
+  // benutzt, sieht keinen Ausweg und sucht auch keinen (auth-roadmap.md §5.2).
+  if (parts[0] === 'notfall') return { kind: 'notfall' }
 
   if (parts[0] === 'launch' && SLUG.test(parts[1] ?? '')) {
     return {
@@ -81,4 +93,16 @@ export function installPath(templateSlug: string, appSlug?: string): string {
  */
 export function openInTab(path: string): void {
   window.open(path, '_blank', 'noopener')
+}
+
+
+/** Wohin der Browser für die Anmeldung geschickt wird.
+
+ * Die Adresse, auf der man gerade steht, wird mitgegeben: Wer auf eine
+ * Desktop-Verknüpfung geklickt hat, landet nach der Anmeldung in seiner
+ * Anwendung und nicht im Dashboard.
+ */
+export function anmeldePfad(): string {
+  const hier = window.location.pathname + window.location.search
+  return `/api/auth/oidc/start?next=${encodeURIComponent(hier)}`
 }

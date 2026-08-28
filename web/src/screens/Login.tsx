@@ -2,7 +2,13 @@ import { useState } from 'react'
 import { ApiError, api, type Me } from '../lib/api'
 import { setLang, t, useLang, type Lang } from '../lib/i18n'
 
-export function Login({ onDone }: { onDone: (me: Me) => void }) {
+export function Login({ onDone, notfall = false, fehler }: {
+  onDone: (me: Me) => void
+  /** Der Notzugang: dieselbe Maske, aber sie sagt, was sie ist. */
+  notfall?: boolean
+  /** Was bei der zentralen Anmeldung schiefging, falls sie es versucht hat. */
+  fehler?: string
+}) {
   const lang = useLang()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -34,9 +40,32 @@ export function Login({ onDone }: { onDone: (me: Me) => void }) {
             statt benutzt zu werden — hier darf die Marke Farbe haben. Der
             Schriftzug steckt im Bild, deshalb keine zweite Überschrift. */}
         <img className="login__logo" src="/logo.svg" alt="OpenTerminalApps" />
-        <p className="sub" style={{ marginBottom: 22 }}>
-          {t('Melde dich an, um deinen Arbeitsplatz zu öffnen.')}
+        <p className="sub" style={{ marginBottom: notfall ? 12 : 22 }}>
+          {notfall
+            ? t('Notzugang mit lokalem Konto. Er umgeht die zentrale Anmeldung und wird protokolliert.')
+            : t('Melde dich an, um deinen Arbeitsplatz zu öffnen.')}
         </p>
+
+        {notfall && (
+          <p className="note-warn" style={{ marginBottom: 18 }}>
+            {t('Dieser Weg ist für den Fall gedacht, dass die zentrale Anmeldung nicht erreichbar ist. Wenn sie läuft, nimm sie.')}
+          </p>
+        )}
+
+        {fehler && (
+          <p className="note-warn" style={{ marginBottom: 18 }}>
+            {t('Die zentrale Anmeldung hat nicht geklappt: {grund}', { grund: fehler })}
+          </p>
+        )}
+
+        {!notfall && (
+          <div className="viewer__row" style={{ marginBottom: 18 }}>
+            <button type="button" className="btn"
+              onClick={() => { window.location.href = '/api/auth/oidc/start?next=/' }}>
+              {t('Über die zentrale Anmeldung')}
+            </button>
+          </div>
+        )}
 
         <label className="field">
           <span className="field__label" style={{ display: 'block', marginBottom: 8 }}>{t('Benutzername')}</span>

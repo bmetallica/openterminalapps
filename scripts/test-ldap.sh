@@ -109,7 +109,7 @@ expect "True" "$HAT" "Stattdessen nur die Auskunft, dass eines hinterlegt ist"
 PRUEF=$(api -X POST "$BASE_URL/api/admin/identity/test" -H 'Content-Type: application/json' \
   -d '{"probe_login":"ruth.mayer"}')
 expect "5" "$(echo "$PRUEF" | jqp "d.get('eintraege')")" "Der Prüf-Knopf findet die Einträge"
-echo "$PRUEF" | grep -q '"entwicklung"' \
+grep -q '"entwicklung"' <<<"$PRUEF" \
   && ok "Und die Gruppen des Verzeichnisses" \
   || bad "Die Gruppen fehlen: $(echo "$PRUEF" | head -c 120)"
 echo "$PRUEF" | jqp "d['person']['gruppen']" | grep -q "verwaltung" \
@@ -129,13 +129,13 @@ echo
 echo "Anmelden aus dem Verzeichnis"
 ANTWORT=$(anon --max-time 30 -X POST "$BASE_URL/api/auth/login" -H 'Content-Type: application/json' \
   -d '{"username":"lena.brandt","password":"Lena-Pruef-2026!"}')
-echo "$ANTWORT" | grep -q '"username": *"lena.brandt"' \
+grep -q '"username": *"lena.brandt"' <<<"$ANTWORT" \
   && ok "Erste Anmeldung legt das Konto an" \
   || bad "Das Konto wurde nicht angelegt: $(echo "$ANTWORT" | head -c 120)"
 echo "$ANTWORT" | jqp "d.get('groups')" | grep -q "users" \
   && ok "Die zugeordnete Gruppe greift (entwicklung → users)" \
   || bad "Die Gruppenzuordnung greift nicht"
-echo "$ANTWORT" | grep -q '"display_name": *"Lena Brandt"' \
+grep -q '"display_name": *"Lena Brandt"' <<<"$ANTWORT" \
   && ok "Name aus dem Verzeichnis übernommen" \
   || bad "Der Anzeigename fehlt"
 

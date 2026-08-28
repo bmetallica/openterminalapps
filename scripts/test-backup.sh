@@ -106,7 +106,7 @@ else
   else
     DRIN=$(tar --zstd -tf "$PROBE" 2>/dev/null | awk -F/ 'NF>2 {print $3}' | sort -u)
     for teil in skeletons shared userfiles; do
-      if echo "$DRIN" | grep -qx "$teil"; then
+      if grep -qx "$teil" <<<"$DRIN"; then
         ok "srv/ota/$teil ist in der Sicherung"
       else
         bad "srv/ota/$teil fehlt in der Sicherung"
@@ -181,7 +181,7 @@ if [ -n "$CN" ]; then
 
   docker exec -u 0 "$CN" rm -f "$MARKER" 2>/dev/null
   MSG=$(api -X POST "$BASE/api/backups/$CBID/restore-into-session" | jqp "d.get('status') or d.get('detail','')")
-  echo "$MSG" | grep -qi "zurückgespielt" && ok "Container-Sicherung zurückgespielt" \
+  grep -qi "zurückgespielt" <<<"$MSG" && ok "Container-Sicherung zurückgespielt" \
                                           || bad "Zurückspielen: $MSG"
   docker exec "$CN" test -f "$MARKER" 2>/dev/null \
     && ok "Markierung ist wieder im Container" || bad "Markierung fehlt nach dem Zurückspielen"
@@ -195,7 +195,7 @@ PROFILE="/srv/ota/profiles/$USER_NAME/user"
 SESSIONS=$(api "$BASE/api/sessions" | jqp "len(d)")
 if [ "$SESSIONS" -gt 0 ]; then
   MSG=$(api -X POST "$BASE/api/backups/$BID/restore" | jqp "d.get('detail','')")
-  echo "$MSG" | grep -qi "session" && ok "Wiederherstellung bei laufender Session abgelehnt" \
+  grep -qi "session" <<<"$MSG" && ok "Wiederherstellung bei laufender Session abgelehnt" \
                                    || bad "Laufende Session wurde nicht erkannt: $MSG"
   for s in $(api "$BASE/api/sessions" | jqp "' '.join(x['id'] for x in d)"); do
     api -X DELETE "$BASE/api/sessions/$s" >/dev/null
@@ -212,7 +212,7 @@ echo "diese Datei darf nach der Wiederherstellung nicht mehr da sein" > "$MARK"
 [ -f "$MARK" ] && ok "Markierung ins Profil gelegt" || bad "Markierung liess sich nicht anlegen"
 
 MSG=$(api -X POST "$BASE/api/backups/$BID/restore" | jqp "d.get('status') or d.get('detail','')")
-echo "$MSG" | grep -qi "wiederhergestellt" && ok "Wiederherstellung gemeldet" \
+grep -qi "wiederhergestellt" <<<"$MSG" && ok "Wiederherstellung gemeldet" \
                                            || bad "Wiederherstellung: $MSG"
 
 [ ! -f "$MARK" ] && ok "Markierung ist verschwunden — die Wiederherstellung hat gewirkt" \
@@ -260,7 +260,7 @@ rm -f "$DUMP_TMP"
 
 DBID=$(api "$BASE/api/backups" | jqp "next((b['id'] for b in d if b['kind']=='database' and b['status']=='ok'), '')")
 MSG=$(api -X POST "$BASE/api/backups/$DBID/restore" | jqp "d.get('detail','')")
-echo "$MSG" | grep -qi "restore-db" \
+grep -qi "restore-db" <<<"$MSG" \
   && ok "Datenbank-Wiederherstellung verweist auf das Skript statt es zu versuchen" \
   || bad "Unerwartete Antwort: $MSG"
 
@@ -278,7 +278,7 @@ NOPROFILE=$(api "$BASE/api/backups" | jqp "sum(1 for b in d if 'noch kein Profil
                             || bad "$NOPROFILE Fehlereinträge für Konten ohne Profil"
 
 RESULT=$(api "$BASE/api/backups/policy" | jqp "d.get('last_result') or ''")
-echo "$RESULT" | grep -q "ohne Profil" && ok "Lauf meldet übersprungene Konten: $RESULT" \
+grep -q "ohne Profil" <<<"$RESULT" && ok "Lauf meldet übersprungene Konten: $RESULT" \
                                        || bad "Lauf ohne Angabe der übersprungenen Konten"
 
 # Ein Lauf, der beim Neustart des Dienstes abgebrochen ist, stünde sonst für

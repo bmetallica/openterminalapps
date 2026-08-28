@@ -7,6 +7,10 @@ pydantic==2.10.4
 pydantic-settings==2.7.0
 argon2-cffi==23.1.0
 pyjwt==2.10.1
+# Fuer RS256: Keycloak signiert seine Token mit einem Schluesselpaar, und
+# PyJWT prueft das nur mit dieser Bibliothek. Ohne sie scheitert die Pruefung
+# mit "Algorithm not supported" — und zwar erst zur Laufzeit.
+cryptography==44.0.0
 httpx==0.28.1
 python-multipart==0.0.20
 pyotp==2.9.0

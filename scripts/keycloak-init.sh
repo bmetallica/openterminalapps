@@ -124,15 +124,42 @@ fi
 #   ota          Die Anmeldung von OTA selbst (ab Etappe B).
 #   ota-tests    Nur für die Prüfreihen: Benutzername und Passwort direkt
 #                gegen ein Token, ohne Browser (auth-roadmap.md §5e).
+# Anlegen **oder ergänzen**. Das Ergänzen ist der Teil, der später zählt:
+# Kommt eine Einstellung dazu — etwa die Rückkanal-Abmeldung —, soll ein
+# erneuter Lauf sie nachtragen, statt achselzuckend „gibt es schon" zu sagen.
+# Zusammengeführt wird feldweise; was in Keycloak steht und uns nicht
+# interessiert, bleibt unangetastet.
 client_anlegen() {  # client_anlegen <clientId> <json>
   local id="$1" body="$2"
   kc GET "/admin/realms/$REALM/clients?clientId=$id" >/dev/null
-  if [ "$(kc_body | jq_py "len(d)")" != "0" ]; then
-    info "Client $id gibt es schon"
+  local vorhanden; vorhanden=$(kc_body)
+
+  if [ "$(echo "$vorhanden" | jq_py "len(d)")" = "0" ]; then
+    local code; code=$(kc POST "/admin/realms/$REALM/clients" "$body")
+    [ "$code" = "201" ] && ok "Client $id angelegt" || bad "Client $id: HTTP $code $(kc_body)"
     return 0
   fi
-  local code; code=$(kc POST "/admin/realms/$REALM/clients" "$body")
-  [ "$code" = "201" ] && ok "Client $id angelegt" || bad "Client $id: HTTP $code $(kc_body)"
+
+  local kid; kid=$(echo "$vorhanden" | jq_py "d[0]['id']")
+  local zusammen
+  zusammen=$(echo "$vorhanden" | NEU="$body" python3 -c "
+import json, os, sys
+alt = json.load(sys.stdin)[0]
+neu = json.loads(os.environ['NEU'])
+# Verschachteltes wird verschmolzen, nicht ersetzt: Attribute, die jemand von
+# Hand gesetzt hat, sollen einen Lauf dieses Skripts ueberleben.
+for k, v in neu.items():
+    if isinstance(v, dict) and isinstance(alt.get(k), dict):
+        alt[k] = {**alt[k], **v}
+    else:
+        alt[k] = v
+print(json.dumps(alt))")
+
+  local code; code=$(kc PUT "/admin/realms/$REALM/clients/$kid" "$zusammen")
+  case "$code" in
+    204) ok "Client $id auf Stand gebracht" ;;
+    *)   bad "Client $id ergänzen: HTTP $code $(kc_body)" ;;
+  esac
 }
 
 client_anlegen ota-manager "$(cat <<JSON
@@ -149,7 +176,11 @@ client_anlegen ota "$(cat <<JSON
  "standardFlowEnabled":true,"directAccessGrantsEnabled":false,
  "serviceAccountsEnabled":false,"protocol":"openid-connect",
  "redirectUris":["/*"],"webOrigins":["+"],
- "defaultClientScopes":["profile","email","roles","ota-groups"]}
+ "defaultClientScopes":["profile","email","roles","ota-groups"],
+ "attributes":{
+   "backchannel.logout.url":"http://api:8000/api/auth/oidc/backchannel",
+   "backchannel.logout.session.required":"false",
+   "backchannel.logout.revoke.offline.tokens":"false"}}
 JSON
 )"
 

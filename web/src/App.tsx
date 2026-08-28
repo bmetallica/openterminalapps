@@ -11,7 +11,7 @@ import { Storage } from './screens/Storage'
 import { Account } from './screens/Account'
 import { Registries } from './screens/Registries'
 import { StandaloneViewer } from './screens/StandaloneViewer'
-import { openInTab, parseRoute, viewPath, type Route } from './lib/routes'
+import { anmeldePfad, openInTab, parseRoute, viewPath, type Route } from './lib/routes'
 import { ApiError, api, type Host, type Me, type Session, type Stream, type Template } from './lib/api'
 import { gb } from './lib/format'
 import { setLang, t, useLang, type Lang } from './lib/i18n'
@@ -100,8 +100,17 @@ export default function App() {
 
   async function logout() {
     await api.logout().catch(() => {})
-    setMe(null)
-    setView('dashboard')
+    // Ausdrücklich auf die Anmeldeseite und nicht zurück in die
+    // Weiterleitung: Wer sich gerade abgemeldet hat, will nicht im selben
+    // Atemzug wieder angemeldet werden. Dort stehen beide Wege — die zentrale
+    // Anmeldung und, solange es sie gibt, die lokale.
+    //
+    // Und **ohne** `setMe(null)` davor. Das war ein Wettlauf: Der leere
+    // Zustand liess sofort neu zeichnen, die Weiterleitung zur zentralen
+    // Anmeldung feuerte noch im selben Bild, und der Mensch war abgemeldet
+    // und im selben Moment wieder angemeldet. Die Seite wird ohnehin
+    // verlassen; den Zustand aufzuräumen ist dann niemandes Aufgabe mehr.
+    window.location.href = '/login'
   }
 
   if (checking) {
@@ -114,9 +123,40 @@ export default function App() {
   }
 
   if (!me) {
-    // Nach der Anmeldung bleibt die Adresse stehen. Wer auf eine Verknüpfung
-    // geklickt hat, landet danach in seiner Anwendung und nicht im Dashboard.
-    return <Login onDone={(u) => { setMe(u); toast(t('Willkommen, {name}', { name: u.username })) }} />
+    const fertig = (u: Me) => { setMe(u); toast(t('Willkommen, {name}', { name: u.username })) }
+
+    // Der Notzugang. Eigene Adresse, damit ihn niemand versehentlich benutzt
+    // — und damit er da ist, wenn Keycloak es nicht ist (auth-roadmap.md §5.2).
+    if (route.kind === 'notfall') return <Login onDone={fertig} notfall />
+
+    // `/login` ist der Landeplatz und **zugleich** die lokale Anmeldung.
+    //
+    // Beides in einem, weil es solange beides sein muss: Ohne Landeplatz
+    // liefe der Browser bei einem Fehler in eine Schleife — weiterleiten,
+    // scheitern, wieder weiterleiten. Und ohne lokale Maske käme bis zur
+    // Übernahme der Bestandskonten (auth-roadmap.md §5.1) niemand mehr
+    // herein, der noch nicht in Keycloak steht. Genau hier wäre der
+    // Administrator ausgesperrt, der diesen Umbau macht.
+    //
+    // Mit der Übernahme fällt dieser Weg weg; übrig bleibt der Notzugang.
+    if (route.kind === 'login') return <Login onDone={fertig} fehler={route.fehler} />
+
+    // Der Normalfall: hinüber zu Keycloak. Die Adresse, auf der wir stehen,
+    // geht mit — wer auf eine Desktop-Verknüpfung geklickt hat, landet danach
+    // in seiner Anwendung und nicht im Dashboard.
+    window.location.replace(anmeldePfad())
+    return (
+      <div className="boot">
+        <img className="boot__mark" src="/icon.svg" alt="" aria-hidden="true" />
+        <span className="silk">{t('Anmeldung wird geöffnet…')}</span>
+      </div>
+    )
+  }
+
+  // Angemeldet und auf einer Anmeldeadresse: Da gibt es nichts mehr zu tun.
+  if (route.kind === 'login' || route.kind === 'notfall') {
+    window.location.replace('/')
+    return <div className="boot"><span className="silk">{t('Einen Moment…')}</span></div>
   }
 
   if (route.kind !== 'app') {

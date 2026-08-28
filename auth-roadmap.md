@@ -704,7 +704,7 @@ der nächsten abschliessen.
   18 clipboard, 37 backup — alle grün. Die Anmeldung läuft unverändert über OTA, und bei
   gestopptem Keycloak melden sich Nutzer weiterhin an; `/healthz` sagt dann „nicht erreichbar"
 
-### B · OTA meldet sich über Keycloak an
+### B · OTA meldet sich über Keycloak an · ⏳ grösstenteils erledigt am 2026-08-28
 - Autorisierungs-Code-Fluss mit PKCE; OTA tauscht den Code und setzt sein eigenes Cookie
 - `users` wird über `sub` verknüpft; Gruppen bei jeder Anmeldung abgeglichen
 - Abmeldung in Keycloak beendet OTA-Sitzungen über Back-Channel-Logout (`token_epoch` +1)
@@ -712,8 +712,23 @@ der nächsten abschliessen.
   nachgebaut und geprüft — das ist mehr als eine Übersetzung (5.3)
 - **Client `ota-tests` mit Direct Access Grants**, damit die vier Skriptreihen weiterlaufen (5e).
   Zusammen mit der Umstellung, nicht danach — sonst steht der Umbau ohne Prüfung da
-- **Fertig, wenn:** Anmeldung, Streams, `forwardAuth` und die Desktop-Verknüpfungen unverändert
-  funktionieren — gemessen, nicht vermutet
+- [x] Autorisierungs-Code-Fluss mit PKCE; OTA tauscht den Code und setzt sein eigenes Cookie
+- [x] `/api/auth/oidc/token` — ein ID-Token gegen eine OTA-Sitzung, der Weg ohne Browser
+- [x] `users` über `sub` verknüpft; Gruppen bei jeder Anmeldung; ein gleichnamiges lokales Konto
+      wird **nicht** übernommen
+- [x] Back-Channel-Logout: Abmeldung in Keycloak erhöht `token_epoch` und wirkt sofort, auch
+      mitten im Stream
+- [x] Client `ota-tests` mit Direct Access Grants für die Prüfreihen
+- [x] Keycloak-Konten sind von OTAs eigener zweiter Stufe ausgenommen (§5.3)
+- [x] Notzugang unter `/notfall`, dazu `/login` als Landeplatz **und** lokale Maske, solange die
+      Bestandskonten nicht übernommen sind (§5.1) — sonst wäre der Administrator ausgesperrt,
+      der diesen Umbau macht
+- [ ] **Offen:** Die Gruppenpflicht zur zweiten Stufe (`require_totp`) als
+      Keycloak-Authentifizierungsfluss. Das ist der Rest von B und ein eigener Schritt: Er ändert
+      den Anmeldefluss des Realms, und ein Fehler darin sperrt alle aus
+- **Gemessen, nicht vermutet:** 136 authz, 92 e2e, 18 clipboard, 37 backup, 29 ldap — alle grün.
+  Der Weg von der Desktop-Verknüpfung durch die Keycloak-Anmeldung bis in die laufende Anwendung
+  ist im e2e-Lauf enthalten, samt der Prüfung, dass die **Herkunft dieselbe bleibt** (§5.6)
 
 ### C · OTA verwaltet Keycloak
 - Nutzer und Gruppen: anlegen, sperren, zuordnen — über die Admin-API statt lokal

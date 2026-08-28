@@ -80,7 +80,14 @@ try {
 
   // ------------------------------------------------------------ Anmeldung
   console.log('Anmeldung')
-  await page.goto(BASE, { waitUntil: 'networkidle2', timeout: 30000 })
+  // Ausdrücklich `/login` und nicht die Wurzel.
+  //
+  // Seit der Umstellung auf Keycloak (auth-roadmap.md, Etappe B) leitet jede
+  // geschützte Adresse einen Nichtangemeldeten zur zentralen Anmeldung weiter.
+  // Diese Reihe prüft OTA und nicht Keycloak — und `bmetallica` ist bis zur
+  // Übernahme der Bestandskonten (§5.1) ein lokales Konto. `/login` ist der
+  // Weg, der beides bedient: Landeplatz für Fehler und lokale Maske.
+  await page.goto(BASE + '/login', { waitUntil: 'networkidle2', timeout: 30000 })
   await shot(page, '01-login')
 
   check(await page.evaluate(() => window.isSecureContext),
@@ -416,8 +423,11 @@ try {
     for (let i = 0; i < 20; i++) {
       await new Promise((r) => setTimeout(r, 2000))
       wieder = await view.evaluate(() => {
+        // Jede Stufe einzeln abgesichert: Während des Neuladens gibt es
+        // kurz ein Dokument ohne Wurzelelement, und ein Zugriff darauf
+        // beendet den ganzen Lauf statt nur diese Messung.
         const d = document.querySelector('.viewer__frame')?.contentDocument
-        return d?.documentElement.classList.contains('noVNC_connected') === true
+        return d?.documentElement?.classList?.contains('noVNC_connected') === true
       })
       if (wieder) break
     }
@@ -497,12 +507,37 @@ try {
 
     // Und der Weg vom Symbol aus, ohne Anmeldung. Ein eigener Browserkontext,
     // weil es genau darum geht: kein Cookie, keine Sitzung.
+    //
+    // Seit Etappe B führt das zur zentralen Anmeldung. Der Punkt, auf den es
+    // dabei ankommt, ist die **Herkunft**: Keycloak liegt unter /auth
+    // derselben Adresse, und nur deshalb bleibt eine Desktop-Verknüpfung in
+    // ihrem Fenster, statt in einen Browser-Tab zu springen.
     const fremd = await browser.createBrowserContext()
     const kalt = await fremd.newPage()
-    await kalt.goto(BASE + ablagePfad, { waitUntil: 'domcontentloaded' })
-    await kalt.waitForSelector('.login', { timeout: 20000 })
-    check(new URL(kalt.url()).pathname === ablagePfad,
-      `Ohne Anmeldung kommt die Anmeldung — und die Adresse bleibt stehen (${ablagePfad})`)
+    await kalt.goto(BASE + ablagePfad, { waitUntil: 'networkidle2' })
+    await kalt.waitForSelector('#username, .login', { timeout: 25000 })
+
+    const beiKeycloak = await kalt.$('#kc-login')
+    check(!!beiKeycloak, 'Ohne Anmeldung führt die Verknüpfung zur zentralen Anmeldung')
+    check(new URL(kalt.url()).origin === new URL(BASE).origin,
+      `Und sie liegt auf derselben Herkunft (${new URL(kalt.url()).origin})`)
+
+    if (beiKeycloak) {
+      await kalt.type('#username', 'kc-pruef')
+      await kalt.type('#password', 'KcPruef2026!xy')
+      await Promise.all([
+        kalt.click('#kc-login'),
+        kalt.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 }),
+      ])
+      await new Promise((r) => setTimeout(r, 1500))
+      check(new URL(kalt.url()).pathname === ablagePfad,
+        `Nach der Anmeldung steht die Adresse wieder da (${new URL(kalt.url()).pathname})`)
+      const wer = await kalt.evaluate(async () => {
+        const r = await fetch('/api/auth/me')
+        return r.ok ? (await r.json()).username : null
+      })
+      check(wer === 'kc-pruef', `Angemeldet über Keycloak (${wer})`)
+    }
     await kalt.close()
     await fremd.close()
   }

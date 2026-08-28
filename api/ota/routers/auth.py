@@ -5,18 +5,21 @@ import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 
+import jwt
+
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session as DbSession
 
-from .. import agent_client, audit, directory, identity
+from .. import agent_client, audit, directory, identity, kcidentity, keycloak
 from ..config import settings
 from ..db import get_db
 from ..deps import current_user, set_session_cookie
 from ..models import User
 from .. import settings_store, totp
 from ..schemas import (
-    LocaleIn, LoginIn, MeOut, PasswordChangeIn, PasswordIn,
+    LocaleIn, LoginIn, MeOut, OidcTokenIn, PasswordChangeIn, PasswordIn,
     TotpActivateIn, TotpCodesOut, TotpDisableIn, TotpSetupOut,
 )
 from ..security import hash_password, needs_totp, password_problem, verify_password
@@ -397,3 +400,251 @@ def set_locale(body: LocaleIn, user: User = Depends(current_user),
     user.locale = body.locale
     db.commit()
     return _me(user)
+
+
+# --------------------------------------------------------------------------
+# Anmeldung über Keycloak (auth-roadmap.md, Etappe B)
+#
+# Zwei Wege herein, und beide enden an derselben Stelle: einem OTA-Cookie.
+#
+#   /oidc/token   Ein bereits vorhandenes Keycloak-Token wird als Beweis
+#                 vorgelegt. Das ist der Weg für alles ohne Browser — die
+#                 Prüfreihen, später ein Kommandozeilenwerkzeug.
+#   /oidc/start   Der Weg im Browser: hin zu Keycloak, mit Code zurück.
+#                 (folgt)
+#
+# **Warum überhaupt ein eigenes Cookie und nicht das Keycloak-Token?** Vor
+# jedem Session-Pfad steht Traefiks forwardAuth, auch vor dem
+# WebSocket-Upgrade. Ein Upgrade lässt sich nicht nach Keycloak umleiten, und
+# ein Stream, der alle paar Minuten einen Anmeldefluss durchliefe, wäre
+# keiner. Keycloak steht an der Haustür; dahinter gilt OTAs Cookie (§3).
+# --------------------------------------------------------------------------
+
+
+@router.post("/oidc/token")
+def oidc_token(
+    body: OidcTokenIn,
+    request: Request,
+    response: Response,
+    db: DbSession = Depends(get_db),
+) -> MeOut:
+    """Ein Keycloak-Token gegen eine OTA-Sitzung.
+
+    Geprüft wird vollständig und gegen den öffentlichen Schlüssel des Realms
+    (`keycloak.pruefe_token`) — Signatur, Aussteller, Laufzeit und vor allem,
+    für **welche** Anwendung das Token ausgestellt wurde. Ohne den letzten
+    Punkt gälte hier ein Token, das für eine andere Anwendung in diesem Realm
+    bestimmt war.
+    """
+    # Das ID-Token, nicht das Zugriffstoken: Es ist die Aussage über eine
+    # Person, und nur dort steht die Kennung (siehe keycloak.pruefe_token).
+    rohtoken = body.id_token.strip()
+    if not rohtoken:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            "Kein ID-Token übergeben (Feld `id_token`).")
+
+    try:
+        daten = keycloak.pruefe_token(rohtoken)
+    except keycloak.KeycloakFehler as exc:
+        audit.record(db, "login.oidc_rejected", request=request, grund=str(exc)[:200])
+        db.commit()
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, str(exc)) from exc
+
+    try:
+        user = kcidentity.anmelden(db, keycloak.angaben(daten))
+    except kcidentity.Abgelehnt as exc:
+        audit.record(db, "login.oidc_refused", request=request, grund=str(exc)[:200])
+        db.commit()
+        raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from exc
+
+    audit.record(db, "login.oidc_ok", actor=user, request=request)
+    db.commit()
+
+    set_session_cookie(response, user, settings_store.idle_minutes(db))
+    return _me(user)
+
+
+# --- Der Anmeldeweg im Browser ------------------------------------------
+#
+# Zwei Aufrufe, und dazwischen war der Mensch bei Keycloak:
+#
+#   /oidc/start     merkt sich, wohin es danach gehen soll, und schickt hin
+#   /oidc/callback  nimmt den Code entgegen und macht daraus eine Sitzung
+#
+# Was zwischen beiden gemerkt werden muss — Zustand, Prüfer, Ziel — liegt in
+# einem kurzlebigen, signierten Cookie und nicht im Serverspeicher. Der Grund
+# ist nicht Bequemlichkeit: Ein Serverspeicher überlebt keinen Neustart der
+# API, und ein Neustart mitten in einer Anmeldung ist kein Ausnahmefall,
+# sondern der Normalfall bei jedem Update.
+
+OIDC_COOKIE = "ota_oidc"
+# Reichlich Zeit für die Anmeldung, aber nicht unbegrenzt: Der Zustand ist der
+# Schutz gegen untergeschobene Anmeldungen und soll nicht ewig gelten.
+OIDC_MINUTEN = 15
+
+
+def _oeffentliche_basis(request: Request) -> str:
+    """Unter welcher Adresse **der Browser** diese Anlage sieht.
+
+    Hinter Traefik steht sie in den Weiterleitungskopfzeilen. Ohne sie
+    schickten wir den Browser an eine Adresse, die nur die API kennt
+    (`http://keycloak:8080`) — und er käme nirgends an.
+    """
+    proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host", "")
+    return f"{proto}://{host}"
+
+
+def _sicheres_ziel(next_: str | None) -> str:
+    """Wohin es nach der Anmeldung geht — nur innerhalb dieser Anlage.
+
+    Ein offener Weiterleitungsparameter ist eine der ältesten Lücken
+    überhaupt: `?next=https://woanders.example` macht aus der eigenen
+    Anmeldeseite eine Startrampe für fremde. Deshalb ausschliesslich Pfade,
+    und auch die nicht in der Form `//fremd.example`, die ein Browser als
+    Adresse mit Herkunft liest.
+    """
+    ziel = (next_ or "/").strip()
+    if not ziel.startswith("/") or ziel.startswith("//"):
+        return "/"
+    return ziel
+
+
+@router.get("/oidc/start")
+def oidc_start(request: Request, next: str = "/") -> Response:
+    """Schickt den Browser zur Anmeldung bei Keycloak."""
+    import base64
+    import hashlib
+
+    verifier = secrets.token_urlsafe(64)
+    challenge = base64.urlsafe_b64encode(
+        hashlib.sha256(verifier.encode("ascii")).digest()
+    ).rstrip(b"=").decode("ascii")
+    state = secrets.token_urlsafe(24)
+    ziel = _sicheres_ziel(next)
+
+    basis = _oeffentliche_basis(request)
+    redirect_uri = f"{basis}/api/auth/oidc/callback"
+
+    merkzettel = jwt.encode(
+        {"state": state, "verifier": verifier, "ziel": ziel, "redirect": redirect_uri,
+         "exp": datetime.now(timezone.utc) + timedelta(minutes=OIDC_MINUTEN)},
+        settings().jwt_secret, algorithm=settings().jwt_algorithm,
+    )
+
+    antwort = RedirectResponse(
+        keycloak.authorize_url(redirect_uri, state, challenge, f"{basis}/auth"),
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+    antwort.set_cookie(
+        OIDC_COOKIE, merkzettel, max_age=OIDC_MINUTEN * 60,
+        httponly=True, secure=settings().cookie_secure,
+        # Lax und nicht Strict: Der Rückweg von Keycloak ist eine Navigation
+        # von einer anderen Seite. Bei Strict schickte der Browser das Cookie
+        # dabei nicht mit, und jede Anmeldung scheiterte am fehlenden Zustand.
+        samesite="lax", path="/api/auth",
+    )
+    return antwort
+
+
+@router.get("/oidc/callback")
+def oidc_callback(
+    request: Request,
+    response: Response,
+    db: DbSession = Depends(get_db),
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
+) -> Response:
+    """Nimmt den Code entgegen und macht daraus eine OTA-Sitzung."""
+
+    def zurueck_mit(grund: str) -> Response:
+        # Fehler landen auf der Anmeldeseite und nicht in einem JSON-Fetzen:
+        # Hier steht ein Mensch vor dem Bildschirm, kein Programm.
+        from urllib.parse import quote
+        r = RedirectResponse(f"/login?fehler={quote(grund)}",
+                             status_code=status.HTTP_303_SEE_OTHER)
+        r.delete_cookie(OIDC_COOKIE, path="/api/auth")
+        return r
+
+    if error:
+        return zurueck_mit(f"Keycloak hat abgelehnt: {error}")
+
+    merkzettel = request.cookies.get(OIDC_COOKIE)
+    if not merkzettel or not code or not state:
+        return zurueck_mit("Die Anmeldung ist unterwegs verlorengegangen. Bitte noch einmal.")
+
+    try:
+        notiz = jwt.decode(merkzettel, settings().jwt_secret,
+                           algorithms=[settings().jwt_algorithm])
+    except jwt.PyJWTError:
+        return zurueck_mit("Die Anmeldung hat zu lange gedauert. Bitte noch einmal.")
+
+    if not secrets.compare_digest(str(notiz.get("state", "")), state):
+        audit.record(db, "login.oidc_state_mismatch", request=request)
+        db.commit()
+        return zurueck_mit("Die Anmeldung passte nicht zusammen. Bitte noch einmal.")
+
+    try:
+        token_antwort = keycloak.tausche_code(
+            code, str(notiz["redirect"]), str(notiz["verifier"]))
+        daten = keycloak.pruefe_token(str(token_antwort.get("id_token") or ""))
+        user = kcidentity.anmelden(db, keycloak.angaben(daten))
+    except keycloak.KeycloakFehler as exc:
+        audit.record(db, "login.oidc_rejected", request=request, grund=str(exc)[:200])
+        db.commit()
+        return zurueck_mit(str(exc))
+    except kcidentity.Abgelehnt as exc:
+        audit.record(db, "login.oidc_refused", request=request, grund=str(exc)[:200])
+        db.commit()
+        return zurueck_mit(str(exc))
+
+    audit.record(db, "login.oidc_ok", actor=user, request=request)
+    db.commit()
+
+    fertig = RedirectResponse(_sicheres_ziel(str(notiz.get("ziel"))),
+                              status_code=status.HTTP_303_SEE_OTHER)
+    fertig.delete_cookie(OIDC_COOKIE, path="/api/auth")
+    set_session_cookie(fertig, user, settings_store.idle_minutes(db))
+    return fertig
+
+
+@router.post("/oidc/backchannel")
+async def oidc_backchannel(request: Request, db: DbSession = Depends(get_db)) -> Response:
+    """Keycloak meldet: Dieser Mensch hat sich abgemeldet.
+
+    Der Rückkanal ist die Antwort auf die Frage aus §5e, wie zwei Uhren
+    zusammenpassen: **Innerhalb von OTA gilt OTAs Uhr**, aber ein ausdrücklicher
+    Widerruf wirkt sofort. Erhöht wird `token_epoch` — dieselbe Mechanik, mit
+    der ein Administrator jemanden hinauswirft. Damit ist die nächste Prüfung
+    in `forwardAuth` die letzte, die das alte Cookie sieht: auch mitten im
+    Stream, auch vor dem nächsten WebSocket-Handshake.
+
+    Ohne Anmeldung erreichbar, und das ist richtig so: Der Beweis steckt in
+    der Signatur des Tokens, nicht in einem Cookie. Keycloak ruft hier ohne
+    Sitzung an.
+    """
+    formular = await request.form()
+    rohtoken = str(formular.get("logout_token") or "")
+    if not rohtoken:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Kein Abmeldetoken.")
+
+    try:
+        daten = keycloak.pruefe_abmeldetoken(rohtoken)
+    except keycloak.KeycloakFehler as exc:
+        # Bewusst 400 und nicht 401: Hier meldet sich niemand an, hier wird
+        # etwas Ungültiges vorgelegt.
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+    sub = str(daten.get("sub") or "")
+    user = kcidentity.finde(db, sub) if sub else None
+    if user is None:
+        # Kein Konto dazu — dann gibt es hier auch nichts zu beenden. Kein
+        # Fehler: Keycloak kennt Menschen, die OTA nie gesehen hat.
+        return Response(status_code=status.HTTP_200_OK)
+
+    user.token_epoch = (user.token_epoch or 0) + 1
+    audit.record(db, "logout.backchannel", actor=user, request=request)
+    db.commit()
+    log.info("Abmeldung über den Rückkanal: %s", user.username)
+    return Response(status_code=status.HTTP_200_OK)

@@ -340,7 +340,7 @@ if [ -z "$CNAME" ] || ! docker inspect "$CNAME" >/dev/null 2>&1; then
 else
   INSPECT=$(docker inspect "$CNAME")
 
-  echo "$INSPECT" | grep -q '"no-new-privileges:true"' \
+  grep -q '"no-new-privileges:true"' <<<"$INSPECT" \
     && ok "no-new-privileges ist gesetzt" \
     || bad "no-new-privileges fehlt — sudo liefe an"
 
@@ -420,7 +420,7 @@ FEHLER=$(echo "$KC" | jqp "str(d['fehler'])")
 expect "None" "$FEHLER" "Keine fehlenden Rechte gemeldet"
 
 HZ=$(curl -s --cacert "$CA" "$BASE/healthz")
-echo "$HZ" | grep -q '"keycloak":"ok"' \
+grep -q '"keycloak":"ok"' <<<"$HZ" \
   && ok "healthz meldet Keycloak" \
   || bad "healthz meldet Keycloak nicht: $HZ"
 
@@ -429,6 +429,126 @@ CODE=$(curl -s --cacert "$CA" -o /dev/null -w '%{http_code}' \
   -X POST "$BASE/api/auth/login" -H 'Content-Type: application/json' \
   -d "{\"username\":\"$ADMIN_USER\",\"password\":\"$ADMIN_PW\"}")
 expect "200" "$CODE" "Die Anmeldung läuft unverändert über OTA"
+
+# ------------------------------------------- Anmeldung über Keycloak
+#
+# Etappe B: Ein Token von Keycloak wird zum Nachweis. Das ist die Stelle, an
+# der Nachlässigkeit teuer wird — deshalb wird hier nicht nur der glückliche
+# Fall geprüft, sondern vor allem die Ablehnungen.
+echo
+echo "Anmeldung über Keycloak"
+
+KC_SECRET="${OTA_KEYCLOAK_SECRET:-}"
+KC_INT="http://ota-keycloak:8080/auth"
+
+if [ -z "$KC_SECRET" ]; then
+  bad "OTA_KEYCLOAK_SECRET fehlt — die Keycloak-Prüfungen entfallen"
+else
+  # Ein Konto, das es nur in Keycloak gibt.
+  KT=$(docker exec -i ota-agent curl -s -d "client_id=ota-manager" \
+        --data-urlencode "client_secret=$KC_SECRET" -d "grant_type=client_credentials" \
+        "$KC_INT/realms/ota/protocol/openid-connect/token" | jqp "d.get('access_token','')")
+
+  docker exec -i ota-agent curl -s -X POST "$KC_INT/admin/realms/ota/users" \
+    -H "Authorization: Bearer $KT" -H 'Content-Type: application/json' \
+    -d '{"username":"kc-pruef","enabled":true,"emailVerified":true,
+         "email":"kc-pruef@ota.test","firstName":"Kirsten","lastName":"Probe",
+         "requiredActions":[],
+         "credentials":[{"type":"password","value":"KcPruef2026!xy","temporary":false}]}' \
+    >/dev/null 2>&1
+
+  ID_TOKEN=$(docker exec -i ota-agent curl -s -d "client_id=ota-tests" \
+    --data-urlencode "client_secret=$KC_SECRET-tests" -d "grant_type=password" \
+    -d "username=kc-pruef" --data-urlencode "password=KcPruef2026!xy" -d "scope=openid" \
+    "$KC_INT/realms/ota/protocol/openid-connect/token" | jqp "d.get('id_token','')")
+
+  if [ -z "$ID_TOKEN" ]; then
+    bad "Kein ID-Token von Keycloak — Direct Access Grants aus?"
+  else
+    ok "Keycloak stellt ein ID-Token aus (Weg der Prüfreihen, §5e)"
+
+    rm -f "$TMP/kc.jar"
+    CODE=$(curl -s --cacert "$CA" -c "$TMP/kc.jar" -o /dev/null -w '%{http_code}' \
+      -X POST "$BASE/api/auth/oidc/token" -H 'Content-Type: application/json' \
+      -d "{\"id_token\":\"$ID_TOKEN\"}")
+    expect "200" "$CODE" "Ein gültiges Token wird zur OTA-Sitzung"
+
+    WER=$(api "$TMP/kc.jar" "$BASE/api/auth/me" | jqp "d.get('username','')")
+    expect "kc-pruef" "$WER" "Und die Sitzung gehört dem richtigen Menschen"
+
+    HERKUNFT=$(api "$TMP/admin.jar" "$BASE/api/admin/users" | jqp "
+next((u['auth_provider'] for u in d if u['username'] == 'kc-pruef'), '')")
+    expect "keycloak" "$HERKUNFT" "Das Konto ist als Keycloak-Konto geführt"
+
+    # Die zweite Stufe gehört nach Keycloak. Ein Keycloak-Konto darf hier
+    # nicht zusätzlich in OTAs eigene TOTP-Einrichtung geschickt werden.
+    ZWEITE=$(api "$TMP/kc.jar" "$BASE/api/auth/me" | jqp "str(d.get('must_setup_totp'))")
+    expect "False" "$ZWEITE" "Keycloak-Konten landen nicht in OTAs eigener zweiter Stufe"
+  fi
+
+  # Und jetzt die Ablehnungen.
+  CODE=$(curl -s --cacert "$CA" -o /dev/null -w '%{http_code}' \
+    -X POST "$BASE/api/auth/oidc/token" -H 'Content-Type: application/json' \
+    -d '{"id_token":"nicht.mal.ein-token"}')
+  expect "401" "$CODE" "Unsinn wird abgewiesen"
+
+  # Ein selbstgebautes Token mit derselben Struktur, aber fremder Signatur.
+  GEFAELSCHT=$(python3 -c "
+import base64, json
+def b(x): return base64.urlsafe_b64encode(json.dumps(x).encode()).rstrip(b'=').decode()
+print(b({'alg':'RS256','kid':'egal'}) + '.' +
+      b({'sub':'11111111-1111-1111-1111-111111111111','preferred_username':'eindringling',
+         'iss':'http://ota-keycloak:8080/auth/realms/ota','aud':'ota','exp':99999999999,'iat':1}) +
+      '.Zm9v')")
+  CODE=$(curl -s --cacert "$CA" -o /dev/null -w '%{http_code}' \
+    -X POST "$BASE/api/auth/oidc/token" -H 'Content-Type: application/json' \
+    -d "{\"id_token\":\"$GEFAELSCHT\"}")
+  expect "401" "$CODE" "Ein selbstgebautes Token ohne gültige Signatur ebenso"
+
+  DA=$(api "$TMP/admin.jar" "$BASE/api/admin/users" | jqp "
+str(len([u for u in d if u['username'] == 'eindringling']))")
+  expect "0" "$DA" "Und es entsteht dabei kein Konto"
+
+  # Der Rückkanal nimmt nur Abmeldetoken an — ein gewöhnliches ID-Token
+  # dürfte sonst jeden aus seiner Sitzung werfen.
+  if [ -n "${ID_TOKEN:-}" ]; then
+    CODE=$(curl -s --cacert "$CA" -o /dev/null -w '%{http_code}' \
+      -X POST "$BASE/api/auth/oidc/backchannel" \
+      --data-urlencode "logout_token=$ID_TOKEN")
+    expect "400" "$CODE" "Der Rückkanal nimmt kein gewöhnliches Token als Abmeldung"
+  fi
+
+  # Ein lokales Konto wird nicht übernommen, auch nicht mit gleichem Namen.
+  docker exec -i ota-agent curl -s -X POST "$KC_INT/admin/realms/ota/users" \
+    -H "Authorization: Bearer $KT" -H 'Content-Type: application/json' \
+    -d "{\"username\":\"$ADMIN_USER\",\"enabled\":true,\"emailVerified\":true,
+         \"email\":\"doppel@ota.test\",\"firstName\":\"Doppel\",\"lastName\":\"Gaenger\",
+         \"requiredActions\":[],
+         \"credentials\":[{\"type\":\"password\",\"value\":\"Fremdes-Passwort-2026!\",\"temporary\":false}]}" \
+    >/dev/null 2>&1
+  DOPPEL=$(docker exec -i ota-agent curl -s -d "client_id=ota-tests" \
+    --data-urlencode "client_secret=$KC_SECRET-tests" -d "grant_type=password" \
+    -d "username=$ADMIN_USER" --data-urlencode "password=Fremdes-Passwort-2026!" -d "scope=openid" \
+    "$KC_INT/realms/ota/protocol/openid-connect/token" | jqp "d.get('id_token','')")
+  if [ -n "$DOPPEL" ]; then
+    CODE=$(curl -s --cacert "$CA" -o /dev/null -w '%{http_code}' \
+      -X POST "$BASE/api/auth/oidc/token" -H 'Content-Type: application/json' \
+      -d "{\"id_token\":\"$DOPPEL\"}")
+    expect "403" "$CODE" "Ein gleichnamiges lokales Konto wird nicht übernommen"
+
+    IMMERNOCH=$(api "$TMP/admin.jar" "$BASE/api/admin/users" | jqp "
+next((u['auth_provider'] for u in d if u['username'] == '$ADMIN_USER'), '')")
+    expect "local" "$IMMERNOCH" "Und es bleibt ein lokales Konto"
+  else
+    bad "Der Doppelgänger liess sich in Keycloak nicht anlegen"
+  fi
+
+  # Aufräumen: der Doppelgänger hat in Keycloak nichts verloren.
+  DID=$(docker exec -i ota-agent curl -s "$KC_INT/admin/realms/ota/users?username=$ADMIN_USER" \
+        -H "Authorization: Bearer $KT" | jqp "d[0]['id'] if d else ''")
+  [ -n "$DID" ] && docker exec -i ota-agent curl -s -X DELETE \
+    "$KC_INT/admin/realms/ota/users/$DID" -H "Authorization: Bearer $KT" >/dev/null 2>&1
+fi
 
 # ------------------------------------------------------- Einmal-Skripte
 #
@@ -689,7 +809,7 @@ else
   # Kein Weg nach draussen. Dieselbe Prüfung wie bei der Ablage, denn es ist
   # dieselbe Art Fehler.
   OUT=$(api "$TMP/admin.jar" "$SKEL?path=../../etc")
-  echo "$OUT" | grep -q "nicht erlaubt\|ausserhalb" \
+  grep -q "nicht erlaubt\|ausserhalb" <<<"$OUT" \
     && ok "Ein Pfad nach draussen wird abgelehnt" \
     || bad "Der Ausbruchsversuch ging durch: $(echo "$OUT" | head -c 100)"
 
@@ -808,16 +928,16 @@ else
     'mkdir -p /etc/sudoers.d && echo "# OTA" > /etc/sudoers.d/ota-admin' >/dev/null 2>&1
 
   VOR=$(api "$TMP/admin.jar" "$BASE/api/templates/$WS_F/freeze/preview")
-  echo "$VOR" | grep -q "id_pruef" \
+  grep -q "id_pruef" <<<"$VOR" \
     && ok "Die Vorschau findet eine Datei, die nach einem Geheimnis aussieht" \
     || bad "Die Vorschau übersah /root/.ssh/id_pruef"
 
-  echo "$VOR" | grep -q "/etc/sudoers.d/ota-admin" \
+  grep -q "/etc/sudoers.d/ota-admin" <<<"$VOR" \
     && ok "Die sudo-Ausnahme steht als „wird entfernt“ in der Vorschau" \
     || bad "Die sudo-Ausnahme fehlt in der Vorschau"
 
   # Das Zuhause ist ein Bind-Mount und darf gar nicht erst auftauchen.
-  echo "$VOR" | grep -q "/home/kasm-user" \
+  grep -q "/home/kasm-user" <<<"$VOR" \
     && bad "Das Zuhause steht in der Vorschau — es gehört nicht ins Image" \
     || ok "Das Zuhause taucht in der Vorschau nicht auf"
 
@@ -825,7 +945,7 @@ else
   # übergehen kann, ist Dekoration.
   OUT=$(api "$TMP/admin.jar" -X POST "$BASE/api/templates/$WS_F/freeze" \
     -H 'Content-Type: application/json' -d '{"comment":"Prüfung"}')
-  echo "$OUT" | grep -q "nach einem Geheimnis aus" \
+  grep -q "nach einem Geheimnis aus" <<<"$OUT" \
     && ok "Ohne ausdrückliche Bestätigung wird nicht eingefroren" \
     || bad "Es wurde trotz Fund eingefroren: $(echo "$OUT" | head -c 120)"
 
@@ -845,7 +965,7 @@ else
   docker unpause "$CN_F" >/dev/null 2>&1   # falls es doch scheiterte
   if [ -n "$IMG" ]; then
     ok "Eingefroren als $IMG"
-    echo "$OUT" | grep -q "pausiert und wurde dafür aufgeweckt" \
+    grep -q "pausiert und wurde dafür aufgeweckt" <<<"$OUT" \
       && ok "Der pausierte Container wurde erkannt und aufgeweckt" \
       || bad "Die Pause blieb unbemerkt — das hätte hängen müssen"
     docker run --rm --entrypoint test "$IMG" -f /etc/sudoers.d/ota-admin \
@@ -859,7 +979,7 @@ else
     # der Liste des Administrators.
     BID_F=$(echo "$OUT" | jqp "d.get('id','')")
     RES=$(api "$TMP/admin.jar" -X DELETE "$BASE/api/templates/$WS_F/builds/$BID_F")
-    echo "$RES" | grep -q "entfernt" \
+    grep -q "entfernt" <<<"$RES" \
       && ok "Die Prüf-Fassung lässt sich wieder entfernen" \
       || bad "Die Prüf-Fassung blieb stehen: $(echo "$RES" | head -c 120)"
     docker rmi -f "$IMG" >/dev/null 2>&1
@@ -869,7 +989,7 @@ else
 next((b['id'] for b in d if b['is_current']), '')")
     if [ -n "$CUR" ]; then
       RES=$(api "$TMP/admin.jar" -X DELETE "$BASE/api/templates/$WS_F/builds/$CUR")
-      echo "$RES" | grep -q "in Betrieb" \
+      grep -q "in Betrieb" <<<"$RES" \
         && ok "Die aktive Fassung lässt sich nicht löschen" \
         || bad "Die aktive Fassung liess sich löschen — der nächste Start bräche ab"
     fi
@@ -896,13 +1016,13 @@ if [ -n "$LAST_B" ]; then
   # nachliefern und sich dann von selbst schliessen, statt offen zu bleiben.
   OUT=$(timeout 20 curl -s --cacert "$CA" -b "$TMP/admin.jar" -N \
     "$BASE/api/templates/$WS_B/builds/$LAST_B/stream")
-  echo "$OUT" | grep -q "^event: end" \
+  grep -q "^event: end" <<<"$OUT" \
     && ok "Der Strom schliesst sich nach einem fertigen Build" \
     || bad "Kein Schlussereignis — die Verbindung bliebe offen"
-  echo "$OUT" | grep -q '^data: {"chunk"' \
+  grep -q '^data: {"chunk"' <<<"$OUT" \
     && ok "Das Protokoll kommt als Zuwachs statt als Ganzes" \
     || bad "Keine Protokoll-Ereignisse im Strom"
-  if echo "$OUT" | grep -q "event: status"; then
+  if grep -q "event: status" <<<"$OUT"; then
     ok "Der Zustand wird gemeldet"
   else
     # Mit Anfang des Stroms, sonst ist der Befund nicht nachvollziehbar:
@@ -922,10 +1042,10 @@ echo
 echo "Zustand und Kennzahlen"
 
 HEALTH=$(curl -s --cacert "$CA" "$BASE/healthz")
-echo "$HEALTH" | grep -q '"db":"ok"' \
+grep -q '"db":"ok"' <<<"$HEALTH" \
   && ok "healthz prüft die Datenbank und meldet sie erreichbar" \
   || bad "healthz sagt nichts über die Datenbank: $HEALTH"
-echo "$HEALTH" | grep -q '"agent":"ok"' \
+grep -q '"agent":"ok"' <<<"$HEALTH" \
   && ok "healthz prüft den Agent und meldet ihn erreichbar" \
   || bad "healthz sagt nichts über den Agent: $HEALTH"
 
@@ -935,13 +1055,13 @@ expect "401" "$(code /dev/null "$BASE/metrics")" "Kennzahlen ohne Anmeldung verw
 expect "403" "$(code "$TMP/user.jar" "$BASE/metrics")" "Kennzahlen für einen normalen Nutzer verweigert"
 
 METRICS=$(api "$TMP/admin.jar" "$BASE/metrics")
-echo "$METRICS" | grep -q "^ota_users " \
+grep -q "^ota_users " <<<"$METRICS" \
   && ok "Kennzahlen enthalten die Kontenzahl" \
   || bad "Kennzahlen ohne ota_users"
-echo "$METRICS" | grep -q "^ota_agent_up 1" \
+grep -q "^ota_agent_up 1" <<<"$METRICS" \
   && ok "Kennzahlen melden den Agent als erreichbar" \
   || bad "ota_agent_up fehlt oder steht auf 0"
-echo "$METRICS" | grep -q "^# TYPE ota_sessions gauge" \
+grep -q "^# TYPE ota_sessions gauge" <<<"$METRICS" \
   && ok "Format ist Prometheus-lesbar (HELP/TYPE je Messwert)" \
   || bad "Kein TYPE-Kopf im Kennzahlen-Format"
 
@@ -1004,7 +1124,7 @@ print(next((t["id"] for t in d
   if [ -n "$TPL_Q" ]; then
     OUT=$(api "$TMP/admin.jar" -X POST "$BASE/api/sessions" -H 'Content-Type: application/json' \
       -d "{\"template_id\":\"$TPL_Q\"}")
-    echo "$OUT" | grep -q "Zuhause belegt" \
+    grep -q "Zuhause belegt" <<<"$OUT" \
       && ok "Volles Kontingent lehnt den Start mit einer verständlichen Meldung ab" \
       || bad "Das Kontingent hielt nichts auf: $(echo "$OUT" | head -c 160)"
   else
@@ -1031,11 +1151,11 @@ fi
 echo
 echo "Zwischenablage-Voraussetzungen"
 HDRS=$(curl -sI --cacert "$CA" "$BASE/")
-echo "$HDRS" | grep -qi 'permissions-policy.*clipboard-read' \
+grep -qi 'permissions-policy.*clipboard-read' <<<"$HDRS" \
   && ok "Permissions-Policy erlaubt clipboard-read" || bad "Permissions-Policy fehlt oder verbietet clipboard-read"
-echo "$HDRS" | grep -qi 'permissions-policy.*clipboard-write' \
+grep -qi 'permissions-policy.*clipboard-write' <<<"$HDRS" \
   && ok "Permissions-Policy erlaubt clipboard-write" || bad "clipboard-write fehlt"
-echo "$HDRS" | grep -qi "frame-ancestors 'self'" \
+grep -qi "frame-ancestors 'self'" <<<"$HDRS" \
   && ok "CSP erlaubt das eigene iframe" || bad "CSP frame-ancestors fehlt"
 [ "$(curl -s --cacert "$CA" -o /dev/null -w '%{ssl_verify_result}' "$BASE/")" = "0" ] \
   && ok "TLS-Kette gültig (Secure Context vorhanden)" || bad "TLS-Kette ungültig"
@@ -1057,7 +1177,7 @@ otp() {  # otp <geheimnis> -> aktueller Zeitcode
 SETUP=$(curl -s --cacert "$CA" -b "$TMP/user.jar" -X POST "$BASE/api/auth/totp/setup")
 SECRET=$(echo "$SETUP" | jqp "d.get('secret','')")
 [ -n "$SECRET" ] && ok "Einrichtung liefert ein Geheimnis" || bad "Keine Einrichtung möglich"
-echo "$SETUP" | grep -q "<svg" && ok "Einrichtungscode kommt als Bild mit" \
+grep -q "<svg" <<<"$SETUP" && ok "Einrichtungscode kommt als Bild mit" \
                                || bad "Kein Einrichtungscode im Ergebnis"
 
 CODES=$(curl -s --cacert "$CA" -b "$TMP/user.jar" -X POST "$BASE/api/auth/totp/activate" \
@@ -1071,7 +1191,7 @@ RC=$(echo "$CODES" | jqp "d['codes'][0]")
 # Ohne Code kommt niemand mehr herein.
 OUT=$(curl -s --cacert "$CA" -X POST "$BASE/api/auth/login" -H 'Content-Type: application/json' \
   -d "{\"username\":\"$TEST_USER\",\"password\":\"$TEST_PW\"}")
-echo "$OUT" | grep -q "Code aus deiner App" \
+grep -q "Code aus deiner App" <<<"$OUT" \
   && ok "Anmeldung ohne zweiten Faktor wird abgelehnt" \
   || bad "Anmeldung ohne zweiten Faktor ging durch"
 
@@ -1084,7 +1204,7 @@ LEFT=$(echo "$OUT" | jqp "d.get('recovery_left',-1)")
 
 OUT=$(curl -s --cacert "$CA" -X POST "$BASE/api/auth/login" -H 'Content-Type: application/json' \
   -d "{\"username\":\"$TEST_USER\",\"password\":\"$TEST_PW\",\"totp\":\"$RC\"}")
-echo "$OUT" | grep -q "stimmt nicht" \
+grep -q "stimmt nicht" <<<"$OUT" \
   && ok "Derselbe Rückfallcode wirkt kein zweites Mal" \
   || bad "Ein verbrauchter Rückfallcode ging erneut durch"
 
@@ -1129,7 +1249,7 @@ next((t['id'] for t in d if t['is_enabled']), '')")
 if [ -n "$TPL_Z" ]; then
   OUT=$(api "$TMP/zwang.jar" -X POST "$BASE/api/sessions" -H 'Content-Type: application/json' \
     -d "{\"template_id\":\"$TPL_Z\"}")
-  echo "$OUT" | grep -q "zweite Faktor Pflicht" \
+  grep -q "zweite Faktor Pflicht" <<<"$OUT" \
     && ok "Ohne zweiten Faktor startet kein Arbeitsplatz" \
     || bad "Der Zwang hielt nichts auf: $(echo "$OUT" | head -c 140)"
 fi
@@ -1148,7 +1268,7 @@ ZWANG_UID=$(api "$TMP/admin.jar" "$BASE/api/admin/users" \
 # Administrator nimmt den zweiten Faktor ab. Ohne das kaeme der Mensch nie
 # wieder herein.
 OUT=$(api "$TMP/admin.jar" -X POST "$BASE/api/admin/users/$TEST_UID/reset-totp")
-echo "$OUT" | grep -q "entfernt" \
+grep -q "entfernt" <<<"$OUT" \
   && ok "Ein Administrator kann den zweiten Faktor abnehmen" \
   || bad "Der zweite Faktor liess sich nicht abnehmen: $(echo "$OUT" | head -c 120)"
 STATE=$(api "$TMP/user2.jar" -X POST "$BASE/api/auth/login" \
@@ -1176,7 +1296,7 @@ api "$TMP/user.jar" -X POST "$BASE/api/auth/login" -H 'Content-Type: application
 # Abschalten verlangt Passwort UND Code.
 OUT=$(curl -s --cacert "$CA" -b "$TMP/user.jar" -X DELETE "$BASE/api/auth/totp" \
   -H 'Content-Type: application/json' -d "{\"password\":\"$TEST_PW\",\"code\":\"000000\"}")
-echo "$OUT" | grep -q "stimmt nicht" \
+grep -q "stimmt nicht" <<<"$OUT" \
   && ok "Abschalten ohne gültigen Code wird verweigert" \
   || bad "Zweiter Faktor liess sich ohne Code abschalten"
 

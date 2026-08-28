@@ -525,6 +525,16 @@ export const EN: Record<string, string> = {
   '{name} auf den Desktop legen': 'Add {name} to desktop',
   'Meine Ablage': 'My files',
   'Zentrale Identität': 'Central identity',
+  'Anmeldung wird geöffnet…': 'Opening sign-in…',
+  'Einen Moment…': 'One moment…',
+  'Notzugang': 'Emergency access',
+  'Über die zentrale Anmeldung': 'Use central sign-in',
+  'Die zentrale Anmeldung hat nicht geklappt: {grund}':
+    'Central sign-in did not work: {grund}',
+  'Notzugang mit lokalem Konto. Er umgeht die zentrale Anmeldung und wird protokolliert.':
+    'Emergency access with a local account. It bypasses central sign-in and is recorded.',
+  'Dieser Weg ist für den Fall gedacht, dass die zentrale Anmeldung nicht erreichbar ist. Wenn sie läuft, nimm sie.':
+    'This route exists for when central sign-in is unreachable. If it is up, use it.',
   'Konten': 'Accounts',
   'Mitgeliefert': 'Bundled',
   'Vorhanden': 'Existing',

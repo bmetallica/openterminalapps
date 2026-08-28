@@ -170,6 +170,15 @@ class TemplateIn(BaseModel):
     group_ids: list[uuid.UUID] | None = None
 
 
+class OidcTokenIn(BaseModel):
+    """Ein ID-Token von Keycloak als Nachweis, wer da anklopft.
+
+    Ausdrücklich das ID-Token: Es ist die Aussage über eine Person, und nur
+    dort steht seit Keycloak 26 die Kennung (`sub`).
+    """
+    id_token: str = Field(min_length=16)
+
+
 class OnceRunOut(BaseModel):
     """Ein Lauf, wie ihn die Verwaltung sieht."""
     model_config = ConfigDict(from_attributes=True)
