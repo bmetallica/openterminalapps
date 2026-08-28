@@ -1,0 +1,184 @@
+/* OTA-Farben fuer die Anmeldemaske.
+   ======================================================================
+   Die Maske gehoert zu Keycloak, aber der Mensch davor sieht OTA. Ein
+   Sprung ins Blau-Weiss einer fremden Anwendung mitten im Anmeldeweg laesst
+   genau den Zweifel aufkommen, den eine Anmeldeseite nie ausloesen darf:
+   "Bin ich hier richtig?"
+
+   Uebernommen sind die Flaechen aus web/src/styles/app.css — dieselbe
+   Slate-Leiter, derselbe kuehle Akzent. Gearbeitet wird ueber PatternFlys
+   eigene Variablen, wo es geht, und nur dort mit Regeln, wo es nicht geht.
+   ====================================================================== */
+
+@import url("https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..700&display=swap");
+
+:root,
+:where(html) {
+  --ota-ground: #090D16;
+  --ota-bay:    #0F172A;
+  --ota-bay-2:  #1B2436;
+  --ota-well:   #060A12;
+  --ota-edge:   #1E293B;
+  --ota-edge-lit: #334155;
+  --ota-text:   #F1F5F9;
+  --ota-label:  #94A3B8;
+  --ota-mute:   #64748B;
+  --ota-key:    #E2E8F0;
+  --ota-accent: #22D3EE;
+
+  /* PatternFly rechnet mit diesen. Sie hier umzubiegen ist wirksamer als
+     jede einzelne Regel weiter unten. */
+  --pf-v5-global--BackgroundColor--100: var(--ota-bay);
+  --pf-v5-global--BackgroundColor--200: var(--ota-bay-2);
+  --pf-v5-global--Color--100: var(--ota-text);
+  --pf-v5-global--Color--200: var(--ota-label);
+  --pf-v5-global--BorderColor--100: var(--ota-edge);
+  --pf-v5-global--primary-color--100: var(--ota-accent);
+  --pf-v5-global--link--Color: var(--ota-accent);
+  --pf-v5-global--FontFamily--text: Archivo, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --pf-v5-global--FontFamily--heading: Archivo, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+html, body, body#keycloak-bg {
+  background-color: var(--ota-ground);
+  color: var(--ota-text);
+  font-family: Archivo, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+/* Keycloak legt ein eigenes Hintergrundbild ueber die Flaeche — der
+   sichtbarste Teil seiner Gestaltung und der einzige, der die Farbe darunter
+   vollstaendig verdeckt.
+   
+   Hier steht ausnahmsweise `!important`. Das Elternthema setzt den Hintergrund
+   als Kurzform (`background: var(--keycloak-bg-logo-url) ...`), und eine
+   Kurzform setzt alle Teilwerte auf einmal. Gegen fremde Gestaltung, die man
+   nicht aendern darf, ist das der ehrlichere Weg als ein Wettlauf um
+   Spezifitaet — der beim naechsten Keycloak wieder anders ausginge. */
+.login-pf body,
+body#keycloak-bg,
+body {
+  background-image: none !important;
+  background-color: var(--ota-ground) !important;
+}
+
+/* Die Karte. Dieselbe Flaeche wie ein Panel in OTA. */
+.pf-v5-c-login__main,
+.pf-v5-c-card {
+  background: var(--ota-bay);
+  border: 1px solid var(--ota-edge);
+  border-radius: 12px;
+  box-shadow: none;
+  color: var(--ota-text);
+}
+
+.pf-v5-c-login__main-header-desc,
+.pf-v5-c-login__main-footer-band,
+.pf-v5-c-form__helper-text,
+.pf-v5-c-login__main-footer-links { color: var(--ota-label); }
+
+.pf-v5-c-title,
+.pf-v5-c-login__main-header-title,
+h1, h2 { color: var(--ota-text); font-weight: 500; }
+
+/* Eingabefelder: eingelassene Flaeche, wie in OTA. */
+.pf-v5-c-form-control,
+.pf-v5-c-form-control input,
+input[type="text"], input[type="password"], input[type="email"] {
+  background: var(--ota-well);
+  border: 1px solid var(--ota-edge);
+  border-radius: 8px;
+  color: var(--ota-text);
+}
+
+.pf-v5-c-form-control:focus-within,
+input:focus {
+  border-color: var(--ota-accent);
+  outline: 2px solid color-mix(in srgb, var(--ota-accent) 35%, transparent);
+  outline-offset: 1px;
+}
+
+.pf-v5-c-form__label,
+.pf-v5-c-form__label-text,
+label { color: var(--ota-label); }
+
+/* Die Hauptaktion bleibt unbunt — genau wie in OTA, wo Farbe Zustand
+   bedeutet und nicht Wichtigkeit. */
+.pf-v5-c-button.pf-m-primary,
+input[type="submit"].pf-m-primary,
+#kc-login {
+  background: var(--ota-key);
+  border-color: var(--ota-key);
+  color: #0F172A;
+  font-weight: 600;
+  border-radius: 8px;
+}
+
+.pf-v5-c-button.pf-m-primary:hover,
+#kc-login:hover { background: #FFFFFF; border-color: #FFFFFF; }
+
+.pf-v5-c-button.pf-m-secondary,
+.pf-v5-c-button.pf-m-link { color: var(--ota-accent); }
+
+/* Meldungen. Rot heisst Fehler, nichts anderes. */
+.pf-v5-c-alert { background: var(--ota-bay-2); border: 1px solid var(--ota-edge); color: var(--ota-text); }
+.pf-v5-c-alert.pf-m-danger  { border-color: #EF4444; }
+.pf-v5-c-alert.pf-m-warning { border-color: #F59E0B; }
+.pf-v5-c-alert.pf-m-success { border-color: #22C55E; }
+.pf-v5-c-alert__title { color: var(--ota-text); }
+
+/* Die Kopfzeile mit dem Realm-Namen. Der Schriftzug traegt hier die Marke. */
+#kc-header, #kc-header-wrapper {
+  color: var(--ota-text);
+  letter-spacing: .08em;
+  font-weight: 600;
+}
+
+a { color: var(--ota-accent); }
+
+
+/* Der Balken ueber der Karte.
+   ----------------------------------------------------------------------
+   PatternFly setzt ihn in seinem eigenen Blau — das einzige Stueck fremde
+   Farbe, das nach allem anderen noch stehenblieb. Es ist auch das
+   auffaelligste: eine Linie quer ueber die Karte, in einer Farbe, die in OTA
+   nirgends vorkommt. */
+.pf-v5-c-login__main {
+  border-top: 3px solid var(--ota-accent);
+}
+
+/* Das Passwortfeld.
+   ----------------------------------------------------------------------
+   Es ist kein einfaches Eingabefeld, sondern eine Gruppe aus Feld und
+   Augenknopf. Die Gruppe traegt den Rahmen, nicht das Feld darin — ohne
+   diese Regeln stand das Passwortfeld rahmenlos neben einem umrandeten
+   Benutzernamen. */
+.pf-v5-c-input-group,
+.pf-v5-c-input-group__item {
+  background: var(--ota-well);
+  border-color: var(--ota-edge);
+}
+
+.pf-v5-c-input-group {
+  border: 1px solid var(--ota-edge);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.pf-v5-c-input-group .pf-v5-c-form-control {
+  border: 0;
+  border-radius: 0;
+}
+
+.pf-v5-c-input-group:focus-within {
+  border-color: var(--ota-accent);
+  outline: 2px solid color-mix(in srgb, var(--ota-accent) 35%, transparent);
+  outline-offset: 1px;
+}
+
+/* Der Augenknopf daneben: dieselbe Flaeche, gedaempfte Farbe. */
+.pf-v5-c-input-group .pf-v5-c-button {
+  background: transparent;
+  color: var(--ota-mute);
+}
+
+.pf-v5-c-input-group .pf-v5-c-button:hover { color: var(--ota-text); }

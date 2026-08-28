@@ -37,8 +37,23 @@ up:
 	$(COMPOSE) up -d --build
 	@# Der Realm wird nach dem Hochfahren eingerichtet, nicht bei `make setup`:
 	@# Dort läuft Keycloak noch nicht. Idempotent — was da ist, bleibt.
-	@./scripts/keycloak-init.sh 2>/dev/null || \
-	  echo "  (Keycloak noch nicht bereit — später:  make identity)"
+	@#
+	@# Und **mit Warten**. Keycloak braucht beim ersten Start rund eine halbe
+	@# Minute, bis es antwortet; ohne diese Schleife scheiterte die Einrichtung
+	@# beim ersten `make up` verlässlich, und der Realm entstand erst, wenn
+	@# jemand die Zeile mit `make identity` von Hand nachholte. Ein
+	@# Schnellstart, dessen zweiter Schritt stillschweigend nichts tut, ist
+	@# keiner.
+	@printf '  Warte auf Keycloak'
+	@for i in $$(seq 1 60); do \
+	  if [ "$$(docker inspect -f '{{.State.Health.Status}}' ota-keycloak 2>/dev/null)" = "healthy" ]; then \
+	    printf ' — bereit\n'; break; \
+	  fi; \
+	  printf '.'; sleep 3; \
+	  if [ $$i = 60 ]; then printf '\n  (kommt nicht hoch — später:  make identity)\n'; fi; \
+	done
+	@./scripts/keycloak-init.sh || \
+	  echo "  (Realm nicht eingerichtet — später:  make identity)"
 	@echo
 	@$(COMPOSE) ps --format '  {{.Name}}\t{{.Status}}'
 

@@ -43,7 +43,7 @@ UJAR="$(mktemp)"
 api "$BASE/api/admin/users" | grep -q "$TEST_USER" || {
   GID=$(api "$BASE/api/admin/groups" | jqp "[g['id'] for g in d if g['slug']=='users'][0]")
   api -X POST "$BASE/api/admin/users" -H 'Content-Type: application/json' \
-      -d "{\"username\":\"$TEST_USER\",\"password\":\"$TEST_PW\",\"group_ids\":[\"$GID\"]}" >/dev/null
+      -d "{\"username\":\"$TEST_USER\",\"email\":\"$TEST_USER@ota.invalid\",\"password\":\"$TEST_PW\",\"group_ids\":[\"$GID\"]}" >/dev/null
 }
 curl -s --cacert "$CA" -c "$UJAR" -X POST "$BASE/api/auth/login" \
      -H 'Content-Type: application/json' \

@@ -298,6 +298,22 @@ services:
       KC_BOOTSTRAP_ADMIN_USERNAME: "${KEYCLOAK_ADMIN_USER:-setup}"
       KC_BOOTSTRAP_ADMIN_PASSWORD: "${KEYCLOAK_ADMIN_PW:?KEYCLOAK_ADMIN_PW fehlt in deploy/.env}"
       JAVA_OPTS_APPEND: "${KEYCLOAK_JAVA_OPTS:--Xms256m -Xmx512m}"
+      # Der Themenspeicher.
+      #
+      # Steht er auf `true`, liest Keycloak eine Themendatei **einmal** und
+      # haelt sie danach fest — ein Neustart raeumt das nicht ab, weil auch
+      # der Browser sie 30 Tage lang behalten darf. Wer am Aussehen arbeitet,
+      # aendert dann eine Datei und sieht nichts; gemessen am 2026-08-29, und
+      # es kostete eine gute halbe Stunde Suche.
+      #
+      # Deshalb hier abschaltbar. Im Betrieb gehoert er an — er spart bei
+      # jedem Seitenaufbau einen Dateizugriff.
+      KC_SPI_THEME_CACHE_THEMES: "${KEYCLOAK_THEME_CACHE:-true}"
+      KC_SPI_THEME_STATIC_MAX_AGE: "${KEYCLOAK_THEME_MAX_AGE:-2592000}"
+    volumes:
+      # Die Anmeldemaske im Gewand von OTA. Themes in diesem Verzeichnis
+      # brauchen keinen Bau-Schritt — Keycloak liest sie direkt.
+      - ./keycloak-theme/ota:/opt/keycloak/themes/ota:ro
     networks:
       - public
       - internal

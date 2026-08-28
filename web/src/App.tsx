@@ -103,19 +103,20 @@ export default function App() {
     openInTab(viewPath(s.id, stream?.display_num))
   }
 
-  async function logout() {
-    await api.logout().catch(() => {})
-    // Ausdrücklich auf die Anmeldeseite und nicht zurück in die
-    // Weiterleitung: Wer sich gerade abgemeldet hat, will nicht im selben
-    // Atemzug wieder angemeldet werden. Dort stehen beide Wege — die zentrale
-    // Anmeldung und, solange es sie gibt, die lokale.
+  function logout() {
+    // Der ganze Weg liegt im Server: /api/auth/oidc/logout beendet die
+    // OTA-Sitzung, schickt den Browser zu Keycloak und von dort auf die
+    // Anmeldeseite zurück.
+    //
+    // Vorher endete hier nur die OTA-Sitzung. Das fühlte sich an, als
+    // passierte nichts: Keycloaks Sitzung lief weiter, und der nächste Klick
+    // meldete denselben Menschen wortlos wieder an.
     //
     // Und **ohne** `setMe(null)` davor. Das war ein Wettlauf: Der leere
-    // Zustand liess sofort neu zeichnen, die Weiterleitung zur zentralen
-    // Anmeldung feuerte noch im selben Bild, und der Mensch war abgemeldet
-    // und im selben Moment wieder angemeldet. Die Seite wird ohnehin
-    // verlassen; den Zustand aufzuräumen ist dann niemandes Aufgabe mehr.
-    window.location.href = '/login'
+    // Zustand liess sofort neu zeichnen, die Weiterleitung zur Anmeldung
+    // feuerte noch im selben Bild, und man war abgemeldet und im selben
+    // Moment wieder angemeldet.
+    window.location.href = '/api/auth/oidc/logout'
   }
 
   if (checking) {

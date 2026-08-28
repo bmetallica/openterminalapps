@@ -487,6 +487,9 @@ def oidc_token(
 # sondern der Normalfall bei jedem Update.
 
 OIDC_COOKIE = "ota_oidc"
+# Der Ausweis fürs Abmelden. Steht bewusst in einem eigenen Cookie und nicht
+# im Sitzungscookie: Er wird genau einmal gebraucht, beim Hinausgehen.
+IDT_COOKIE = "ota_idt"
 # Reichlich Zeit für die Anmeldung, aber nicht unbegrenzt: Der Zustand ist der
 # Schutz gegen untergeschobene Anmeldungen und soll nicht ewig gelten.
 OIDC_MINUTEN = 15
@@ -615,6 +618,19 @@ def oidc_callback(
                               status_code=status.HTTP_303_SEE_OTHER)
     fertig.delete_cookie(OIDC_COOKIE, path="/api/auth")
     set_session_cookie(fertig, user, settings_store.idle_minutes(db))
+
+    # Das ID-Token bleibt liegen, aber nur als Ausweis fürs Abmelden.
+    #
+    # Ohne ihn fragt Keycloak beim Abmelden zurück („Wollen Sie sich wirklich
+    # abmelden?"), weil es nicht weiss, wer da geht — eine Rückfrage auf einen
+    # Knopf, den jemand gerade absichtlich gedrückt hat. Mit dem Ausweis geht
+    # es durch.
+    idt = str(token_antwort.get("id_token") or "")
+    if idt:
+        fertig.set_cookie(
+            IDT_COOKIE, idt, httponly=True, secure=settings().cookie_secure,
+            samesite="lax", path="/api/auth",
+        )
     return fertig
 
 
@@ -657,3 +673,34 @@ async def oidc_backchannel(request: Request, db: DbSession = Depends(get_db)) ->
     db.commit()
     log.info("Abmeldung über den Rückkanal: %s", user.username)
     return Response(status_code=status.HTTP_200_OK)
+
+
+@router.get("/oidc/logout")
+def oidc_logout(request: Request, db: DbSession = Depends(get_db)) -> Response:
+    """Abmelden — hier **und** bei Keycloak.
+
+    Vorher endete nur die OTA-Sitzung. Das fühlte sich an, als passierte gar
+    nichts: Keycloaks Sitzung lief weiter, und der nächste Klick meldete
+    denselben Menschen wortlos wieder an. Wer auf „Abmelden" drückt, meint
+    aber genau das — und an einem geteilten Rechner ist eine offene Sitzung,
+    die niemand vermutet, das eigentliche Problem.
+
+    Die OTA-Sitzung wird in jedem Fall beendet, auch wenn Keycloak gerade
+    schweigt. Ein Abmelden, das an einem stummen Dienst hängenbleibt, wäre
+    das Gegenteil von dem, was der Knopf verspricht.
+    """
+    idt = request.cookies.get(IDT_COOKIE)
+    basis = _oeffentliche_basis(request)
+    ziel = f"{basis}/login?abgemeldet=1"
+
+    wohin = ziel
+    if idt:
+        try:
+            wohin = keycloak.abmelde_url(f"{basis}/auth", ziel, idt)
+        except Exception:  # noqa: BLE001
+            wohin = ziel
+
+    antwort = RedirectResponse(wohin, status_code=status.HTTP_303_SEE_OTHER)
+    antwort.delete_cookie(settings().cookie_name, path="/")
+    antwort.delete_cookie(IDT_COOKIE, path="/api/auth")
+    return antwort

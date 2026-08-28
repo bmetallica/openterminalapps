@@ -30,12 +30,18 @@ function UserEditor({ user, groups, onSaved, onClose, onToast }: {
   const selected = groupIds.map((id) => groups.find((g) => g.id === id)?.name ?? '').filter(Boolean)
 
   async function save() {
+    // Die eigentliche Prüfung macht die API — hier steht sie nur, damit der
+    // Hinweis am Feld erscheint und nicht als Fehlermeldung von weit her.
+    if (!email.trim()) {
+      onToast(tr('Ohne E-Mail kommt dieses Konto in keine angebundene Anwendung.'), 'bad')
+      return
+    }
     setBusy(true)
     try {
       const body = {
         username,
         display_name: displayName || null,
-        email: email || null,
+        email: email.trim(),
         password: password || null,
         is_active: isActive,
         group_ids: groupIds,
@@ -112,9 +118,11 @@ function UserEditor({ user, groups, onSaved, onClose, onToast }: {
         </div>
       </Field>
 
-      <Field label={tr('E-Mail')}>
+      <Field label={tr('E-Mail')}
+        hint={tr('Pflicht. Angebundene Anwendungen erkennen Menschen daran wieder — ohne Adresse kommt niemand dort hinein.')}>
         <div className="row-item">
-          <input value={email} type="email" aria-label={tr('E-Mail')}
+          <input value={email} type="email" required aria-label={tr('E-Mail')}
+            placeholder="vorname.nachname@firma.de"
             onChange={(e) => setEmail(e.target.value)} />
         </div>
       </Field>

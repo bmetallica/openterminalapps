@@ -2,8 +2,45 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
+
+
+def _adresse(wert: object) -> str:
+    """Eine E-Mail-Adresse pruefen — mit Mass.
+
+    Bewusst **nicht** `EmailStr`. Dessen Vorgabe verlangt eine Adresse, die im
+    Internet zustellbar waere, und lehnt damit `chef@firma.local`,
+    `admin@ota.internal` und alles unter `.test` ab. OTA ist ein Werkzeug fuers
+    interne Netz; dort sind solche Adressen der Normalfall, und Internetregeln
+    darauf anzuwenden hiesse, die Haelfte der Anlagen auszusperren.
+
+    Geprueft wird deshalb die **Form** — ein @-Zeichen, ein brauchbarer Teil
+    davor und dahinter —, nicht die Erreichbarkeit. Ob jemand seine Post
+    bekommt, entscheidet sein Mailserver und nicht dieses Feld.
+    """
+    import email_validator
+    from email_validator import EmailNotValidError, validate_email
+
+    # `.local` und `.internal` sind in Firmennetzen der Normalfall — die
+    # Bibliothek lehnt sie ab, weil sie im Internet nicht zustellbar waeren.
+    # Genau das ist hier aber egal. `localhost`, `arpa` und `onion` bleiben
+    # draussen: Die sind auch intern keine Adresse.
+    email_validator.SPECIAL_USE_DOMAIN_NAMES = ["arpa", "localhost", "onion"]
+
+    text = str(wert or "").strip()
+    if not text:
+        raise ValueError("Eine E-Mail-Adresse wird gebraucht.")
+    try:
+        geprueft = validate_email(text, check_deliverability=False,
+                                  globally_deliverable=False)
+    except EmailNotValidError as exc:
+        raise ValueError(f"Das ist keine E-Mail-Adresse: {exc}") from exc
+    return str(geprueft.normalized)
+
+
+Adresse = Annotated[str, BeforeValidator(_adresse)]
 
 
 class LoginIn(BaseModel):
@@ -347,9 +384,19 @@ class UserOut(BaseModel):
 
 
 class UserIn(BaseModel):
+    """Ein Konto, wie es die Verwaltung anlegt oder aendert.
+
+    **Die E-Mail ist Pflicht.** Sie war es lange nicht, und das ging so lange
+    gut, wie OTA das einzige war, das die Konten kannte. Seit sie an fremde
+    Anwendungen weitergereicht wird, ist ein Konto ohne Adresse ein Konto, das
+    sich dort nicht anmelden kann — gemessen an Open WebUI, das die Anmeldung
+    mit „email is missing" abweist und dabei von einem falschen Passwort
+    spricht. Aus einem Verzeichnis kommt sie ohnehin mit.
+    """
+
     username: str = Field(min_length=2, max_length=128)
     display_name: str | None = None
-    email: str | None = None
+    email: Adresse
     password: str | None = None
     is_active: bool = True
     group_ids: list[uuid.UUID] = []

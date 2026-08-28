@@ -1,5 +1,16 @@
 # 8 · Nutzer, Gruppen und Rechte
 
+> **Seit dem 2026-08-28 kommen die Konten aus Keycloak.** OTA führt sie weiter als Projektion —
+> Gruppen, Rechte und Zuteilungen bleiben hier —, aber angelegt und geprüft werden sie dort.
+> Wie das zusammenhängt und was der Notzugang ist, steht in
+> [Kapitel 18](18-zentrale-anmeldung.md).
+>
+> **Die E-Mail ist Pflichtfeld.** Sie war es lange nicht; seit sie an angebundene Anwendungen
+> weitergereicht wird, ist ein Konto ohne Adresse eines, das sich dort nicht anmelden kann. Interne
+> Adressen (`chef@firma.local`) sind ausdrücklich erlaubt — OTA ist ein Werkzeug fürs interne Netz
+> und setzt dort keine Internet-Regeln durch. Zwei Konten mit derselben Adresse gehen nicht:
+> Angebundene Anwendungen erkennen Menschen daran wieder, und zwei wären dort ein Mensch.
+
 *Für Administratoren.* AD-Anbindung ✅, Kerberos 🔨 M6
 
 ## Grundsatz

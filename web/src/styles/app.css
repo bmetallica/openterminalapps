@@ -114,7 +114,25 @@ button, input, select, textarea { font: inherit; color: inherit; }
   display: flex; flex-direction: column; align-items: center;
   padding: 14px 0 12px;
   gap: 4px;
+
+  /* Die Leiste scrollt in sich selbst.
+     ------------------------------------------------------------------
+     Ohne das lief sie bei kleinen Fenstern über ihren Kasten hinaus: Der
+     Hintergrund endete an der Fensterunterkante, die untersten Knöpfe
+     standen darunter auf der Seitenfläche. Aufgefallen ist es, als zwei
+     Einträge dazukamen — gemessen am 2026-08-29: ab 863 px Inhaltshöhe
+     ragte er heraus, und genau darunter fing die falsche Farbe an.
+
+     Die Bildlaufleiste bleibt unsichtbar: Sie wäre bei 62 px Breite ein
+     Drittel der Leiste. Gescrollt wird mit dem Rad, und `rail__spacer`
+     sorgt dafür, dass Konto und Abmelden trotzdem unten sitzen, solange
+     der Platz reicht. */
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
 }
+
+.rail::-webkit-scrollbar { width: 0; height: 0; }
 
 .rail__mark {
   width: 38px; height: 38px; border-radius: 9px;

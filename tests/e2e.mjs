@@ -638,6 +638,10 @@ try {
   await page.waitForSelector('.drawer', { timeout: 10000 })
   const testName = `pruef-${Date.now().toString().slice(-6)}`
   await page.type('.drawer input[aria-label="Benutzername"]', testName)
+  // Die E-Mail ist Pflichtfeld, seit sie an angebundene Anwendungen
+  // weitergereicht wird. `.invalid` ist die dafuer reservierte Endung —
+  // eine Adresse, die erkennbar nirgendwohin geht.
+  await page.type('.drawer input[aria-label="E-Mail"]', `${testName}@ota.invalid`)
   await page.type('.drawer input[aria-label="Passwort"]', 'PruefKonto2026!xy')
   await page.evaluate(() => {
     const chip = [...document.querySelectorAll('.drawer .chip')]

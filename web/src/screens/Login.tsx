@@ -52,6 +52,13 @@ export function Login({ onDone, notfall = false, fehler }: {
           </p>
         )}
 
+        {typeof window !== 'undefined'
+          && new URLSearchParams(window.location.search).has('abgemeldet') && (
+          <p className="note-info" style={{ marginBottom: 18 }}>
+            {t('Du bist abgemeldet — hier und bei der zentralen Anmeldung.')}
+          </p>
+        )}
+
         {fehler && (
           <p className="note-warn" style={{ marginBottom: 18 }}>
             {t('Die zentrale Anmeldung hat nicht geklappt: {grund}', { grund: fehler })}

@@ -657,17 +657,19 @@ entscheidet über die *Anmeldung*, nicht über die Weiterarbeit; ein Widerruf wi
 Back-Channel-Logout, nicht über Ablauf. Das ist verständlich und hat keine Lücke — vorausgesetzt,
 Back-Channel-Logout funktioniert wirklich, und genau das ist zu prüfen.
 
-### Abmelden — nur hier oder überall?
+### Abmelden — **entschieden am 2026-08-29: überall**
 
-Klickt jemand in OTA auf **Abmelden**: gilt das nur für OTA, oder auch für Open WebUI und alles
-Weitere?
+Klickt jemand in OTA auf **Abmelden**, endet auch die Sitzung bei Keycloak.
 
-Beides ist vertretbar. Für ein Portal spricht einiges dafür, dass „Abmelden" wirklich abmeldet —
-sonst bleibt an einem geteilten Rechner eine offene Sitzung zurück, die niemand vermutet. Dagegen
-spricht die Überraschung, dass ein Klick in OTA drei andere Fenster mitnimmt.
+Die Entscheidung fiel am Verhalten, nicht am Reissbrett: Vorher endete nur OTAs Sitzung, und das
+fühlte sich an, als passierte gar nichts — Keycloak lief weiter, und der nächste Klick meldete
+denselben Menschen wortlos wieder an. Wer auf „Abmelden" drückt, meint aber genau das. An einem
+geteilten Rechner ist eine offene Sitzung, die niemand vermutet, das eigentliche Problem.
 
-Vorschlag: **beides anbieten** — „Abmelden" für OTA, „Überall abmelden" daneben. Zu entscheiden in
-Etappe D, wenn es die erste zweite Anwendung überhaupt gibt.
+Umgesetzt über `/api/auth/oidc/logout`: OTAs Cookie fällt, dann geht es mit dem beim Anmelden
+hinterlegten ID-Token als Ausweis zu Keycloaks Abmeldeadresse und von dort auf `/login`. Ohne
+diesen Ausweis fragt Keycloak zurück — eine Rückfrage auf einen Knopf, den jemand gerade
+absichtlich gedrückt hat. Die OTA-Sitzung endet in jedem Fall, auch wenn Keycloak schweigt.
 
 ---
 

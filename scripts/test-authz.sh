@@ -106,10 +106,10 @@ EXISTING=$(api "$TMP/admin.jar" "$BASE/api/admin/users" \
 
 if [ -n "$EXISTING" ]; then
   api "$TMP/admin.jar" -X PUT "$BASE/api/admin/users/$EXISTING" -H 'Content-Type: application/json' \
-    -d "{\"username\":\"$TEST_USER\",\"password\":\"$TEST_PW\",\"group_ids\":[\"$USERS_GID\"]}" >/dev/null
+    -d "{\"username\":\"$TEST_USER\",\"email\":\"$TEST_USER@ota.invalid\",\"password\":\"$TEST_PW\",\"group_ids\":[\"$USERS_GID\"]}" >/dev/null
 else
   api "$TMP/admin.jar" -X POST "$BASE/api/admin/users" -H 'Content-Type: application/json' \
-    -d "{\"username\":\"$TEST_USER\",\"password\":\"$TEST_PW\",\"group_ids\":[\"$USERS_GID\"]}" >/dev/null
+    -d "{\"username\":\"$TEST_USER\",\"email\":\"$TEST_USER@ota.invalid\",\"password\":\"$TEST_PW\",\"group_ids\":[\"$USERS_GID\"]}" >/dev/null
 fi
 # Ein zweiter Faktor aus einem frueheren Lauf wuerde die Anmeldung mit blossem
 # Passwort abweisen — und der ganze Rest scheiterte an einem 401, das nichts
@@ -175,7 +175,7 @@ if [ -n "$SID" ]; then
     | jqp "d.get('id','')")
   if [ -n "$SUP_GID" ]; then
     api "$TMP/admin.jar" -X POST "$BASE/api/admin/users" -H 'Content-Type: application/json' \
-      -d "{\"username\":\"$SUP\",\"password\":\"$TEST_PW\",\"group_ids\":[\"$SUP_GID\"]}" >/dev/null
+      -d "{\"username\":\"$SUP\",\"email\":\"$SUP@ota.invalid\",\"password\":\"$TEST_PW\",\"group_ids\":[\"$SUP_GID\"]}" >/dev/null
     login "$TMP/sup.jar" "$SUP" "$TEST_PW"
 
     SEEN=$(api "$TMP/sup.jar" "$BASE/api/sessions?all_users=true" | jqp "len(d)")
@@ -465,6 +465,49 @@ CODE=$(curl -s --cacert "$CA" -o /dev/null -w '%{http_code}' \
   -X POST "$BASE/api/auth/login" -H 'Content-Type: application/json' \
   -d "{\"username\":\"$ADMIN_USER\",\"password\":\"$ADMIN_PW\"}")
 expect "200" "$CODE" "Die Anmeldung läuft unverändert über OTA"
+
+# --------------------------------------------------- E-Mail als Pflicht
+#
+# Seit sie an angebundene Anwendungen weitergereicht wird, ist ein Konto ohne
+# Adresse ein Konto, das sich dort nicht anmelden kann. Gemessen an Open WebUI:
+# Es weist die Anmeldung mit „email is missing" ab — und spricht dabei von
+# einem falschen Passwort.
+echo
+echo "E-Mail als Pflichtfeld"
+
+CODE=$(code "$TMP/admin.jar" -X POST "$BASE/api/admin/users" \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"ohne-mail","password":"Ein-Langes-Passwort-2026!"}')
+expect "422" "$CODE" "Ohne E-Mail entsteht kein Konto"
+
+CODE=$(code "$TMP/admin.jar" -X POST "$BASE/api/admin/users" \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"krumm","email":"keine-adresse","password":"Ein-Langes-Passwort-2026!"}')
+expect "422" "$CODE" "Und mit Unsinn im Feld auch nicht"
+
+# Interne Adressen müssen gehen. Eine Bibliothek, die auf Zustellbarkeit im
+# Internet besteht, sperrte halbe Firmennetze aus.
+CODE=$(code "$TMP/admin.jar" -X POST "$BASE/api/admin/users" \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"intern-pruef","email":"chef@firma.local","password":"Ein-Langes-Passwort-2026!"}')
+expect "201" "$CODE" "Eine interne Adresse wird angenommen"
+IPID=$(api "$TMP/admin.jar" "$BASE/api/admin/users" | jqp "
+next((u['id'] for u in d if u['username'] == 'intern-pruef'), '')")
+
+# Und keine zwei Konten auf derselben Adresse.
+CODE=$(code "$TMP/admin.jar" -X POST "$BASE/api/admin/users" \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"doppelt-pruef","email":"CHEF@firma.local","password":"Ein-Langes-Passwort-2026!"}')
+expect "409" "$CODE" "Dieselbe Adresse ein zweites Mal wird abgelehnt"
+
+[ -n "$IPID" ] && api "$TMP/admin.jar" -X DELETE "$BASE/api/admin/users/$IPID" >/dev/null
+
+# Kein Bestandskonto darf ohne Adresse dastehen — sonst kommt es in keine
+# angebundene Anwendung, und niemand merkt es, bis jemand es versucht.
+OHNE=$(api "$TMP/admin.jar" "$BASE/api/admin/users" | jqp "
+','.join(u['username'] for u in d if not u.get('email'))")
+[ -z "$OHNE" ] && ok "Alle Konten haben eine Adresse" \
+               || bad "Ohne Adresse: $OHNE"
 
 # ------------------------------------------- Übernahme und Notzugang
 #
@@ -783,7 +826,19 @@ next((s['id'] for s in d if s['template_id'] == '$WS_E' and s['status'] == 'runn
   sleep 12
 
   CN_E="ota-s-$(echo "$NEU" | cut -c1-12)"
-  DA=$(docker exec "$CN_E" sh -c 'cat /home/kasm-user/einmal.txt 2>/dev/null' | tr -d '\r\n')
+
+  # Warten, bis es da ist — nicht eine feste Zeit lang schlafen.
+  #
+  # Das Einmal-Skript laeuft, nachdem der Container steht, und wie lange das
+  # dauert, haengt vom Rechner und davon ab, was sonst gerade laeuft. Eine
+  # feste Wartezeit ist deshalb entweder zu kurz (und die Pruefung meldet
+  # einen Fehler, den es nicht gibt) oder unnoetig lang.
+  DA=""
+  for versuch in $(seq 1 20); do
+    DA=$(docker exec "$CN_E" sh -c 'cat /home/kasm-user/einmal.txt 2>/dev/null' | tr -d '\r\n')
+    [ -n "$DA" ] && break
+    sleep 2
+  done
   expect "$MARKE" "$DA" "Es läuft beim ersten Start"
 
   GEZAEHLT=$(api "$TMP/admin.jar" "$BASE/api/templates/$WS_E/once" | jqp "
@@ -796,9 +851,13 @@ str(next((x['ran_count'] for x in d if x['id'] == '$SC'), 0))")
   sleep 4
   NEU2=$(api "$TMP/admin.jar" -X POST "$BASE/api/sessions" -H 'Content-Type: application/json' \
           -d "{\"template_id\":\"$WS_E\"}" | jqp "d.get('id','')")
-  sleep 12
   CN_E2="ota-s-$(echo "$NEU2" | cut -c1-12)"
-  NOCHMAL=$(docker exec "$CN_E2" sh -c 'cat /home/kasm-user/einmal.txt 2>/dev/null' | tr -d '\r\n')
+  NOCHMAL=""
+  for versuch in $(seq 1 20); do
+    NOCHMAL=$(docker exec "$CN_E2" sh -c 'cat /home/kasm-user/einmal.txt 2>/dev/null' | tr -d '\r\n')
+    [ -n "$NOCHMAL" ] && break
+    sleep 2
+  done
   expect "VON-HAND" "$NOCHMAL" "Beim zweiten Start läuft es nicht noch einmal"
 
   # Zuruecksetzen nimmt nur die Notiz zurueck — ausgefuehrt wird beim Start.
@@ -1434,7 +1493,7 @@ api "$TMP/admin.jar" -X PUT "$BASE/api/admin/groups/$USERS_GID_2" \
 # Ein zweiter Testnutzer ohne zweiten Faktor — der erste hat gerade einen.
 ZWANG="ota-pruef-zwang"
 api "$TMP/admin.jar" -X POST "$BASE/api/admin/users" -H 'Content-Type: application/json' \
-  -d "{\"username\":\"$ZWANG\",\"password\":\"$TEST_PW\",\"group_ids\":[\"$USERS_GID_2\"]}" \
+  -d "{\"username\":\"$ZWANG\",\"email\":\"$ZWANG@ota.invalid\",\"password\":\"$TEST_PW\",\"group_ids\":[\"$USERS_GID_2\"]}" \
   >/dev/null
 login "$TMP/zwang.jar" "$ZWANG" "$TEST_PW"
 

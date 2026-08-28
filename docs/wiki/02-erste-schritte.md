@@ -1,5 +1,10 @@
 # 2 · Erste Schritte
 
+> **Zwei Konten nach `make admin`.** Der Alltagszugang liegt in Keycloak, der Notzugang `notfall`
+> lokal in OTA. Beide Passwörter werden **einmal** gedruckt. Die Startseite führt zur zentralen
+> Anmeldung; der Notzugang liegt unter `/notfall`. Warum das so ist:
+> [Kapitel 18](18-zentrale-anmeldung.md).
+
 ## Voraussetzungen
 
 | | |

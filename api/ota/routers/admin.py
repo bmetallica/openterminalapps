@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import logging
+
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session as DbSession
 
-from .. import agent_client, audit
+from .. import agent_client, audit, keycloak
 import os
 import re
 from ..db import get_db
@@ -21,6 +23,8 @@ from ..schemas import (
 )
 from ..security import hash_password, password_problem
 from .. import settings_store
+
+log = logging.getLogger("ota.admin")
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -170,6 +174,7 @@ def create_user(
     if db.scalar(select(User).where(User.username == body.username)):
         raise HTTPException(status.HTTP_409_CONFLICT,
                             f"Der Benutzername {body.username} ist schon vergeben.")
+    _email_frei(db, body.email, None)
     if body.password:
         problem = password_problem(body.password)
         if problem:
@@ -203,6 +208,7 @@ def update_user(
     if not user:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Nutzer nicht gefunden")
 
+    _email_frei(db, body.email, user.id)
     new_groups = list(db.scalars(select(Group).where(Group.id.in_(body.group_ids))).all())
 
     # Der letzte aktive lokale Administrator darf sich seine Rechte nicht nehmen.
@@ -226,10 +232,67 @@ def update_user(
         user.must_change_password = True
         user.token_epoch += 1
 
+    _nach_keycloak(user)
+
     audit.record(db, "user.updated", actor=actor, object_type="user",
                  object_id=user.username, request=request)
     db.commit()
     return _user_out(user)
+
+
+def _nach_keycloak(user: User) -> None:
+    """Traegt Aenderungen an einem uebernommenen Konto in Keycloak nach.
+
+    Ohne das lief die Verwaltung auseinander: Eine E-Mail, hier eingetragen,
+    stand nur hier — und eine fremde Anwendung, die sie im Token erwartet,
+    bekam sie nie zu sehen. Genau daran scheiterte die erste Anbindung von
+    Open WebUI: `OAuth callback failed, email is missing`, obwohl in OTA eine
+    Adresse stand.
+
+    Betrifft **nur** Konten mit `auth_provider == "keycloak"`. Lokale Konten
+    haben dort nichts zu suchen, und ein Verzeichniskonto gehoert dem
+    Verzeichnis.
+
+    Schlaegt es fehl, wird die Aenderung in OTA trotzdem gespeichert. Ein
+    Keycloak, das gerade schweigt, darf die Verwaltung nicht anhalten — der
+    naechste Speichervorgang holt es nach. Sichtbar bleibt es im Protokoll.
+    """
+    if user.auth_provider != "keycloak" or not user.external_id:
+        return
+
+    try:
+        keycloak.ruf("PUT", f"/users/{user.external_id}", json={
+            "email": user.email or None,
+            "emailVerified": bool(user.email),
+            "enabled": bool(user.is_active) and not user.is_locked,
+        })
+        keycloak.gruppen_setzen(user.external_id, sorted(g.name for g in user.groups))
+        # Die zweite Stufe haengt an einer Rolle (auth-roadmap.md §5.3).
+        keycloak.rolle_setzen(
+            user.external_id, "zweiter-faktor",
+            any(getattr(g, "require_totp", False) for g in user.groups))
+    except keycloak.KeycloakFehler as exc:
+        log.warning("Konto %s nicht nach Keycloak nachgetragen: %s",
+                    user.username, exc)
+
+
+def _email_frei(db: DbSession, email: str, ausser: uuid.UUID | None) -> None:
+    """Keine zwei Konten mit derselben Adresse.
+
+    Nicht aus Ordnungssinn: Keycloak laesst im Realm keine doppelten Adressen
+    zu (`duplicateEmailsAllowed: false`), und fremde Anwendungen erkennen
+    Menschen oft an der E-Mail wieder. Zwei Konten mit derselben Adresse waeren
+    dort ein Mensch — oder gar keiner, je nach Anwendung.
+    """
+    vorhanden = db.scalar(select(User).where(
+        func.lower(User.email) == (email or "").strip().lower()))
+    if vorhanden is not None and vorhanden.id != ausser:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"Die Adresse {email} gehoert schon zu „{vorhanden.username}“. "
+            "Zwei Konten mit derselben Adresse waeren fuer angebundene "
+            "Anwendungen derselbe Mensch.",
+        )
 
 
 def _admin_count(db: DbSession) -> int:

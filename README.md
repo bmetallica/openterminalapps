@@ -42,11 +42,21 @@ zu ergänzen. Ein zweiter Aufruf lässt vorhandene Werte unangetastet.
 `sudo` braucht es, weil OTA Verzeichnisse unter `/srv/ota` anlegt und mit dem Docker-Socket spricht.
 Wer in der Gruppe `docker` ist und `/srv/ota` selbst angelegt hat, kann es weglassen.
 
-`make admin` legt das Konto an und **druckt ein erzeugtes Passwort**. Es gilt genau einmal: Beim
-ersten Anmelden verlangt OTA ein neues. Danach:
+`make admin` legt **zwei** Konten an und druckt beide Passwörter — sie werden nur dieses eine Mal
+gezeigt:
+
+| Konto | Wo es liegt | Wofür |
+|---|---|---|
+| `<deinname>` | in Keycloak | der Alltagszugang; die Anmeldung verlangt sofort ein eigenes Passwort |
+| `notfall` | lokal in OTA | der Ausweg, wenn Keycloak einmal nicht antwortet |
+
+Das zweite ist keine Dreingabe: Ab dem Moment, in dem die Anmeldung über einen weiteren Dienst
+läuft, braucht es einen Weg herein, der ohne ihn funktioniert. Er ist unter `/notfall` erreichbar,
+und jede Anmeldung darüber steht im Protokoll.
 
 ```
-https://<host>:8443/
+https://<host>:8443/            # leitet zur zentralen Anmeldung weiter
+https://<host>:8443/notfall     # der lokale Notzugang
 ```
 
 **Einmalig das Wurzelzertifikat importieren**, dann warnt der Browser nicht mehr — auch nach jedem
@@ -66,6 +76,17 @@ importieren, „Websites vertrauen" ankreuzen.
 make ps                          # alle Dienste sollten "healthy" sein
 curl -k https://localhost:8443/healthz
 ```
+
+Die Antwort nennt vier Dinge: `db`, `agent`, `keycloak` und den Gesamtzustand. Steht dort
+`"keycloak":"nicht erreichbar"`, ist der Realm noch nicht eingerichtet oder der Dienst noch nicht
+oben — nachholen mit:
+
+```bash
+sudo make identity               # Realm, Clients, Rollen; idempotent
+```
+
+`make up` tut das von selbst und wartet dafür, bis Keycloak antwortet (beim ersten Start rund eine
+halbe Minute).
 
 Wenn etwas klemmt: `make logs` und [Handbuch, Kapitel 12](docs/wiki/12-fehlersuche.md) — dort stehen
 echte Fehler aus dem Betrieb mit Symptom, Ursache und Reparatur.
@@ -94,8 +115,15 @@ Ausführlich in [Handbuch, Kapitel 2](docs/wiki/02-erste-schritte.md).
 - **Sichtbarkeit je Anwendung und Gruppe**, für den Fall, dass eine Lizenz nicht für alle reicht
 - **Zwei-Faktor je Gruppe erzwingbar**; `/healthz` und `/metrics` für die Überwachung
 - Nutzer, Gruppen und Rechte; Administratoren sind in ihrem eigenen Container `root`
-- **Anmeldung gegen LDAP oder Active Directory**, mit Gruppen-Zuordnung und Prüf-Knopf. Lokale
-  Konten bleiben davon unberührt — ein gleichnamiger Verzeichniseintrag kann keines übernehmen
+- **Zentrale Anmeldung über Keycloak**, mitgeliefert im Stack — oder ein vorhandenes anbinden. OTA
+  ist dessen Verwalter: Konten, Gruppen und die **AD-Anbindung** richtet man in OTAs Oberfläche
+  ein, die Keycloak-Konsole bleibt für den Alltag zu
+- **Notzugang** unter `/notfall`: ein lokales Konto, das ohne Keycloak funktioniert. Ohne ihn wäre
+  eine Anlage nach einer kaputten Anmeldekonfiguration nicht mehr zu betreten
+- Ein Verzeichniseintrag kann **kein bestehendes Konto übernehmen** — auch nicht mit demselben Namen
+- **Fremde Web-Anwendungen** im Katalog (Open WebUI, Grafana, …): OTA legt den OIDC-Zugang an und
+  entscheidet, wer die Kachel sieht. Was jemand darin darf, entscheidet die Anwendung — OTA baut
+  ihr Rechtemodell nicht nach
 - Anmeldefrist einstellbar (30 min bis 48 h), rollend — wer arbeitet, wird nicht abgemeldet
 - Oberfläche auf Deutsch und Englisch, umschaltbar auch vor der Anmeldung
 - Das Handbuch liegt **im Programm**, gefiltert nach Rechten
@@ -108,12 +136,16 @@ Ausführlich in [Handbuch, Kapitel 2](docs/wiki/02-erste-schritte.md).
 - **Rezepte** für alles, was kein einfaches Paket ist — mit geführtem Bauer für eigene
 - **Anwendungen im Image finden**: OTA liest die `.desktop`-Dateien und schlägt Name, Zeichen und
   Startbefehl vor. Niemand muss wissen, wo eine Binärdatei liegt
-- **Gemeinsame Ablage** für Dateien, die in jeden Arbeitsplatz sollen — im Container nur lesbar
+- **Zwei Ablagen**: die gemeinsame für Dateien, die in jeden Arbeitsplatz sollen (im Container nur
+  lesbar), und eine **eigene je Nutzer** unter `/mnt/austausch` — beschreibbar, der Weg hinein und
+  wieder heraus. Auch in der Kontrollleiste einer laufenden Session, mit Ziehen und Ablegen
 - **Skeleton-Profil** je Workspace: womit ein Zuhause anfängt. Einzelne Pfade auf Wunsch bei jedem
   Start durchgesetzt — die Ausnahme, nicht die Regel
 - **Session einfrieren**: im eigenen Arbeitsplatz einrichten, Vorschau ansehen, als neue Fassung
   übernehmen. Das Home bleibt draussen, Geheimnisse werden markiert, die sudo-Ausnahme entfernt
 - **Skript beim Sessionstart** je Workspace, für alles, was ins Home gehört, aber nicht ins Image
+- **Einmal-Skripte** je Workspace: laufen je Nutzer genau einmal — für eine Umstellung im Zuhause,
+  die das Skeleton nicht mehr erreicht und die das Startskript sonst bei jedem Start wiederholte
 
 **Betrieb**
 - Eigene Registry im Stack; fehlt ein Image lokal, wird es beim Start von dort geholt

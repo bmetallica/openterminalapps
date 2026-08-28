@@ -525,6 +525,8 @@ export const EN: Record<string, string> = {
   '{name} auf den Desktop legen': 'Add {name} to desktop',
   'Meine Ablage': 'My files',
   'Zentrale Identität': 'Central identity',
+  'Du bist abgemeldet — hier und bei der zentralen Anmeldung.':
+    'You are signed out — here and at the central sign-in.',
   'Konfiguration für die Anwendung': 'Configuration for the application',
   'Zertifikat': 'Certificate',
   'Beispiel für Open WebUI. Andere Anwendungen nennen die Felder anders, brauchen aber dieselben vier Werte: Kennung, Geheimnis, Entdeckungsadresse und Rückadresse.':

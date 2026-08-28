@@ -85,7 +85,7 @@ if [ "$CODE" = "200" ]; then
 else
   CODE=$(kc POST "/admin/realms" "$(cat <<JSON
 {"realm":"$REALM","enabled":true,"displayName":"OpenTerminalApps",
- "loginTheme":"keycloak","sslRequired":"external",
+ "loginTheme":"ota","sslRequired":"external",
  "registrationAllowed":false,"resetPasswordAllowed":false,
  "bruteForceProtected":true,"permanentLockout":false,
  "maxFailureWaitSeconds":900,"failureFactor":5,
@@ -346,6 +346,26 @@ next((e['id'] for e in d if e.get('providerId') == 'conditional-user-role'), '')
   fi
 }
 
+# ---------------------------------------------- Das Gewand der Anmeldung
+#
+# Auch bei einem Realm, den es schon gibt: Sonst saehe nur eine frisch
+# aufgesetzte Anlage richtig aus, und jede bestehende bliebe bei Keycloaks
+# Blau — mitten im Anmeldeweg von OTA.
+thema_setzen() {
+  kc GET "/admin/realms/$REALM" >/dev/null
+  local jetzt; jetzt=$(kc_body | jq_py "d.get('loginTheme','')")
+  if [ "$jetzt" = "ota" ]; then
+    info "Anmeldemaske traegt schon das OTA-Gewand"
+    return 0
+  fi
+  local code; code=$(kc PUT "/admin/realms/$REALM" \
+    "{\"realm\":\"$REALM\",\"loginTheme\":\"ota\"}")
+  case "$code" in
+    204) ok "Anmeldemaske auf das OTA-Gewand gestellt" ;;
+    *)   bad "Gewand setzen: HTTP $code $(kc_body)" ;;
+  esac
+}
+
 # ------------------------------------------ Was ein Konto haben muss
 #
 # Keycloak verlangt ab Werk eine E-Mail-Adresse von jedem Konto. OTA verlangt
@@ -390,6 +410,7 @@ print(json.dumps(d) if geaendert else '')" <<<"$profil")
 rolle_anlegen
 fluss_einrichten
 profil_lockern
+thema_setzen
 
 echo
 echo "Bereit. Realm: $REALM"
