@@ -443,6 +443,18 @@ done
 FEHLER=$(echo "$KC" | jqp "str(d['fehler'])")
 expect "None" "$FEHLER" "Keine fehlenden Rechte gemeldet"
 
+# Die eigene CA muss **ohne Anmeldung** abholbar sein. Sonst wäre es ein
+# Kreis: Wer der Anlage noch nicht traut, kann sich bei ihr nicht anmelden —
+# und ohne die CA kann eine fremde Anwendung ihr nicht trauen.
+CACODE=$(curl -s --cacert "$CA" -o "$TMP/geholt.crt" -w '%{http_code}' "$BASE/ca.crt")
+expect "200" "$CACODE" "Die eigene CA ist ohne Anmeldung abholbar"
+openssl x509 -in "$TMP/geholt.crt" -noout -subject >/dev/null 2>&1 \
+  && ok "Und sie ist ein gültiges Zertifikat" \
+  || bad "Was da kommt, ist kein Zertifikat"
+grep -q "PRIVATE KEY" "$TMP/geholt.crt" \
+  && bad "Es kommt ein privater Schlüssel mit!" \
+  || ok "Ohne privaten Schlüssel"
+
 HZ=$(curl -s --cacert "$CA" "$BASE/healthz")
 grep -q '"keycloak":"ok"' <<<"$HZ" \
   && ok "healthz meldet Keycloak" \

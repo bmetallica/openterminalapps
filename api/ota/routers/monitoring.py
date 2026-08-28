@@ -15,6 +15,7 @@ handgeschrieben steht wenigstens dabei, was gemessen wird.
 from __future__ import annotations
 
 import time
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -87,6 +88,43 @@ def healthz(response: Response, db: DbSession = Depends(get_db)) -> dict[str, An
     if out["db"] != "ok":
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
     return out
+
+
+@router.get("/ca.crt")
+def ca_zertifikat() -> Response:
+    """Die eigene CA zum Herunterladen — ohne Anmeldung.
+
+    Das ist kein Versehen und keine Bequemlichkeit. Ein CA-Zertifikat enthaelt
+    einen oeffentlichen Schluessel und Namen, sonst nichts; es ist zum
+    Verteilen gemacht. Und es muss **vor** dem Vertrauen erreichbar sein —
+    eine Anmeldung davor waere ein Kreis: Wer der Anlage noch nicht traut,
+    kann sich bei ihr auch nicht anmelden.
+
+    Wozu: Eine fremde Anwendung, die sich gegen OTA anmelden soll, muss dem
+    Zertifikat des Anmeldedienstes vertrauen. In einer frischen Anlage gibt es
+    kein oeffentliches Zertifikat, sondern die CA, die `make setup` erzeugt
+    hat. Statt sie auf dem Host zu suchen, holt man sie hier ab:
+
+        curl -o ota-ca.crt https://<host>/ca.crt
+
+    Laeuft die Anlage hinter einem echten Zertifikat, gibt es hier nichts —
+    dann ist auch nichts zu verteilen.
+    """
+    pfad = Path(settings().certs_dir) / "ota-ca.crt"
+    try:
+        inhalt = pfad.read_bytes()
+    except OSError:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            "Diese Anlage benutzt keine eigene CA. Dann braucht auch niemand "
+            "eine zu importieren.",
+        ) from None
+
+    return Response(
+        content=inhalt, media_type="application/x-pem-file",
+        headers={"Content-Disposition": 'attachment; filename="ota-ca.crt"',
+                 "Cache-Control": "public, max-age=3600"},
+    )
 
 
 def _metrics_allowed(request: Request, db: DbSession) -> None:

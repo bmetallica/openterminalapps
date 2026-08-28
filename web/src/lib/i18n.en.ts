@@ -525,6 +525,14 @@ export const EN: Record<string, string> = {
   '{name} auf den Desktop legen': 'Add {name} to desktop',
   'Meine Ablage': 'My files',
   'Zentrale Identität': 'Central identity',
+  'Konfiguration für die Anwendung': 'Configuration for the application',
+  'Zertifikat': 'Certificate',
+  'Beispiel für Open WebUI. Andere Anwendungen nennen die Felder anders, brauchen aber dieselben vier Werte: Kennung, Geheimnis, Entdeckungsadresse und Rückadresse.':
+    'Example for Open WebUI. Other applications name the fields differently but need the same four values: client id, secret, discovery URL and return address.',
+  'Die Anwendung ruft die Anmeldung serverseitig auf. Benutzt diese Anlage ihr eigenes Zertifikat, muss sie es kennen, sonst bricht der Aufruf mit einem Zertifikatsfehler ab.':
+    'The application calls sign-in from its server side. If this installation uses its own certificate, the application must know it — otherwise the call fails with a certificate error.',
+  'Das zusammengelegte Bündel, nicht die CA allein: Sonst vertraut die Anwendung nur noch dieser Anlage und keinem öffentlichen Zertifikat mehr.':
+    'The combined bundle, not the CA on its own: otherwise the application trusts only this installation and no public certificate any more.',
   'Weitere Anwendungen': 'Other applications',
   'Web-Anwendungen': 'Web applications',
   'Anwendung hinzufügen': 'Add an application',

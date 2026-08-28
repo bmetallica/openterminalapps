@@ -108,6 +108,10 @@ services:
       - ../docs/wiki:/app/wiki:ro
       # Die Firefox-Erweiterung wird beim Abruf gepackt, nicht beim Bauen.
       - ../extension:/app/extension:ro
+      # Nur die oeffentlichen Zertifikate, nie die Schluessel: Die API haendigt
+      # unter /ca.crt die eigene CA aus, damit fremde Anwendungen ihr vertrauen
+      # koennen, ohne dass jemand eine Datei suchen muss.
+      - ./certs:/app/certs:ro
     networks:
       - public      # damit Traefik sie erreicht
       - internal    # damit sie DB und Agent erreicht
@@ -116,7 +120,7 @@ services:
       - "traefik.docker.network=ota_public"
       # /healthz und /metrics liegen bewusst nicht unter /api: Ein
       # Überwachungssystem soll sie an der Stelle finden, an der es sie sucht.
-      - "traefik.http.routers.ota-api.rule=PathPrefix(`/api`) || Path(`/healthz`) || Path(`/metrics`)"
+      - "traefik.http.routers.ota-api.rule=PathPrefix(`/api`) || Path(`/healthz`) || Path(`/metrics`) || Path(`/ca.crt`)"
       - "traefik.http.routers.ota-api.entrypoints=websecure"
       - "traefik.http.routers.ota-api.tls=true"
       - "traefik.http.routers.ota-api.priority=50"

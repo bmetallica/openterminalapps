@@ -19,6 +19,65 @@ const LEER: WebAppIn = {
   is_enabled: true, sort_order: 0, group_ids: [],
 }
 
+/**
+ * Was in die fremde Anwendung eingetragen werden muss.
+ *
+ * Steht hier, weil es sonst nirgends steht: Die Werte kommen aus drei
+ * Quellen — Keycloak, OTA und der Adresse, unter der diese Anlage erreichbar
+ * ist —, und sie von Hand zusammenzusuchen ist genau die Arbeit, die dieses
+ * Portal abnehmen soll.
+ *
+ * Der Abschnitt zum Zertifikat ist kein Beiwerk. Er ist die Stelle, an der
+ * die erste Anbindung in einer frischen Anlage scheitert: Die fremde
+ * Anwendung ruft den Anmeldedienst **serverseitig** auf, und dort gilt kein
+ * „trotzdem fortfahren" wie im Browser. Ohne die CA bricht der Aufruf mit
+ * einem Zertifikatsfehler ab — noch bevor irgendjemand etwas anklicken kann.
+ */
+function Konfiguration({ app, geheimnis }: { app: WebApp; geheimnis?: string }) {
+  const herkunft = window.location.origin
+  const block = [
+    `OAUTH_CLIENT_ID=${app.client_id}`,
+    `OAUTH_CLIENT_SECRET=${geheimnis ?? '<beim Anlegen gezeigt>'}`,
+    `OPENID_PROVIDER_URL=${herkunft}/auth/realms/ota/.well-known/openid-configuration`,
+    'OAUTH_PROVIDER_NAME=OpenTerminalApps',
+    `WEBUI_URL=${app.url.replace(/\/$/, '')}`,
+    'ENABLE_OAUTH_SIGNUP=true',
+    'OAUTH_GROUP_CLAIM=groups',
+    'ENABLE_OAUTH_GROUP_MANAGEMENT=true',
+  ].join('\n')
+
+  return (
+    <details style={{ marginTop: 12 }}>
+      <summary className="silk" style={{ cursor: 'pointer' }}>
+        {tr('Konfiguration für die Anwendung')}
+      </summary>
+
+      <p className="field__hint" style={{ marginTop: 10 }}>
+        {tr('Beispiel für Open WebUI. Andere Anwendungen nennen die Felder anders, brauchen aber dieselben vier Werte: Kennung, Geheimnis, Entdeckungsadresse und Rückadresse.')}
+      </p>
+      <pre className="build__log" style={{ whiteSpace: 'pre-wrap', margin: '8px 0' }}>{block}</pre>
+
+      <p className="field__hint" style={{ marginTop: 12 }}>
+        <b>{tr('Zertifikat')}</b> — {tr('Die Anwendung ruft die Anmeldung serverseitig auf. Benutzt diese Anlage ihr eigenes Zertifikat, muss sie es kennen, sonst bricht der Aufruf mit einem Zertifikatsfehler ab.')}
+      </p>
+      <pre className="build__log" style={{ whiteSpace: 'pre-wrap', margin: '8px 0' }}>{
+`# auf dem Rechner der Anwendung
+curl -o ota-ca.crt ${herkunft}/ca.crt
+cat /etc/ssl/certs/ca-certificates.crt ota-ca.crt > ca-bundle.crt
+
+# im Compose der Anwendung
+volumes:
+  - ./ca-bundle.crt:/etc/ssl/certs/ca-certificates.crt:ro
+environment:
+  SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
+  REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt`}</pre>
+      <p className="field__hint">
+        {tr('Das zusammengelegte Bündel, nicht die CA allein: Sonst vertraut die Anwendung nur noch dieser Anlage und keinem öffentlichen Zertifikat mehr.')}
+      </p>
+    </details>
+  )
+}
+
 export function WebApps({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad') => void }) {
   useLang()
   const [liste, setListe] = useState<WebApp[] | null>(null)
@@ -122,6 +181,8 @@ export function WebApps({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad')
               ? tr('alle')
               : gruppen.filter((g) => a.group_ids.includes(g.id)).map((g) => g.name).join(', ')}
           </p>
+          <Konfiguration app={a} geheimnis={geheimnis?.fuer === a.name ? geheimnis.wert : undefined} />
+
           <div className="viewer__row" style={{ marginTop: 12 }}>
             <button className="btn btn--sm" onClick={() => bearbeiten(a)}>{tr('Bearbeiten')}</button>
             <button className="btn btn--sm" onClick={() => {

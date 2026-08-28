@@ -51,6 +51,10 @@ class Settings(BaseSettings):
     # dort ist OTA fuehrend und darf den Realm einrichten. "vorhanden" ist ein
     # fremder; dort ist OTA Gast, loescht nichts und fasst nur die eigenen
     # Gruppen an (§5b).
+    # Wo die oeffentlichen Zertifikate liegen. Nur zum Ausliefern der eigenen
+    # CA unter /ca.crt — Schluessel liegen hier nie.
+    certs_dir: str = "/app/certs"
+
     idp_mode: str = "mitgeliefert"
     # Leer heisst: der mitgelieferte unter seinem Dienstnamen.
     keycloak_url: str = ""
