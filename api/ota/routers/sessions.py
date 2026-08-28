@@ -12,13 +12,16 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DbSession
 
 from .. import agent_client, audit, settings_store
 from ..config import settings
 from ..db import get_db
 from ..deps import current_user
-from ..models import AppStream, Session as SessionModel, Template, TemplateApp, User
+from ..models import (
+    AppStream, OnceScriptRun, Session as SessionModel, Template, TemplateApp, User,
+)
 from ..schemas import SessionOut, SessionStartIn, StreamOut
 from ..security import (
     effective_resources, needs_totp, owns_session, profile_path,
@@ -155,6 +158,58 @@ def _out(s: SessionModel) -> SessionOut:
         url=f"/s/{s.id}/?path=s/{s.id}/websockify{STREAM_ARGS}",
         streams=[_stream_out(s, x) for x in s.streams],
     )
+
+
+def _offene_einmal_skripte(db: DbSession, tpl, user) -> list[dict[str, str]]:
+    """Welche Einmal-Skripte dieser Nutzer noch nicht hatte.
+
+    Gebucht wird je Nutzer und Skript, nicht je Session: Wer drei
+    Arbeitsplätze derselben Vorlage nacheinander startet, bekommt es einmal.
+    Ein neues Skript ist ein neuer Eintrag und läuft wieder für alle — genau
+    dafür gibt es sie.
+    """
+    if not tpl.once_scripts:
+        return []
+
+    erledigt = set(db.scalars(
+        select(OnceScriptRun.script_id).where(OnceScriptRun.user_id == user.id)
+    ).all())
+    return [
+        {"id": str(x.id), "name": x.name, "body": x.body}
+        for x in tpl.once_scripts
+        if x.is_enabled and x.body.strip() and x.id not in erledigt
+    ]
+
+
+def _buche_einmal_skripte(db: DbSession, user, ergebnisse: list[dict]) -> None:
+    """Hält fest, was gelaufen ist — auch das, was schiefging.
+
+    Ein gescheitertes Skript wird trotzdem gebucht. Sonst liefe ein kaputtes
+    bei **jedem** Start jedes Nutzers erneut, und aus einem Fehler würde eine
+    Dauerbelastung. Sichtbar bleibt er: Die Verwaltung sieht Rückgabewert und
+    Ausgabe und kann ausdrücklich „nochmal" sagen.
+
+    Nicht gebucht wird, was gar nicht zustande kam — der Agent berichtet dann
+    kein Ergebnis, und der nächste Start versucht es wieder.
+    """
+    for eintrag in ergebnisse:
+        try:
+            script_id = uuid.UUID(str(eintrag.get("id")))
+        except (ValueError, TypeError):
+            continue
+        db.add(OnceScriptRun(
+            script_id=script_id, user_id=user.id,
+            exit_code=int(eintrag.get("exit_code") or 0),
+            output=str(eintrag.get("output") or "")[:8000],
+        ))
+    if ergebnisse:
+        try:
+            db.commit()
+        except IntegrityError:
+            # Zwei Starts gleichzeitig — die Eindeutigkeit hat entschieden.
+            # Das Skript ist dann trotzdem gelaufen, und mehr als einmal
+            # gebucht muss es nicht sein.
+            db.rollback()
 
 
 def _traefik_labels(sess_id: uuid.UUID, user_id: uuid.UUID, vnc_user: str,
@@ -395,6 +450,9 @@ def start_session(
             # Arbeitsplaetze, aus denen bewusst nichts herausgetragen werden
             # soll. Leer heisst: nicht einhaengen.
             "shelf_user": user.username if tpl.user_shelf else "",
+            # Einmal-Skripte, die dieser Nutzer noch nicht hatte. Welche das
+            # sind, weiss nur die API — der Agent fuehrt aus und berichtet.
+            "once_scripts": _offene_einmal_skripte(db, tpl, user),
             # Womit ein Zuhause anfaengt. Beim ersten Start der ganze Baum,
             # danach nur die durchgesetzten Pfade.
             "template_slug": tpl.slug,
@@ -408,6 +466,8 @@ def start_session(
         sess.error = "Der Container konnte nicht gestartet werden."
         db.commit()
         raise
+
+    _buche_einmal_skripte(db, user, result.get("once") or [])
 
     sess.container_id = result["container_id"]
     # Erst wenn die Route steht, ist die Session fuer den Browser da.

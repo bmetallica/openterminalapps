@@ -11,10 +11,12 @@ from .. import agent_client, audit
 from ..db import get_db
 from ..deps import current_user, require_permission
 from ..models import (
-    Group, Session as SessionModel, Template, TemplateApp, TemplateOverride, User,
+    Group, OnceScript, Session as SessionModel, Template, TemplateApp,
+    TemplateOverride, User,
 )
 from ..schemas import (
-    AllocationOut, AppIn, OverrideIn, OverrideOut, TemplateIn, TemplateOut,
+    AllocationOut, AppIn, OnceRunOut, OnceScriptIn, OnceScriptOut, OverrideIn,
+    OverrideOut, TemplateIn, TemplateOut,
 )
 from ..security import effective_resources, user_can_see_app, user_can_see_template
 
@@ -399,3 +401,120 @@ def set_apps(
     db.commit()
     db.refresh(tpl)
     return _out(tpl)
+
+
+# --------------------------------------------------------------------------
+# Einmal-Skripte
+#
+# Der Fall: Ein neues Golden Image bringt eine neue Fassung mit, und die
+# braucht eine Aenderung im Zuhause — eine umgezogene Einstellungsdatei, ein
+# neuer Pfad. Das Skeleton greift nicht mehr (das Zuhause ist nicht leer), das
+# Startskript liefe bei jedem Start wieder. Also: einmal je Nutzer.
+#
+# Gebucht wird je Nutzer und Skript, nicht je Session. Ein neues Skript ist
+# ein neuer Eintrag und laeuft wieder fuer alle.
+# --------------------------------------------------------------------------
+
+def _once_out(script: OnceScript) -> OnceScriptOut:
+    daten = OnceScriptOut.model_validate(script)
+    daten.ran_count = len(script.runs)
+    daten.failed = [
+        OnceRunOut(username=r.user.username, ran_at=r.ran_at,
+                   exit_code=r.exit_code, output=r.output)
+        for r in script.runs if r.exit_code != 0
+    ]
+    return daten
+
+
+@router.get("/{template_id}/once", dependencies=[Depends(manage)])
+def list_once(template_id: uuid.UUID,
+              db: DbSession = Depends(get_db)) -> list[OnceScriptOut]:
+    tpl = db.get(Template, template_id)
+    if not tpl:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Workspace nicht gefunden")
+    return [_once_out(x) for x in tpl.once_scripts]
+
+
+@router.post("/{template_id}/once", dependencies=[Depends(manage)],
+             status_code=status.HTTP_201_CREATED)
+def create_once(template_id: uuid.UUID, body: OnceScriptIn, request: Request,
+                actor: User = Depends(current_user),
+                db: DbSession = Depends(get_db)) -> OnceScriptOut:
+    tpl = db.get(Template, template_id)
+    if not tpl:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Workspace nicht gefunden")
+
+    script = OnceScript(template_id=tpl.id, **body.model_dump())
+    db.add(script)
+    audit.record(db, "once_script.created", actor=actor, object_type="template",
+                 object_id=tpl.slug, request=request, name=body.name)
+    db.commit()
+    db.refresh(script)
+    return _once_out(script)
+
+
+@router.put("/{template_id}/once/{script_id}", dependencies=[Depends(manage)])
+def update_once(template_id: uuid.UUID, script_id: uuid.UUID, body: OnceScriptIn,
+                request: Request, actor: User = Depends(current_user),
+                db: DbSession = Depends(get_db)) -> OnceScriptOut:
+    script = db.get(OnceScript, script_id)
+    if not script or script.template_id != template_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Skript nicht gefunden")
+
+    # Der Text aendert sich, die Buchfuehrung bleibt: Wer es schon hatte,
+    # bekommt es **nicht** noch einmal.
+    #
+    # Das ist die unbequeme, aber ehrliche Antwort. Ein Skript, das nach jeder
+    # Korrektur an einem Tippfehler bei allen erneut liefe, waere keine
+    # Einmal-Sache mehr, und niemand traute sich, es anzufassen. Wer den Lauf
+    # wirklich wiederholen will, sagt das ausdruecklich — dafuer gibt es
+    # „nochmal".
+    for key, value in body.model_dump().items():
+        setattr(script, key, value)
+    audit.record(db, "once_script.updated", actor=actor, object_type="template",
+                 object_id=str(script_id), request=request, name=body.name)
+    db.commit()
+    db.refresh(script)
+    return _once_out(script)
+
+
+@router.delete("/{template_id}/once/{script_id}", dependencies=[Depends(manage)])
+def delete_once(template_id: uuid.UUID, script_id: uuid.UUID, request: Request,
+                actor: User = Depends(current_user),
+                db: DbSession = Depends(get_db)) -> dict:
+    script = db.get(OnceScript, script_id)
+    if not script or script.template_id != template_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Skript nicht gefunden")
+    name = script.name
+    db.delete(script)
+    audit.record(db, "once_script.deleted", actor=actor, object_type="template",
+                 object_id=str(script_id), request=request, name=name)
+    db.commit()
+    return {"status": "geloescht"}
+
+
+@router.post("/{template_id}/once/{script_id}/again", dependencies=[Depends(manage)])
+def run_once_again(template_id: uuid.UUID, script_id: uuid.UUID, request: Request,
+                   nur_gescheiterte: bool = False,
+                   actor: User = Depends(current_user),
+                   db: DbSession = Depends(get_db)) -> dict:
+    """Loescht die Buchfuehrung, damit es beim naechsten Start wieder laeuft.
+
+    Ausgefuehrt wird hier nichts: Ein Einmal-Skript laeuft im Container, und
+    der laeuft vielleicht gerade gar nicht. Was hier passiert, ist das
+    Zuruecknehmen der Notiz „ist schon gelaufen" — beim naechsten Start jedes
+    betroffenen Nutzers holt der Agent es dann nach.
+    """
+    script = db.get(OnceScript, script_id)
+    if not script or script.template_id != template_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Skript nicht gefunden")
+
+    betroffen = [r for r in script.runs
+                 if not nur_gescheiterte or r.exit_code != 0]
+    for lauf in betroffen:
+        db.delete(lauf)
+    audit.record(db, "once_script.reset", actor=actor, object_type="template",
+                 object_id=str(script_id), request=request,
+                 name=script.name, count=len(betroffen))
+    db.commit()
+    return {"status": "zurueckgesetzt", "count": len(betroffen)}

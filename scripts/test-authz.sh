@@ -392,6 +392,70 @@ fi
 
 [ -n "${USID:-}" ] && api "$TMP/user.jar" -X DELETE "$BASE/api/sessions/$USID" >/dev/null
 
+# ------------------------------------------------------- Einmal-Skripte
+#
+# Der Fall: Ein neues Golden Image braucht eine Aenderung im Zuhause, die das
+# Skeleton nicht mehr erreicht. Gemessen wird die ganze Kette — anlegen,
+# einmal laufen, **nicht** zweimal laufen, Fehler festhalten, zuruecksetzen.
+echo
+echo "Einmal-Skripte"
+
+WS_E=$(api "$TMP/admin.jar" "$BASE/api/templates" | jqp "
+next((t['id'] for t in d if t['mode'] == 'workspace'), '')")
+
+CODE=$(code "$TMP/user.jar" "$BASE/api/templates/$WS_E/once")
+expect "403" "$CODE" "Ein normaler Nutzer sieht die Einmal-Skripte nicht"
+
+MARKE="einmal-$$"
+SC=$(api "$TMP/admin.jar" -X POST "$BASE/api/templates/$WS_E/once" \
+      -H 'Content-Type: application/json' \
+      -d "{\"name\":\"Pruefung $MARKE\",\"body\":\"echo $MARKE > \\\"\$HOME/einmal.txt\\\"\\n\"}" \
+     | jqp "d.get('id','')")
+
+if [ -z "$SC" ]; then
+  bad "Das Einmal-Skript liess sich nicht anlegen"
+else
+  ok "Einmal-Skript angelegt"
+
+  SID_E=$(api "$TMP/admin.jar" "$BASE/api/sessions" | jqp "
+next((s['id'] for s in d if s['template_id'] == '$WS_E' and s['status'] == 'running'), '')")
+  [ -n "$SID_E" ] && api "$TMP/admin.jar" -X DELETE "$BASE/api/sessions/$SID_E" >/dev/null
+  sleep 4
+  NEU=$(api "$TMP/admin.jar" -X POST "$BASE/api/sessions" -H 'Content-Type: application/json' \
+         -d "{\"template_id\":\"$WS_E\"}" | jqp "d.get('id','')")
+  sleep 12
+
+  CN_E="ota-s-$(echo "$NEU" | cut -c1-12)"
+  DA=$(docker exec "$CN_E" sh -c 'cat /home/kasm-user/einmal.txt 2>/dev/null' | tr -d '\r\n')
+  expect "$MARKE" "$DA" "Es läuft beim ersten Start"
+
+  GEZAEHLT=$(api "$TMP/admin.jar" "$BASE/api/templates/$WS_E/once" | jqp "
+str(next((x['ran_count'] for x in d if x['id'] == '$SC'), 0))")
+  expect "1" "$GEZAEHLT" "OTA hat den Lauf verbucht"
+
+  # Und jetzt der Kern: beim zweiten Start passiert nichts mehr.
+  docker exec "$CN_E" sh -c 'echo VON-HAND > /home/kasm-user/einmal.txt'
+  api "$TMP/admin.jar" -X DELETE "$BASE/api/sessions/$NEU" >/dev/null
+  sleep 4
+  NEU2=$(api "$TMP/admin.jar" -X POST "$BASE/api/sessions" -H 'Content-Type: application/json' \
+          -d "{\"template_id\":\"$WS_E\"}" | jqp "d.get('id','')")
+  sleep 12
+  CN_E2="ota-s-$(echo "$NEU2" | cut -c1-12)"
+  NOCHMAL=$(docker exec "$CN_E2" sh -c 'cat /home/kasm-user/einmal.txt 2>/dev/null' | tr -d '\r\n')
+  expect "VON-HAND" "$NOCHMAL" "Beim zweiten Start läuft es nicht noch einmal"
+
+  # Zuruecksetzen nimmt nur die Notiz zurueck — ausgefuehrt wird beim Start.
+  ZURUECK=$(api "$TMP/admin.jar" -X POST "$BASE/api/templates/$WS_E/once/$SC/again" \
+            | jqp "str(d.get('count', 0))")
+  expect "1" "$ZURUECK" "„Nochmal“ setzt die Buchführung zurück"
+
+  api "$TMP/admin.jar" -X DELETE "$BASE/api/templates/$WS_E/once/$SC" >/dev/null
+  WEG=$(api "$TMP/admin.jar" "$BASE/api/templates/$WS_E/once" | jqp "
+str(len([x for x in d if x['id'] == '$SC']))")
+  expect "0" "$WEG" "Gelöscht ist gelöscht"
+  docker exec "$CN_E2" sh -c 'rm -f /home/kasm-user/einmal.txt' 2>/dev/null || true
+fi
+
 # ---------------------------------------------------- Die beiden Ablagen
 #
 # Sie sind bewusst getrennt: Die gemeinsame gehoert der Verwaltung und liegt

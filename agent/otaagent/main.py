@@ -144,6 +144,10 @@ class StartRequest(BaseModel):
     # keine. Die Vorlage kann das abschalten, und die API entscheidet es —
     # der Agent haengt nur ein, was ihm gesagt wird.
     shelf_user: str = ""
+    # Skripte, die fuer **diesen** Nutzer noch nie gelaufen sind. Welche das
+    # sind, weiss die API — der Agent fuehrt aus und berichtet, was dabei
+    # herauskam. Siehe `_run_once_scripts`.
+    once_scripts: list[dict[str, str]] = []
 
 
 @app.get("/healthz")
@@ -492,11 +496,14 @@ def start_container(req: StartRequest) -> dict[str, Any]:
             log.warning("Skeleton nicht angewandt: %s", exc)
 
     _link_shared(container)
+    # Einmal-Skripte zuerst: Sie richten ein, worauf das Startskript sich
+    # danach verlassen darf.
+    once = _run_once_scripts(container, req.once_scripts)
     if req.start_script.strip():
         _run_start_script(container, req.start_script)
 
     container.reload()
-    return {"container_id": container.id, "status": container.status}
+    return {"container_id": container.id, "status": container.status, "once": once}
 
 
 def _link_shared(container) -> None:
@@ -531,6 +538,58 @@ def _link_shared(container) -> None:
         container.exec_run(["bash", "-lc", script], user="1000")
     except APIError as exc:
         log.warning("Verweis auf die Ablage nicht angelegt: %s", exc)
+
+
+def _run_once_scripts(container, scripts: list[dict[str, str]]) -> list[dict[str, Any]]:
+    """Fuehrt die Einmal-Skripte aus und berichtet, was dabei herauskam.
+
+    Der Unterschied zum Startskript ist nicht die Technik, sondern die
+    Buchfuehrung: Ein Startskript laeuft bei jedem Start, ein Einmal-Skript
+    genau einmal je Nutzer. Wer das weiss, ist die API — hier steht nur die
+    Ausfuehrung.
+
+    Berichtet wird **jeder** Lauf, auch der misslungene, samt Rueckgabewert
+    und den letzten Zeilen der Ausgabe. Ohne diesen Bericht koennte die API
+    nicht unterscheiden zwischen „ist gelaufen" und „konnte nicht laufen" —
+    und genau diese Unterscheidung entscheidet, ob es beim naechsten Start
+    noch einmal versucht wird.
+    """
+    ergebnisse: list[dict[str, Any]] = []
+    for eintrag in scripts:
+        kennung = str(eintrag.get("id", ""))
+        text = str(eintrag.get("body", ""))
+        if not kennung or not text.strip():
+            continue
+
+        payload = base64.b64encode(text.encode("utf-8")).decode("ascii")
+        datei = f"/tmp/ota-einmal-{kennung[:12]}"
+        runner = (
+            f'echo {payload} | base64 -d > {datei}.sh && '
+            f'chmod +x {datei}.sh && '
+            f'bash {datei}.sh > {datei}.log 2>&1; '
+            f'rc=$?; tail -c 4000 {datei}.log; exit $rc'
+        )
+        try:
+            res = container.exec_run(
+                ["bash", "-lc", runner], user="1000",
+                environment={"HOME": "/home/kasm-user",
+                             "OTA_SHARED": SHARED_MOUNT,
+                             "OTA_FILES": USERFILES_MOUNT},
+            )
+            ausgabe = (res.output or b"").decode("utf-8", "replace")
+            ergebnisse.append({"id": kennung, "exit_code": res.exit_code,
+                               "output": ausgabe[-4000:]})
+            if res.exit_code != 0:
+                log.warning("Einmal-Skript %s in %s endete mit %s: %s",
+                            eintrag.get("name", kennung), container.name,
+                            res.exit_code, ausgabe[-400:])
+        except APIError as exc:
+            # Kein Ergebnis heisst fuer die API: nicht gelaufen. Beim naechsten
+            # Start wird es wieder versucht — und das ist richtig, denn hier
+            # ist nicht das Skript gescheitert, sondern der Weg dorthin.
+            log.warning("Einmal-Skript %s nicht ausfuehrbar: %s",
+                        eintrag.get("name", kennung), exc)
+    return ergebnisse
 
 
 def _run_start_script(container, script: str) -> None:

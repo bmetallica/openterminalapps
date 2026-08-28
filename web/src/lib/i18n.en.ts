@@ -524,6 +524,35 @@ export const EN: Record<string, string> = {
   'Der Browser hat die Verknüpfung abgelehnt.': 'The browser refused the shortcut.',
   '{name} auf den Desktop legen': 'Add {name} to desktop',
   'Meine Ablage': 'My files',
+  'Einmal': 'One-time',
+  'Einmal-Skript anlegen': 'Add a one-time script',
+  'Noch kein Einmal-Skript': 'No one-time script yet',
+  'Nochmal': 'Run again',
+  'Bearbeiten': 'Edit',
+  'Angelegt {when}': 'Created {when}',
+  '{n}× gelaufen': 'ran {n}×',
+  '{n} gescheitert': '{n} failed',
+  '(keine Ausgabe)': '(no output)',
+  'Ohne Namen findet es später niemand wieder.': 'Without a name nobody will find it again.',
+  'Zurückgesetzt für {n} Nutzer.': 'Reset for {n} users.',
+  'Zurücksetzen fehlgeschlagen': 'Reset failed',
+  'z. B. „VS Code 1.99 — settings.json umziehen"':
+    'e.g. "VS Code 1.99 — move settings.json"',
+  'Läuft je Nutzer genau einmal, beim nächsten Start dieses Workspace — für Änderungen am Zuhause, die das Skeleton nicht mehr erreicht, weil dort schon etwas liegt.':
+    'Runs exactly once per user, at their next start of this workspace — for changes to the home directory that the skeleton can no longer reach because something is already there.',
+  'Typischer Fall: Ein Update braucht eine neue Einstellungsdatei im Home. Kopiere sie aus der gemeinsamen Ablage — $OTA_SHARED zeigt darauf.':
+    'Typical case: an update needs a new settings file in the home directory. Copy it from the shared files — $OTA_SHARED points there.',
+  'Bei {names} endete es mit einem Fehler.': 'It ended with an error for {names}.',
+  '„{name}" bei allen erneut laufen lassen? Es passiert beim nächsten Start, nicht sofort.':
+    'Run "{name}" again for everyone? It happens at their next start, not right now.',
+  '„{name}" löschen? Die Buchführung geht mit.':
+    'Delete "{name}"? The record of who has run it goes too.',
+  'Gespeichert. Es läuft beim nächsten Start jedes Nutzers, der es noch nicht hatte.':
+    'Saved. It runs at the next start for every user who has not had it yet.',
+  'Läuft als Nutzer im Container, nicht als root — was dort entsteht, soll ihm gehören. Scheitert es, startet der Arbeitsplatz trotzdem, und es wird als gelaufen verbucht: Ein kaputtes Skript soll nicht bei jedem Start jedes Nutzers wieder anlaufen. Der Fehler steht dann hier.':
+    'Runs as the user inside the container, not as root — whatever it creates should belong to them. If it fails, the workspace still starts and the run is recorded anyway: a broken script must not fire again at every start for every user. The error shows up here.',
+  'Eine Änderung am Text lässt es nicht erneut laufen. Wer es schon hatte, hat es gehabt — dafür ist „Nochmal" da.':
+    'Editing the text does not make it run again. Whoever has had it, has had it — that is what "Run again" is for.',
   'Gemeinsame Ablage': 'Shared files',
   'Deine Dateien': 'Your files',
   'Eigene Ablage': 'Personal shelf',

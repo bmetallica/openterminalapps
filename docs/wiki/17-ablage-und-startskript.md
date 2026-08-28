@@ -17,6 +17,7 @@ bekommen.
 | Dateien eines Nutzers, hin und zurück | **Eigene Ablage** | Sein Weg in den Container und heraus |
 | Womit ein Home anfängt | **Skeleton** | Dateien, die einfach da sein sollen — im Browser sichtbar |
 | Einrichtung im Home | **Startskript** | Für alles, was *ausgeführt* werden muss |
+| Einmalige Umstellung im Home | **Einmal-Skript** | Für eine Änderung, die je Nutzer genau einmal nötig ist |
 | Eigene Einstellungen | **Nichts davon** | Das persistente Home hält sie ohnehin |
 
 Der letzte Punkt wird oft übersehen: **Was ein Nutzer in seinem Home ändert, bleibt.** Extensions,
@@ -208,3 +209,60 @@ und der Rückgabewert im Protokoll des Agents:
 ```bash
 docker compose -f deploy/docker-compose.yml logs agent | grep Startskript
 ```
+
+
+## Einmal-Skripte ✅
+
+**Workspace-Editor → Einmal.**
+
+Der Fall, für den es sie gibt: Ein neues Golden Image bringt eine Anwendung in einer neuen Fassung
+mit, und die braucht eine Änderung im Zuhause — eine umgezogene Einstellungsdatei, ein neuer Pfad.
+
+* Das **Skeleton** hilft nicht: Es greift nur, solange das Zuhause leer ist, und das ist es längst
+  nicht mehr.
+* Das **Startskript** hilft, läuft dann aber bei jedem Start wieder — obwohl die Sache nach dem
+  ersten Mal erledigt ist.
+
+Ein Einmal-Skript läuft **je Nutzer genau einmal**, beim nächsten Start dieses Workspace.
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+# $OTA_SHARED = gemeinsame Ablage,  $OTA_FILES = eigene Ablage des Nutzers
+mkdir -p "$HOME/.config/Code/User"
+cp "$OTA_SHARED/vscode/settings.json" "$HOME/.config/Code/User/settings.json"
+```
+
+### Die Buchführung
+
+Gebucht wird je **Nutzer und Skript**, nicht je Session: Wer drei Arbeitsplätze derselben Vorlage
+nacheinander startet, bekommt es einmal. Ein **neues** Skript ist ein neuer Eintrag und läuft wieder
+für alle — genau so ist es gemeint.
+
+**Eine Änderung am Text lässt es nicht erneut laufen.** Das ist die unbequeme, aber ehrliche
+Antwort: Ein Skript, das nach jeder Korrektur an einem Tippfehler bei allen erneut liefe, wäre keine
+Einmal-Sache mehr, und niemand traute sich, es anzufassen. Wer den Lauf wirklich wiederholen will,
+sagt das ausdrücklich — dafür gibt es **Nochmal**.
+
+**Nochmal** führt nichts aus. Ein Einmal-Skript läuft im Container, und der läuft vielleicht gerade
+gar nicht; der Knopf nimmt nur die Notiz „ist schon gelaufen" zurück. Nachgeholt wird es beim
+nächsten Start jedes betroffenen Nutzers.
+
+### Wenn es scheitert
+
+Der Arbeitsplatz startet trotzdem — ihn wegen einer misslungenen Einrichtung zu verweigern wäre die
+schlechtere Antwort.
+
+Der Lauf wird **trotzdem als erledigt verbucht.** Sonst liefe ein kaputtes Skript bei jedem Start
+jedes Nutzers erneut, und aus einem Fehler würde eine Dauerbelastung. Sichtbar bleibt er: Im
+Editor stehen Rückgabewert, betroffene Nutzer und die letzten Zeilen der Ausgabe.
+
+Eine Ausnahme davon: Kam der Lauf gar nicht erst zustande — der Container antwortete nicht —, wird
+nichts gebucht. Dann war nicht das Skript das Problem, sondern der Weg dorthin, und der nächste
+Start versucht es wieder.
+
+### Was es nicht tun sollte
+
+Dasselbe wie beim Startskript: **keine Installationen.** Die gehören ins Golden Image. Und nichts,
+was root braucht — es läuft als Nutzer im Container, damit die Dateien ihm gehören und er sie
+später noch ändern kann.

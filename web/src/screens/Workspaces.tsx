@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   CapacityFader, ChipSelect, Combobox, Field, KeyValueRows, Led, Segmented, Toggle,
 } from '../components/controls'
+import { OnceScripts } from '../components/OnceScripts'
 import { Workbench } from '../components/Workbench'
 import { cores as coresLabel, gb, idleLabel } from '../lib/format'
 import {
@@ -74,8 +75,8 @@ function Editor({ tpl, host, groups, images, onSaved, onClose, onToast }: {
   // "Software" steht direkt neben "Apps", weil es derselbe Vorgang in zwei
   // Schritten ist: erst einbauen, dann freigeben.
   const TABS = tpl.mode === 'workspace'
-    ? ['Allgemein', 'Apps', 'Software', 'Skeleton', 'Ressourcen', 'Rechte', 'Umgebung', 'Zuteilung']
-    : ['Allgemein', 'Software', 'Skeleton', 'Ressourcen', 'Rechte', 'Umgebung', 'Zuteilung']
+    ? ['Allgemein', 'Apps', 'Software', 'Skeleton', 'Ressourcen', 'Rechte', 'Umgebung', 'Einmal', 'Zuteilung']
+    : ['Allgemein', 'Software', 'Skeleton', 'Ressourcen', 'Rechte', 'Umgebung', 'Einmal', 'Zuteilung']
 
   const [draft, setDraft] = useState<Draft>(() => toDraft(tpl))
   const [tab, setTab] = useState(TABS[0])
@@ -436,6 +437,8 @@ function Editor({ tpl, host, groups, images, onSaved, onClose, onToast }: {
           </Field>
         </>
       )}
+
+      {tab === 'Einmal' && <OnceScripts templateId={tpl.id} onToast={onToast} />}
 
       {tab === 'Zuteilung' && (
         <>

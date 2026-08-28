@@ -250,6 +250,10 @@ class Template(Base):
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
     )
 
+    once_scripts: Mapped[list[OnceScript]] = relationship(
+        cascade="all, delete-orphan", lazy="selectin",
+        order_by="OnceScript.sort_order",
+    )
     apps: Mapped[list[TemplateApp]] = relationship(
         back_populates="template", cascade="all, delete-orphan",
         lazy="selectin", order_by="TemplateApp.sort_order",
@@ -262,6 +266,74 @@ class Template(Base):
         back_populates="template", cascade="all, delete-orphan",
         lazy="selectin", order_by="ImageBuild.version.desc()",
     )
+
+
+class OnceScript(Base):
+    """Ein Skript, das je Nutzer **genau einmal** laeuft (plan.md §9.6).
+
+    Der Fall, fuer den es das gibt: Ein neues Golden Image bringt eine
+    Anwendung in einer neuen Fassung mit, und die braucht eine Aenderung im
+    Zuhause — eine umgezogene Einstellungsdatei, ein neuer Pfad. Das Skeleton
+    hilft nicht, denn das Zuhause ist laengst nicht mehr leer. Das Startskript
+    hilft, aber es laeuft dann bei jedem Start wieder, obwohl die Sache nach
+    dem ersten Mal erledigt ist.
+
+    Gebucht wird je Nutzer und Skript (`OnceScriptRun`), nicht je Session:
+    Wer drei Arbeitsplaetze derselben Vorlage nacheinander startet, bekommt es
+    einmal. Ein neues Skript ist ein neuer Eintrag und laeuft wieder fuer alle
+    — genau so ist es gemeint.
+    """
+
+    __tablename__ = "once_scripts"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    template_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("templates.id", ondelete="CASCADE"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(255))
+    body: Mapped[str] = mapped_column(Text, default="")
+    is_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+    runs: Mapped[list[OnceScriptRun]] = relationship(
+        back_populates="script", cascade="all, delete-orphan", lazy="selectin"
+    )
+
+
+class OnceScriptRun(Base):
+    """Dass ein Einmal-Skript fuer einen Nutzer gelaufen ist — und wie.
+
+    Der Eintrag entsteht auch dann, wenn das Skript mit einem Fehler endet.
+    Sonst liefe ein kaputtes Skript bei **jedem** Start jedes Nutzers erneut,
+    und aus einem Fehler wuerde eine Dauerbelastung. Was misslungen ist, steht
+    im Rueckgabewert und in der Ausgabe; die Verwaltung sieht es und kann es
+    ausdruecklich noch einmal laufen lassen.
+
+    Kein Eintrag entsteht, wenn der Lauf gar nicht zustande kam — dann war
+    nicht das Skript das Problem, sondern der Weg dorthin, und der naechste
+    Start versucht es wieder.
+    """
+
+    __tablename__ = "once_script_runs"
+    __table_args__ = (UniqueConstraint("script_id", "user_id"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    script_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("once_scripts.id", ondelete="CASCADE"), index=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    ran_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    exit_code: Mapped[int] = mapped_column(Integer, default=0)
+    output: Mapped[str] = mapped_column(Text, default="")
+
+    script: Mapped[OnceScript] = relationship(back_populates="runs")
+    user: Mapped[User] = relationship(lazy="selectin")
 
 
 class TemplateApp(Base):

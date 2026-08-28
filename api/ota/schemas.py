@@ -170,6 +170,38 @@ class TemplateIn(BaseModel):
     group_ids: list[uuid.UUID] | None = None
 
 
+class OnceRunOut(BaseModel):
+    """Ein Lauf, wie ihn die Verwaltung sieht."""
+    model_config = ConfigDict(from_attributes=True)
+
+    username: str
+    ran_at: datetime
+    exit_code: int
+    output: str
+
+
+class OnceScriptOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str
+    body: str
+    is_enabled: bool
+    sort_order: int
+    created_at: datetime
+    # Zusammenfassung statt roher Liste: Was die Verwaltung wissen will, ist
+    # „bei wie vielen ist es gelaufen und bei wem ging es schief".
+    ran_count: int = 0
+    failed: list[OnceRunOut] = []
+
+
+class OnceScriptIn(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    body: str = ""
+    is_enabled: bool = True
+    sort_order: int = 0
+
+
 class OverrideIn(BaseModel):
     scope: str
     target_id: uuid.UUID

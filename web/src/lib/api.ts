@@ -203,6 +203,25 @@ export type SharedEntry = {
   modified: number
 }
 
+/** Ein Skript, das je Nutzer genau einmal läuft. */
+export type OnceScript = {
+  id: string
+  name: string
+  body: string
+  is_enabled: boolean
+  sort_order: number
+  created_at: string
+  ran_count: number
+  failed: { username: string; ran_at: string; exit_code: number; output: string }[]
+}
+
+export type OnceScriptIn = {
+  name: string
+  body: string
+  is_enabled: boolean
+  sort_order: number
+}
+
 export type SharedListing = {
   path: string
   entries: SharedEntry[]
@@ -482,6 +501,23 @@ export const api = {
     call<Session>(`/sessions/${id}/apps/${slug}`, { method: 'POST' }),
   stopApp: (id: string, slug: string) =>
     call<Session>(`/sessions/${id}/apps/${slug}`, { method: 'DELETE' }),
+  onceScripts: (templateId: string) =>
+    call<OnceScript[]>(`/templates/${templateId}/once`),
+  addOnceScript: (templateId: string, body: OnceScriptIn) =>
+    call<OnceScript>(`/templates/${templateId}/once`, {
+      method: 'POST', body: JSON.stringify(body),
+    }),
+  saveOnceScript: (templateId: string, id: string, body: OnceScriptIn) =>
+    call<OnceScript>(`/templates/${templateId}/once/${id}`, {
+      method: 'PUT', body: JSON.stringify(body),
+    }),
+  removeOnceScript: (templateId: string, id: string) =>
+    call<{ status: string }>(`/templates/${templateId}/once/${id}`, { method: 'DELETE' }),
+  runOnceAgain: (templateId: string, id: string, nurGescheiterte = false) =>
+    call<{ status: string; count: number }>(
+      `/templates/${templateId}/once/${id}/again?nur_gescheiterte=${nurGescheiterte}`,
+      { method: 'POST' }),
+
   discoverApps: (templateId: string) =>
     call<DiscoveredApp[]>(`/templates/${templateId}/apps/discover`),
 

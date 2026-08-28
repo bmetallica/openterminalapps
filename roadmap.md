@@ -226,6 +226,12 @@ Der Entwurf steht bereits (`web/`, `plan.md` §13). Hier wird er verkabelt.
 - [x] **Jede Anwendung in einem eigenen Tab.** Eigene Adressen `/view/s/<id>[/<display>]`;
       das Dashboard bleibt im ersten Tab stehen
 - [x] **Verknüpfung auf dem Desktop** (PWA): Manifest je Vorlage und App aus der API
+- [x] **Einmal-Skripte je Workspace** (2026-08-28): Laufen je Nutzer genau einmal, beim nächsten
+      Start — für Änderungen am Zuhause, die das Skeleton nicht mehr erreicht (es ist nicht leer)
+      und die das Startskript bei jedem Start wiederholen würde. Gebucht je Nutzer und Skript;
+      ein neues Skript läuft wieder für alle. Ein gescheiterter Lauf wird verbucht und sichtbar
+      gemacht, damit ein kaputtes Skript nicht bei jedem Start jedes Nutzers erneut anläuft;
+      „Nochmal" nimmt die Buchführung zurück, ausgeführt wird beim nächsten Start
 - [x] **Zwei getrennte Ablagen** (2026-08-28): Die gemeinsame gehört der Verwaltung — sichtbar
       und beschreibbar nur für die, die Images oder Vorlagen verwalten, im Container weiterhin
       `/mnt/ota` nur lesbar. Die eigene gehört je einem Nutzer, liegt beschreibbar unter
