@@ -59,6 +59,14 @@ aufraeumen() {
   rest=$(api "$BASE_URL/api/admin/users" | jqp "sum(1 for u in d if u['auth_provider'] == 'ldap')")
   expect "0" "${rest:-?}" "Alle Verzeichniskonten entfernt"
 
+  # Die Anbindung in Keycloak ebenso. Sie zeigt sonst auf ein Verzeichnis,
+  # das es gleich nicht mehr gibt — und dann scheitert jede Anmeldung eines
+  # Kontos, das daraus stammt, mit einer Meldung, die niemand versteht.
+  api -X DELETE "$BASE_URL/api/admin/identity/keycloak/verzeichnis" >/dev/null 2>&1
+  local kcweg
+  kcweg=$(api "$BASE_URL/api/admin/identity/keycloak/verzeichnis" | jqp "str(d.get('eingerichtet'))")
+  expect "False" "${kcweg:-?}" "Anbindung in Keycloak wieder entfernt"
+
   "$ROOT/scripts/ldap-test-server.sh" stop >/dev/null 2>&1
   ok "Testverzeichnis entfernt"
 
@@ -181,6 +189,86 @@ expect "1" "$NOCHDA" "Gelöscht wird es nicht — das entscheidet ein Mensch"
 expect "403" "$(code_as piet.holm 'Piet-Pruef-2026!')" "Und es kommt nicht mehr herein"
 
 # ------------------------------------------------- Ausfall des Verzeichnisses
+echo
+echo "Dasselbe Verzeichnis, aber über Keycloak"
+#
+# Etappe C der auth-roadmap: Eine Administration richtet das Verzeichnis in
+# **OTAs** Oberfläche ein und muss die Keycloak-Konsole nicht öffnen. Geprüft
+# wird der ganze Weg — prüfen, speichern, abgleichen — und vor allem, dass die
+# wichtigste Schutzregel dabei nicht verlorengeht.
+
+# Keycloak muss das Testverzeichnis erreichen können; es hängt im internen
+# Netz, Keycloak in beiden.
+docker network connect ota_public ota-ldap-test >/dev/null 2>&1 || true
+
+KC_KONF='{"server_uri":"ldap://ota-ldap-test:389","base_dn":"dc=ota,dc=test",
+          "bind_dn":"cn=ota-dienst,dc=ota,dc=test","bind_password":"dienst-geheim-2026",
+          "kind":"other","login_attribute":"uid","is_enabled":true}'
+
+# Ein Konto ohne Verwaltungsrechte — angelegt und gleich wieder weg.
+anon -c "$TMP/klein.jar" -o /dev/null -X POST "$BASE_URL/api/auth/login" \
+  -H 'Content-Type: application/json' \
+  -d "{\"username\":\"lena.brandt\",\"password\":\"Lena-Passwort-2026!\"}" 2>/dev/null || true
+CODE=$(curl -s --cacert "$CA" -b "$TMP/klein.jar" -o /dev/null -w '%{http_code}' \
+  "$BASE_URL/api/admin/identity/keycloak/verzeichnis")
+case "$CODE" in
+  401|403) ok "Ohne Verwaltungsrecht kein Blick auf die Anbindung ($CODE)" ;;
+  *)       bad "Die Anbindung war ohne Verwaltungsrecht erreichbar ($CODE)" ;;
+esac
+
+PRUEF_KC=$(api -X POST "$BASE_URL/api/admin/identity/keycloak/verzeichnis/test" \
+  -H 'Content-Type: application/json' -d "$KC_KONF")
+expect "True" "$(jqp "str(d['verbindung'])" <<<"$PRUEF_KC")" "Keycloak erreicht den Server"
+expect "True" "$(jqp "str(d['anmeldung'])" <<<"$PRUEF_KC")" "Und das Dienstkonto kommt herein"
+
+FALSCH=$(api -X POST "$BASE_URL/api/admin/identity/keycloak/verzeichnis/test" \
+  -H 'Content-Type: application/json' \
+  -d "$(sed 's/dienst-geheim-2026/falsches-kennwort/' <<<"$KC_KONF")")
+expect "False" "$(jqp "str(d['anmeldung'])" <<<"$FALSCH")" "Ein falsches Kennwort fällt beim Prüfen auf"
+jqp "d['hinweise'][0] if d['hinweise'] else ''" <<<"$FALSCH" | grep -q "Bind-DN" \
+  && ok "Und die Meldung sagt, wo man nachsehen muss" \
+  || bad "Die Meldung hilft nicht weiter"
+
+SETZEN=$(api -X PUT "$BASE_URL/api/admin/identity/keycloak/verzeichnis" \
+  -H 'Content-Type: application/json' -d "$KC_KONF")
+expect "True" "$(jqp "str(d['eingerichtet'])" <<<"$SETZEN")" "Die Anbindung ist gespeichert"
+expect "True" "$(jqp "str(d['hat_kennwort'])" <<<"$SETZEN")" "Das Kennwort liegt in Keycloak"
+jqp "str(d)" <<<"$SETZEN" | grep -q "dienst-geheim" \
+  && bad "Das Kennwort kommt zurück — es darf nur hinein" \
+  || ok "Das Kennwort kommt nicht zurück"
+
+ABGLEICH=$(api -X POST "$BASE_URL/api/admin/identity/keycloak/verzeichnis/abgleich?voll=true")
+# Neu geholt **oder** aufgefrischt: Beim zweiten Lauf auf demselben Rechner
+# stehen die Konten schon in Keycloak, und dann meldet der Abgleich sie als
+# "updated". Beides heisst dasselbe — sie sind da.
+GEHOLT=$(jqp "str(d.get('added', 0) + d.get('updated', 0))" <<<"$ABGLEICH")
+[ "${GEHOLT:-0}" -ge 3 ] && ok "Konten aus dem Verzeichnis geholt oder aufgefrischt ($GEHOLT)" \
+                         || bad "Es kamen keine Konten an: $ABGLEICH"
+
+# Und jetzt der Punkt, auf den es ankommt. Im Testverzeichnis steht ein
+# Eintrag `bmetallica` mit fremdem Kennwort — genau der Angriff, gegen den die
+# Regel steht: Wer im Verzeichnis etwas anlegen darf, legte sonst einen
+# Eintrag mit dem Namen des Administrators an.
+FREMD_TOKEN=$(docker exec -i ota-agent curl -s -d "client_id=ota-tests" \
+  --data-urlencode "client_secret=${OTA_KEYCLOAK_SECRET:-}-tests" -d "grant_type=password" \
+  -d "username=$ADMIN" --data-urlencode "password=Fremdes-Passwort-2026!" -d "scope=openid" \
+  "http://ota-keycloak:8080/auth/realms/ota/protocol/openid-connect/token" \
+  | jqp "d.get('id_token','')")
+
+if [ -z "$FREMD_TOKEN" ]; then
+  bad "Der Doppelgänger liess sich nicht anmelden — Prüfung nicht aussagekräftig"
+else
+  ok "Der Doppelgänger meldet sich bei Keycloak an (mit fremdem Kennwort)"
+  CODE=$(curl -s --cacert "$CA" -o /dev/null -w '%{http_code}' \
+    -X POST "$BASE_URL/api/auth/oidc/token" -H 'Content-Type: application/json' \
+    -d "{\"id_token\":\"$FREMD_TOKEN\"}")
+  expect "403" "$CODE" "OTA übernimmt das gleichnamige lokale Konto trotzdem nicht"
+
+  HERKUNFT=$(api "$BASE_URL/api/admin/users" | jqp "
+next((u['auth_provider'] for u in d if u['username'] == '$ADMIN'), '')")
+  expect "local" "$HERKUNFT" "Und $ADMIN bleibt ein lokales Konto"
+fi
+
 echo
 echo "Wenn das Verzeichnis ausfällt"
 docker stop "$LDAP_CN" >/dev/null 2>&1

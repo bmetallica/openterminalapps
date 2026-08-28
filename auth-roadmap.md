@@ -734,11 +734,22 @@ der nächsten abschliessen.
   Der Weg von der Desktop-Verknüpfung durch die Keycloak-Anmeldung bis in die laufende Anwendung
   ist im e2e-Lauf enthalten, samt der Prüfung, dass die **Herkunft dieselbe bleibt** (§5.6)
 
-### C · OTA verwaltet Keycloak
-- Nutzer und Gruppen: anlegen, sperren, zuordnen — über die Admin-API statt lokal
-- AD/LDAP-Anbindung über die OTA-Oberfläche konfigurierbar, mit „Verbindung testen"
-- Jede Änderung im OTA-Protokoll, mit dem Menschen, der sie veranlasst hat
-- **Fertig, wenn:** eine Administration Keycloak für den Alltag nicht mehr öffnen muss
+### C · OTA verwaltet Keycloak · ⏳ zur Hälfte erledigt am 2026-08-28
+- [x] **AD/LDAP-Anbindung über die OTA-Oberfläche**, mit „Verbindung testen" vor dem Speichern:
+      Einstellungen → Verzeichnis in Keycloak. Angelegt wird eine *Benutzer-Föderation* unter
+      `components` — nicht ein „Identity Provider", das sind fremde OIDC- und SAML-Anbieter (§5.5)
+- [x] Nur lesend (`editMode: READ_ONLY`): OTA schreibt nie ins Verzeichnis zurück
+- [x] Kennwort des Dienstkontos geht nur hinein; leer heisst „nicht anfassen", nicht „löschen"
+- [x] Abgleich auf Knopfdruck, jede Änderung im OTA-Protokoll mit dem Menschen dahinter
+- [x] Die alte, eigene Anbindung ist in der Oberfläche als abgelöst gekennzeichnet
+- [ ] **Offen:** Nutzer und Gruppen über die Admin-API statt lokal. Das hängt mit Etappe E
+      zusammen — solange Bestandskonten lokal sind, müsste die Nutzerverwaltung beides
+      gleichzeitig zeigen, und die Frage „wer führt?" ist erst nach der Übernahme beantwortet
+- [ ] **Offen:** Die Rolle `zweiter-faktor` automatisch an Gruppen hängen, die sie verlangen
+- **Gemessen gegen ein echtes Verzeichnis:** 42 Prüfungen in der LDAP-Reihe, darunter der
+  Angriffsfall — ein Verzeichniseintrag mit dem Namen des Administrators, über die echte
+  Föderation nach Keycloak geholt, meldet sich dort mit fremdem Kennwort an und wird von OTA
+  **abgelehnt** (403). Das lokale Konto bleibt unangetastet
 
 ### D · Die erste fremde Anwendung
 - Anwendungstyp „Externe Web-Anwendung" neben „Arbeitsplatz" im Katalog

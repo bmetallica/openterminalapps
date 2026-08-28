@@ -28,6 +28,23 @@ expect() {  # expect <erwartet> <ist> <beschreibung>
   if [ "$2" = "$1" ]; then ok "$3 ($2)"; else bad "$3 — erwartet $1, bekommen $2"; fi
 }
 
+laufende_session() {  # laufende_session <vorlagen-id> — gibt die Session-ID
+  # Herstellen statt voraussetzen. Vorher hing das Ergebnis davon ab, was ein
+  # vorheriger Lauf hinterlassen hatte: Lief zufällig keine Session, meldeten
+  # zwei Abschnitte "keine laufende Session" — ein Fehlschlag, der nichts mit
+  # dem Geprüften zu tun hat.
+  local vorlage="$1" sid
+  sid=$(api "$TMP/admin.jar" "$BASE/api/sessions" | jqp "
+next((s['id'] for s in d if s['template_id'] == '$vorlage' and s['status'] == 'running'), '')")
+  if [ -z "$sid" ]; then
+    sid=$(api "$TMP/admin.jar" -X POST "$BASE/api/sessions" \
+          -H 'Content-Type: application/json' -d "{\"template_id\":\"$vorlage\"}" \
+          | jqp "d.get('id','')")
+    sleep 18
+  fi
+  printf '%s' "$sid"
+}
+
 jqp() {  # jqp <python-ausdruck ueber d> — liest JSON von stdin
   python3 -c "import sys,json;d=json.load(sys.stdin);print($1)" 2>/dev/null
 }
@@ -657,8 +674,7 @@ esac
 # Und der eigentliche Zweck: der Weg in den Container und wieder heraus.
 WS_A=$(api "$TMP/admin.jar" "$BASE/api/templates" | jqp "
 next((t['id'] for t in d if t['mode'] == 'workspace'), '')")
-SID_A=$(api "$TMP/admin.jar" "$BASE/api/sessions" | jqp "
-next((s['id'] for s in d if s['template_id'] == '$WS_A' and s['status'] == 'running'), '')")
+SID_A=$(laufende_session "$WS_A")
 
 if [ -z "$SID_A" ]; then
   bad "Keine laufende Session für die Ablage-Prüfung"
@@ -693,8 +709,7 @@ echo "Anwendung, deren Display verschwunden ist"
 
 WS_D=$(api "$TMP/admin.jar" "$BASE/api/templates" | jqp "
 next((t['id'] for t in d if t['mode'] == 'workspace' and t['apps']), '')")
-SID_D=$(api "$TMP/admin.jar" "$BASE/api/sessions" | jqp "
-next((s['id'] for s in d if s['template_id'] == '$WS_D' and s['status'] == 'running'), '')")
+SID_D=$(laufende_session "$WS_D")
 APP_D=$(api "$TMP/admin.jar" "$BASE/api/templates/$WS_D" | jqp "
 next((a['slug'] for a in d['apps'] if a['is_enabled'] and not a.get('blocked_reason')), '')")
 

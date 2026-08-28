@@ -427,3 +427,178 @@ def pruefe_abmeldetoken(rohtoken: str) -> dict[str, Any]:
     if not daten.get("sub") and not daten.get("sid"):
         raise KeycloakFehler("Das Abmeldetoken nennt niemanden.")
     return daten
+
+
+# --- Die Verzeichnisanbindung verwalten (Etappe C) ----------------------
+#
+# Das ist der eigentliche Gewinn des Umbaus: Eine Administration soll ein
+# Active Directory in **OTAs** Oberfläche einrichten und Keycloak dafür nicht
+# öffnen müssen.
+#
+# Wichtig und leicht zu verwechseln: Die LDAP-Anbindung ist in Keycloak
+# **keine** „Identity-Provider"-Ressource — das sind fremde OIDC- und
+# SAML-Anbieter. Sie ist eine *Benutzer-Föderation* und liegt unter
+# `components`. Daran hängt auch, warum das Dienstkonto `manage-realm`
+# braucht (§5.5).
+
+LDAP_PROVIDER = "org.keycloak.storage.UserStorageProvider"
+LDAP_NAME = "ota-verzeichnis"
+
+
+def _eins(wert: Any) -> list[str]:
+    """Keycloak führt Komponentenwerte als Listen, auch einzelne."""
+    return [str(wert)]
+
+
+def verzeichnis_lesen() -> dict[str, Any] | None:
+    """Die eingerichtete Anbindung, oder nichts."""
+    resp = ruf("GET", f"/components?type={LDAP_PROVIDER}")
+    if resp.status_code != 200:
+        raise KeycloakFehler("Die Verzeichnisanbindung liess sich nicht lesen.")
+    for teil in resp.json():
+        if teil.get("name") == LDAP_NAME:
+            werte = teil.get("config", {})
+            return {
+                "id": teil["id"],
+                "server_uri": (werte.get("connectionUrl") or [""])[0],
+                "base_dn": (werte.get("usersDn") or [""])[0],
+                "bind_dn": (werte.get("bindDn") or [""])[0],
+                "user_filter": (werte.get("customUserSearchFilter") or [""])[0],
+                "login_attribute": (werte.get("usernameLDAPAttribute") or [""])[0],
+                "kind": (werte.get("vendor") or [""])[0],
+                "hat_kennwort": bool((werte.get("bindCredential") or [""])[0]),
+                "is_enabled": (werte.get("enabled") or ["true"])[0] == "true",
+            }
+    return None
+
+
+def _config(daten: dict[str, Any], kennwort: str | None) -> dict[str, Any]:
+    """Aus OTAs Feldern die Komponentenkonfiguration von Keycloak."""
+    art = daten.get("kind") or "ad"
+    ist_ad = art == "ad"
+    config: dict[str, Any] = {
+        "enabled": _eins("true" if daten.get("is_enabled", True) else "false"),
+        "vendor": _eins("ad" if ist_ad else "other"),
+        "connectionUrl": _eins(daten["server_uri"]),
+        "usersDn": _eins(daten["base_dn"]),
+        "authType": _eins("simple"),
+        "bindDn": _eins(daten.get("bind_dn") or ""),
+        # Der Anmeldename. Bei einem Active Directory ist das
+        # `sAMAccountName`, bei OpenLDAP `uid` — die häufigste Stolperstelle
+        # bei dieser Einrichtung überhaupt.
+        "usernameLDAPAttribute": _eins(daten.get("login_attribute")
+                                       or ("sAMAccountName" if ist_ad else "uid")),
+        "rdnLDAPAttribute": _eins("cn" if ist_ad else "uid"),
+        "uuidLDAPAttribute": _eins("objectGUID" if ist_ad else "entryUUID"),
+        "userObjectClasses": _eins("person, organizationalPerson, user"
+                                   if ist_ad else "inetOrgPerson, organizationalPerson"),
+        "searchScope": _eins("2"),
+        # **Nur lesen.** OTA schreibt nicht ins Verzeichnis zurück, und schon
+        # gar nicht Passwörter. Wer im AD etwas ändern will, tut das im AD.
+        "editMode": _eins("READ_ONLY"),
+        "importEnabled": _eins("true"),
+        "syncRegistrations": _eins("false"),
+        "trustEmail": _eins("true"),
+        "connectionPooling": _eins("true"),
+        "pagination": _eins("true"),
+    }
+    if daten.get("user_filter"):
+        config["customUserSearchFilter"] = _eins(daten["user_filter"])
+    if kennwort:
+        config["bindCredential"] = _eins(kennwort)
+    return config
+
+
+def verzeichnis_setzen(daten: dict[str, Any], kennwort: str | None) -> dict[str, Any]:
+    """Anbindung anlegen oder ändern.
+
+    Ein leeres Kennwort heisst „nicht anfassen", nicht „löschen": Sonst
+    verlöre eine Änderung an der Adresse nebenbei die Zugangsdaten, und das
+    fiele erst bei der nächsten Anmeldung auf.
+    """
+    vorhanden = verzeichnis_lesen()
+    config = _config(daten, kennwort)
+
+    if vorhanden is None:
+        if not kennwort:
+            raise KeycloakFehler(
+                "Für eine neue Anbindung wird das Kennwort des Dienstkontos gebraucht."
+            )
+        resp = ruf("POST", "/components", json={
+            "name": LDAP_NAME, "providerId": "ldap",
+            "providerType": LDAP_PROVIDER, "config": config,
+        })
+        if resp.status_code != 201:
+            raise KeycloakFehler(f"Anlegen abgelehnt: {resp.text[:200]}")
+        return verzeichnis_lesen() or {}
+
+    # Ändern: Keycloak will die vollständige Darstellung zurück.
+    alt = ruf("GET", f"/components/{vorhanden['id']}")
+    if alt.status_code != 200:
+        raise KeycloakFehler("Die vorhandene Anbindung liess sich nicht lesen.")
+    darstellung = alt.json()
+    darstellung["config"] = {**darstellung.get("config", {}), **config}
+    resp = ruf("PUT", f"/components/{vorhanden['id']}", json=darstellung)
+    if resp.status_code not in (204, 200):
+        raise KeycloakFehler(f"Ändern abgelehnt: {resp.text[:200]}")
+    return verzeichnis_lesen() or {}
+
+
+def verzeichnis_entfernen() -> None:
+    vorhanden = verzeichnis_lesen()
+    if vorhanden is None:
+        return
+    resp = ruf("DELETE", f"/components/{vorhanden['id']}")
+    if resp.status_code not in (204, 200):
+        raise KeycloakFehler("Die Anbindung liess sich nicht entfernen.")
+
+
+def verzeichnis_testen(daten: dict[str, Any], kennwort: str | None) -> dict[str, Any]:
+    """Verbindung und Anmeldung des Dienstkontos prüfen, ohne etwas zu speichern.
+
+    Keycloak bringt dafür einen eigenen Aufruf mit. Er prüft genau die beiden
+    Dinge, an denen es in der Praxis scheitert: Kommt man an den Server heran,
+    und lässt er das Dienstkonto herein?
+    """
+    ergebnis: dict[str, Any] = {"verbindung": False, "anmeldung": False, "hinweise": []}
+
+    grund = {"action": "testConnection", "connectionUrl": daten["server_uri"],
+             "bindDn": daten.get("bind_dn") or "", "bindCredential": kennwort or "",
+             "authType": "simple", "useTruststoreSpi": "always",
+             "connectionTimeout": "10000", "startTls": "false"}
+
+    resp = ruf("POST", "/testLDAPConnection", json=grund)
+    ergebnis["verbindung"] = resp.status_code == 204
+    if not ergebnis["verbindung"]:
+        ergebnis["hinweise"].append(
+            "Der Server ist nicht erreichbar. Stimmen Adresse und Port, und "
+            "kommt Keycloak überhaupt dorthin?")
+        return ergebnis
+
+    resp = ruf("POST", "/testLDAPConnection",
+               json={**grund, "action": "testAuthentication"})
+    ergebnis["anmeldung"] = resp.status_code == 204
+    if not ergebnis["anmeldung"]:
+        ergebnis["hinweise"].append(
+            "Der Server antwortet, lässt das Dienstkonto aber nicht herein. "
+            "Stimmen Bind-DN und Kennwort?")
+    return ergebnis
+
+
+def verzeichnis_abgleichen(voll: bool = False) -> dict[str, Any]:
+    """Konten aus dem Verzeichnis holen.
+
+    `voll` liest alles, sonst nur das seit dem letzten Mal Geänderte. Der
+    volle Lauf ist der, den man nach dem Einrichten einmal braucht.
+    """
+    vorhanden = verzeichnis_lesen()
+    if vorhanden is None:
+        raise KeycloakFehler("Es ist keine Verzeichnisanbindung eingerichtet.")
+    art = "triggerFullSync" if voll else "triggerChangedUsersSync"
+    resp = ruf("POST", f"/user-storage/{vorhanden['id']}/sync?action={art}")
+    if resp.status_code not in (200, 204):
+        raise KeycloakFehler(f"Der Abgleich scheiterte: {resp.text[:200]}")
+    try:
+        return resp.json()
+    except Exception:  # noqa: BLE001
+        return {"status": "ok"}

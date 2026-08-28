@@ -170,6 +170,23 @@ class TemplateIn(BaseModel):
     group_ids: list[uuid.UUID] | None = None
 
 
+class KcVerzeichnisIn(BaseModel):
+    """Eine Verzeichnisanbindung, wie sie die Oberfläche schickt.
+
+    Das Kennwort geht nur hinein. Leer heisst „nicht anfassen" — nicht
+    „löschen": Sonst verlöre eine Änderung an der Adresse nebenbei die
+    Zugangsdaten, und das fiele erst bei der nächsten Anmeldung auf.
+    """
+    server_uri: str = Field(min_length=3)
+    base_dn: str = Field(min_length=3)
+    bind_dn: str = ""
+    bind_password: str = ""
+    user_filter: str = ""
+    login_attribute: str = ""
+    kind: str = "ad"
+    is_enabled: bool = True
+
+
 class OidcTokenIn(BaseModel):
     """Ein ID-Token von Keycloak als Nachweis, wer da anklopft.
 

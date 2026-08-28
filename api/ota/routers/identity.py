@@ -18,7 +18,7 @@ from .. import audit, directory, identity, keycloak
 from ..db import get_db
 from ..deps import current_user, require_permission
 from ..models import Group, IdentityConfig, User
-from ..schemas import IdentityIn, IdentityOut, IdentityTestIn
+from ..schemas import IdentityIn, IdentityOut, IdentityTestIn, KcVerzeichnisIn
 
 router = APIRouter(prefix="/api/admin/identity", tags=["identity"])
 manage = require_permission("users.manage", "settings.manage")
@@ -139,3 +139,86 @@ def keycloak_status() -> dict:
     zustand = keycloak.probe()
     zustand["version"] = keycloak.version() if zustand["erreichbar"] else None
     return zustand
+
+
+# --------------------------------------------------------------------------
+# Die Verzeichnisanbindung in Keycloak (Etappe C)
+#
+# Der Punkt der ganzen Übung: Ein Administrator richtet hier ein Active
+# Directory ein und muss Keycloak dafür nicht öffnen.
+#
+# Das Kennwort des Dienstkontos geht nur **hinein** — dieselbe Regel wie bei
+# der alten Anbindung oben. Zurück kommt nur die Auskunft, ob eines hinterlegt
+# ist.
+# --------------------------------------------------------------------------
+
+
+@router.get("/keycloak/verzeichnis", dependencies=[Depends(manage)])
+def kc_verzeichnis() -> dict:
+    try:
+        return {"eingerichtet": True, **(keycloak.verzeichnis_lesen() or {})} \
+            if keycloak.verzeichnis_lesen() else {"eingerichtet": False}
+    except keycloak.KeycloakFehler as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+
+
+@router.put("/keycloak/verzeichnis", dependencies=[Depends(manage)])
+def kc_verzeichnis_setzen(body: KcVerzeichnisIn, request: Request,
+                          actor: User = Depends(current_user),
+                          db: DbSession = Depends(get_db)) -> dict:
+    try:
+        daten = keycloak.verzeichnis_setzen(
+            body.model_dump(exclude={"bind_password"}), body.bind_password or None)
+    except keycloak.KeycloakFehler as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+    # Im Protokoll steht, **wer** es veranlasst hat. Keycloaks eigene
+    # Ereignisse sagen nur „ota-manager hat etwas geändert" (§5.5).
+    audit.record(db, "keycloak.verzeichnis_gesetzt", actor=actor, request=request,
+                 server=body.server_uri, base=body.base_dn)
+    db.commit()
+    return {"eingerichtet": True, **daten}
+
+
+@router.delete("/keycloak/verzeichnis", dependencies=[Depends(manage)])
+def kc_verzeichnis_weg(request: Request, actor: User = Depends(current_user),
+                       db: DbSession = Depends(get_db)) -> dict:
+    try:
+        keycloak.verzeichnis_entfernen()
+    except keycloak.KeycloakFehler as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    audit.record(db, "keycloak.verzeichnis_entfernt", actor=actor, request=request)
+    db.commit()
+    return {"eingerichtet": False}
+
+
+@router.post("/keycloak/verzeichnis/test", dependencies=[Depends(manage)])
+def kc_verzeichnis_test(body: KcVerzeichnisIn) -> dict:
+    """Prüfen, ohne zu speichern. Genau die beiden Fragen, an denen es scheitert."""
+    kennwort = body.bind_password or None
+    if not kennwort:
+        # Kein Kennwort mitgeschickt heisst: das gespeicherte benutzen. Dafür
+        # muss Keycloak es kennen — sonst kann hier nichts geprüft werden.
+        vorhanden = keycloak.verzeichnis_lesen()
+        if not vorhanden or not vorhanden.get("hat_kennwort"):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                                "Zum Prüfen wird das Kennwort des Dienstkontos gebraucht.")
+    try:
+        return keycloak.verzeichnis_testen(
+            body.model_dump(exclude={"bind_password"}), kennwort)
+    except keycloak.KeycloakFehler as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+
+
+@router.post("/keycloak/verzeichnis/abgleich", dependencies=[Depends(manage)])
+def kc_verzeichnis_abgleich(request: Request, voll: bool = False,
+                            actor: User = Depends(current_user),
+                            db: DbSession = Depends(get_db)) -> dict:
+    try:
+        ergebnis = keycloak.verzeichnis_abgleichen(voll=voll)
+    except keycloak.KeycloakFehler as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    audit.record(db, "keycloak.verzeichnis_abgleich", actor=actor, request=request,
+                 voll=voll)
+    db.commit()
+    return ergebnis

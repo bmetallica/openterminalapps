@@ -590,8 +590,9 @@ Rückweg. Alles Weitere steht im eigenen Dokument.
       PKCE, Token-Tausch ohne Browser für die Prüfreihen, Back-Channel-Logout, zweite Stufe je
       Rolle. Die Desktop-Verknüpfungen überstehen es, weil Keycloak unter `/auth` **derselben**
       Herkunft liegt; das ist im e2e-Lauf gemessen. `/login` bleibt bis Etappe E die lokale Maske
-- [ ] Etappe C: OTA verwaltet Keycloak — Nutzer, Gruppen und die AD-Anbindung über die eigene
-      Oberfläche statt über die Keycloak-Konsole
+- [~] **Etappe C zur Hälfte am 2026-08-28**: Die AD-Anbindung lässt sich in OTAs Oberfläche
+      einrichten, prüfen und abgleichen — die Keycloak-Konsole bleibt dafür zu. Offen bleibt die
+      Nutzer- und Gruppenverwaltung; sie hängt an Etappe E
 - [ ] Etappe D: die erste fremde Anwendung (Open WebUI) als OIDC-Client
 - [ ] Etappe E: Bestandskonten übernehmen und aufräumen. **Berührt jedes vorhandene Konto** —
       hier ist eine ausdrückliche Freigabe nötig, bevor es losgeht

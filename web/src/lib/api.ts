@@ -233,6 +233,30 @@ export type KeycloakStatus = {
   faehigkeiten: Record<string, boolean>
 }
 
+/** Die Verzeichnisanbindung, wie Keycloak sie führt. */
+export type KcVerzeichnis = {
+  eingerichtet: boolean
+  server_uri?: string
+  base_dn?: string
+  bind_dn?: string
+  user_filter?: string
+  login_attribute?: string
+  kind?: string
+  hat_kennwort?: boolean
+  is_enabled?: boolean
+}
+
+export type KcVerzeichnisIn = {
+  server_uri: string
+  base_dn: string
+  bind_dn: string
+  bind_password: string
+  user_filter: string
+  login_attribute: string
+  kind: string
+  is_enabled: boolean
+}
+
 export type SharedListing = {
   path: string
   entries: SharedEntry[]
@@ -568,6 +592,19 @@ export const api = {
     call<{ status: string }>(`/files?path=${encodeURIComponent(path)}`, { method: 'DELETE' }),
 
   keycloakStatus: () => call<KeycloakStatus>('/admin/identity/keycloak'),
+  kcVerzeichnis: () => call<KcVerzeichnis>('/admin/identity/keycloak/verzeichnis'),
+  kcVerzeichnisSetzen: (b: KcVerzeichnisIn) =>
+    call<KcVerzeichnis>('/admin/identity/keycloak/verzeichnis', {
+      method: 'PUT', body: JSON.stringify(b),
+    }),
+  kcVerzeichnisTest: (b: KcVerzeichnisIn) =>
+    call<{ verbindung: boolean; anmeldung: boolean; hinweise: string[] }>(
+      '/admin/identity/keycloak/verzeichnis/test', { method: 'POST', body: JSON.stringify(b) }),
+  kcVerzeichnisWeg: () =>
+    call<KcVerzeichnis>('/admin/identity/keycloak/verzeichnis', { method: 'DELETE' }),
+  kcVerzeichnisAbgleich: (voll = false) =>
+    call<{ added?: number; updated?: number; failed?: number; status?: string }>(
+      `/admin/identity/keycloak/verzeichnis/abgleich?voll=${voll}`, { method: 'POST' }),
 
   registries: () => call<Registry[]>('/admin/registries'),
   suggestedRegistries: () =>

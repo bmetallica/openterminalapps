@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { KcVerzeichnis } from '../components/KcVerzeichnis'
 import { Field, Led, Toggle } from '../components/controls'
 import { ApiError, api, type Group, type IdentityConfig, type KeycloakStatus } from '../lib/api'
 import { ago } from '../lib/format'
@@ -176,8 +177,15 @@ export function Directory({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad
       </p>
 
       <KeycloakKarte />
+      <KcVerzeichnis onToast={onToast} />
 
-      <div className="section__head"><span className="silk">{tr('Verbindung')}</span><span className="section__rule" /></div>
+      <div className="section__head">
+        <span className="silk">{tr('Verbindung (alte Anbindung)')}</span>
+        <span className="section__rule" />
+      </div>
+      <p className="field__hint" style={{ marginTop: -6, marginBottom: 12 }}>
+        {tr('Wird von der Anbindung über Keycloak abgelöst und nicht mehr weiterentwickelt. Sie bleibt als Rückweg bestehen, bis die Umstellung abgeschlossen ist.')}
+      </p>
       <div className="panel" style={{ padding: '16px 20px', marginBottom: 18 }}>
         <Field label={tr('Adresse')}
           hint={tr('ldaps://server:636 für eine verschlüsselte Verbindung, oder ldap://server:389 mit StartTLS.')}>
