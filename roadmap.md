@@ -563,10 +563,32 @@ Das Feature aus `plan.md` §1.2 und §9.8. Gegen alle drei echten Registries gep
 
 ---
 
+## M11 — Zentrale Identität · Entwurf
+
+**Eigenes Dokument:** [`auth-roadmap.md`](auth-roadmap.md).
+
+Der Umbau von „OTA ist sein eigener Identity Provider" zu „OTA ist das Anwendungsportal über einem
+zentralen Keycloak". Anlass ist Open WebUI: Sobald eine zweite Anwendung dazukommt, gibt es nur
+noch schlechte Antworten — dreimal dieselben Menschen pflegen, Passwörter weiterreichen, oder
+selbst OIDC-Provider werden.
+
+Betrifft M6 unmittelbar: Die eigene LDAP-Anbindung ist ab 2026-08-28 **eingefroren** und fällt mit
+dem Umstieg weg. Neue Wünsche an die AD-Anbindung sind ab jetzt Argumente für M11, keine Arbeit an
+`directory.py`.
+
+Vier Entscheidungen sind getroffen (2026-08-28): Bestandskonten werden übernommen und bekommen
+einmalig neue Passwörter; es bleibt ein lokales Notfallkonto mit eigener zweiter Stufe; die zweite
+Stufe wandert im Übrigen nach Keycloak; die eigene LDAP-Anbindung bleibt bis zur letzten Etappe als
+Rückweg. Alles Weitere steht im eigenen Dokument.
+
+- [ ] **Nichts hiervon ist umgesetzt.** Erst wird zu Ende gedacht.
+
+---
+
 ## M9 — Optionale Erweiterungen · 2–3 Wochen
 
-- [ ] **OIDC** mit PKCE, Claim→Gruppen-Mapping
-- [ ] **WebAuthn/Passkeys**
+- [ ] ~~**OIDC** mit PKCE, Claim→Gruppen-Mapping~~ — aufgegangen in M11 (`auth-roadmap.md`)
+- [ ] **WebAuthn/Passkeys** — käme mit M11 ohne Zusatzarbeit, siehe `auth-roadmap.md`
 - [ ] **Guacamole-Engine** für RDP/VNC-Ziele — löst `HauptPC` und `VNC-HauptPC` ab
 - [ ] **code-server** als leichte Engine für reine Editor-Sessions (Extensions dann über Open VSX)
 - [ ] Gemeinsame Gruppenlaufwerke
