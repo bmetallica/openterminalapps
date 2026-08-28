@@ -97,5 +97,14 @@ backup:
 	@tar --zstd -cf backups/profiles-$$(date +%F-%H%M).tar.zst \
 	  --exclude='.cache' --exclude='core.*' --exclude='*.sock' \
 	  --exclude='*/Cache*' -C / srv/ota/profiles 2>/dev/null || true
-	@ls -la backups/ | tail -3
+	@# Alles, was jemand von Hand angelegt hat und was sich nicht aus Code
+	@# oder Image wiederherstellen laesst. Bis zum 2026-08-28 fehlten diese
+	@# drei: Gesichert wurden nur die Zuhause der Nutzer, und ein
+	@# zurueckgespielter Stand kam ohne Skeleton-Profile, ohne die gemeinsame
+	@# Ablage und ohne die eigenen Ablagen zurueck.
+	@tar --zstd -cf backups/inhalte-$$(date +%F-%H%M).tar.zst \
+	  --exclude='*.sock' -C / \
+	  $$(cd / && ls -d srv/ota/skeletons srv/ota/shared srv/ota/userfiles \
+	     2>/dev/null) 2>/dev/null || true
+	@ls -la backups/ | tail -4
 	@echo "Ein Backup, dessen Wiederherstellung nie getestet wurde, ist kein Backup."

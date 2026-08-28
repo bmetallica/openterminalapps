@@ -9,6 +9,13 @@
 | **Profile** | Das Home jedes Nutzers ohne Caches: Projekte, Einstellungen, SSH-Schlüssel, Git-Konfiguration | **an** |
 | **Container** | Nur was ausserhalb des Home verändert wurde, ermittelt über `docker diff` | aus |
 | **Datenbank** | Nutzer, Gruppen, Workspaces, Zuweisungen, Audit-Log | **an** |
+| **Inhalte** | Skeleton-Profile, gemeinsame Ablage, die eigenen Ablagen der Nutzer | **an** (nur `make backup`) |
+
+Die letzte Zeile fehlte bis zum 2026-08-28, und das war eine echte Lücke: Gesichert wurden nur die
+Zuhause der Nutzer und die Datenbank. Skeleton-Profile, gemeinsame Ablage und die eigenen Ablagen
+sind aber **von Hand angelegter Inhalt** — sie lassen sich weder aus dem Code noch aus einem Image
+wiederherstellen. Ein zurückgespielter Stand kam ohne sie zurück, und es fiel erst auf, wenn man
+sie brauchte.
 
 **Warum nicht der ganze Container?** Am laufenden System gemessen: Das Profil eines
 Nutzers sind 326 MB, die Schreibschicht seines Containers 340 MB — ein vollständiger
@@ -22,6 +29,25 @@ auf 355 Einträge — ohne dass eine Nutzerdatei fehlte. Die 306 MB Unterschied 
 heruntergeladener SDK-Cache.
 
 ## Von Hand sichern
+
+### Auf der Kommandozeile: der vollständige Stand
+
+```bash
+make backup
+```
+
+Legt drei Archive unter `backups/` ab:
+
+```
+db-2026-08-28-1549.sql.zst          Datenbank
+profiles-2026-08-28-1549.tar.zst    /srv/ota/profiles
+inhalte-2026-08-28-1550.tar.zst     /srv/ota/{skeletons,shared,userfiles}
+```
+
+Das ist der Weg, den man vor einem Update nimmt. Die drei zusammen sind ein vollständiger Stand;
+alles Übrige — Images, Container, die Anwendung selbst — lässt sich neu bauen.
+
+### In der Oberfläche: die Profile
 
 *Betrieb → Sicherung → **Jetzt alle sichern***. Das sichert die Profile aller aktiven
 Nutzer. Der Fortschritt erscheint in der Liste darunter.

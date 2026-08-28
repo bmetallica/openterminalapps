@@ -79,12 +79,60 @@ PATHV=$(api "$BASE/api/backups" | jqp "d[0]['path'] or ''")
                                    || bad "Archiv fehlt: $PATHV"
 tar --zstd -tf "$PATHV" >/dev/null 2>&1 && ok "Archiv ist lesbar" || bad "Archiv beschädigt"
 
+# ------------------------------------------- Was von Hand angelegt wurde
+#
+# `make backup` sicherte bis zum 2026-08-28 nur die Zuhause der Nutzer und die
+# Datenbank. Nicht dabei waren die Skeleton-Profile, die gemeinsame Ablage und
+# die eigenen Ablagen — also genau das, was jemand von Hand angelegt hat und
+# was sich weder aus Code noch aus einem Image wiederherstellen laesst. Ein
+# zurueckgespielter Stand kam ohne all das zurueck, und es faellt erst auf,
+# wenn man es braucht.
+#
+# Geprueft wird der Befehl aus dem Makefile selbst, nicht eine Kopie davon:
+# `make -n` schreibt ihn aus, und genau der laeuft hier.
+echo
+echo "Von Hand angelegte Inhalte"
+
+INH=$(cd "$ROOT" && make -n backup 2>/dev/null | grep -A 3 'inhalte-' | head -4)
+
+if [ -z "$INH" ]; then
+  bad "Im Sicherungslauf gibt es keinen Schritt für die Inhalte"
+else
+  ( cd "$ROOT" && eval "$INH" ) >/dev/null 2>&1 || true
+  PROBE=$(ls -t "$ROOT"/backups/inhalte-*.tar.zst 2>/dev/null | head -1)
+
+  if [ -z "$PROBE" ]; then
+    bad "Der Inhaltsschritt erzeugte kein Archiv"
+  else
+    DRIN=$(tar --zstd -tf "$PROBE" 2>/dev/null | awk -F/ 'NF>2 {print $3}' | sort -u)
+    for teil in skeletons shared userfiles; do
+      if echo "$DRIN" | grep -qx "$teil"; then
+        ok "srv/ota/$teil ist in der Sicherung"
+      else
+        bad "srv/ota/$teil fehlt in der Sicherung"
+      fi
+    done
+  fi
+fi
+
+
 # ---------------------------------------------------------- Container
 echo
 # Für die Container-Prüfungen braucht es einen laufenden Arbeitsplatz. Statt
 # ihn vorauszusetzen, stellt der Test ihn selbst her — sonst hängt das
 # Ergebnis davon ab, was ein vorheriger Test hinterlassen hat.
-CN=$(docker ps --filter "label=ota.session_id" --format '{{.Names}}' | head -1)
+#
+# Und zwar den Container **dieses** Kontos, nicht den ersten aus `docker ps`.
+# Lief zuvor die Autorisierungsreihe, steht dort die Session eines Testnutzers
+# vorn: Die Markierung landete dann in einem fremden Container, die Sicherung
+# wurde von einem anderen gezogen, und drei Prüfungen scheiterten an einem
+# Zustand statt an einem Fehler. Gemessen am 2026-08-28.
+mein_container() {
+  api "$BASE/api/sessions" | jqp "
+next(('ota-s-' + s['id'][:12] for s in d if s['status'] == 'running'), '')"
+}
+
+CN=$(mein_container)
 if [ -z "$CN" ]; then
   TPL=$(api "$BASE/api/templates" \
     | jqp "next((t['id'] for t in d if t['mode']=='workspace' and t['is_enabled']), '')")
@@ -93,7 +141,7 @@ if [ -z "$CN" ]; then
         -d "{\"template_id\":\"$TPL\"}" >/dev/null
     echo "  (Arbeitsplatz für die Prüfung gestartet)"
     sleep 20
-    CN=$(docker ps --filter "label=ota.session_id" --format '{{.Names}}' | head -1)
+    CN=$(mein_container)
   fi
 fi
 if [ -n "$CN" ]; then
