@@ -542,6 +542,75 @@ try {
     await fremd.close()
   }
 
+  // ------------------------------------------------------- Zweite Stufe
+  //
+  // Sie liegt seit Etappe B in Keycloak (auth-roadmap.md §5.3). Was in OTA
+  // ein Feld an der Gruppe war, ist dort ein Anmeldefluss mit einer
+  // Rollenbedingung — und der Fluss ist gebunden, also gilt er für alle.
+  //
+  // Geprüft wird beides: dass er greift, wo er soll, und **dass er nicht
+  // greift, wo er nicht soll**. Das zweite ist das wichtigere: Ein Fluss mit
+  // einer leeren Bedingung sperrt entweder jeden aus oder niemanden — und
+  // genau letzteres ist beim Bauen einmal passiert.
+  console.log('\nZweite Stufe')
+  {
+    const kcs = process.env.OTA_KEYCLOAK_SECRET ?? ''
+    const kb = 'http://ota-keycloak:8080/auth'
+    const dex = (cmd) => execSync(`docker exec -i ota-agent ${cmd}`).toString()
+
+    if (!kcs) {
+      bad('OTA_KEYCLOAK_SECRET fehlt — die Prüfung der zweiten Stufe entfällt')
+    } else {
+      const tok = JSON.parse(dex(`curl -s -d client_id=ota-manager ` +
+        `--data-urlencode client_secret=${kcs} -d grant_type=client_credentials ` +
+        `${kb}/realms/ota/protocol/openid-connect/token`)).access_token
+
+      const konto = JSON.stringify({
+        username: 'kc-zweifach', enabled: true, emailVerified: true,
+        email: 'kc-zweifach@ota.test', firstName: 'Zwei', lastName: 'Fach',
+        requiredActions: [],
+        credentials: [{ type: 'password', value: 'KcZwei2026!xy', temporary: false }],
+      })
+      dex(`curl -s -X POST ${kb}/admin/realms/ota/users -H 'Authorization: Bearer ${tok}' ` +
+          `-H 'Content-Type: application/json' -d '${konto}'`)
+      const uid = JSON.parse(dex(`curl -s '${kb}/admin/realms/ota/users?username=kc-zweifach' ` +
+        `-H 'Authorization: Bearer ${tok}'`))[0]?.id
+      const rolle = dex(`curl -s ${kb}/admin/realms/ota/roles/zweiter-faktor ` +
+        `-H 'Authorization: Bearer ${tok}'`).trim()
+      dex(`curl -s -X POST ${kb}/admin/realms/ota/users/${uid}/role-mappings/realm ` +
+          `-H 'Authorization: Bearer ${tok}' -H 'Content-Type: application/json' -d '[${rolle}]'`)
+
+      const anmelden = async (nutzer, pass) => {
+        const ctx = await browser.createBrowserContext()
+        const seite = await ctx.newPage()
+        await seite.goto(BASE + '/api/auth/oidc/start?next=/', { waitUntil: 'networkidle2' })
+        await seite.type('#username', nutzer)
+        await seite.type('#password', pass)
+        await Promise.all([
+          seite.click('#kc-login'),
+          seite.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 }),
+        ])
+        await new Promise((r) => setTimeout(r, 1500))
+        const wer = await seite.evaluate(async () => {
+          const r = await fetch('/api/auth/me')
+          return r.ok ? (await r.json()).username : null
+        })
+        const einrichtung = !!(await seite.$('#kc-totp-secret-key, .qrcode, #totp'))
+        await seite.close(); await ctx.close()
+        return { wer, einrichtung }
+      }
+
+      const mit = await anmelden('kc-zweifach', 'KcZwei2026!xy')
+      check(mit.einrichtung && mit.wer === null,
+        `Wer die Rolle trägt, muss erst einen zweiten Faktor einrichten ` +
+        `(Einrichtung: ${mit.einrichtung}, angemeldet: ${mit.wer})`)
+
+      const ohne = await anmelden('kc-pruef', 'KcPruef2026!xy')
+      check(!ohne.einrichtung && ohne.wer === 'kc-pruef',
+        `Wer sie nicht trägt, kommt unverändert durch (${ohne.wer})`)
+    }
+  }
+
   // ------------------------------------------------- Nutzer und Gruppen
   console.log('\nNutzer und Gruppen')
   await page.evaluate(() => {

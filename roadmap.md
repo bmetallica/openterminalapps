@@ -586,8 +586,15 @@ Rückweg. Alles Weitere steht im eigenen Dokument.
 - [x] **Etappe A erledigt am 2026-08-28**: Keycloak 26.7 im Stack unter `/auth`, Realm `ota`,
       Dienstkonto mit benannten Rechten, Rechteprüfung in der Oberfläche, in `/healthz` und in
       der Sicherung. **Die Anmeldung ist unverändert** — sie läuft weiterhin über OTA selbst
-- [ ] Etappe B: OTA meldet sich über Keycloak an. Der gefährlichste Schritt — daran hängen
-      Anmeldung, forwardAuth, Streams, Desktop-Verknüpfungen und die Prüfreihen gleichzeitig
+- [x] **Etappe B erledigt am 2026-08-28**: OTA meldet sich über Keycloak an — Code-Fluss mit
+      PKCE, Token-Tausch ohne Browser für die Prüfreihen, Back-Channel-Logout, zweite Stufe je
+      Rolle. Die Desktop-Verknüpfungen überstehen es, weil Keycloak unter `/auth` **derselben**
+      Herkunft liegt; das ist im e2e-Lauf gemessen. `/login` bleibt bis Etappe E die lokale Maske
+- [ ] Etappe C: OTA verwaltet Keycloak — Nutzer, Gruppen und die AD-Anbindung über die eigene
+      Oberfläche statt über die Keycloak-Konsole
+- [ ] Etappe D: die erste fremde Anwendung (Open WebUI) als OIDC-Client
+- [ ] Etappe E: Bestandskonten übernehmen und aufräumen. **Berührt jedes vorhandene Konto** —
+      hier ist eine ausdrückliche Freigabe nötig, bevor es losgeht
 
 ---
 

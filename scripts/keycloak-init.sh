@@ -230,6 +230,125 @@ case "$CODE" in
   *)       bad "Rechte setzen: HTTP $CODE $(kc_body)" ;;
 esac
 
+# --------------------------------------------- Zweite Stufe je Gruppe
+#
+# In OTA war das ein Feld an der Gruppe (`require_totp`). In Keycloak ist es
+# ein Anmeldefluss mit einer Bedingung — und Gruppen taugen dort nicht als
+# Bedingung, Rollen schon. Also: eine Realm-Rolle `zweiter-faktor`, und wer
+# sie trägt, muss beim Anmelden einen zweiten Faktor vorzeigen. OTA hängt sie
+# später an die Gruppen, die sie verlangen (auth-roadmap.md §5.3).
+#
+# Der Fluss ist eine **Kopie** des eingebauten und nicht der eingebaute
+# selbst. Das ist kein Ordnungssinn: Keycloak lässt eingebaute Flüsse nicht
+# ändern, und ein eigener lässt sich im Zweifel mit einem Handgriff wieder
+# abhängen — `browserFlow` zurück auf `browser`, und alles ist wie vorher.
+
+rolle_anlegen() {
+  kc GET "/admin/realms/$REALM/roles/zweiter-faktor" >/dev/null
+  if [ "$?" = "0" ] && [ "$(kc GET "/admin/realms/$REALM/roles/zweiter-faktor")" = "200" ]; then
+    info "Rolle zweiter-faktor gibt es schon"
+    return 0
+  fi
+  local code; code=$(kc POST "/admin/realms/$REALM/roles" \
+    '{"name":"zweiter-faktor","description":"Verlangt beim Anmelden einen zweiten Faktor"}')
+  case "$code" in
+    201|409) ok "Rolle zweiter-faktor steht bereit" ;;
+    *)       bad "Rolle anlegen: HTTP $code $(kc_body)" ;;
+  esac
+}
+
+fluss_einrichten() {
+  kc GET "/admin/realms/$REALM/authentication/flows" >/dev/null
+  if kc_body | jq_py "[f['alias'] for f in d]" | grep -q "ota-browser"; then
+    info "Anmeldefluss ota-browser gibt es schon"
+  else
+    local code; code=$(kc POST "/admin/realms/$REALM/authentication/flows/browser/copy" \
+      '{"newName":"ota-browser"}')
+    [ "$code" = "201" ] && ok "Anmeldefluss ota-browser angelegt" \
+                        || { bad "Fluss kopieren: HTTP $code $(kc_body)"; return 1; }
+  fi
+
+  kc GET "/admin/realms/$REALM/authentication/flows/ota-browser/executions" >/dev/null
+  local schritte; schritte=$(kc_body)
+
+  # Die Rollenbedingung, falls sie noch fehlt.
+  if ! echo "$schritte" | jq_py "[e.get('providerId') for e in d]" | grep -q "conditional-user-role"; then
+    local zweig; zweig=$(python3 -c "
+import urllib.parse; print(urllib.parse.quote('ota-browser Browser - Conditional 2FA'))")
+    kc POST "/admin/realms/$REALM/authentication/flows/$zweig/executions/execution" \
+      '{"provider":"conditional-user-role"}' >/dev/null
+    kc GET "/admin/realms/$REALM/authentication/flows/ota-browser/executions" >/dev/null
+    schritte=$(kc_body)
+    ok "Rollenbedingung in den 2FA-Zweig gesetzt"
+  fi
+
+  # Und jetzt die Anforderungen. Die Bedingung „user configured" muss **aus**
+  # sein: Sie liesse den zweiten Faktor nur für die gelten, die ihn schon
+  # haben — und damit könnte ihn jeder umgehen, indem er ihn nicht einrichtet.
+  local id
+  for eintrag in \
+    "conditional-user-role:REQUIRED" \
+    "conditional-user-configured:DISABLED" \
+    "conditional-credential:DISABLED" \
+    "auth-otp-form:REQUIRED"
+  do
+    local provider="${eintrag%%:*}" wunsch="${eintrag##*:}"
+    id=$(echo "$schritte" | PROVIDER="$provider" python3 -c "
+import json, os, sys
+p = os.environ['PROVIDER']
+# Nur im 2FA-Zweig: 'user configured' steht auch im Organisations-Zweig, und
+# den fassen wir nicht an.
+treffer = [e['id'] for e in json.load(sys.stdin)
+           if e.get('providerId') == p and e['level'] >= 2 and e['index'] < 90]
+print(treffer[-1] if treffer else '')")
+    [ -z "$id" ] && continue
+    kc PUT "/admin/realms/$REALM/authentication/flows/ota-browser/executions" \
+      "{\"id\":\"$id\",\"requirement\":\"$wunsch\"}" >/dev/null
+  done
+
+  # Die Bedingung braucht ihren Wert — sonst steht sie da und prüft nichts.
+  #
+  # Frisch gelesen und nicht aus `$schritte`: Die Kennungen der Schritte
+  # ändern sich, sobald an den Anforderungen geschraubt wurde, und mit einer
+  # veralteten Kennung geht die Konfiguration ins Leere. Gemessen am
+  # 2026-08-28: Der Zweig stand richtig, die Bedingung war leer, und damit
+  # hätte die zweite Stufe für **niemanden** gegriffen.
+  kc GET "/admin/realms/$REALM/authentication/flows/ota-browser/executions" >/dev/null
+  id=$(kc_body | jq_py "
+next((e['id'] for e in d if e.get('providerId') == 'conditional-user-role'), '')")
+
+  if [ -z "$id" ]; then
+    bad "Die Rollenbedingung ist nicht auffindbar"
+    return 1
+  fi
+
+  kc GET "/admin/realms/$REALM/authentication/executions/$id" >/dev/null
+  if kc_body | grep -q "authenticationConfig"; then
+    info "Rollenbedingung ist bereits eingestellt"
+  else
+    local code; code=$(kc POST "/admin/realms/$REALM/authentication/executions/$id/config" \
+      '{"alias":"ota-zweiter-faktor","config":{"condUserRole":"zweiter-faktor","negate":"false"}}')
+    case "$code" in
+      201) ok "Rollenbedingung eingestellt (zweiter-faktor)" ;;
+      *)   bad "Rollenbedingung einstellen: HTTP $code $(kc_body)"; return 1 ;;
+    esac
+  fi
+
+  # Zuletzt binden. Erst hier wird es scharf.
+  kc GET "/admin/realms/$REALM" >/dev/null
+  if [ "$(kc_body | jq_py "d.get('browserFlow','')")" = "ota-browser" ]; then
+    info "Anmeldefluss ist gebunden"
+  else
+    local code; code=$(kc PUT "/admin/realms/$REALM" \
+      "{\"realm\":\"$REALM\",\"browserFlow\":\"ota-browser\"}")
+    [ "$code" = "204" ] && ok "Anmeldefluss gebunden — die zweite Stufe greift" \
+                        || bad "Fluss binden: HTTP $code $(kc_body)"
+  fi
+}
+
+rolle_anlegen
+fluss_einrichten
+
 echo
 echo "Bereit. Realm: $REALM"
 echo "  Verwaltung : $BASE/admin/$REALM/console/"

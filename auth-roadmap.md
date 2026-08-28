@@ -704,7 +704,7 @@ der nächsten abschliessen.
   18 clipboard, 37 backup — alle grün. Die Anmeldung läuft unverändert über OTA, und bei
   gestopptem Keycloak melden sich Nutzer weiterhin an; `/healthz` sagt dann „nicht erreichbar"
 
-### B · OTA meldet sich über Keycloak an · ⏳ grösstenteils erledigt am 2026-08-28
+### B · OTA meldet sich über Keycloak an · ✅ erledigt am 2026-08-28
 - Autorisierungs-Code-Fluss mit PKCE; OTA tauscht den Code und setzt sein eigenes Cookie
 - `users` wird über `sub` verknüpft; Gruppen bei jeder Anmeldung abgeglichen
 - Abmeldung in Keycloak beendet OTA-Sitzungen über Back-Channel-Logout (`token_epoch` +1)
@@ -723,10 +723,14 @@ der nächsten abschliessen.
 - [x] Notzugang unter `/notfall`, dazu `/login` als Landeplatz **und** lokale Maske, solange die
       Bestandskonten nicht übernommen sind (§5.1) — sonst wäre der Administrator ausgesperrt,
       der diesen Umbau macht
-- [ ] **Offen:** Die Gruppenpflicht zur zweiten Stufe (`require_totp`) als
-      Keycloak-Authentifizierungsfluss. Das ist der Rest von B und ein eigener Schritt: Er ändert
-      den Anmeldefluss des Realms, und ein Fehler darin sperrt alle aus
-- **Gemessen, nicht vermutet:** 136 authz, 92 e2e, 18 clipboard, 37 backup, 29 ldap — alle grün.
+- [x] Die Gruppenpflicht zur zweiten Stufe als Keycloak-Anmeldefluss: Realm-Rolle
+      `zweiter-faktor`, eine **Kopie** des eingebauten Anmeldeflusses mit einer Rollenbedingung im
+      2FA-Zweig, gebunden als Anmeldefluss des Realms. Eine Kopie, weil Keycloak eingebaute Flüsse
+      nicht ändern lässt — und weil sie sich mit einem Handgriff wieder abhängen lässt
+      (`browserFlow` zurück auf `browser`). Wer die Rolle trägt, muss beim Anmelden einen zweiten
+      Faktor einrichten; wer sie nicht trägt, merkt nichts. OTA hängt die Rolle in Etappe C an die
+      Gruppen, die sie verlangen
+- **Gemessen, nicht vermutet:** 136 authz, 95 e2e, 18 clipboard, 37 backup, 29 ldap — alle grün.
   Der Weg von der Desktop-Verknüpfung durch die Keycloak-Anmeldung bis in die laufende Anwendung
   ist im e2e-Lauf enthalten, samt der Prüfung, dass die **Herkunft dieselbe bleibt** (§5.6)
 
