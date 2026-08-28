@@ -132,6 +132,7 @@ class TemplateOut(BaseModel):
     rights: dict
     env: dict
     start_script: str = ""
+    skeleton_enforce: list[str] = []
     is_enabled: bool
     apps: list[AppOut] = []
     group_ids: list[uuid.UUID] = []
@@ -157,6 +158,7 @@ class TemplateIn(BaseModel):
     rights: dict = {}
     env: dict = {}
     start_script: str = ""
+    skeleton_enforce: list[str] = []
     is_enabled: bool = True
     # `None` heisst „nicht mitgeschickt" und laesst die Zuweisung stehen; eine
     # leere Liste heisst „niemand mehr". Ohne diese Unterscheidung nimmt ein
@@ -387,6 +389,11 @@ class SettingsIn(BaseModel):
     # 0 heisst jeweils: keine Grenze.
     profile_quota_gb: int | None = None
     disk_floor_gb: int | None = None
+
+
+class SkeletonDirIn(BaseModel):
+    path: str = ""
+    name: str
 
 
 class ImagePullIn(BaseModel):

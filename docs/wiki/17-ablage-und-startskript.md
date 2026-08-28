@@ -1,9 +1,10 @@
 # 17 · Ablage und Startskript
 
-*Für Administratoren.* ✅ Gemeinsame Ablage, Skript beim Sessionstart
+*Für Administratoren.* ✅ Gemeinsame Ablage, Skeleton-Profil, Skript beim Sessionstart
 
-Zwei Wege, um Dinge in die Arbeitsplätze der Nutzer zu bekommen, ohne dafür jedes Mal ein Image zu
-bauen. Sie gehören zusammen: Die Ablage ist die Quelle, das Skript holt sich, was es braucht.
+Drei Wege, um Dinge in die Arbeitsplätze der Nutzer zu bekommen, ohne dafür jedes Mal ein Image zu
+bauen. Sie gehören zusammen: Die Ablage ist die Quelle, das Skeleton legt den Grundstand, das Skript
+holt sich, was es braucht.
 
 ## Was wohin gehört
 
@@ -11,13 +12,54 @@ bauen. Sie gehören zusammen: Die Ablage ist die Quelle, das Skript holt sich, w
 |---|---|---|
 | Software | **Golden Image** ([Kapitel 7](07-golden-images.md)) | Einmal bauen statt bei jedem Start installieren |
 | Dateien für alle | **Ablage** | Austauschbar, ohne Image-Bau |
-| Einrichtung im Home | **Startskript** | Gilt je Nutzer, läuft in dessen Rechten |
+| Womit ein Home anfängt | **Skeleton** | Dateien, die einfach da sein sollen — im Browser sichtbar |
+| Einrichtung im Home | **Startskript** | Für alles, was *ausgeführt* werden muss |
 | Eigene Einstellungen | **Nichts davon** | Das persistente Home hält sie ohnehin |
 
 Der letzte Punkt wird oft übersehen: **Was ein Nutzer in seinem Home ändert, bleibt.** Extensions,
 Editorkonfiguration, SSH-Schlüssel, Projektordner — das liegt auf dem Host unter
 `/srv/ota/profiles/<nutzer>/` und wird bei jedem Start eingehängt. Ein neues Golden Image ändert
 daran nichts; das Home liegt *über* dem Image.
+
+## Das Skeleton-Profil ✅
+
+Im Workspace-Editor unter **Skeleton** liegt ein Verzeichnisbaum. Er kommt beim **ersten** Start in
+das Zuhause eines Nutzers — solange es noch leer ist. Danach gehört das Zuhause ihm.
+
+Damit fängt niemand mit einem nackten Desktop an: Editor-Einstellungen, ein Wurzelzertifikat, eine
+Vorlagendatei, eine `.bashrc`. **Punktdateien sind ausdrücklich erlaubt** und der Normalfall — anders
+als in der gemeinsamen Ablage, wo sie nichts zu suchen haben.
+
+### „Durchsetzen"
+
+Neben jedem Eintrag steht ein Schalter *durchsetzen*. Ist er an, kommt dieser Pfad bei **jedem**
+Start und **überschreibt**, was der Nutzer geändert hat.
+
+> **Das ist mit Bedacht die Ausnahme.** Ein Zuhause gehört dem Menschen, der darin arbeitet; ihm bei
+> jedem Start Einstellungen zu überschreiben, muss man begründen können. Für eine
+> Proxy-Konfiguration oder ein Wurzelzertifikat ist es richtig. Für ein Farbschema nicht.
+
+Was durchgesetzt wird, steht als Warnung unter der Liste — mit den Pfaden, damit niemand raten muss.
+
+Wird eine Datei gelöscht, verschwindet sie auch aus der Durchsetzungsliste. Ein Pfad, den es nicht
+mehr gibt, wäre eine Einstellung, die nichts mehr tut, und beim nächsten Hinsehen eine Frage.
+
+### Skeleton oder Startskript?
+
+| | |
+|---|---|
+| **Skeleton** | Dateien, die einfach da sein sollen |
+| **Startskript** | Alles, was *ausgeführt* werden muss — etwas holen, erzeugen, abfragen |
+
+Wer die Wahl hat, nimmt das Skeleton: Eine Datei, die man im Browser sieht, ist leichter zu prüfen
+als eine Zeile Shell.
+
+Die Reihenfolge beim Start ist Skeleton → Verweis auf die Ablage → Startskript. Das Skript darf den
+Grundstand also überschreiben; es ist das spezifischere Werkzeug.
+
+Alles landet als `1000:1000` im Home — kopiert wird als root, und ohne diesen Schritt gehörte dem
+Nutzer sein eigenes Zuhause nicht mehr.
+
 
 ## Die gemeinsame Ablage ✅
 

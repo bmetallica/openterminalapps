@@ -29,6 +29,7 @@ from . import apps as app_scripts
 from . import backup as backup_ops
 from . import builder
 from . import freeze as freeze_ops
+from . import skeleton as skeleton_ops
 from . import clipboard as clip_scripts
 from . import discover
 from . import registry as registry_reader
@@ -122,6 +123,10 @@ class StartRequest(BaseModel):
     memory_bytes: int = Field(gt=0)
     env: dict[str, str] = {}
     profile_path: str = ""
+    # Kennung des Workspace — bestimmt, welches Skeleton gilt.
+    template_slug: str = ""
+    # Pfade im Skeleton, die bei **jedem** Start ueberschreiben.
+    skeleton_enforce: list[str] = []
     vnc_user: str = "kasm_user"
     vnc_secret: str
     mode: str = "workspace"
@@ -325,6 +330,11 @@ def start_container(req: StartRequest) -> dict[str, Any]:
         except OSError as exc:
             log.warning("Arbeitsplatz-Startskript nicht ablegbar: %s", exc)
 
+    # **Vor** dem Start feststellen, ob das Zuhause noch unbenutzt ist.
+    # Danach ist die Frage nicht mehr zu beantworten: Der Container schreibt
+    # in den ersten Sekunden hinein.
+    frisches_zuhause = skeleton_ops.is_empty(req.profile_path)
+
     if req.profile_path:
         _ensure_profile(req.profile_path)
         mounts.append(docker.types.Mount(
@@ -391,6 +401,22 @@ def start_container(req: StartRequest) -> dict[str, Any]:
         _elevate(container)
 
     _wait_for_vnc(container)
+
+    # Reihenfolge mit Absicht: erst das Skeleton, dann der Verweis auf die
+    # Ablage, dann das Startskript. Das Skeleton legt den Grundstand; das
+    # Skript darf ihn ueberschreiben, denn es ist das spezifischere Werkzeug.
+    if req.template_slug:
+        try:
+            result = skeleton_ops.apply(
+                container.id, req.template_slug, req.skeleton_enforce,
+                fresh=frisches_zuhause,
+            )
+            if result.get("kopiert"):
+                log.info("Skeleton für %s angewandt (%s): %s", req.template_slug,
+                         result.get("grund"), ", ".join(result["kopiert"]))
+        except Exception as exc:  # noqa: BLE001 — nie den Start verhindern
+            log.warning("Skeleton nicht angewandt: %s", exc)
+
     _link_shared(container)
     if req.start_script.strip():
         _run_start_script(container, req.start_script)
@@ -757,6 +783,47 @@ class FreezeRequest(BaseModel):
     container_id: str
     tag: str
     comment: str = ""
+
+
+class SkeletonDirRequest(BaseModel):
+    pfad: str = ""
+    name: str
+
+
+@app.get("/skeleton/{slug}", dependencies=[Depends(require_token)])
+def skeleton_list(slug: str, pfad: str = "") -> dict[str, Any]:
+    try:
+        return skeleton_ops.listing(slug, pfad)
+    except skeleton_ops.SkeletonError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+
+@app.post("/skeleton/{slug}/upload", dependencies=[Depends(require_token)])
+async def skeleton_upload(slug: str, pfad: str = Form(default=""),
+                          files: list[UploadFile] = File(...)) -> dict[str, Any]:
+    raus = []
+    for f in files:
+        try:
+            raus.append(skeleton_ops.save(slug, pfad, f.filename or "", await f.read()))
+        except skeleton_ops.SkeletonError as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    return {"dateien": raus}
+
+
+@app.post("/skeleton/{slug}/dir", dependencies=[Depends(require_token)])
+def skeleton_mkdir(slug: str, req: SkeletonDirRequest) -> dict[str, Any]:
+    try:
+        return skeleton_ops.make_dir(slug, req.pfad, req.name)
+    except skeleton_ops.SkeletonError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+
+@app.delete("/skeleton/{slug}", dependencies=[Depends(require_token)])
+def skeleton_remove(slug: str, pfad: str) -> dict[str, str]:
+    try:
+        return skeleton_ops.remove(slug, pfad)
+    except skeleton_ops.SkeletonError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
 
 @app.get("/freeze/{container_id}/preview", dependencies=[Depends(require_token)])

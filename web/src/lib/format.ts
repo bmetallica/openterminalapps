@@ -4,6 +4,20 @@ export function gb(bytes: number, digits = 1): string {
   return (bytes / GB).toFixed(digits).replace('.', ',')
 }
 
+/**
+ * Eine Grösse in der Einheit, die zu ihr passt.
+ *
+ * `gb()` ist richtig, wo Gigabyte die Einheit der Sache sind — Images,
+ * Arbeitsspeicher, Kontingente. Für eine Konfigurationsdatei von 300 Bytes
+ * ist „0,00 GB" keine Angabe, sondern eine Ausrede.
+ */
+export function size(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(0)} KB`
+  if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1).replace('.', ',')} MB`
+  return `${gb(bytes, 2)} GB`
+}
+
 export function duration(ms: number): string {
   const min = Math.floor(ms / 60000)
   if (min < 60) return `${min} min`

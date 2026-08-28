@@ -8,6 +8,7 @@ import {
   ApiError, api,
   type Allocation, type Group, type Host, type HostImage, type Template,
 } from '../lib/api'
+import { Skeleton } from './Skeleton'
 import { t as tr, useLang } from '../lib/i18n'
 import { Software } from './Software'
 
@@ -51,6 +52,10 @@ function toPayload(d: Draft) {
     persistence_scope: d.persistence_scope,
     rights: d.rights,
     env: Object.fromEntries(d.env_rows.filter((r) => r.k).map((r) => [r.k, r.v])),
+    // Fehlte bis zum 2026-08-28: Das Feld liess sich bearbeiten und wurde
+    // beim Speichern stillschweigend verworfen.
+    start_script: d.start_script,
+    skeleton_enforce: d.skeleton_enforce,
     is_enabled: d.is_enabled,
     group_ids: d.group_ids,
   }
@@ -68,8 +73,8 @@ function Editor({ tpl, host, groups, images, onSaved, onClose, onToast }: {
   // "Software" steht direkt neben "Apps", weil es derselbe Vorgang in zwei
   // Schritten ist: erst einbauen, dann freigeben.
   const TABS = tpl.mode === 'workspace'
-    ? ['Allgemein', 'Apps', 'Software', 'Ressourcen', 'Rechte', 'Umgebung', 'Zuteilung']
-    : ['Allgemein', 'Software', 'Ressourcen', 'Rechte', 'Umgebung', 'Zuteilung']
+    ? ['Allgemein', 'Apps', 'Software', 'Skeleton', 'Ressourcen', 'Rechte', 'Umgebung', 'Zuteilung']
+    : ['Allgemein', 'Software', 'Skeleton', 'Ressourcen', 'Rechte', 'Umgebung', 'Zuteilung']
 
   const [draft, setDraft] = useState<Draft>(() => toDraft(tpl))
   const [tab, setTab] = useState(TABS[0])
@@ -390,6 +395,11 @@ function Editor({ tpl, host, groups, images, onSaved, onClose, onToast }: {
             </div>
           ))}
         </>
+      )}
+
+      {tab === 'Skeleton' && (
+        <Skeleton tpl={tpl} enforce={draft.skeleton_enforce ?? []}
+          onEnforce={(v) => set('skeleton_enforce', v)} onToast={onToast} />
       )}
 
       {tab === 'Umgebung' && (

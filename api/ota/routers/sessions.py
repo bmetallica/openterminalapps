@@ -345,6 +345,10 @@ def start_session(
             # koennten sie dort nichts nachinstallieren. Die Entscheidung faellt
             # hier und nicht im Agent: Der Agent kennt keine Rollen.
             "elevated": user.is_admin,
+            # Womit ein Zuhause anfaengt. Beim ersten Start der ganze Baum,
+            # danach nur die durchgesetzten Pfade.
+            "template_slug": tpl.slug,
+            "skeleton_enforce": list(tpl.skeleton_enforce or []),
             # Laeuft nach dem Start als Nutzer im Container.
             "start_script": tpl.start_script or "",
             "labels": _traefik_labels(sess.id, user.id, sess.vnc_user, sess.vnc_secret),

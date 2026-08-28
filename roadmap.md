@@ -35,7 +35,7 @@ die Sicherung aus M7. Ein Nutzer meldet sich an, startet seinen Arbeitsplatz und
 öffnet darin VS Code, ein Terminal und den Dateimanager — jedes formatfüllend auf
 eigenem Display, alle im selben Container mit gemeinsamem `/home`. Ein
 Administrator baut Software ins Image, bindet fremde Kataloge ein und stellt
-Sicherungen wieder her. Geprüft durch **210 automatische Prüfungen in vier
+Sicherungen wieder her. Geprüft durch **217 automatische Prüfungen in vier
 Suiten**, davon 76 in einem echten Browser (`make test`). Ein voller Lauf
 dauert rund eine halbe Stunde — er baut Container, friert ein Image ein und
 misst im Browser nach.
@@ -338,7 +338,12 @@ Session-Prozesse, und die ereignisgesteuerte statt abfragende Brücke (braucht e
 - [x] **Fehlende Spalten beim Start ergänzen** (`api/ota/schema_sync.py`): `create_all` legt
       Tabellen an, aber keine Spalten — eine neue Spalte legte am 2026-08-27 eine laufende Anlage
       lahm. Ergänzt wird nur; Löschen, Umbenennen und Typwechsel bleiben Alembic vorbehalten
-- [ ] Skeleton-Profile: Kopie beim ersten Start, Datei-Browser, „Enforce"-Pfade
+- [x] **Skeleton-Profile** (`agent/otaagent/skeleton.py`, Workspace-Editor → *Skeleton*): ein
+      Verzeichnisbaum je Workspace mit Datei-Browser, Ziehen und Ablegen. Kommt beim **ersten**
+      Start ins leere Zuhause; einzelne Pfade lassen sich **durchsetzen** und überschreiben dann bei
+      jedem Start. Dass Letzteres die Ausnahme ist, steht auch so in der Oberfläche — ein Zuhause
+      gehört dem Menschen, der darin arbeitet. Punktdateien sind hier erlaubt (anders als in der
+      gemeinsamen Ablage): Ein Skeleton besteht grösstenteils aus ihnen
 - [x] **Alte Fassungen werden wirklich aufgeräumt.** `KEEP_VERSIONS = 3` stand seit dem ersten Tag
       im Code und wurde nie angewendet; aufgefallen ist das erst, als das Einfrieren dazukam und
       Fassungen schneller wuchsen als beim Bauen. Die aktive bleibt immer, auch wenn sie älter ist.
@@ -349,6 +354,9 @@ Session-Prozesse, und die ereignisgesteuerte statt abfragende Brücke (braucht e
       Sicherung ist davon nichts wert: in Sekunden wieder geholt, beim Zurückspielen ohnehin
       veraltet. Aufgefallen, weil eine Container-Sicherung ohne erkennbaren Grund von 2 MB auf
       68 MB sprang, nachdem jemand im Container etwas nachinstalliert hatte
+- [x] **`start_script` wurde in der Oberfläche nie gespeichert.** Das Feld liess sich bearbeiten,
+      und `toPayload` liess es weg — die Eingabe verschwand beim Speichern stillschweigend.
+      Aufgefallen beim Anbau des Skeleton-Reiters
 - [x] **„Session einfrieren"** (`agent/otaagent/freeze.py`): Im eigenen Arbeitsplatz einrichten,
       Vorschau ansehen, als neue Fassung einfrieren. Drei Dinge sind dabei wichtiger als der
       `docker commit` selbst:
@@ -540,6 +548,10 @@ Entscheidung, die nicht am Schreibtisch fällt — ein Testkonto im Verzeichnisd
 ob Kerberos dort überhaupt zur Verfügung steht (`plan.md` §9.4). **Die Passwort-Durchreichung
 bleibt draussen** (§17.9), auch wenn sie der kürzeste Weg wäre.
 
-Aus M5 stehen noch die Skeleton-Profile und „Session einfrieren" offen — beide sind Komfort, keine
-Voraussetzung. Aus `plan.md` §17 bleiben **Hardware** (§17.1) und **Domain/Zertifikat** (§17.2);
-Letzteres bestimmt, ob die lokale CA eine Zwischenlösung bleibt oder dauerhaft trägt.
+Aus M5 steht nur noch das **eigene Basisimage** `ota/base-xfce` offen. An ihm hängen zwei
+Kleinigkeiten, die sonst nicht gehen: eine ereignisgesteuerte Zwischenablage-Brücke (`clipnotify`
+fehlt im Kasm-Image) und `xsel`/`xdotool`/`autocutsel`. Beides ist Feinschliff, keine
+Voraussetzung.
+
+Aus `plan.md` §17 bleiben **Hardware** (§17.1) und **Domain/Zertifikat** (§17.2); Letzteres
+bestimmt, ob die lokale CA eine Zwischenlösung bleibt oder dauerhaft trägt.

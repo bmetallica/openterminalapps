@@ -15,7 +15,7 @@ Projekte, denselben SSH-Schlüssel, dieselbe Zwischenablage.
 Daneben lassen sich einzelne Anwendungen als Wegwerf-Container starten und vorhandene Kasm-Images
 sowie ganze Registries einbinden — als Zusatz, nicht als Fundament.
 
-> **Stand:** läuft und wird benutzt. 210 automatische Prüfungen, davon 76 in einem echten Browser.
+> **Stand:** läuft und wird benutzt. 217 automatische Prüfungen, davon 76 in einem echten Browser.
 > Was noch fehlt, steht offen in [roadmap.md](roadmap.md) — nichts davon ist beschönigt.
 
 ---
@@ -63,6 +63,10 @@ nicht mehr — auch nach jedem späteren Zertifikatswechsel.
 - **Anwendungen im Image finden**: OTA liest die `.desktop`-Dateien und schlägt Name, Zeichen und
   Startbefehl vor. Niemand muss wissen, wo eine Binärdatei liegt
 - **Gemeinsame Ablage** für Dateien, die in jeden Arbeitsplatz sollen — im Container nur lesbar
+- **Skeleton-Profil** je Workspace: womit ein Zuhause anfängt. Einzelne Pfade auf Wunsch bei jedem
+  Start durchgesetzt — die Ausnahme, nicht die Regel
+- **Session einfrieren**: im eigenen Arbeitsplatz einrichten, Vorschau ansehen, als neue Fassung
+  übernehmen. Das Home bleibt draussen, Geheimnisse werden markiert, die sudo-Ausnahme entfernt
 - **Skript beim Sessionstart** je Workspace, für alles, was ins Home gehört, aber nicht ins Image
 
 **Betrieb**
@@ -115,7 +119,7 @@ aussahen, als sie waren.
 make test
 ```
 
-**210 Prüfungen in vier Suiten**, jede stellt ihren Vorzustand selbst her:
+**217 Prüfungen in vier Suiten**, jede stellt ihren Vorzustand selbst her:
 
 | Suite | Prüft |
 |---|---|

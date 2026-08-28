@@ -15,7 +15,7 @@ key, the same clipboard.
 Alongside that, single applications can run as throwaway containers, and existing Kasm images and
 whole registries can be attached — as an addition, not as the foundation.
 
-> **Status:** running and in use. 210 automated checks, 76 of them in a real browser. What is still
+> **Status:** running and in use. 217 automated checks, 76 of them in a real browser. What is still
 > missing is listed openly in [roadmap.md](roadmap.md) — nothing there is dressed up.
 >
 > The documentation is written in German. This file is the exception.
@@ -65,6 +65,10 @@ after any later certificate change.
 - **Find applications inside the image**: OTA reads the `.desktop` files and suggests name, symbol
   and start command. Nobody has to know where a binary lives
 - **Shared storage** for files that belong in every workspace — read-only inside the container
+- **A skeleton profile** per workspace: what a home directory starts out as. Individual paths can be
+  enforced at every start — the exception, not the rule
+- **Freeze a session**: set it up in your own workspace, review the preview, adopt it as a new
+  version. The home stays out, secrets are flagged, the sudo exception is removed
 - **A script at session start**, per workspace, for anything that belongs in the home directory but
   not in the image
 
@@ -118,7 +122,7 @@ were.
 make test
 ```
 
-**210 checks in four suites**, each one setting up its own preconditions:
+**217 checks in four suites**, each one setting up its own preconditions:
 
 | Suite | Checks |
 |---|---|

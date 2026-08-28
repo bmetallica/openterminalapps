@@ -46,6 +46,8 @@ export type Template = {
   rights: Record<string, boolean>
   /** Läuft bei jedem Sessionstart als Nutzer im Container. */
   start_script: string
+  /** Pfade im Skeleton, die bei jedem Start überschreiben. */
+  skeleton_enforce: string[]
   env: Record<string, string>
   is_enabled: boolean
   apps: App[]
@@ -258,6 +260,13 @@ export type FreezePreview = {
   /** Wird vor dem Einfrieren aus dem Container entfernt. */
   entfernt: string[]
   session_id: string
+}
+
+export type SkeletonEntry = {
+  name: string
+  pfad: string
+  verzeichnis: boolean
+  bytes: number
 }
 
 export type HelpChapter = { slug: string; title: string; section: string }
@@ -498,6 +507,25 @@ export const api = {
   checkPackages: (templateId: string, names: string[]) =>
     call<PackageCheck[]>(
       `/templates/${templateId}/packages?names=${encodeURIComponent(names.join(','))}`),
+
+  skeletonList: (templateId: string, path = '') =>
+    call<{ pfad: string; eintraege: SkeletonEntry[] }>(
+      `/templates/${templateId}/skeleton?path=${encodeURIComponent(path)}`),
+  skeletonUpload: (templateId: string, path: string, file: File) => {
+    const body = new FormData()
+    body.append('file', file, file.name)
+    return call<unknown>(
+      `/templates/${templateId}/skeleton/upload?path=${encodeURIComponent(path)}`,
+      { method: 'POST', body })
+  },
+  skeletonMkdir: (templateId: string, path: string, name: string) =>
+    call<unknown>(`/templates/${templateId}/skeleton/dir`, {
+      method: 'POST', body: JSON.stringify({ path, name }),
+    }),
+  skeletonRemove: (templateId: string, path: string) =>
+    call<{ status: string }>(
+      `/templates/${templateId}/skeleton?path=${encodeURIComponent(path)}`,
+      { method: 'DELETE' }),
 
   builds: (templateId: string) => call<Build[]>(`/templates/${templateId}/builds`),
   freezePreview: (templateId: string) =>

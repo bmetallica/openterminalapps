@@ -16,7 +16,7 @@ from .models import ImageBuild, Session as SessionModel
 from .routers import (
     admin, auth, backups, builds, help as help_router, internal, monitoring,
     pwa, recipes as recipes_router, registries as registries_router,
-    sessions, shared as shared_router, templates,
+    sessions, shared as shared_router, skeleton as skeleton_router, templates,
 )
 
 log = logging.getLogger("ota")
@@ -220,6 +220,7 @@ app.include_router(help_router.router)
 app.include_router(pwa.router)
 app.include_router(recipes_router.router)
 app.include_router(shared_router.router)
+app.include_router(skeleton_router.router)
 app.include_router(registries_router.router)
 app.include_router(internal.router)
 app.include_router(monitoring.router)

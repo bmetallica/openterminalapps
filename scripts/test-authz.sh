@@ -62,10 +62,17 @@ for _ in 1 2 3; do
   T_FAKE=$((T_FAKE + $(tmg "gibtesnicht-$RANDOM")))
 done
 T_REAL=$((T_REAL / 3)); T_FAKE=$((T_FAKE / 3))
-DIFF=$((T_REAL - T_FAKE)); [ "$DIFF" -lt 0 ] && DIFF=$((-DIFF))
-[ "$DIFF" -lt 60 ] \
+
+# Verglichen wird das Verhaeltnis, nicht die Differenz in Millisekunden.
+# Der Befund, um den es geht, ist eine Groessenordnung: Ohne Argon2-Durchlauf
+# antwortet ein unbekannter Name in ein bis zwei Millisekunden statt in
+# hundertfuenfzig. Eine feste Schranke in Millisekunden misst dagegen vor
+# allem, wie beschaeftigt der Host gerade ist — sie schlug am 2026-08-28 bei
+# 230 gegen 167 Millisekunden an, und daran war nichts falsch ausser der
+# Schranke.
+[ "${T_FAKE:-0}" -ge $((T_REAL / 2)) ] \
   && ok "Unbekanntes Konto verrät sich nicht über die Dauer (${T_REAL}ms vs ${T_FAKE}ms)" \
-  || bad "Zeitunterschied verrät bestehende Konten: ${T_REAL}ms vs ${T_FAKE}ms"
+  || bad "Unbekanntes Konto antwortet auffällig schneller: ${T_REAL}ms vs ${T_FAKE}ms"
 
 expect "401" "$(curl -s --cacert "$CA" -o /dev/null -w '%{http_code}' -X POST "$BASE/api/auth/login" \
   -H 'Content-Type: application/json' -d "{\"username\":\"$ADMIN_USER\",\"password\":\"falsch\"}")" \
@@ -375,6 +382,99 @@ if [ -n "$ACNAME" ]; then
 fi
 
 [ -n "${USID:-}" ] && api "$TMP/user.jar" -X DELETE "$BASE/api/sessions/$USID" >/dev/null
+
+# ------------------------------------------------------- Skeleton-Profil
+# Womit ein Zuhause anfaengt. Geprueft wird beides: dass ein durchgesetzter
+# Pfad bei jedem Start ankommt, und dass niemand aus dem Skeleton herauskommt.
+echo
+echo "Skeleton-Profil"
+
+WS_S=$(api "$TMP/admin.jar" "$BASE/api/templates" | jqp "
+next((t['id'] for t in d if t['mode'] == 'workspace' and t['apps']), '')")
+SKEL="$BASE/api/templates/$WS_S/skeleton"
+MARKE="ota-pruef-skeleton-$RANDOM"
+
+if [ -z "$WS_S" ]; then
+  bad "Kein Arbeitsplatz für die Skeleton-Prüfung"
+else
+  printf 'Skeleton war hier\n' > "$TMP/$MARKE"
+  api "$TMP/admin.jar" -X POST "$SKEL/upload?path=" -F "file=@$TMP/$MARKE" >/dev/null
+  api "$TMP/admin.jar" "$SKEL" | grep -q "$MARKE" \
+    && ok "Datei liegt im Skeleton" \
+    || bad "Die Datei kam nicht im Skeleton an"
+
+  # Punktdateien sind der Normalfall — ein Skeleton besteht grösstenteils
+  # aus ihnen. Die gemeinsame Ablage lehnt sie ab, hier müssen sie durch.
+  printf 'x\n' > "$TMP/.ota-pruef-punkt"
+  api "$TMP/admin.jar" -X POST "$SKEL/upload?path=" -F "file=@$TMP/.ota-pruef-punkt" >/dev/null
+  api "$TMP/admin.jar" "$SKEL" | grep -q "ota-pruef-punkt" \
+    && ok "Punktdateien sind erlaubt" \
+    || bad "Eine Punktdatei wurde abgelehnt — ein Skeleton besteht daraus"
+
+  # Kein Weg nach draussen. Dieselbe Prüfung wie bei der Ablage, denn es ist
+  # dieselbe Art Fehler.
+  OUT=$(api "$TMP/admin.jar" "$SKEL?path=../../etc")
+  echo "$OUT" | grep -q "nicht erlaubt\|ausserhalb" \
+    && ok "Ein Pfad nach draussen wird abgelehnt" \
+    || bad "Der Ausbruchsversuch ging durch: $(echo "$OUT" | head -c 100)"
+
+  expect "403" "$(code "$TMP/user.jar" "$SKEL")" \
+    "Das Skeleton ist für einen normalen Nutzer gesperrt"
+
+  # Und jetzt der Weg in den Container: durchsetzen, Session neu starten,
+  # nachsehen.
+  VORHER=$(api "$TMP/admin.jar" "$BASE/api/templates/$WS_S" | jqp "
+__import__('json').dumps(d.get('skeleton_enforce') or [])")
+  api "$TMP/admin.jar" -X PUT "$BASE/api/templates/$WS_S" \
+    -H 'Content-Type: application/json' \
+    -d "$(api "$TMP/admin.jar" "$BASE/api/templates/$WS_S" | MARKE="$MARKE" python3 -c '
+import json, os, sys
+d = json.load(sys.stdin)
+keep = ("friendly_name","description","icon","categories","mode","image_ref","cores",
+        "memory_bytes","x_res","y_res","idle_minutes","idle_action","persistence_scope",
+        "rights","env","start_script","is_enabled","group_ids")
+b = {k: d[k] for k in keep if k in d}
+b["skeleton_enforce"] = [os.environ["MARKE"]]
+print(json.dumps(b))')" >/dev/null
+
+  SID_S=$(api "$TMP/admin.jar" "$BASE/api/sessions" | jqp "
+next((s['id'] for s in d if s['template_id'] == '$WS_S'), '')")
+  [ -n "$SID_S" ] && api "$TMP/admin.jar" -X DELETE "$BASE/api/sessions/$SID_S" >/dev/null
+  sleep 4
+  SID_S=$(api "$TMP/admin.jar" -X POST "$BASE/api/sessions" -H 'Content-Type: application/json' \
+    -d "{\"template_id\":\"$WS_S\"}" | jqp "d.get('id','')")
+  sleep 4
+  CN_S=$(docker ps --filter "label=ota.session_id" --format '{{.Names}}' \
+    | grep "$(echo "$SID_S" | cut -c1-12)" | head -1)
+  if [ -n "$CN_S" ]; then
+    docker exec "$CN_S" test -f "/home/kasm-user/$MARKE" \
+      && ok "Der durchgesetzte Pfad ist beim Start im Zuhause" \
+      || bad "Der durchgesetzte Pfad kam nicht an"
+    OWNER=$(docker exec "$CN_S" stat -c '%u:%g' "/home/kasm-user/$MARKE" 2>/dev/null)
+    expect "1000:1000" "$OWNER" "Und gehört dem Nutzer, nicht root"
+  else
+    bad "Keine Session zum Prüfen des Skeletons"
+  fi
+
+  # Aufräumen: Datei löschen — dabei muss die Kennung aus „durchsetzen"
+  # verschwinden, sonst stünde dort ein Pfad, den es nicht mehr gibt.
+  api "$TMP/admin.jar" -X DELETE "$SKEL?path=$MARKE" >/dev/null
+  REST=$(api "$TMP/admin.jar" "$BASE/api/templates/$WS_S" | jqp "len(d.get('skeleton_enforce') or [])")
+  expect "0" "$REST" "Eine gelöschte Datei verschwindet aus „durchsetzen“"
+  api "$TMP/admin.jar" -X DELETE "$SKEL?path=.ota-pruef-punkt" >/dev/null
+
+  api "$TMP/admin.jar" -X PUT "$BASE/api/templates/$WS_S" \
+    -H 'Content-Type: application/json' \
+    -d "$(api "$TMP/admin.jar" "$BASE/api/templates/$WS_S" | VORHER="$VORHER" python3 -c '
+import json, os, sys
+d = json.load(sys.stdin)
+keep = ("friendly_name","description","icon","categories","mode","image_ref","cores",
+        "memory_bytes","x_res","y_res","idle_minutes","idle_action","persistence_scope",
+        "rights","env","start_script","is_enabled","group_ids")
+b = {k: d[k] for k in keep if k in d}
+b["skeleton_enforce"] = json.loads(os.environ["VORHER"])
+print(json.dumps(b))')" >/dev/null
+fi
 
 # ------------------------------------------------- Session einfrieren
 # Der kurze Weg zu einem Golden Image: im eigenen Arbeitsplatz einrichten,

@@ -154,6 +154,10 @@ class Template(Base):
     # anlegen. Nicht fuer Installationen — die gehoeren ins Golden Image (§8),
     # sonst wartet jeder Nutzer bei jedem Start darauf.
     start_script: Mapped[str] = mapped_column(Text, default="")
+    # Pfade im Skeleton, die bei **jedem** Start ueberschreiben. Der Rest
+    # kommt nur ins leere Zuhause. Die Ausnahme ist mit Bedacht die Ausnahme:
+    # Ein Zuhause gehoert dem Menschen, der darin arbeitet.
+    skeleton_enforce: Mapped[list] = mapped_column(JSONB, default=list)
 
     persistence_scope: Mapped[str] = mapped_column(String(16), default="user")
     idle_minutes: Mapped[int] = mapped_column(Integer, default=60)

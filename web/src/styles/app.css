@@ -1299,3 +1299,41 @@ button, input, select, textarea { font: inherit; color: inherit; }
   color: var(--mute); font-weight: 600;
 }
 .frost__row.is-secret .frost__kind { color: var(--caution); }
+
+/* Skeleton — Dateiliste mit Ablagefläche. Bewusst nicht als Tabelle: Jede
+   Zeile trägt zwei Schalter, und eine Tabelle mit Knöpfen in Zellen liest
+   sich schlechter als eine Liste. */
+.dropzone {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 120px;
+  padding: 8px;
+  border: 1px dashed var(--edge);
+  border-radius: 8px;
+  background: var(--well);
+}
+.dropzone.is-over { border-color: var(--accent); background: var(--bay-2); }
+
+.filerow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+.filerow:hover { background: var(--bay-2); }
+.filerow--up {
+  border: 0; background: none; color: var(--label);
+  font: inherit; font-size: 13px; text-align: left; cursor: pointer;
+}
+.filerow__icon { color: var(--mute); }
+.filerow__name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.filerow__link {
+  border: 0; background: none; padding: 0;
+  color: var(--key); font: inherit; font-size: 13px; text-align: left; cursor: pointer;
+}
+.filerow__link:hover { text-decoration: underline; }
+.filerow__size { font-size: 11.5px; color: var(--mute); font-variant-numeric: tabular-nums; }
+.chip--sm { padding: 2px 8px; font-size: 11px; }

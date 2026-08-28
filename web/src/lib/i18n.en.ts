@@ -906,4 +906,22 @@ export const EN: Record<string, string> = {
     'For when both the phone and the recovery codes are gone. Without this, the person could never get back in. All sessions of the account are ended, and it is logged under your name.',
   'Zweiten Faktor abnehmen': 'Remove the second factor',
   'Abnehmen fehlgeschlagen': 'Removal failed',
+  'Skeleton': 'Skeleton',
+  'Was hier liegt, kommt beim ersten Start in das Zuhause eines Nutzers — solange es noch leer ist. Danach gehört das Zuhause ihm. Punktdateien sind erlaubt und der Normalfall.':
+    'Whatever is here goes into a user\u2019s home directory at their first start — as long as it is still empty. After that the home belongs to them. Dotfiles are allowed and are the normal case.',
+  'Dateien ablegen': 'Add files',
+  'Verzeichnis anlegen': 'Create directory',
+  'Name des Verzeichnisses': 'Name of the directory',
+  'Pfad:': 'Path:',
+  'eine Ebene höher': 'one level up',
+  'Noch nichts hinterlegt. Dateien hierher ziehen oder oben ablegen.':
+    'Nothing here yet. Drag files in, or add them above.',
+  'durchsetzen': 'enforce',
+  'Bei jedem Start überschreiben': 'Overwrite at every start',
+  '{n} Pfad(e) werden bei jedem Start überschrieben:':
+    '{n} path(s) are overwritten at every start:',
+  'Was der Nutzer dort ändert, ist beim nächsten Start weg. Für ein Wurzelzertifikat richtig, für Einstellungen selten.':
+    'Whatever the user changes there is gone at the next start. Right for a root certificate, rarely right for settings.',
+  'Änderungen an „durchsetzen“ gelten erst nach dem Speichern. Die Dateien selbst sind sofort abgelegt.':
+    'Changes to “enforce” take effect only after saving. The files themselves are stored immediately.',
 }
