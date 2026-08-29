@@ -148,15 +148,24 @@ ota.boden.home {
 
 ### 2 · Traefik muss dem Proxy glauben
 
-In `deploy/traefik/traefik.yml`:
+In **`deploy/.env`**:
 
-```yaml
-entryPoints:
-  websecure:
-    forwardedHeaders:
-      trustedIPs:
-        - "192.168.66.251/32"
+```bash
+OTA_TRUSTED_PROXIES=192.168.66.251/32
 ```
+
+Danach `make up` (oder `./scripts/traefik-config.sh` und Traefik neu starten).
+
+> Warum nicht direkt in `traefik.yml`? Weil die Datei erzeugt wird. Traefik liest seine statische
+> Konfiguration aus **genau einer** Quelle: Sobald sie da ist, ignoriert es Umgebungsvariablen und
+> Kommandozeilenargumente vollständig — gemessen am 2026-08-29, als
+> `TRAEFIK_ENTRYPOINTS_..._TRUSTEDIPS` wirkungslos blieb. Ein Wert, der je Anlage anders aussieht,
+> muss deshalb vor dem Start hineingeschrieben werden. Das erledigt
+> `scripts/traefik-config.sh` aus `traefik.yml.vorlage`; Handarbeit gehört in die Vorlage.
+
+Mehrere Adressen durch Komma getrennt und **in Anführungszeichen** —
+`OTA_TRUSTED_PROXIES="192.168.66.251/32,10.0.0.5/32"`. Die Datei wird von Skripten eingelesen, und
+ein Leerzeichen ohne Anführungszeichen macht aus dem Rest der Zeile einen Befehl.
 
 Ohne diesen Eintrag **ersetzt** Traefik die Kopfzeilen des Proxys durch seine eigenen — er traut
 ihnen nicht, und das ist die richtige Vorgabe. Wer hier steht, darf behaupten, von wo eine Anfrage

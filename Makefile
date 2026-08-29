@@ -26,6 +26,7 @@ help:
 .PHONY: setup
 setup:
 	@./scripts/setup-env.sh
+	@./scripts/traefik-config.sh
 	@./scripts/make-cert.sh
 	@mkdir -p /srv/ota/profiles /srv/ota/skeletons /srv/ota/shared \
 	          /srv/ota/backups /srv/ota/runtime /srv/ota/userfiles
@@ -34,6 +35,9 @@ setup:
 
 .PHONY: up
 up:
+	@# Traefiks statische Konfiguration haengt an einem Wert aus deploy/.env
+	@# und wird deshalb vor jedem Start neu erzeugt. Siehe die Vorlage daneben.
+	@./scripts/traefik-config.sh
 	$(COMPOSE) up -d --build
 	@# Der Realm wird nach dem Hochfahren eingerichtet, nicht bei `make setup`:
 	@# Dort läuft Keycloak noch nicht. Idempotent — was da ist, bleibt.
