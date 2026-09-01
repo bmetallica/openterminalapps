@@ -699,9 +699,10 @@ der nächsten abschliessen.
       Zentrale Identität
 - [x] `/healthz` meldet Keycloak — mit einem echten Kontakt, nicht aus dem Zwischenspeicher
 - [x] Keycloaks Datenbank in `make backup`
-- [ ] Das Notfallkonto (5.2) wandert nach **B**. In A wäre es ein zweiter Weg zu einer Anmeldung,
-      die ohnehin lokal ist — also ein Duplikat ohne Nutzen. Es entsteht mit der Umstellung, im
-      selben Schritt, und wird gegen genau den Fall geprüft, für den es da ist: Keycloak steht
+- [x] Das Notfallkonto (5.2) ist in **E** entstanden, nicht in A: Dort wäre es ein zweiter Weg zu
+      einer Anmeldung gewesen, die ohnehin lokal war — ein Duplikat ohne Nutzen. `make admin` legt
+      es seither bei jeder Einrichtung mit an, und die Prüfreihen melden sich damit an: Damit wird
+      bei **jedem** Lauf geprüft, dass der Notausgang offen ist
 - **Fertig:** 125 Prüfungen in der Autorisierungsreihe (10 davon neu für diese Etappe), 90 e2e,
   18 clipboard, 37 backup — alle grün. Die Anmeldung läuft unverändert über OTA, und bei
   gestopptem Keycloak melden sich Nutzer weiterhin an; `/healthz` sagt dann „nicht erreichbar"
@@ -755,7 +756,7 @@ der nächsten abschliessen.
   Föderation nach Keycloak geholt, meldet sich dort mit fremdem Kennwort an und wird von OTA
   **abgelehnt** (403). Das lokale Konto bleibt unangetastet
 
-### D · Die erste fremde Anwendung · ⏳ OTA-Seite fertig am 2026-08-28
+### D · Die erste fremde Anwendung · ✅ erledigt am 2026-08-29
 - Anwendungstyp „Externe Web-Anwendung" neben „Arbeitsplatz" im Katalog
 - Neues Recht `anwendungen.verwalten` und die Liste erlaubter Ziel-Domains (5d) — beides **bevor**
   der erste Client entstehen kann, nicht danach
@@ -773,9 +774,15 @@ der nächsten abschliessen.
 - [x] **Reverse-Proxy-Falle gefunden und behoben** (siehe Wiki 10): Traefik ersetzte die
       Kopfzeilen des vorgelagerten Proxys, und die Anmeldung führte an die interne IP — eine
       andere Herkunft, an der die Desktop-Verknüpfungen hängen
-- [ ] **Offen, und zwar auf dem anderen Rechner:** Open WebUI nimmt OIDC ausschliesslich über
-      Umgebungsvariablen entgegen; seine Schnittstelle kann es nicht (geprüft an Fassung 0.9.6).
-      Die Werte stehen bereit, eintragen muss sie jemand dort
+- [x] **Open WebUI meldet sich an** (2026-08-29). Es nimmt OIDC ausschliesslich über
+      Umgebungsvariablen entgegen — seine Schnittstelle kann es nicht (geprüft an Fassung 0.9.6).
+      Der Weg dorthin führte über zwei Hürden, die beide nichts mit OIDC zu tun hatten: das
+      Zertifikat (die Anwendung ruft die Anmeldung serverseitig auf, dort gibt es kein „trotzdem
+      fortfahren") und eine fehlende E-Mail im Token
+- [ ] **Offen, aber auf der anderen Seite:** Open WebUI legt Gruppen nicht von selbst an
+      (`ENABLE_OAUTH_GROUP_CREATION`) und nimmt Administratoren vom Gruppenabgleich aus. Die
+      Gruppen kommen im Token an; was damit geschieht, entscheidet die Anwendung — genau die
+      Trennung, die in §2 steht
 
 ### E · Aufräumen · ✅ erledigt am 2026-08-28
 - Wiederholbarer Migrationslauf für Bestandskonten (5.1): Konten nach Keycloak, Passwörter neu,
@@ -843,7 +850,7 @@ Keycloak steht unter Apache-2.0 und passt damit zur Lizenzlage von OTA. Es gehö
 | 2 | Notzugang, wenn Keycloak steht | Ein Notfallkonto unter eigener Adresse, protokolliert, mit eigener zweiter Stufe | **entschieden** 2026-08-28 |
 | 3 | Ort der zweiten Stufe | Keycloak — bis auf das Notfallkonto | **entschieden** 2026-08-28 |
 | 4 | Eigene LDAP-Anbindung | Bis Etappe E Rückweg, dort entfernt; ab sofort eingefroren | **entschieden** 2026-08-28 |
-| 5 | Profil- und Ablagepfade | Nach `sub` benannt, Verweis unter dem Namen | Vorschlag (§4) |
+| 5 | Profil- und Ablagepfade | Nach `sub` benannt, Verweis unter dem Namen | **beschlossen, nicht umgesetzt** — siehe unten |
 | 6 | Eigener Realm statt `master` | Ja, zwingend (falls Keycloak) | ergibt sich aus 5.5 |
 | 7 | **Welcher Identity Provider** | **Keycloak** — die konservative Wahl: tiefste AD-Föderation, Apache-2.0, CNCF. Zitadel, Authelia, Dex, Ory und Kanidm sind an den Anforderungen gescheitert, authentik unterlag | **entschieden** 2026-08-28 |
 | 7a | Speicherbedarf | Eingepreist. Produktiv bekommt Keycloak, was es braucht; auf der Entwicklungsmaschine ein Deckel, damit es die Arbeitsplätze nicht verdrängt | ergibt sich aus 5a |
@@ -851,6 +858,40 @@ Keycloak steht unter Apache-2.0 und passt damit zur Lizenzlage von OTA. Es gehö
 | 10 | Wann ein Rechteentzug greift | Gruppen bei der nächsten Anmeldung; Sperre und erzwungene Abmeldung sofort | **entschieden** 2026-08-28 |
 | 11 | Wer Anwendungen anlegen darf | Eigenes Recht `anwendungen.verwalten` **und** eine Liste erlaubter Ziel-Domains; leere Liste erlaubt nichts | **entschieden** 2026-08-28 |
 | 8 | Zugriff über eine eigene schmale Schicht | Ja — eine Naht zur fremden Software, in Prüfreihen ersetzbar | ergibt sich aus 5a |
+| 12 | Abmelden: hier oder überall | **Überall.** Am Verhalten entschieden, nicht am Reissbrett | **entschieden** 2026-08-29 |
+
+### Offen und dringend: Entscheidung 5 steht noch aus
+
+**Die Profil- und Ablagepfade heissen weiter nach dem Anmeldenamen.**
+
+```python
+# api/ota/security.py
+return f"{root}/{user.username}/{tpl.slug}"     # /srv/ota/profiles/anna.schmidt/…
+```
+
+Beschlossen war etwas anderes (§4), und der Grund dafür ist inzwischen **scharf**: Seit Etappe B
+zieht OTA einen geänderten Anmeldenamen aus Keycloak nach —
+
+```python
+# api/ota/kcidentity.py
+if user.username != name:
+    user.username = name
+```
+
+— und ab diesem Moment zeigt `profile_path()` auf ein anderes Verzeichnis. Wer im Verzeichnis
+umbenannt wird, weil er heiratet oder die Abteilung wechselt, findet beim nächsten Start ein leeres
+Zuhause. Das alte liegt noch da, aber niemand sucht dort, und die Meldung dazu gibt es nicht.
+
+Zwei Wege, und der zweite ist der beschlossene:
+
+1. **Beim Umbenennen mitziehen.** Klein, sofort machbar, und die laufende Session müsste dabei
+   stehen — ein Verzeichniswechsel unter einem offenen Bind-Mount ist ein sicherer Weg in kaputte
+   Zustände.
+2. **Nach `sub` benennen, mit einem Verweis unter dem Namen.** Einmalig eine Migration bestehender
+   Verzeichnisse, danach gegen jede Umbenennung immun. So war es entschieden.
+
+Bis dahin gilt: **Ein Konto in Keycloak nicht umbenennen**, solange niemand das Zuhause von Hand
+mitnimmt.
 
 ### Noch offen, aber später zu beantworten
 

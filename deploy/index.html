@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OpenTerminalApps</title>
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <!-- Die Kennung "ota-manifest" ist Absicht: Beim Öffnen einer Anwendung
+         tauscht InstallButton die Adresse aus, damit die Verknüpfung auf dem
+         Desktop diese Anwendung meint und nicht das Dashboard. -->
+    <link id="ota-manifest" rel="manifest" href="/manifest.webmanifest" />
+    <!-- Und hier, noch vor allem anderen, für den Weg über die Adresse.
+
+         Der Browser liest das Manifest einmal, kurz nach dem Laden, und
+         entscheidet dann, ob und was sich ablegen lässt. Ein Austausch später
+         aus React heraus kommt für diese Entscheidung zu spät: Der Knopf im
+         Viewer bietet dann zwar an zu installieren, abgelegt wird aber, was
+         beim Laden dastand — das Dashboard. Deshalb steht die Zuordnung hier,
+         synchron im Kopf des Dokuments, bevor der Parser weiterläuft.
+
+         Alles, was der Browser für die Ablage braucht, hängt damit an der
+         Adresse allein. Genau das ist der Punkt: Eine Verknüpfung ist eine
+         Adresse, sonst nichts. -->
+    <script>
+      (function () {
+        var m = location.pathname.match(
+          /^\/launch\/([a-z0-9][a-z0-9-]{0,63})(?:\/([a-z0-9][a-z0-9-]{0,63}))?\/?$/)
+        if (!m) return
+        document.getElementById('ota-manifest').href =
+          '/api/pwa/manifest.webmanifest?template=' + encodeURIComponent(m[1]) +
+          (m[2] ? '&app=' + encodeURIComponent(m[2]) : '')
+      })()
+    </script>
+    <!-- Faerbt die Browserleiste auf dem Telefon. Derselbe Grund wie im
+         Manifest: Das Fenster soll nicht zweifarbig anfangen. -->
+    <meta name="theme-color" content="#0B1315" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+    <script type="module" crossorigin src="/assets/index-t2Ukz_5f.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-BXtyvnmN.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>

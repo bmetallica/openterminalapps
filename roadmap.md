@@ -22,23 +22,31 @@ früh. Die Einbindung vorhandener **Kasm-Images und -Registries** ist ein Featur
 | **M3** | Oberfläche | Entwurf an echte Daten angeschlossen | ✅ **erledigt** |
 | **M4** | **Der Arbeitsplatz** | Ein Linux je Nutzer, Apps einzeln gestreamt | ✅ **Grundfunktion steht** |
 | **M5** | Golden Images | Build-Pipeline, Versionen, App-Katalog, Skeleton | 2–3 Wochen |
-| **M6** | Identität & Netzlaufwerke | AD/LDAP ✅, Kerberos und Shares offen | 1–2 Wochen |
+| **M6** | Identität & Netzlaufwerke | AD/LDAP ✅ — mit M11 abgelöst; Kerberos und Shares offen | 1–2 Wochen |
 | **M7** | Migration & Härtung | Profil umgezogen ✅, Härtung, Monitoring | 1–2 Wochen |
 | **M8** | Kasm-Kompatibilität | Einzelimages und ganze Registries einbinden | ✅ **erledigt** |
-| **M9** | Optionale Erweiterungen | OIDC, Guacamole, WebAuthn, code-server | 2–3 Wochen |
+| **M9** | Optionale Erweiterungen | Guacamole, WebAuthn, code-server, Gruppenlaufwerke | 2–3 Wochen |
 | **M10** | Skalierung | Mehrere Hosts, Pools | offen |
+| **M11** | **Zentrale Identität** | Keycloak als Anmeldung, OTA als sein Verwalter und Portal | ✅ **erledigt** |
 
 Bis zum produktiven Einsatz (M5–M7): **realistisch 4–6 Wochen** in Teilzeit.
 
-**Stand 2026-08-27**: M0 bis M4 und M8 laufen, dazu die Build-Pipeline aus M5 und
-die Sicherung aus M7. Ein Nutzer meldet sich an, startet seinen Arbeitsplatz und
-öffnet darin VS Code, ein Terminal und den Dateimanager — jedes formatfüllend auf
-eigenem Display, alle im selben Container mit gemeinsamem `/home`. Ein
-Administrator baut Software ins Image, bindet fremde Kataloge ein und stellt
-Sicherungen wieder her. Geprüft durch **251 automatische Prüfungen in fünf
-Suiten**, davon 76 in einem echten Browser (`make test`). Ein voller Lauf
-dauert rund eine halbe Stunde — er baut Container, friert ein Image ein und
-misst im Browser nach.
+**Stand 2026-09-01**: M0 bis M4, M8 und M11 laufen, dazu die Build-Pipeline aus M5 und die
+Sicherung aus M7.
+
+Ein Nutzer meldet sich über die **zentrale Anmeldung** an, startet seinen Arbeitsplatz und öffnet
+darin VS Code, ein Terminal und den Dateimanager — jedes formatfüllend auf eigenem Display, alle
+im selben Container mit gemeinsamem `/home`. Er legt einzelne Anwendungen als **Symbol auf dem
+Desktop** ab, die in einem eigenen Fenster starten. Dateien schiebt er über seine **eigene Ablage**
+in den Container und wieder heraus.
+
+Ein Administrator baut Software ins Image, bindet fremde Kataloge ein, stellt Sicherungen wieder
+her, richtet ein **Active Directory** in OTAs Oberfläche ein und bindet **fremde Web-Anwendungen**
+an, die dieselbe Anmeldung benutzen.
+
+Geprüft durch **357 automatische Prüfungen in fünf Reihen**, davon 95 in einem echten Browser
+(`make test`). Ein voller Lauf dauert rund eine Dreiviertelstunde — er baut Container, friert ein
+Image ein, zieht ein Wegwerf-Verzeichnis hoch und misst im Browser nach.
 
 ---
 
@@ -425,9 +433,16 @@ Session-Prozesse, und die ereignisgesteuerte statt abfragende Brücke (braucht e
 
 ---
 
-## M6 — Identität & Netzlaufwerke · 2–3 Wochen
+## M6 — Identität & Netzlaufwerke · teilweise abgelöst
 
 Erst mit dem Arbeitsplatz sinnvoll (`plan.md` §9.4).
+
+> **Die Identitäts-Hälfte ist mit M11 erledigt und ersetzt.** Die eigene LDAP-Anbindung
+> (`directory.py`) war ab 2026-08-28 eingefroren und ist mit der Übernahme weggefallen; ein
+> Verzeichnis bindet man jetzt in Keycloak an, eingerichtet über OTAs Oberfläche
+> ([`auth-roadmap.md`](auth-roadmap.md), Etappe C). Was hier offen bleibt, sind die
+> **Netzlaufwerke** — Kerberos, Tickets, UID/GID. Dafür braucht es ein KDC und einen Dateiserver,
+> und ohne die lässt sich nichts davon ehrlich prüfen.
 
 - [x] **Eine Session ohne Container stand für immer im Weg.** Sie zählte als „live", der nächste
       Startversuch bekam sie zurück statt einer neuen — und der Arbeitsplatz liess sich nicht mehr
@@ -458,7 +473,9 @@ echtes AD mit KDC und Dateiservern, und ohne eines lässt sich nichts davon ehrl
 - [ ] Ticket-Erneuerung im Container per `k5start`
 - [ ] UID/GID aus dem Verzeichnis (`uidNumber`/`gidNumber`) beim Start setzen
 - [ ] Weg 3 (Nutzer verbindet selbst) immer verfügbar
-- [ ] Weg 4 (Passwort-Durchreichung) **standardmässig aus**, mit Warntext im Admin-UI
+- ~~Weg 4 (Passwort-Durchreichung)~~ — **wird nicht gebaut.** Ausdrücklich verworfen; mit Keycloak
+      dazwischen ist sie noch weniger zu rechtfertigen als vorher. Ein Punkt, den man „später mal"
+      offenhält, wird irgendwann gebaut — deshalb steht er hier als Nein und nicht als Kästchen
 - [ ] Zugangsdaten nur über `tmpfs` mit `0600` — **nie** als Umgebungsvariable, nie ins Profil,
       nie ins Image
 - [ ] Weg 1 (S4U2Proxy) evaluieren, falls die AD-Konfiguration es hergibt
@@ -467,6 +484,12 @@ echtes AD mit KDC und Dateiservern, und ohne eines lässt sich nichts davon ehrl
 
 ## M7 — Migration & Härtung · 1–2 Wochen
 
+- [x] **Die Sicherung war unvollständig** (behoben 2026-08-28). `make backup` sicherte die
+      Datenbank und die Zuhause — nicht aber `skeletons`, `shared` und `userfiles`, also genau
+      das, was jemand von Hand angelegt hat und was sich weder aus Code noch aus einem Image
+      wiederherstellen lässt. Ein zurückgespielter Stand kam ohne all das zurück, und es wäre erst
+      aufgefallen, wenn man es braucht. Dazu Keycloaks eigene Datenbank; ohne sie kämen Nutzer aus
+      einer Wiederherstellung zurück, die auf Identitäten ohne Gegenstück zeigen
 - [x] Nutzer `bmetallica` in `admins` + `users` (über `make admin`)
 - [x] `scripts/migrate-kasm-profile.sh` — idempotent, mit Probelauf und Abnahmemodus
 - [x] Profil in einen **Arbeitsplatz** überführt (805 MB Rohdaten → 63 MB)
@@ -563,7 +586,7 @@ Das Feature aus `plan.md` §1.2 und §9.8. Gegen alle drei echten Registries gep
 
 ---
 
-## M11 — Zentrale Identität · Entwurf
+## M11 — Zentrale Identität · ✅ erledigt am 2026-08-29
 
 **Eigenes Dokument:** [`auth-roadmap.md`](auth-roadmap.md).
 
@@ -600,12 +623,35 @@ Rückweg. Alles Weitere steht im eigenen Dokument.
       eingerichtet und geprüft, Rückweg je Konto vorhanden. Die Prüfreihen melden sich als
       Notzugang an — damit steht kein persönliches Passwort mehr in `deploy/.env`
 
+**Danach, aus dem ersten echten Betrieb** (2026-08-29). Alles hier kam nicht aus dem Entwurf,
+sondern daraus, dass jemand es benutzt hat:
+
+- [x] **Abmelden meldet ab** — auch bei Keycloak. Vorher endete nur OTAs Sitzung, und der nächste
+      Klick meldete denselben Menschen wortlos wieder an
+- [x] **E-Mail ist Pflichtfeld**, geprüft und eindeutig — mit internen Adressen (`chef@firma.local`).
+      Eine angebundene Anwendung erkennt Menschen daran wieder; ohne Adresse kommt niemand hinein
+- [x] **Änderungen an Konten wandern nach Keycloak** (E-Mail, Sperre, Gruppen, zweite Stufe). Das
+      war die eigentliche Lücke hinter „email is missing"
+- [x] **`/ca.crt`** — OTA gibt seine CA heraus, ohne Anmeldung. Eine fremde Anwendung ruft die
+      Anmeldung serverseitig auf; dort gibt es kein „trotzdem fortfahren". Dazu die vollständige
+      Konfiguration zum Übertragen im Anwendungs-Bildschirm
+- [x] **Die Anmeldemaske trägt OTAs Farben** (`deploy/keycloak-theme/ota`), Themenspeicher
+      abschaltbar — sonst ändert man eine Datei und sieht nichts
+- [x] **Betrieb hinter einem weiteren Reverse Proxy**: `OTA_TRUSTED_PROXIES` in `deploy/.env`,
+      daraus wird Traefiks statische Konfiguration erzeugt. Ohne das führte die Anmeldung an die
+      interne Adresse — eine andere Herkunft, an der die Desktop-Verknüpfungen hängen
+- [x] **`make admin` legt zwei Konten an**: den Alltagszugang in Keycloak und den Notzugang lokal.
+      Vorher entstand ein lokales Konto, während die Startseite zu Keycloak führte — man richtete
+      eines ein, mit dem man sich nicht anmelden konnte
+- [x] **`make up` wartet auf Keycloak**, bevor es den Realm einrichtet
+
 ---
 
 ## M9 — Optionale Erweiterungen · 2–3 Wochen
 
-- [ ] ~~**OIDC** mit PKCE, Claim→Gruppen-Mapping~~ — aufgegangen in M11 (`auth-roadmap.md`)
-- [ ] **WebAuthn/Passkeys** — käme mit M11 ohne Zusatzarbeit, siehe `auth-roadmap.md`
+- [x] ~~**OIDC** mit PKCE, Claim→Gruppen-Mapping~~ — mit M11 erledigt (`auth-roadmap.md`)
+- [ ] **WebAuthn/Passkeys** — braucht seit M11 keine Arbeit in OTA mehr, nur einen
+      Authentifizierungsfluss in Keycloak. Offen bleibt die Entscheidung, ob er verlangt wird
 - [ ] **Guacamole-Engine** für RDP/VNC-Ziele — löst `HauptPC` und `VNC-HauptPC` ab
 - [ ] **code-server** als leichte Engine für reine Editor-Sessions (Extensions dann über Open VSX)
 - [ ] Gemeinsame Gruppenlaufwerke
@@ -643,19 +689,39 @@ Erst mit Hardware für die Zielgröße (`plan.md` §17.1).
 
 ## Nächster Schritt
 
-**Ein echtes Active Directory anbinden.** Die Anmeldung steht und ist gegen ein OpenLDAP im
-Container geprüft — aber ein AD ist kein OpenLDAP: `sAMAccountName` statt `uid`, verschachtelte
-Gruppen, ein Dienstkonto, das jemand anlegen muss. Der erste Schritt ist eine halbe Stunde am
-echten Verzeichnis mit dem Prüf-Knopf.
+**Zuerst: eine Weile benutzen.** Der ganze Umbau auf Keycloak ist zwei Tage alt, und alles, was
+seit Etappe E dazukam, kam nicht aus dem Entwurf, sondern daraus, dass jemand die Anlage benutzt
+hat — das Abmelden, die E-Mail-Pflicht, die Nachführung nach Keycloak, das Aussehen der
+Anmeldemaske. Der nächste Fund kommt vermutlich genauso.
 
-Danach **Kerberos und Netzlaufwerke** — dafür braucht es KDC und Dateiserver, und ohne die lässt
-sich nichts davon ehrlich prüfen. **Die Passwort-Durchreichung bleibt draussen** (§17.9), auch
-wenn sie der kürzeste Weg wäre.
+Dann, in dieser Reihenfolge:
 
-Aus M5 steht nur noch das **eigene Basisimage** `ota/base-xfce` offen. An ihm hängen zwei
-Kleinigkeiten, die sonst nicht gehen: eine ereignisgesteuerte Zwischenablage-Brücke (`clipnotify`
-fehlt im Kasm-Image) und `xsel`/`xdotool`/`autocutsel`. Beides ist Feinschliff, keine
-Voraussetzung.
+**Zuerst aber eine Sache, die nicht warten sollte: die Profilpfade.** Sie heissen nach dem
+Anmeldenamen, und seit M11 zieht OTA einen im Verzeichnis geänderten Namen nach — wer umbenannt
+wird, findet beim nächsten Start ein leeres Zuhause. Das alte liegt noch da, aber niemand sucht
+dort. Entschieden war, sie nach der unveränderlichen Kennung zu benennen und einen Verweis unter
+dem Namen danebenzulegen ([`auth-roadmap.md`](auth-roadmap.md) §4, Entscheidung 5); umgesetzt ist
+das nicht. Bis dahin gilt: **kein Konto in Keycloak umbenennen.**
 
-Aus `plan.md` §17 bleiben **Hardware** (§17.1) und **Domain/Zertifikat** (§17.2); Letzteres
-bestimmt, ob die lokale CA eine Zwischenlösung bleibt oder dauerhaft trägt.
+**Netzlaufwerke** (der Rest von M6). Kerberos-Tickets, `sec=krb5`, UID/GID aus dem Verzeichnis.
+Dafür braucht es ein KDC und einen Dateiserver; ohne beides lässt sich nichts davon ehrlich
+prüfen. **Die Passwort-Durchreichung bleibt draussen** (§17.9), auch wenn sie der kürzeste Weg
+wäre — und mit Keycloak dazwischen ist sie noch weniger zu rechtfertigen als vorher.
+
+**Das eigene Basisimage** `ota/base-xfce` (Rest von M5). An ihm hängen die letzten drei offenen
+Kleinigkeiten der Zwischenablage: eine ereignisgesteuerte Brücke statt der Abfrage im halben
+Sekundentakt (`clipnotify` fehlt im Kasm-Image), `xsel`/`xdotool`/`autocutsel`, und die
+Abnahmefälle 3, 7 und 12. Feinschliff, keine Voraussetzung.
+
+**Der Skeleton-Teilbaum je App** (Rest von M5): Startbefehl, Symbol, Sperrgrund, festes Display,
+Sichtbarkeit und Auflösung stehen schon je App — was ein Zuhause mitbringt, hängt weiterhin am
+ganzen Workspace.
+
+Aus `plan.md` §17 bleibt **Hardware** (§17.1). **Domain und Zertifikat** (§17.2) haben sich in der
+Praxis entschieden: Die Anlage läuft hinter einem Reverse Proxy mit einem Zertifikat der
+Firmen-CA, und OTAs eigene CA bleibt für den direkten Weg und für angebundene Anwendungen
+(`/ca.crt`). Beide Wege funktionieren nebeneinander und sind geprüft.
+
+**Nicht als Nächstes**: M9 und M10. Sie sind sauber beschrieben und warten, bis jemand sie
+wirklich braucht — eine zweite Maschine, eine RDP-Quelle, ein helles Theme. Nichts davon fehlt
+heute jemandem.
