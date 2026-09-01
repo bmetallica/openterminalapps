@@ -12,3 +12,8 @@ __pycache__/
 *.pyc
 backups/
 deploy/traefik/traefik.yml
+
+# Auslagerungsdateien von Editoren (nano, vim)
+*.swp
+*.swo
+*~
