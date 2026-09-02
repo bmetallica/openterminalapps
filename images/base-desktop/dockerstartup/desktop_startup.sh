@@ -138,7 +138,47 @@ fi
 export DBUS_SESSION_BUS_ADDRESS
 
 xsetroot -solid '#1b2733' 2>/dev/null || true
-startxfce4 > /tmp/xfce.log 2>&1 &
+
+# **Arbeitsplatz oder einzelne Anwendung.** Der Unterschied ist nicht
+# Geschmack: Selkies überträgt genau ein Display, und was darauf liegt, sieht
+# der Anwender. Hinter einer einzelnen Anwendung sind Leiste und
+# Schreibtischsymbole Ballast, den niemand bedienen will — und auf einer
+# Maschine ohne GPU kostet der Compositor Rechenzeit, die der Kodierer besser
+# gebraucht.
+#
+# Ganz ohne Fenstermanager geht es nicht: Die Anwendung hätte keinen Rahmen,
+# folgte der Bildschirmgrösse nicht und liesse sich nicht formatfüllend
+# setzen. `xfwm4` allein ist der kleinste Umfang, der das kann.
+if [ "${OTA_MODE:-workspace}" = "single_app" ]; then
+  # `--compositor=off`, weil auf einer Maschine ohne GPU jeder Bildaufbau
+  # in Software passiert — und diese Rechenzeit gehört dem Kodierer.
+  # Kein `--daemon`: Die Option gibt es in Debians xfwm4 nicht, und der
+  # Fenstermanager beendete sich damit sofort. Sichtbar war das erst
+  # daran, dass `wmctrl` keine Fensterliste bekam.
+  xfwm4 --compositor=off > /tmp/xfwm4.log 2>&1 &
+
+  # Sobald ein Fenster da ist, formatfüllend setzen — sonst zeigt der Strom an
+  # den Rändern die leere Fläche. Dieselbe Erkennung wie im Agent (apps.py):
+  # `wmctrl -l` listet auch Fenster, die "überall kleben" (-1 in der zweiten
+  # Spalte) und keine Anwendung sind.
+  (
+    for _ in $(seq 1 120); do
+      FENSTER=$(wmctrl -l 2>/dev/null | awk '$2 != -1' | head -1 | cut -d' ' -f1)
+      if [ -n "$FENSTER" ]; then
+        # `fullscreen` und nicht `maximized`: Maximiert bliebe die
+        # Titelleiste stehen, und bei einer einzelnen Anwendung gibt es
+        # nichts, wozu man sie brauchte — verschoben oder geschlossen wird
+        # hier nichts, die Sitzung beendet man in OTA. Formatfüllend ist
+        # ausserdem das, was „nur diese Anwendung" verspricht.
+        wmctrl -i -r "$FENSTER" -b add,fullscreen 2>/dev/null || true
+        break
+      fi
+      sleep 0.5
+    done
+  ) &
+else
+  startxfce4 > /tmp/xfce.log 2>&1 &
+fi
 
 # Siehe dieselbe Stelle in vnc_startup.sh: `-fork` verzweigt hier nicht, und
 # ohne `&` bleibt das ganze Startskript stehen.

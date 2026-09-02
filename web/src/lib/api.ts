@@ -356,6 +356,7 @@ export type Build = {
   apt_packages: string[]
   vscode_extensions: string[]
   setup_script: string
+  start_command: string
   comment: string
   status: 'queued' | 'building' | 'ok' | 'failed'
   log: string
@@ -765,7 +766,7 @@ export const api = {
     call<Build>(`/templates/${templateId}/builds/${id}`),
   startBuild: (templateId: string, body: {
     apt_packages: string[]; vscode_extensions?: string[]
-    setup_script?: string; comment?: string
+    setup_script?: string; start_command?: string; comment?: string
   }) => call<Build>(`/templates/${templateId}/builds`, {
     method: 'POST', body: JSON.stringify(body),
   }),

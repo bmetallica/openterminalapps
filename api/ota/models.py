@@ -560,6 +560,9 @@ class ImageBuild(Base):
     apt_packages: Mapped[list] = mapped_column(JSONB, default=list)
     vscode_extensions: Mapped[list] = mapped_column(JSONB, default=list)
     setup_script: Mapped[str] = mapped_column(Text, default="")
+    # Womit ein Einzelanwendungs-Image seine Anwendung startet. Fuer einen
+    # Arbeitsplatz bleibt es leer: Der startet seine Anwendungen auf Zuruf.
+    start_command: Mapped[str] = mapped_column(Text, default="")
     comment: Mapped[str] = mapped_column(String(512), default="")
 
     # queued | building | ok | failed | cancelled

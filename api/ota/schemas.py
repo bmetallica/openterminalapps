@@ -465,6 +465,11 @@ class BuildIn(BaseModel):
     apt_packages: list[str] = []
     vscode_extensions: list[str] = []
     setup_script: str = ""
+    # Nur fuer Einzelanwendungs-Images: der Aufruf der Anwendung. Leer heisst,
+    # dass das Basisimage sein eigenes Startskript behaelt — was bei den
+    # Kasm-Anwendungsimages stimmt und bei OTAs eigenen nicht: Deren
+    # Platzhalter startet absichtlich nichts.
+    start_command: str = ""
     comment: str = ""
     # Fremde Aufräumdienste für die Dauer des Builds anhalten. Standardmässig
     # an, weil ein Golden Image sonst auf diesem Host keine Minute überlebt.
@@ -487,6 +492,7 @@ class BuildOut(BaseModel):
     apt_packages: list[str]
     vscode_extensions: list[str]
     setup_script: str
+    start_command: str
     comment: str
     status: str
     log: str

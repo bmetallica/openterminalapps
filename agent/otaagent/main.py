@@ -491,6 +491,13 @@ def start_container(req: StartRequest) -> dict[str, Any]:
     # der Verweis und sonst nichts.
     if req.shelf_name:
         env.setdefault("OTA_LOGIN", req.shelf_name)
+    # Die Betriebsart. Der Container richtet sich danach ein: Ein Arbeitsplatz
+    # bekommt den ganzen Schreibtisch, eine einzelne Anwendung nur einen
+    # Fenstermanager. Bisher wusste er es nicht und startete immer XFCE —
+    # hinter einer einzelnen Anwendung ist das Ballast, den niemand bedient,
+    # und auf einer Maschine ohne GPU kostet der Compositor Rechenzeit, die
+    # der Kodierer besser gebrauchen kann.
+    env.setdefault("OTA_MODE", req.mode)
     env.setdefault("VNC_VIEW_ONLY_PW", secrets.token_urlsafe(16))
     # Ohne Verzoegerung zwischen Zwischenablage-Aktionen (plan.md §10.1).
     env.setdefault("VNCOPTIONS", "-PreferBandwidth -DynamicQualityMin=4 "
@@ -1162,6 +1169,9 @@ class BuildRequest(BaseModel):
     apt_packages: list[str] = []
     vscode_extensions: list[str] = []
     setup_script: str = ""
+    # Womit ein Einzelanwendungs-Image seine Anwendung startet. Leer laesst das
+    # Startskript des Basisimages stehen.
+    start_command: str = ""
     # Arbeitsplatz oder Einzelanwendung. Entscheidet, ob das Startskript des
     # Basisimages ueberschrieben wird — siehe builder.render_dockerfile.
     mode: str = "workspace"
@@ -1187,6 +1197,7 @@ def start_build(req: BuildRequest) -> dict[str, Any]:
     return builder.start(
         req.tag, req.base_image, req.apt_packages,
         req.vscode_extensions, req.setup_script, req.pause_containers, req.mode,
+        req.start_command,
     )
 
 

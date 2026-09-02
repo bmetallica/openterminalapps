@@ -148,6 +148,53 @@ einen absoluten Pfad gespeichert hat — Editor-Einstellungen, virtuelle
 Umgebungen, `git config` — bleibt gültig. Genau das wäre kaputt, wenn das
 Zuhause selbst den Anmeldenamen trüge.
 
+### Eine Anwendung, kein Schreibtisch
+
+Betriebsart **„Einzelne App"** überträgt genau eine Anwendung, formatfüllend,
+ohne Leiste und ohne Schreibtischsymbole. Der Container startet dafür nur
+einen Fenstermanager statt der ganzen Arbeitsumgebung.
+
+Zwei Dinge greifen ineinander:
+
+* Der Agent schickt `OTA_MODE` mit. Das Startskript verzweigt darauf — vorher
+  wusste der Container seine Betriebsart nicht und startete immer XFCE.
+* Im Bildbauer gibt es das Feld **Startbefehl**. Daraus entsteht ein
+  `custom_startup.sh` im gebauten Image.
+
+Das Feld ist nötig, weil der Bildbauer für Einzelanwendungen bewusst das
+Startskript des Basisimages behält. Bei den Kasm-Anwendungsimages stimmt das —
+die starten „ihre" Anwendung selbst. OTAs eigenes Basisimage bringt dagegen
+absichtlich einen Platzhalter mit, der **nichts** startet; ein darauf gebautes
+Einzelanwendungs-Image zeigte deshalb einen leeren Bildschirm, und der Grund
+stand nirgends.
+
+Der Befehl wird über base64 ins Dockerfile gelegt und nicht in eine
+`RUN`-Zeile geschrieben: Er kommt aus einem Textfeld und darf
+Anführungszeichen, Dollarzeichen und Zeilenumbrüche enthalten.
+
+Beendet sich die Anwendung, startet das Startskript sie nach drei Sekunden
+neu. Bei einer Einzelanwendung ist das gewollt — im Arbeitsplatz hat dieselbe
+Aufsicht einmal 119 leere Fenster erzeugt, weshalb ein Arbeitsplatz-Image den
+Platzhalter bekommt.
+
+Geprüft im laufenden Container: Es laufen `Xvfb`, `xfwm4`, die Anwendung,
+Selkies, PulseAudio — **kein** `xfce4-panel`, `xfdesktop` oder
+`xfce4-session`. Das Fenster steht auf `0 0 1440x900` bei einem Bildschirm von
+1440×900, mit `_NET_WM_STATE_FULLSCREEN`.
+
+Zwei Stolperstellen, beide gemessen:
+
+* **`xfwm4 --daemon` gibt es in Debian nicht.** Der Fenstermanager beendete
+  sich sofort, und sichtbar war das erst daran, dass `wmctrl` keine
+  Fensterliste bekam (`Cannot get client list properties`). Ohne
+  Fenstermanager hat die Anwendung keinen Rahmen, folgt der Bildschirmgrösse
+  nicht und lässt sich nicht formatfüllend setzen. Er läuft jetzt mit
+  `--compositor=off` — ohne GPU passiert jeder Bildaufbau in Software, und
+  diese Rechenzeit gehört dem Kodierer.
+* **`fullscreen`, nicht `maximized`.** Maximiert bliebe die Titelleiste
+  stehen, und bei einer einzelnen Anwendung gibt es nichts, wozu man sie
+  brauchte.
+
 ### Drei Fallen beim Wechsel auf Debian
 
 Alle drei hatten dieselbe Form: Das Image baute grün durch, und der Fehler
