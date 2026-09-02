@@ -46,22 +46,17 @@ USER root
 #
 # `pulseaudio` für den Ton. `xdotool`, `xclip` und die übrigen Werkzeuge
 # bringt das Basisimage schon mit.
-# `coturn` läuft **im Container**, nicht im Stack.
-#
-# WebRTC braucht einen Medienweg per UDP, und Session-Container liegen in
-# einem internen Docker-Netz ohne veröffentlichte Ports — der Browser käme
-# nicht heran. Ein TURN-Server vermittelt.
-#
-# Er sitzt hier drin und nicht als eigener Dienst im Stack, weil das der Weg
-# ist, den Selkies selbst vorsieht: ein TURN je Sitzung, mit einem kleinen
-# Portbereich, den der Agent nach aussen durchreicht. Ein gemeinsamer TURN im
-# Stack wäre die Alternative — dann liefe der Medienstrom aller Sitzungen
-# über einen Prozess, und der Fehlerfall träfe alle auf einmal.
+# **Kein `coturn`.** WebRTC braucht einen Medienweg per UDP, und der geht
+# nicht durch Traefik — vermittelt wird über einen TURN-Server. Der stand
+# zuerst hier drin, ein eigener je Sitzung, und das kann nicht funktionieren:
+# Hinter einer Docker-Bridge meldet TURN die Adresse des Hosts als Relay und
+# verschickt die Pakete mit der Container-Adresse als Absender; der Browser
+# verwirft sie. Er läuft deshalb als Dienst `turn` im Stack, auf dem Netz des
+# Hosts. Siehe `deploy/docker-compose.yml` und `scripts/pruef-turn.py`.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       xvfb x11-xserver-utils \
       pulseaudio pulseaudio-utils \
       python3-venv python3-pip \
-      coturn \
       # `evdev` (ueber `pynput`) bringt kein fertiges Rad mit und wuerde sonst
       # uebersetzt — mit Uebersetzer und Kernel-Kopfdateien im Image. Ubuntu
       # hat es fertig; die Umgebung unten wird mit `--system-site-packages`
@@ -137,6 +132,26 @@ RUN python3 -m venv --system-site-packages "$SELKIES_HOME" \
       "${SELKIES_BASE}/v${SELKIES_VERSION}/selkies_gstreamer-${SELKIES_VERSION}-py3-none-any.whl" \
  && ln -sf "$SELKIES_HOME/bin/selkies-gstreamer" /usr/local/bin/selkies-gstreamer \
  && test -x "$SELKIES_HOME/bin/selkies-gstreamer"
+
+# Selkies hängt an jede STUN-Liste `stun.l.google.com` an — unabhängig davon,
+# was konfiguriert ist. Im Firmennetz ist das ein Ruf nach draussen, den
+# niemand bestellt hat, und ohne Internet wartet der Verbindungsaufbau erst
+# in einen Zeitablauf hinein. Der Kopf der Datei erklärt es; sie bricht ab,
+# wenn eine neue Selkies-Fassung die Stelle verschoben hat.
+COPY patches/kein-fremd-stun.py /tmp/kein-fremd-stun.py
+RUN python3 /tmp/kein-fremd-stun.py \
+      "$SELKIES_HOME/lib/python3.12/site-packages" \
+ && rm -f /tmp/kein-fremd-stun.py
+
+# Chrome verschickt seinen DTLS-Handschlag mit fest 1200 Byte je Paket und
+# passt sich einer kleineren Pfadgroesse nicht an. Wo weniger durchpasst —
+# ein VPN-Tunnel mit MTU 1000 — kommt der Handschlag nie zustande. Dagegen
+# hilft, den Browser ueber TURN zu zwingen; dafuer muss die Einstellung
+# ueberhaupt einstellbar sein. Der Kopf der Datei erklaert die Messung.
+COPY patches/ice-nur-vermittelt.py /tmp/ice-nur-vermittelt.py
+RUN python3 /tmp/ice-nur-vermittelt.py \
+      "$SELKIES_HOME/lib/python3.12/site-packages" \
+ && rm -f /tmp/ice-nur-vermittelt.py
 
 # `cvt` rechnet eine Modeline aus. Selkies braucht es, um die Auflösung an
 # das Browserfenster anzupassen — und in Ubuntu 24.04 liefert es **kein**

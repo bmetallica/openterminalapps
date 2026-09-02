@@ -13,9 +13,10 @@
 #     eine Fehlerquelle ohne Gewinn.
 #   * **Der Medienstrom geht nicht durch Traefik.** Das ist der eigentliche
 #     Unterschied: Die Weboberfläche und die Signalisierung laufen wie bisher
-#     über 8080, das Bild selbst aber als WebRTC über UDP. Dafür läuft in
-#     diesem Container ein TURN-Server; der Agent reicht dessen Ports nach
-#     aussen durch, und `SELKIES_TURN_HOST` sagt dem Browser, wohin.
+#     über 8080, das Bild selbst aber als WebRTC über UDP. Vermittelt wird
+#     über den TURN-Dienst aus dem Stack; `SELKIES_TURN_HOST` und
+#     `SELKIES_TURN_SHARED_SECRET` sagen, wohin und womit. Der Container
+#     selbst veröffentlicht keinen einzigen Port.
 #   * `/dockerstartup/custom_startup.sh` wird ausgeführt und neu gestartet,
 #     wenn es sich beendet. Ein Arbeitsplatz überdeckt es mit einem Skript,
 #     das nur wartet.
@@ -111,58 +112,6 @@ startxfce4 > /tmp/xfce.log 2>&1 &
 autocutsel -selection CLIPBOARD -fork > /dev/null 2>&1 &
 autocutsel -selection PRIMARY -fork > /dev/null 2>&1 &
 
-# --- TURN --------------------------------------------------------------
-#
-# Ohne ihn bliebe das Bild schwarz. Der Browser und dieser Container haben
-# keinen gemeinsamen Weg: Session-Container liegen in einem internen
-# Docker-Netz, der Browser sitzt im Firmennetz. WebRTC sammelt Kandidaten, und
-# der einzige, den beide Seiten erreichen können, ist der über einen
-# vermittelnden TURN-Server.
-#
-# `SELKIES_TURN_HOST` muss die Adresse sein, unter der der **Browser** diesen
-# Container erreicht — also der Host, auf dem OTA läuft, nicht die
-# Container-IP. Der Agent setzt sie beim Start.
-TURN_PORT=${SELKIES_TURN_PORT:-3478}
-TURN_MIN=${TURN_MIN_PORT:-65500}
-TURN_MAX=${TURN_MAX_PORT:-65510}
-TURN_USER=${SELKIES_TURN_USERNAME:-selkies}
-TURN_PW=${SELKIES_TURN_PASSWORD:-$VNC_PW}
-
-if [ -n "${SELKIES_TURN_HOST:-}" ]; then
-  cat > /tmp/turnserver.conf <<TURNCONF
-# Alles unter /tmp: Der Prozess läuft als Nutzer 1000, und coturn legt sonst
-# seine PID unter /var/run ab — dort darf er nicht schreiben und beendet sich
-# mit "Cannot create pid file". Aufgefallen ist das nicht am Fehler, sondern
-# am schwarzen Bild: Ohne TURN kommt keine WebRTC-Verbindung zustande.
-pidfile=/tmp/turnserver.pid
-log-file=/tmp/turnserver-detail.log
-simple-log
-listening-port=${TURN_PORT}
-listening-ip=0.0.0.0
-relay-ip=0.0.0.0
-external-ip=${SELKIES_TURN_HOST}
-min-port=${TURN_MIN}
-max-port=${TURN_MAX}
-lt-cred-mech
-user=${TURN_USER}:${TURN_PW}
-realm=openterminalapps
-no-tls
-no-dtls
-no-cli
-no-multicast-peers
-# Nur vermitteln, nicht als offener Relay dienen: Ohne diese Zeilen stünde im
-# Firmennetz ein Server, über den sich beliebiger Verkehr umleiten liesse.
-denied-peer-ip=0.0.0.0-0.255.255.255
-denied-peer-ip=127.0.0.0-127.255.255.255
-denied-peer-ip=169.254.0.0-169.254.255.255
-allowed-peer-ip=127.0.0.1
-TURNCONF
-  turnserver -c /tmp/turnserver.conf > /tmp/turnserver.log 2>&1 &
-  echo "TURN läuft auf ${SELKIES_TURN_HOST}:${TURN_PORT} (${TURN_MIN}-${TURN_MAX})" >&2
-else
-  echo "SELKIES_TURN_HOST fehlt — ohne TURN bleibt der Strom voraussichtlich schwarz" >&2
-fi
-
 # --- Selkies -------------------------------------------------------------
 #
 # `--enable_https=false`, weil Traefik davor TLS beendet. `--enable_resize`,
@@ -171,15 +120,35 @@ fi
 #
 # Der GStreamer-Unterbau liegt unter /opt/gstreamer und wird über `gst-env` in
 # die Umgebung geholt; das System-GStreamer bleibt unangetastet.
+#
+# **Der Medienweg.** Bild und Ton laufen als WebRTC über UDP und damit nicht
+# durch Traefik. Browser und Container haben keinen gemeinsamen Weg — die
+# Sitzung liegt in einem internen Docker-Netz —, also vermittelt ein
+# TURN-Server. Der läuft **nicht hier drin**, sondern als Dienst `turn` im
+# Stack, auf dem Netz des Hosts.
+#
+# Dass er dort und nicht hier läuft, ist die Lehre aus dem ersten Anlauf:
+# Ein TURN hinter einer Docker-Bridge meldet die Adresse des Hosts als Relay
+# und verschickt die Pakete mit der Container-Adresse als Absender. Der
+# Browser verwirft sie und zeigt bis in alle Ewigkeit "Waiting for stream";
+# hier drin stand nur "Fatal SSL error" beim DTLS-Handschlag. Nachmessen mit
+# `scripts/pruef-turn.py`.
+#
+# `SELKIES_TURN_SHARED_SECRET` ist dasselbe Geheimnis, das der TURN-Dienst
+# kennt. Selkies rechnet sich daraus für jede Sitzung ein kurzlebiges
+# Anmeldepaar aus und gibt es dem Browser mit — das Sitzungspasswort bleibt,
+# wo es hingehört.
 # shellcheck disable=SC1091
 . /opt/gstreamer/gst-env
 
 export SELKIES_ENABLE_BASIC_AUTH=true
 export SELKIES_BASIC_AUTH_USER="${VNC_USER:-kasm_user}"
 export SELKIES_BASIC_AUTH_PASSWORD="$VNC_PW"
-export SELKIES_TURN_HOST SELKIES_TURN_PORT="$TURN_PORT"
-export SELKIES_TURN_USERNAME="$TURN_USER" SELKIES_TURN_PASSWORD="$TURN_PW"
-export SELKIES_TURN_PROTOCOL="${SELKIES_TURN_PROTOCOL:-udp}"
+
+TURN_PORT=${SELKIES_TURN_PORT:-3478}
+if [ -z "${SELKIES_TURN_HOST:-}" ] || [ -z "${SELKIES_TURN_SHARED_SECRET:-}" ]; then
+  echo "SELKIES_TURN_HOST/-SHARED_SECRET fehlt — ohne TURN bleibt der Strom schwarz" >&2
+fi
 
 selkies-gstreamer \
   --addr=0.0.0.0 \
@@ -187,6 +156,12 @@ selkies-gstreamer \
   --enable_https=false \
   --web_root=/opt/gst-web \
   --enable_resize=true \
+  --turn_host="${SELKIES_TURN_HOST:-}" \
+  --turn_port="$TURN_PORT" \
+  --turn_protocol="${SELKIES_TURN_PROTOCOL:-udp}" \
+  --turn_shared_secret="${SELKIES_TURN_SHARED_SECRET:-}" \
+  --stun_host="${SELKIES_STUN_HOST:-$SELKIES_TURN_HOST}" \
+  --stun_port="${SELKIES_STUN_PORT:-$TURN_PORT}" \
   --encoder="${SELKIES_ENCODER:-x264enc}" \
   --framerate="${SELKIES_FRAMERATE:-30}" \
   > /tmp/selkies.log 2>&1 &

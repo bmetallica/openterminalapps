@@ -22,8 +22,8 @@ Ehrlich vorweg, denn es sind keine Kleinigkeiten:
 |---|---|---|
 | Anwendungen | **je Anwendung ein Bildschirm**, umschaltbar in der Leiste | **ein Bildschirm je Sitzung** — alle Anwendungen darauf, wie an einem echten Rechner |
 | Weg des Bildes | durch Traefik, ein Port | **an Traefik vorbei**, WebRTC über UDP |
-| Zusätzliche Ports | keine | 3478 und 65500–65510 auf dem Host |
-| Sitzungen gleichzeitig | beliebig viele | **eine** je Host (feste Ports, siehe unten) |
+| Zusätzliche Ports | keine | 3478 und 49160–49260 auf dem Host (UDP), einmal für alle |
+| Sitzungen gleichzeitig | beliebig viele | beliebig viele (ein TURN für den ganzen Host) |
 | Zwischenablage | OTAs Brücke zwischen den Displays | Selkies' eigene, im Bild eingebaut |
 | Ton | über KasmVNC | über WebRTC |
 
@@ -42,35 +42,111 @@ docker build -t ota/base-selkies:test images/base-selkies
 ```
 
 In `deploy/.env` muss stehen, unter welcher Adresse die **Browser** diesen
-Host erreichen — nicht die eines Docker-Netzes:
+Host erreichen — nicht die eines Docker-Netzes und nicht `0.0.0.0` — und ein
+Geheimnis für die TURN-Anmeldung:
 
 ```
-OTA_SELKIES_TURN_HOST=192.168.66.224
+OTA_TURN_HOST=192.168.66.224
+OTA_TURN_SECRET=…            # openssl rand -base64 32
+OTA_TURN_PROTOCOL=udp        # tcp bei kleiner MTU, siehe unten
+OTA_TURN_ICE_POLICY=all      # relay bei kleiner MTU, siehe unten
 ```
+
+Dann den TURN-Dienst starten und **nachmessen**, bevor irgendetwas anderes
+probiert wird:
+
+```bash
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d turn
+python3 scripts/pruef-turn.py
+```
+
+Die letzte Zeile muss `TURN vermittelt.` lauten. Tut sie es nicht, hat es
+keinen Zweck, eine Sitzung zu starten — sie zeigt dann „Waiting for stream"
+und sagt nicht warum.
 
 Dann eine Vorlage anlegen mit `image_ref: ota/base-selkies:test` und
 `stream_engine: selkies`. Alles andere bleibt wie bei jedem Arbeitsplatz:
 Zuhause, Ablagen, Skeleton, Startskript, Rechte.
 
-> **Eine Sitzung je Host.** Die TURN-Ports stehen fest; eine zweite
-> Selkies-Sitzung fände sie belegt. Für den Versuch reicht das. Wird daraus
-> ein Weg für alle, ist eine Portvergabe je Sitzung das Erste, was fehlt.
-
-## Warum ein TURN-Server im Container läuft
+## Warum der TURN-Server im Stack läuft und nicht in der Sitzung
 
 WebRTC braucht einen Medienweg per UDP. Session-Container liegen in einem
 internen Docker-Netz ohne veröffentlichte Ports — der Browser käme nicht
-heran, und Traefik hilft nicht: Es spricht HTTP, nicht UDP.
+heran, und Traefik hilft nicht: Es spricht HTTP, nicht UDP. Vermittelt wird
+deshalb über einen TURN-Server.
 
-Vermittelt wird deshalb über einen TURN-Server. Er läuft **im
-Session-Container**, nicht im Stack: So gehört er zur Sitzung, und ein Fehler
-trifft eine statt aller. Der Agent reicht seine Ports nach aussen durch.
+Der lief zuerst **im Session-Container**, einer je Sitzung, mit Ports, die der
+Agent nach aussen durchreichte. Das klang sauber — ein Fehler trifft eine
+Sitzung statt aller — und kann trotzdem nicht funktionieren. Ein TURN hinter
+einer Docker-Bridge meldet als Relay-Adresse die des Hosts, verschickt die
+vermittelten Pakete aber mit der Container-Adresse als Absender:
+
+```
+2. Allocate mit Anmeldung  -> Relay 192.168.66.224:65502
+5. Client -> Relay -> Peer: b'HINAUS' von 192.168.0.4:65502
+   Absender != Relay 192.168.66.224:65502  [ausgehend KAPUTT]
+```
+
+Jeder WebRTC-Stack verwirft ein Paket, dessen Absender nicht zu dem Kandidaten
+passt, auf den er wartet. Deshalb läuft der Dienst `turn` auf dem **Netz des
+Hosts** (`network_mode: host`) — nur ohne NAT dazwischen stimmen gemeldete und
+tatsächliche Adresse überein.
+
+Ein gemeinsamer TURN bringt nebenbei das, was der Weg vorher nicht konnte:
+**mehr als eine Selkies-Sitzung je Host.** Der Portbereich wird einmal geteilt
+statt je Container veröffentlicht, und der Session-Container macht überhaupt
+keinen Port mehr auf.
+
+Angemeldet wird mit kurzlebigen Zugangsdaten aus einem HMAC über
+`OTA_TURN_SECRET` — Selkies rechnet sie sich aus demselben Geheimnis aus und
+gibt sie dem Browser mit Ablaufzeit mit. Das Sitzungspasswort steht nicht drin.
 
 Die Weboberfläche und die Signalisierung laufen weiterhin über Traefik, mit
 derselben Anmeldung und demselben Basic-Auth-Header wie bei KasmVNC. **Nur der
 Medienstrom geht daran vorbei.**
 
-## Drei Fallen, alle beim Bauen aufgetreten
+## Netze mit kleiner Paketgrösse (VPN)
+
+Wer über ein VPN zugreift, dessen MTU deutlich unter 1500 liegt — WireGuard mit
+1000 zum Beispiel —, bekommt **kein Bild und keine Fehlermeldung**. Die Sitzung
+baut sich auf, ICE verbindet, und dann steht „Waiting for stream".
+
+Der Grund: **Chrome verschickt seinen DTLS-Handschlag mit fest 1200 Byte je
+Paket und passt sich einer kleineren Pfadgrösse nicht an.** Die kleinen
+ICE-Prüfungen kommen durch, das grosse Paket nicht. Die Gegenseite wartet auf
+den fehlenden Teil des Handschlags und antwortet deshalb gar nicht — darum
+steht nirgends ein Fehler. Im Protokoll der Sitzung sieht man es am
+Grössenmuster der empfangenen Pakete:
+
+```
+tragfähiger Weg:  1200, 263, 1200, 263, …
+über den Tunnel:  263, 263, 263, …   (und sonst nichts)
+```
+
+Abhilfe, beide Zeilen zusammen:
+
+```
+OTA_TURN_PROTOCOL=tcp
+OTA_TURN_ICE_POLICY=relay
+```
+
+`relay` nimmt dem Browser den direkten Weg, `tcp` legt die Strecke
+Browser–TURN in einen TCP-Strom — und TCP handelt seine Segmentgrösse mit dem
+Pfad selbst aus. Die Frage nach der Paketgrösse stellt sich damit nicht mehr.
+
+Das kostet etwas: Jedes Byte läuft über den TURN-Server, auch für Anwender im
+selben Netz, die direkt könnten. Solange nur ein Teil der Anwender über ein
+solches VPN kommt, ist das ein Kompromiss zu Lasten aller. Die saubere Lösung
+wäre, dem Browser beide Wege anzubieten und ihn wählen zu lassen — dafür müsste
+Selkies zwei TURN-Einträge ausliefern, heute liefert es einen.
+
+Nachweisen lässt sich beides mit `scripts/pruef-selkies.mjs`: Der Prüfstand
+fährt einen Browser, der den Session-Container **nicht** direkt erreichen kann,
+und sagt, ob ein Bild ankommt. Mit einer Sperre für grosse UDP-Pakete
+(`iptables … -m length --length 1029:65535 -j DROP`) lässt sich der Fehler
+gezielt nachstellen — er verschwindet mit den beiden Zeilen oben.
+
+## Fünf Fallen, alle beim Bauen aufgetreten
 
 1. **Der Client baut seine Adressen aus der Wurzel.** `fetch("/turn")` und
    `wss://host/<erstes Pfadsegment>/signalling/` — beides zeigt nicht dorthin,
@@ -92,10 +168,25 @@ Medienstrom geht daran vorbei.**
    ein 1440er Fenster gequetscht. Das Image bringt eine eigene Rechnung mit,
    geprüft am Referenzwert für 1920×1080.
 
-3. **coturn darf nicht nach `/var/run` schreiben.** Der Container läuft als
-   Nutzer 1000. Ohne `pidfile=/tmp/...` startet der TURN-Server gar nicht, und
-   das Bild bleibt schwarz — die Meldung steht in seinem eigenen Protokoll,
-   nicht dort, wo man sucht.
+3. **coturn darf nicht nach `/var/run` schreiben.** Solange er im Container
+   lief, gehörte er dem Nutzer 1000, und ohne `pidfile=/tmp/...` startete er
+   gar nicht — die Meldung stand in seinem eigenen Protokoll, nicht dort, wo
+   man sucht. Der Dienst im Stack hat das Problem nicht mehr; die Falle bleibt
+   hier stehen, weil sie zwei Tage gekostet hat.
+
+4. **TURN hinter NAT vermittelt nicht.** Siehe oben. Der Fehler zeigt sich an
+   drei Stellen und an keiner davon als das, was er ist: im Browser
+   „Waiting for stream", im Container `Fatal SSL error` beim DTLS-Handschlag,
+   im TURN-Protokoll `create_relay_ioa_sockets: no available ports` — Letzteres
+   nur eine Folge davon, dass elf Ports für die vielen Anläufe zu wenig waren.
+   Zu sehen ist die Ursache erst, wenn man ein Paket durchschickt und den
+   Absender vergleicht: `scripts/pruef-turn.py`.
+
+5. **Ein zu kleines MTU sieht aus wie gar nichts.** Siehe den Abschnitt oben.
+   Dieser Fehler kostet besonders viel Zeit, weil jede einzelne Schicht gesund
+   aussieht: TURN vermittelt, ICE verbindet, der Handschlag kommt an. Nur eben
+   nicht ganz. Aufgefallen ist er erst beim Vergleich der Paketgrössen
+   zwischen einer funktionierenden und einer scheiternden Sitzung.
 
 ## Wie es weitergeht
 
@@ -108,5 +199,9 @@ beantwortet, und was vor einer Entscheidung gemessen gehört:
   einer Maschine ohne GPU zahlt das jede Sitzung.
 - **Trägt das Modell „ein Bildschirm" den Alltag** — oder fehlt der
   Anwendungsumschalter dann doch?
+- **Wie viele Sitzungen trägt ein TURN?** Eine Verbindung belegt vier
+  Relay-Ports, und coturn gibt sie erst nach Ablauf der Lebenszeit frei. Der
+  Vorgabebereich von hundert Ports reicht für rund zwanzig gleichzeitige
+  Sitzungen; wer mehr braucht, macht ihn grösser.
 
 Solange das nicht gemessen ist, bleibt KasmVNC die Vorgabe.

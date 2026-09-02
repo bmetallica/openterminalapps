@@ -524,34 +524,56 @@ def start_container(req: StartRequest) -> dict[str, Any]:
     #
     # KasmVNC schickt alles durch den einen HTTPS-Weg. Selkies überträgt das
     # Bild als WebRTC über UDP, und dafür braucht es einen Weg vom Browser zum
-    # Container, den Traefik nicht kennt. Vermittelt wird über einen
-    # TURN-Server **im Container selbst**; seine Ports gehen hier nach aussen.
+    # Container, den Traefik nicht kennt. Vermittelt wird über den TURN-Dienst
+    # **aus dem Stack** (`deploy/docker-compose.yml`, Dienst `turn`).
     #
-    # Feste Ports und keine Vergabe je Sitzung: Damit läuft genau **eine**
-    # Selkies-Sitzung je Host. Das reicht für den Versuch, um den es hier
-    # geht, und eine Portvergabe, die niemand braucht, wäre Arbeit ohne
-    # Nutzen. Steht die Entscheidung für diesen Weg, gehört sie als Erstes
-    # nachgeholt.
+    # Hier steht deshalb nichts mehr über Ports. Der erste Anlauf liess einen
+    # eigenen TURN im Session-Container laufen und reichte dessen Ports nach
+    # aussen durch — das kann nicht funktionieren: Hinter einer Docker-Bridge
+    # meldet TURN die Adresse des Hosts als Relay, verschickt die Pakete aber
+    # mit der Container-Adresse als Absender. Gemessen mit
+    # `scripts/pruef-turn.py`; die Begründung steht beim Dienst `turn`.
+    #
+    # Dass die Portvergabe damit wegfällt, ist der Nebengewinn: Es laufen
+    # jetzt beliebig viele Selkies-Sitzungen je Host statt genau einer.
     ports: dict[str, Any] = {}
     if req.engine == "selkies":
-        turn_port = int(os.environ.get("OTA_SELKIES_TURN_PORT", "3478"))
-        turn_min = int(os.environ.get("OTA_SELKIES_TURN_MIN", "65500"))
-        turn_max = int(os.environ.get("OTA_SELKIES_TURN_MAX", "65510"))
-        turn_host = os.environ.get("OTA_SELKIES_TURN_HOST", "")
-        if not turn_host:
-            log.warning("OTA_SELKIES_TURN_HOST ist nicht gesetzt — der Strom "
+        turn_host = os.environ.get("OTA_TURN_HOST", "")
+        turn_secret = os.environ.get("OTA_TURN_SECRET", "")
+        if not turn_host or not turn_secret:
+            log.warning("OTA_TURN_HOST oder OTA_TURN_SECRET fehlt — der Strom "
                         "bleibt voraussichtlich schwarz")
         env.setdefault("SELKIES_TURN_HOST", turn_host)
-        env.setdefault("SELKIES_TURN_PORT", str(turn_port))
-        env.setdefault("TURN_MIN_PORT", str(turn_min))
-        env.setdefault("TURN_MAX_PORT", str(turn_max))
-        # Jeder Port einzeln und nicht als Bereich: Die Docker-Bibliothek
-        # nimmt eine Zeichenkette wie "65500-65510" nicht an und antwortet mit
-        # `invalid port '65500-65510': invalid syntax`. Elf Einträge sind
-        # ueberschaubar.
-        ports = {f"{turn_port}/tcp": turn_port, f"{turn_port}/udp": turn_port}
-        for p in range(turn_min, turn_max + 1):
-            ports[f"{p}/udp"] = p
+        env.setdefault("SELKIES_TURN_PORT",
+                       os.environ.get("OTA_TURN_PORT", "3478"))
+        env.setdefault("SELKIES_TURN_SHARED_SECRET", turn_secret)
+        # UDP oder TCP zwischen Browser und TURN.
+        #
+        # UDP ist der Normalfall und der schnellere Weg. TCP ist die Antwort
+        # auf Netze mit kleiner Paketgroesse: Ein WebRTC-Strom rechnet mit
+        # rund 1400 Byte je Paket, und wo weniger durchpasst — ein VPN mit
+        # MTU 1000 etwa — wird jedes groessere Paket zerlegt. Fragmente
+        # ueberleben eine NAT selten, und dann scheitert schon der
+        # DTLS-Handschlag, ohne dass irgendwo ein Fehler steht. Ueber TCP
+        # liegt alles in einem Strom, der sich der Pfadgroesse selbst anpasst.
+        env.setdefault("SELKIES_TURN_PROTOCOL",
+                       os.environ.get("OTA_TURN_PROTOCOL", "udp"))
+        # Darf der Browser auch direkt, oder muss alles ueber TURN?
+        #
+        # "all" ist die Vorgabe und der schnellere Weg. "relay" ist die
+        # Antwort auf Netze mit kleiner Paketgroesse: Chrome verschickt
+        # seinen DTLS-Handschlag mit fest 1200 Byte und passt sich einer
+        # kleineren Pfadgroesse nicht an — durch einen Tunnel mit MTU 1000
+        # kommt er nie an, waehrend die kleinen ICE-Pakete durchgehen. Nur
+        # ueber TURN (und dort ueber TCP) stellt sich die Frage nicht mehr.
+        env.setdefault("SELKIES_ICE_TRANSPORT_POLICY",
+                       os.environ.get("OTA_TURN_ICE_POLICY", "all"))
+        # Auch STUN auf den eigenen Server. Selkies fragt sonst
+        # `stun.l.google.com` — im Firmennetz ein Weg nach draussen, den
+        # niemand bestellt hat, und ohne Internet bleibt die Sitzung hängen.
+        env.setdefault("SELKIES_STUN_HOST", turn_host)
+        env.setdefault("SELKIES_STUN_PORT",
+                       os.environ.get("OTA_TURN_PORT", "3478"))
 
     try:
         container = client.containers.run(
