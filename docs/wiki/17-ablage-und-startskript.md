@@ -1,6 +1,7 @@
 # 17 · Ablagen und Startskript
 
-*Für Administratoren.* ✅ Gemeinsame Ablage, eigene Ablage, Skeleton-Profil, Skript beim Sessionstart
+*Für Administratoren.* ✅ Gemeinsame Ablage, eigene Ablage, Gruppenlaufwerke, Skeleton-Profil,
+Skript beim Sessionstart
 
 Wege, um Dinge in die Arbeitsplätze der Nutzer zu bekommen, ohne dafür jedes Mal ein Image zu bauen.
 Sie gehören zusammen: Die gemeinsame Ablage ist die Quelle, das Skeleton legt den Grundstand, das
@@ -15,6 +16,7 @@ bekommen.
 | Software | **Golden Image** ([Kapitel 7](07-golden-images.md)) | Einmal bauen statt bei jedem Start installieren |
 | Dateien für alle | **Gemeinsame Ablage** | Austauschbar, ohne Image-Bau |
 | Dateien eines Nutzers, hin und zurück | **Eigene Ablage** | Sein Weg in den Container und heraus |
+| Dateien eines Teams | **Gruppenlaufwerk** | Dieselben Dateien für alle Mitglieder, beide Richtungen |
 | Womit ein Home anfängt | **Skeleton** | Dateien, die einfach da sein sollen — im Browser sichtbar |
 | Einrichtung im Home | **Startskript** | Für alles, was *ausgeführt* werden muss |
 | Einmalige Umstellung im Home | **Einmal-Skript** | Für eine Änderung, die je Nutzer genau einmal nötig ist |
@@ -65,19 +67,19 @@ Alles landet als `1000:1000` im Home — kopiert wird als root, und ohne diesen 
 Nutzer sein eigenes Zuhause nicht mehr.
 
 
-## Die beiden Ablagen ✅
+## Die drei Ablagen ✅
 
-Es gibt zwei, und sie beantworten verschiedene Fragen. Wer sie verwechselt, legt Vertrauliches an
-den falschen Ort — deshalb sind sie seit dem 2026-08-28 auch in der Oberfläche getrennt.
+Sie beantworten verschiedene Fragen. Wer sie verwechselt, legt Vertrauliches an den falschen Ort —
+deshalb sind sie auch in der Oberfläche getrennt.
 
-| | Gemeinsame Ablage | Eigene Ablage |
-|---|---|---|
-| Gehört | der Verwaltung | je einem Nutzer |
-| Sieht sie im Browser | wer Images oder Workspaces verwaltet | nur der Eigentümer |
-| Im Container | `/mnt/ota`, **nur lesbar** | `/mnt/austausch`, **beschreibbar** |
-| Im Home | `~/Gemeinsam` | `~/Austausch` |
-| Wozu | Zertifikate, Pakete, Vorlagen für alle | Dateien hinein und wieder heraus |
-| Abschaltbar | nein | ja, je Workspace |
+| | Gemeinsame Ablage | Eigene Ablage | Gruppenlaufwerk |
+|---|---|---|---|
+| Gehört | der Verwaltung | je einem Nutzer | je einer Gruppe |
+| Sieht sie im Browser | wer Images oder Workspaces verwaltet | nur der Eigentümer | jedes Mitglied |
+| Im Container | `/mnt/ota`, **nur lesbar** | `/mnt/austausch`, **beschreibbar** | `/mnt/gruppen/<name>`, **beschreibbar** |
+| Im Home | `~/Gemeinsam` | `~/Austausch` | `~/Gruppen` |
+| Wozu | Zertifikate, Pakete, Vorlagen für alle | Dateien hinein und wieder heraus | dieselben Dateien für ein Team |
+| Abschaltbar | nein | ja, je Workspace | ja, je Workspace |
 
 ## Die gemeinsame Ablage ✅
 
@@ -155,6 +157,60 @@ ganz, und ein Verweis aus einem früheren Start wird beim nächsten Start aufger
 
 Der Schalter wirkt beim **nächsten** Start der Session — ein laufender Container wird nicht
 umgehängt.
+
+## Gruppenlaufwerke ✅
+
+**Meine Ablage** — oben stehen die Laufwerke der eigenen Gruppen zur Auswahl. Die Umschaltung
+erscheint nur, wenn es überhaupt eine gibt; ein Wähler mit einem einzigen Eintrag ist kein Wähler.
+
+```
+/mnt/gruppen/<gruppenname>      der Einhängepunkt, beschreibbar
+~/Gruppen                       ein Verweis auf das Elternverzeichnis
+```
+
+Ein Ordner je Gruppe, in der der Mensch ist, und nur diese. Wer in drei Gruppen ist, sieht drei
+Ordner; wer in keiner ist, sieht `~/Gruppen` gar nicht — ein Verweis, der ins Leere zeigt, wird
+beim nächsten Start aufgeräumt.
+
+**Die Mitgliedschaft entscheidet, und sonst nichts.** Auch ein Administrator kommt nur an die
+Laufwerke der Gruppen, in denen er selbst ist. Das ist Absicht: Wer Gruppen verwaltet, verwaltet
+Zugehörigkeiten — das heisst nicht, dass er in die Dateien sehen soll. Wer wirklich hinein muss,
+trägt sich in die Gruppe ein, und das steht im Protokoll.
+
+### Wann ein Entzug wirkt
+
+| | Wirkt |
+|---|---|
+| Im Browser | **sofort** — die nächste Anfrage wird abgewiesen |
+| Im laufenden Container | beim **nächsten Sessionstart** |
+
+Der Unterschied ist keine Nachlässigkeit. Einem laufenden Container einen Bind-Mount zu entziehen
+ginge nur, indem man ihn beendet — jemanden mitten in der Arbeit hinauszuwerfen wäre schlimmer als
+die Stunde bis zum nächsten Start. Dieselbe Regel gilt für die übrigen Rechte
+(`auth-roadmap.md`).
+
+### Auf der Platte
+
+```
+/srv/ota/groupfiles/<kennung>/        das Verzeichnis
+/srv/ota/groupfiles/<gruppenname>     ein Verweis darauf, für Menschen
+```
+
+Benannt nach der **Kennung** der Gruppe, nicht nach ihrem Namen — aus demselben Grund wie bei den
+Profilen: Ein Gruppenname lässt sich in der Verwaltung ändern, und ab diesem Moment zeigte der Pfad
+woanders hin. Im Container trägt der Ordner trotzdem den Namen; wird die Gruppe umbenannt, heisst
+er ab dem nächsten Start anders, und die Daten bleiben, wo sie sind.
+
+Das Verzeichnis trägt das **setgid-Bit**. Ohne das könnte ein Container Dateien anlegen, die ein
+anderer nicht mehr ändern kann — und genau das ist bei einem gemeinsamen Laufwerk der Normalfall,
+nicht die Ausnahme.
+
+Gesichert wird es mit `make backup` zusammen mit den übrigen Inhalten ([Kapitel 14](14-sicherung.md)).
+
+### Abschalten je Workspace
+
+Im Workspace-Editor unter **Ressourcen → Gruppenlaufwerke**. Vorgabe ist **an**. Aus ergibt Sinn
+für Arbeitsplätze, die bewusst abgeschottet sein sollen.
 
 ## Das Startskript ✅
 

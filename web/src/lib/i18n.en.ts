@@ -1090,6 +1090,27 @@ export const EN: Record<string, string> = {
     'Changes to “enforce” take effect only after saving. The files themselves are stored immediately.',
   'Der Teilbaum kommt genau einmal je Zuhause. Wer ihn erneut ausrollen will, löscht im Zuhause die Merkdatei unter ~/.ota/app-skeleton/.':
     'The subtree arrives exactly once per home. To roll it out again, delete the marker file under ~/.ota/app-skeleton/ in that home.',
+  'Gewand': 'Appearance',
+  'Wie der Rechner': 'Match the system',
+  'Hell': 'Light',
+  'Dunkel': 'Dark',
+  'Gruppenlaufwerk': 'Group drive',
+  'Gruppenlaufwerke': 'Group drives',
+  'Gruppenlaufwerke einhängen': 'Mount group drives',
+  'Der übliche Weg, im Team an denselben Dateien zu arbeiten':
+    'The usual way to work on the same files as a team',
+  'Je Gruppe des Nutzers ein Ordner unter /mnt/gruppen und als „Gruppen" im Home. Alle Mitglieder sehen dasselbe.':
+    'One folder per group the user belongs to, under /mnt/gruppen and as \u201cGruppen\u201d in the home. All members see the same thing.',
+  'Ohne sie bleibt dieser Arbeitsplatz abgeschottet — auch von den Dateien der eigenen Gruppen.':
+    'Without them this workspace stays sealed off \u2014 including from its own groups\u2019 files.',
+  'Meine': 'Mine',
+  'Gemeinsam im Team': 'Shared with the team',
+  'Im Container unter /mnt/gruppen und als „Gruppen" im Home. Alle Mitglieder sehen dasselbe.':
+    'In the container under /mnt/gruppen and as \u201cGruppen\u201d in the home. All members see the same thing.',
+  'Dieselben Dateien für alle Mitglieder von „{name}". Im Arbeitsplatz unter /mnt/gruppen/{name} und als „Gruppen" im Home — beschreibbar. Wer die Gruppe verlässt, sieht sie beim nächsten Sessionstart nicht mehr.':
+    'The same files for every member of \u201c{name}\u201d. In the workspace under /mnt/gruppen/{name} and as \u201cGruppen\u201d in the home \u2014 writable. Whoever leaves the group stops seeing it at their next session start.',
+  'Was hier liegt, sehen alle Mitglieder. Zieh Dateien in die Fläche oben oder leg einen Ordner an.':
+    'Everything here is visible to all members. Drag files into the area above, or create a folder.',
   'Entfernen fehlgeschlagen': 'Removal failed',
   'Verzeichnis (LDAP / Active Directory)': 'Directory (LDAP / Active Directory)',
   'Konten aus einem Verzeichnis anmelden lassen, statt sie von Hand anzulegen. Lokale Konten bleiben davon unberührt — sie werden weiterhin lokal geprüft, auch wenn im Verzeichnis ein gleichnamiger Eintrag steht.': 'Let accounts sign in from a directory instead of creating them by hand. Local accounts are untouched — they are still checked locally, even if the directory holds an entry with the same name.',

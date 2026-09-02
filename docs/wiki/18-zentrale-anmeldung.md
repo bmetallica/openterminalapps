@@ -11,7 +11,7 @@ arbeitet.
 
 | | Frage | Zuständig |
 |---|---|---|
-| **Keycloak** | Wer bist du? | Anmeldung, Identität, SSO, AD/LDAP, zweite Stufe, Sitzungen |
+| **Keycloak** | Wer bist du? | Anmeldung, Identität, SSO, AD/LDAP, zweite Stufe (Passkey oder Einmalkennwort), Sitzungen |
 | **OTA** | Welche Anwendungen darfst du **sehen und betreten**? | Katalog, Zugriff je Gruppe, Arbeitsplätze |
 | **Die Anwendung** | Was darfst du **darin** tun? | Open-WebUI-Rechte, Grafana-Rollen, … |
 
@@ -83,6 +83,44 @@ OTA hängt die Rolle an jeden, dessen Gruppe sie verlangt. Der Anmeldefluss ist 
 eingebauten (`ota-browser`) — Keycloak lässt eingebaute nicht ändern, und eine Kopie lässt sich mit
 einem Handgriff wieder abhängen: `browserFlow` zurück auf `browser`.
 
+### Passkey oder Einmalkennwort ✅
+
+Als zweiter Faktor geht beides. Wer einen **Passkey** hinterlegt hat — Fingerabdruck,
+Gesichtserkennung, ein Sicherheitsschlüssel —, weist sich damit aus; wer keinen hat, bekommt wie
+bisher die Abfrage des **Einmalkennworts**.
+
+Hinterlegt wird ein Passkey in Keycloaks Kontoverwaltung unter *Signing in → Passkey*. Die dafür
+nötige Aktion (`webauthn-register`) ist im Realm ab Werk eingeschaltet; im Browser meldet sich OTA
+dabei als „OpenTerminalApps".
+
+```
+Bedingung: Rolle zweiter-faktor            REQUIRED
+├─ ota-passkey                             ALTERNATIVE
+│    ├─ Bedingung: beim Nutzer eingerichtet  REQUIRED
+│    └─ WebAuthn                             REQUIRED
+└─ ota-einmalkennwort                      ALTERNATIVE
+     └─ Einmalkennwort                       REQUIRED
+```
+
+> **Warum zwei Zweige und nicht einfach zwei Alternativen nebeneinander.**
+>
+> Der naheliegende Aufbau wäre, Einmalkennwort und Passkey beide auf ALTERNATIVE zu stellen: „such
+> dir was aus". Am 2026-09-02 gegen dieses Keycloak gemessen: Wer die Rolle trägt und **noch keins
+> von beiden** eingerichtet hat, kommt dann gar nicht mehr herein — die Anmeldung endet mit
+> *„Invalid username or password"*. Also nicht nur eine Sperre, sondern eine mit einer
+> irreführenden Meldung, bei der niemand auf die Ursache käme.
+>
+> Auch eine vorgemerkte Ersteinrichtung hilft nicht: Vorgemerkte Aktionen laufen **nach** der
+> Anmeldung, und so weit kommt es gar nicht.
+>
+> Mit den zwei Zweigen fällt jemand ohne Passkey durch die erste Bedingung und landet im zweiten
+> Zweig, wo das Einmalkennwort notfalls seine eigene Einrichtung anstösst. Es gibt damit keinen
+> Zustand, in dem niemand mehr hereinkommt — und genau das prüft `scripts/test-authz.sh` bei jedem
+> Lauf.
+
+Wer einen Passkey hat, bekommt das Einmalkennwort nicht mehr angeboten. Das ist bewusst so: Zwei
+Wege nebeneinander sind zwei Wege, die ein Angreifer probieren kann, und der schwächere gewinnt.
+
 ## Fremde Anwendungen anbinden
 
 **Anwendungen → Anwendung hinzufügen.** OTA legt den OIDC-Client in Keycloak an und zeigt die
@@ -146,6 +184,20 @@ nicht nötig.
 > ```
 >
 > Für den Betrieb wieder auf `true` und `2592000`.
+
+### Die Maske folgt dem Gewand
+
+Wer in OTA auf **hell** gestellt hat, bekommt auch die Anmeldemaske hell. Das geht, weil Keycloak
+hinter demselben Ingress liegt wie OTA — also auf derselben Herkunft, und damit liest die Maske
+denselben `localStorage`, in dem OTA die Wahl ablegt (`resources/js/gewand.js` im Theme).
+
+Ohne das bekäme jemand mit hellem Gewand eine dunkle Anmeldemaske und danach eine helle Anwendung.
+Das sieht nicht nach einer Anlage aus, sondern nach zweien — und genau diesen Zweifel darf eine
+Anmeldeseite nie auslösen.
+
+> **Wenn Keycloak auf einem eigenen Namen läuft**, ist es eine fremde Herkunft und die Maske bleibt
+> beim dunklen Gewand. Das ist kein Fehler, sondern die Grenze von `localStorage`; es fällt nur
+> auf, wenn jemand hell eingestellt hat.
 
 ## Ein vorhandenes Keycloak benutzen
 

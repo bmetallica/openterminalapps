@@ -51,6 +51,11 @@ SHARED_MOUNT = "/mnt/ota"
 # Die eigene Ablage des Nutzers. Anders als die gemeinsame ist sie
 # **beschreibbar** — sie ist der Weg in den Container und wieder heraus.
 USERFILES_MOUNT = "/mnt/austausch"
+# Darunter je Gruppe ein Ordner mit ihrem Namen. Ein gemeinsames Elternteil
+# statt eines Einhaengepunkts je Gruppe: Sonst waere nach der dritten Gruppe
+# nicht mehr zu erkennen, was zum Arbeitsplatz gehoert und was eine Ablage
+# ist.
+GROUPFILES_MOUNT = "/mnt/gruppen"
 SESSION_NETWORK = os.environ.get("OTA_SESSION_NETWORK", "ota_sessions")
 PUBLIC_NETWORK = os.environ.get("OTA_PUBLIC_NETWORK", "ota_public")
 
@@ -148,6 +153,9 @@ class StartRequest(BaseModel):
     # Nur fuer den Verweis im Dateisystem. Ueber den Pfad entscheidet
     # `shelf_user`; dieser Name darf sich aendern, ohne dass etwas umzieht.
     shelf_name: str = ""
+    # Gruppenlaufwerke: je Eintrag {"id": …, "name": …}. Die Kennung
+    # entscheidet ueber das Verzeichnis, der Name ueber den Einhaengepunkt.
+    group_shelves: list[dict[str, str]] = []
     # Skripte, die fuer **diesen** Nutzer noch nie gelaufen sind. Welche das
     # sind, weiss die API — der Agent fuehrt aus und berichtet, was dabei
     # herauskam. Siehe `_run_once_scripts`.
@@ -290,6 +298,52 @@ def user_read(username: str, path: str) -> Response:
     )
 
 
+# --- Gruppenlaufwerke ----------------------------------------------------
+#
+# Dieselbe Mechanik wie bei der eigenen Ablage, nur mit einer anderen Wurzel.
+# **Wer in eine Gruppe gehoert, entscheidet die API** — der Agent kennt keine
+# Mitgliedschaften und soll auch keine kennen. Er bekommt eine Kennung und
+# liefert das Verzeichnis dazu.
+
+def _group_base(group_id: str):
+    try:
+        return shared_store.group_root(group_id)
+    except shared_store.SharedError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+
+@app.get("/groupfiles/{group_id}", dependencies=[Depends(require_token)])
+def group_list(group_id: str, path: str = "") -> dict[str, Any]:
+    return _shared(shared_store.listing, path, _group_base(group_id))
+
+
+@app.post("/groupfiles/{group_id}/upload", dependencies=[Depends(require_token)])
+async def group_upload(group_id: str, path: str = Form(default=""),
+                       file: UploadFile = File(...)) -> dict[str, Any]:
+    data = await file.read()
+    return _shared(shared_store.save, path, file.filename or "datei", data,
+                   _group_base(group_id))
+
+
+@app.post("/groupfiles/{group_id}/dir", dependencies=[Depends(require_token)])
+def group_mkdir(group_id: str, req: UserNameRequest) -> dict[str, Any]:
+    return _shared(shared_store.make_dir, req.path, req.name, _group_base(group_id))
+
+
+@app.delete("/groupfiles/{group_id}", dependencies=[Depends(require_token)])
+def group_remove(group_id: str, path: str) -> dict[str, Any]:
+    return _shared(shared_store.remove, path, _group_base(group_id))
+
+
+@app.get("/groupfiles/{group_id}/file", dependencies=[Depends(require_token)])
+def group_read(group_id: str, path: str) -> Response:
+    name, data = _shared(shared_store.read, path, _group_base(group_id))
+    return Response(
+        content=data, media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{name}"'},
+    )
+
+
 class RegistryRequest(BaseModel):
     url: str
     schema_version: str = "1.1"
@@ -426,6 +480,31 @@ def start_container(req: StartRequest) -> dict[str, Any]:
     # Home und nicht darin: Was der Browser sieht und was der Container sieht,
     # soll derselbe Ort sein — und der soll sich beim Sichern des Profils
     # nicht doppelt wiederfinden.
+    # Die Gruppenlaufwerke. Welche das sind, entscheidet die API beim Start —
+    # der Agent kennt keine Mitgliedschaften. Wer waehrend einer laufenden
+    # Session aus einer Gruppe faellt, behaelt sie bis zum naechsten Start;
+    # das ist eine bewusste Entscheidung (auth-roadmap.md).
+    for gruppe in req.group_shelves:
+        kennung = str(gruppe.get("id", ""))
+        name = str(gruppe.get("name", "")).strip()
+        if not kennung or not name:
+            continue
+        try:
+            ziel = shared_store.group_root(kennung)
+        except shared_store.SharedError as exc:
+            log.warning("Gruppenlaufwerk %s nicht einhaengbar: %s", name, exc)
+            continue
+        # Der Einhaengepunkt traegt den **Namen**, das Verzeichnis die
+        # Kennung. Wird die Gruppe umbenannt, heisst der Ordner im Container
+        # ab dem naechsten Start anders — die Daten bleiben, wo sie sind.
+        sicher = re.sub(r"[^A-Za-z0-9._-]+", "-", name).strip("-")[:64]
+        if not sicher:
+            continue
+        mounts.append(docker.types.Mount(
+            target=f"{GROUPFILES_MOUNT}/{sicher}", source=str(ziel), type="bind",
+        ))
+        shared_store.verweis_setzen(ziel, sicher)
+
     if req.shelf_user:
         try:
             ablage = shared_store.user_root(req.shelf_user)
@@ -516,13 +595,14 @@ def start_container(req: StartRequest) -> dict[str, Any]:
 
 
 def _link_shared(container) -> None:
-    """Legt Verweise auf die beiden Ablagen ins Home.
+    """Legt Verweise auf die Ablagen ins Home.
 
     Die eigentlichen Einhaengepunkte liegen ausserhalb des Home: Ein
     unbeschreibbares Verzeichnis mitten in den eigenen Dateien verwirrt mehr,
     als es hilft — und die eigene Ablage soll beim Sichern des Profils nicht
     ein zweites Mal auftauchen. Findbar sollen beide trotzdem sein, deshalb
-    die Verweise: „Gemeinsam" und „Austausch".
+    die Verweise: „Gemeinsam", „Austausch" und — falls es welche gibt —
+    „Gruppen".
 
     Nur wenn dort noch nichts liegt: Wer einen eigenen Ordner dieses Namens
     angelegt hat, behaelt ihn.
@@ -540,6 +620,17 @@ def _link_shared(container) -> None:
         f'elif [ -L "$HOME/Austausch" ] '
         f'  && [ "$(readlink "$HOME/Austausch")" = "{USERFILES_MOUNT}" ]; then '
         f'  rm -f "$HOME/Austausch"; '
+        f'fi; '
+        # Dasselbe fuer die Gruppenlaufwerke, aber als **ein** Verweis auf das
+        # Elternverzeichnis: Ein Verweis je Gruppe im Zuhause waere nach der
+        # dritten Gruppe unuebersichtlich, und beim Verlassen einer Gruppe
+        # bliebe er stehen und zeigte ins Leere.
+        f'if [ -d {GROUPFILES_MOUNT} ] '
+        f'  && [ -n "$(ls -A {GROUPFILES_MOUNT} 2>/dev/null)" ]; then '
+        f'  [ -e "$HOME/Gruppen" ] || ln -s {GROUPFILES_MOUNT} "$HOME/Gruppen"; '
+        f'elif [ -L "$HOME/Gruppen" ] '
+        f'  && [ "$(readlink "$HOME/Gruppen")" = "{GROUPFILES_MOUNT}" ]; then '
+        f'  rm -f "$HOME/Gruppen"; '
         f'fi; '
         'exit 0'
     )

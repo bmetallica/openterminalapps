@@ -9,13 +9,13 @@
 | **Profile** | Das Home jedes Nutzers ohne Caches: Projekte, Einstellungen, SSH-Schlüssel, Git-Konfiguration | **an** |
 | **Container** | Nur was ausserhalb des Home verändert wurde, ermittelt über `docker diff` | aus |
 | **Datenbank** | Nutzer, Gruppen, Workspaces, Zuweisungen, Audit-Log | **an** |
-| **Inhalte** | Skeleton-Profile, gemeinsame Ablage, die eigenen Ablagen der Nutzer | **an** (nur `make backup`) |
+| **Inhalte** | Skeleton-Profile, gemeinsame Ablage, die eigenen Ablagen der Nutzer, die Gruppenlaufwerke | **an** (nur `make backup`) |
 
 Die letzte Zeile fehlte bis zum 2026-08-28, und das war eine echte Lücke: Gesichert wurden nur die
-Zuhause der Nutzer und die Datenbank. Skeleton-Profile, gemeinsame Ablage und die eigenen Ablagen
-sind aber **von Hand angelegter Inhalt** — sie lassen sich weder aus dem Code noch aus einem Image
-wiederherstellen. Ein zurückgespielter Stand kam ohne sie zurück, und es fiel erst auf, wenn man
-sie brauchte.
+Zuhause der Nutzer und die Datenbank. Skeleton-Profile, gemeinsame Ablage, die eigenen Ablagen und
+die Gruppenlaufwerke sind aber **von Hand angelegter Inhalt** — sie lassen sich weder aus dem Code
+noch aus einem Image wiederherstellen. Ein zurückgespielter Stand kam ohne sie zurück, und es fiel
+erst auf, wenn man sie brauchte.
 
 **Warum nicht der ganze Container?** Am laufenden System gemessen: Das Profil eines
 Nutzers sind 326 MB, die Schreibschicht seines Containers 340 MB — ein vollständiger

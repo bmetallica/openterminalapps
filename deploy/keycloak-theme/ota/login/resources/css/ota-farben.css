@@ -182,3 +182,58 @@ a { color: var(--ota-accent); }
 }
 
 .pf-v5-c-input-group .pf-v5-c-button:hover { color: var(--ota-text); }
+
+/* ======================================================================
+   Das helle Gewand.
+
+   Gesetzt von `js/gewand.js`, das die Wahl aus OTAs `localStorage` liest.
+   Es werden ausschliesslich die `--ota-*`-Merkmale neu belegt — alles
+   darunter, auch die Umbiegung von PatternFly, rechnet mit ihnen und zieht
+   dadurch mit. Wer hier eine Regel statt eines Merkmals aendert, hat beim
+   naechsten Gewand wieder zwei Stellen zu pflegen.
+
+   Dieselben Werte wie in web/src/styles/app.css unter
+   `:root[data-theme="hell"]`. Zwei Dateien, ein Farbsatz: Die Anmeldemaske
+   gehoert Keycloak und laesst sich nicht aus OTAs Stylesheet bedienen.
+   ====================================================================== */
+:root[data-ota-gewand="hell"],
+:where(html[data-ota-gewand="hell"]) {
+  --ota-ground: #F1F4F9;
+  --ota-bay:    #FFFFFF;
+  --ota-bay-2:  #E9EDF4;
+  --ota-well:   #F7F9FC;
+  --ota-edge:   #D7DEE8;
+  --ota-edge-lit: #B4BFCD;
+  --ota-text:   #0F172A;
+  --ota-label:  #4A5568;
+  --ota-mute:   #6B7684;
+  --ota-key:    #1E293B;
+  --ota-accent: #0E7490;
+
+  /* Der Schriftzug ueber der Karte.
+     ------------------------------------------------------------------
+     PatternFly setzt ihn mit `#kc-header-wrapper { color: ... !important }`
+     — und zwar auf „helle Schrift", weil es von einem dunklen Grund ausgeht.
+     Im dunklen Gewand stimmt das zufaellig; im hellen stand der Schriftzug
+     weiss auf weiss und war schlicht unsichtbar.
+     Ein Gegen-`!important` waere der kurze Weg und der falsche: Die Regel
+     rechnet mit einer Variablen, also wird die Variable gesetzt. Bewusst nur
+     hier im hellen Gewand — PatternFly benutzt sie auch anderswo fuer helle
+     Schrift auf dunklem Grund, und dort ist sie richtig. */
+  --pf-v5-global--Color--light-100: var(--ota-text);
+}
+
+/* Der Anmeldeknopf dreht sich mit: dunkle Flaeche, heller Text — genau wie
+   die Primaeraktion in OTA. Ohne diese Regel bliebe heller Text auf hellem
+   Grund stehen, denn die Textfarbe des Knopfs stammt nicht aus `--ota-*`. */
+:root[data-ota-gewand="hell"] .pf-v5-c-button.pf-m-primary,
+:root[data-ota-gewand="hell"] input[type="submit"].pf-m-primary,
+:root[data-ota-gewand="hell"] #kc-login {
+  color: #F8FAFC;
+}
+
+:root[data-ota-gewand="hell"] .pf-v5-c-button.pf-m-primary:hover,
+:root[data-ota-gewand="hell"] #kc-login:hover {
+  background: #334155;
+  border-color: #334155;
+}

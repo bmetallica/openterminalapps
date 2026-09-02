@@ -238,6 +238,15 @@ class Template(Base):
     user_shelf: Mapped[bool] = mapped_column(Boolean, default=True,
                                              server_default="true")
 
+    # Haengt die Laufwerke der Gruppen ein, in denen der Nutzer ist — unter
+    # /mnt/gruppen/<name>, beschreibbar, ein Ordner je Gruppe.
+    #
+    # Vorgabe an, aus demselben Grund wie oben: Ein gemeinsames Laufwerk ist
+    # der uebliche Weg, im Team an denselben Dateien zu arbeiten. Wer einen
+    # Arbeitsplatz bewusst abgeschottet haben will, schaltet es hier ab.
+    group_shelf: Mapped[bool] = mapped_column(Boolean, default=True,
+                                              server_default="true")
+
     persistence_scope: Mapped[str] = mapped_column(String(16), default="user")
     idle_minutes: Mapped[int] = mapped_column(Integer, default=60)
     idle_action: Mapped[str] = mapped_column(String(16), default="stop")

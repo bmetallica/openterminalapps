@@ -27,6 +27,12 @@ export type App = {
   is_enabled: boolean
 }
 
+/** Ein Gruppenlaufwerk, wie es der angemeldete Mensch sieht. */
+export type GroupDrive = {
+  id: string
+  name: string
+}
+
 export type Template = {
   id: string
   slug: string
@@ -49,6 +55,7 @@ export type Template = {
   /** Pfade im Skeleton, die bei jedem Start überschreiben. */
   skeleton_enforce: string[]
   user_shelf: boolean
+  group_shelf: boolean
   env: Record<string, string>
   is_enabled: boolean
   apps: App[]
@@ -619,6 +626,27 @@ export const api = {
     }),
   filesRemove: (path: string) =>
     call<{ status: string }>(`/files?path=${encodeURIComponent(path)}`, { method: 'DELETE' }),
+
+  // Gruppenlaufwerke. Anders als bei der eigenen Ablage steht der Empfänger
+  // hier in der Adresse — es gibt ja mehrere. Ob jemand hineindarf,
+  // entscheidet die Mitgliedschaft, und das prüft die API bei jedem Aufruf.
+  myGroupDrives: () => call<GroupDrive[]>('/groupfiles'),
+  groupList: (gid: string, path = '') =>
+    call<SharedListing>(`/groupfiles/${gid}?path=${encodeURIComponent(path)}`),
+  groupUpload: (gid: string, path: string, file: File) => {
+    const body = new FormData()
+    body.append('file', file)
+    return call<{ name: string; size_bytes: number }>(
+      `/groupfiles/${gid}/upload?path=${encodeURIComponent(path)}`,
+      { method: 'POST', body })
+  },
+  groupMkdir: (gid: string, path: string, name: string) =>
+    call<{ name: string }>(`/groupfiles/${gid}/dir`, {
+      method: 'POST', body: JSON.stringify({ path, name }),
+    }),
+  groupRemove: (gid: string, path: string) =>
+    call<{ status: string }>(
+      `/groupfiles/${gid}?path=${encodeURIComponent(path)}`, { method: 'DELETE' }),
 
   webApps: () => call<WebApp[]>('/webapps'),
   addWebApp: (b: WebAppIn) =>

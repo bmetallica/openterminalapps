@@ -105,7 +105,7 @@ else
     bad "Der Inhaltsschritt erzeugte kein Archiv"
   else
     DRIN=$(tar --zstd -tf "$PROBE" 2>/dev/null | awk -F/ 'NF>2 {print $3}' | sort -u)
-    for teil in skeletons shared userfiles; do
+    for teil in skeletons shared userfiles groupfiles; do
       if grep -qx "$teil" <<<"$DRIN"; then
         ok "srv/ota/$teil ist in der Sicherung"
       else

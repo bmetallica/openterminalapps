@@ -29,7 +29,8 @@ setup:
 	@./scripts/traefik-config.sh
 	@./scripts/make-cert.sh
 	@mkdir -p /srv/ota/profiles /srv/ota/skeletons /srv/ota/shared \
-	          /srv/ota/backups /srv/ota/runtime /srv/ota/userfiles
+	          /srv/ota/backups /srv/ota/runtime /srv/ota/userfiles \
+	          /srv/ota/groupfiles
 	@echo
 	@echo "Bereit. Weiter mit:  make up"
 
@@ -148,6 +149,7 @@ backup:
 	@tar --zstd -cf backups/inhalte-$$(date +%F-%H%M).tar.zst \
 	  --exclude='*.sock' -C / \
 	  $$(cd / && ls -d srv/ota/skeletons srv/ota/shared srv/ota/userfiles \
+	     srv/ota/groupfiles \
 	     2>/dev/null) 2>/dev/null || true
 	@ls -la backups/ | tail -5
 	@echo "Ein Backup, dessen Wiederherstellung nie getestet wurde, ist kein Backup."

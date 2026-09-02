@@ -146,6 +146,10 @@ services:
       # Eigene Ablage je Nutzer. Anders als die gemeinsame liegt sie
       # beschreibbar im Container — der Weg hinein und wieder heraus.
       OTA_USERFILES_ROOT: "${OTA_USERFILES_ROOT:-/srv/ota/userfiles}"
+      # Gemeinsame Laufwerke je Gruppe. Wie die eigene Ablage beschreibbar,
+      # aber fuer alle Mitglieder dieselben Dateien. Benannt nach der Kennung
+      # der Gruppe, nicht nach ihrem Namen — der laesst sich aendern.
+      OTA_GROUPFILES_ROOT: "${OTA_GROUPFILES_ROOT:-/srv/ota/groupfiles}"
       # Skeleton-Profile je Workspace: womit ein Zuhause anfaengt.
       OTA_SKELETON_ROOT: "${OTA_SKELETON_ROOT:-/srv/ota/skeletons}"
       OTA_SESSION_NETWORK: ota_sessions
@@ -163,6 +167,7 @@ services:
       # Bind-Mount in Session-Container weiterreichen kann.
       - ${OTA_SHARED_ROOT:-/srv/ota/shared}:${OTA_SHARED_ROOT:-/srv/ota/shared}
       - ${OTA_USERFILES_ROOT:-/srv/ota/userfiles}:${OTA_USERFILES_ROOT:-/srv/ota/userfiles}
+      - ${OTA_GROUPFILES_ROOT:-/srv/ota/groupfiles}:${OTA_GROUPFILES_ROOT:-/srv/ota/groupfiles}
       - ${OTA_SKELETON_ROOT:-/srv/ota/skeletons}:${OTA_SKELETON_ROOT:-/srv/ota/skeletons}
       # Ein einziges Wurzelverzeichnis für alle Sicherungen. Genau deshalb
       # lässt es sich später ohne Änderung an OTA durch einen NFS-Mount

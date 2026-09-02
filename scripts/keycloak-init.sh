@@ -257,6 +257,114 @@ rolle_anlegen() {
   esac
 }
 
+# ------------------------------------------------ Passkeys als zweite Stufe
+#
+# **Warum zwei Unterfluesse und nicht einfach zwei Alternativen.** Der
+# naheliegende Weg waere, `auth-otp-form` und `webauthn-authenticator`
+# nebeneinander auf ALTERNATIVE zu stellen: „Code oder Passkey, such dir was
+# aus." Gemessen am 2026-09-02 gegen dieses Keycloak: Wer die Rolle traegt und
+# **noch keins von beiden** eingerichtet hat, kommt dann gar nicht mehr
+# herein — die Anmeldung endet mit „Invalid username or password". Also nicht
+# nur eine Sperre, sondern eine mit einer irrefuehrenden Meldung. Auch eine
+# vorgemerkte Ersteinrichtung (`CONFIGURE_TOTP`) hilft nicht: Vorgemerkte
+# Aktionen laufen **nach** der Anmeldung, und so weit kommt es gar nicht.
+#
+# Deshalb zwei Zweige, beide ALTERNATIVE:
+#
+#   Bedingung: Rolle „zweiter-faktor"          REQUIRED
+#   ├─ ota-passkey                             ALTERNATIVE
+#   │    ├─ Bedingung: beim Nutzer eingerichtet  REQUIRED
+#   │    └─ WebAuthn                             REQUIRED
+#   └─ ota-einmalkennwort                      ALTERNATIVE
+#        └─ Einmalkennwort                       REQUIRED
+#
+# Wer einen Passkey hinterlegt hat, nimmt den ersten Zweig. Wer keinen hat,
+# faellt durch — die Bedingung ist dann falsch — und landet im zweiten, wo
+# das Einmalkennwort notfalls seine eigene Einrichtung anstoesst. Damit gibt
+# es keinen Zustand, in dem niemand mehr hereinkommt.
+#
+# Einen Passkey hinterlegt man in Keycloaks Kontoverwaltung; die noetige
+# Aktion `webauthn-register` ist im Realm ab Werk eingeschaltet.
+passkey_einrichten() {
+  local zweig; zweig=$(python3 -c "
+import urllib.parse; print(urllib.parse.quote('ota-browser Browser - Conditional 2FA'))")
+
+  kc GET "/admin/realms/$REALM/authentication/flows/ota-browser/executions" >/dev/null
+  local vorhanden; vorhanden=$(kc_body)
+
+  if ! echo "$vorhanden" | grep -q "ota-passkey"; then
+    kc POST "/admin/realms/$REALM/authentication/flows/$zweig/executions/flow" \
+      '{"alias":"ota-passkey","type":"basic-flow","description":"Passkey, wenn einer hinterlegt ist"}' \
+      >/dev/null
+    kc POST "/admin/realms/$REALM/authentication/flows/ota-passkey/executions/execution" \
+      '{"provider":"conditional-user-configured"}' >/dev/null
+    kc POST "/admin/realms/$REALM/authentication/flows/ota-passkey/executions/execution" \
+      '{"provider":"webauthn-authenticator"}' >/dev/null
+    ok "Zweig ota-passkey angelegt"
+  else
+    info "Zweig ota-passkey gibt es schon"
+  fi
+
+  kc GET "/admin/realms/$REALM/authentication/flows/ota-browser/executions" >/dev/null
+  if ! kc_body | grep -q "ota-einmalkennwort"; then
+    kc POST "/admin/realms/$REALM/authentication/flows/$zweig/executions/flow" \
+      '{"alias":"ota-einmalkennwort","type":"basic-flow","description":"Einmalkennwort, wenn kein Passkey da ist"}' \
+      >/dev/null
+    kc POST "/admin/realms/$REALM/authentication/flows/ota-einmalkennwort/executions/execution" \
+      '{"provider":"auth-otp-form"}' >/dev/null
+    ok "Zweig ota-einmalkennwort angelegt"
+  else
+    info "Zweig ota-einmalkennwort gibt es schon"
+  fi
+
+  # Die Anforderungen. Gewaehlt wird ueber **Ebene und Kennung** — dieselbe
+  # Kennung steht seit den Unterfluessen mehrfach im Baum, und mit der
+  # falschen ginge die Einstellung ins Leere.
+  local eintrag ebene kennung wunsch id
+  for eintrag in \
+    "2:ota-passkey:ALTERNATIVE" \
+    "2:ota-einmalkennwort:ALTERNATIVE" \
+    "2:webauthn-authenticator:DISABLED" \
+    "3:conditional-user-configured:REQUIRED" \
+    "3:webauthn-authenticator:REQUIRED" \
+    "3:auth-otp-form:REQUIRED"
+  do
+    ebene="${eintrag%%:*}"
+    kennung="${eintrag#*:}"; kennung="${kennung%%:*}"
+    wunsch="${eintrag##*:}"
+    kc GET "/admin/realms/$REALM/authentication/flows/ota-browser/executions" >/dev/null
+    id=$(kc_body | LVL="$ebene" KEY="$kennung" python3 -c "
+import json, os, sys
+lvl = int(os.environ['LVL']); key = os.environ['KEY']
+t = [e['id'] for e in json.load(sys.stdin)
+     if e['level'] == lvl and (e.get('providerId') == key or e.get('displayName') == key)]
+print(t[0] if t else '')")
+    if [ -z "$id" ]; then
+      bad "Schritt $kennung auf Ebene $ebene nicht gefunden"
+      return 1
+    fi
+    kc PUT "/admin/realms/$REALM/authentication/flows/ota-browser/executions" \
+      "{\"id\":\"$id\",\"requirement\":\"$wunsch\"}" >/dev/null
+  done
+  ok "Passkey- und Einmalkennwort-Zweig stehen nebeneinander"
+
+  # Der Name, den der Browser beim Anlegen eines Passkeys anzeigt. Ab Werk
+  # steht dort „keycloak", und das sagt niemandem etwas.
+  kc GET "/admin/realms/$REALM" >/dev/null
+  if [ "$(kc_body | jq_py "d.get('webAuthnPolicyRpEntityName','')")" = "OpenTerminalApps" ]; then
+    info "Der Passkey-Name steht bereits auf OpenTerminalApps"
+  else
+    # `webAuthnPolicyRpId` bleibt leer: Dann leitet Keycloak sie aus dem
+    # aufgerufenen Namen ab, und OTA ist bewusst ueber IP **und** Domain
+    # erreichbar. Ein fest eingetragener Wert wuerde den jeweils anderen Weg
+    # unbrauchbar machen.
+    local code; code=$(kc PUT "/admin/realms/$REALM" \
+      "{\"realm\":\"$REALM\",\"webAuthnPolicyRpEntityName\":\"OpenTerminalApps\"}")
+    [ "$code" = "204" ] && ok "Passkeys melden sich als OpenTerminalApps" \
+                        || bad "Passkey-Name setzen: HTTP $code $(kc_body)"
+  fi
+}
+
 fluss_einrichten() {
   kc GET "/admin/realms/$REALM/authentication/flows" >/dev/null
   if kc_body | jq_py "[f['alias'] for f in d]" | grep -q "ota-browser"; then
@@ -285,21 +393,26 @@ import urllib.parse; print(urllib.parse.quote('ota-browser Browser - Conditional
   # Und jetzt die Anforderungen. Die Bedingung „user configured" muss **aus**
   # sein: Sie liesse den zweiten Faktor nur für die gelten, die ihn schon
   # haben — und damit könnte ihn jeder umgehen, indem er ihn nicht einrichtet.
+  #
+  # `auth-otp-form` steht hier bewusst **nicht** mehr: Seit es Passkeys gibt,
+  # liegt es in einem eigenen Unterfluss (siehe `passkey_einrichten`). Auf
+  # dieser Ebene wird es abgeschaltet, sonst liefe es zusaetzlich.
   local id
   for eintrag in \
     "conditional-user-role:REQUIRED" \
     "conditional-user-configured:DISABLED" \
     "conditional-credential:DISABLED" \
-    "auth-otp-form:REQUIRED"
+    "auth-otp-form:DISABLED"
   do
     local provider="${eintrag%%:*}" wunsch="${eintrag##*:}"
     id=$(echo "$schritte" | PROVIDER="$provider" python3 -c "
 import json, os, sys
 p = os.environ['PROVIDER']
-# Nur im 2FA-Zweig: 'user configured' steht auch im Organisations-Zweig, und
-# den fassen wir nicht an.
+# Genau Ebene 2: 'user configured' steht auch im Organisations-Zweig (Ebene 2,
+# anderer Ast) und seit den Passkeys noch einmal auf Ebene 3 im Unterfluss.
+# Der Organisations-Ast kommt vor dem Formular-Ast, deshalb der letzte Treffer.
 treffer = [e['id'] for e in json.load(sys.stdin)
-           if e.get('providerId') == p and e['level'] >= 2 and e['index'] < 90]
+           if e.get('providerId') == p and e['level'] == 2]
 print(treffer[-1] if treffer else '')")
     [ -z "$id" ] && continue
     kc PUT "/admin/realms/$REALM/authentication/flows/ota-browser/executions" \
@@ -322,8 +435,12 @@ next((e['id'] for e in d if e.get('providerId') == 'conditional-user-role'), '')
     return 1
   fi
 
+  # `authenticatorConfig` mit **t**, nicht `authenticationConfig`. Die
+  # Liste der Schritte nennt das Feld anders als der einzelne Schritt, und
+  # der falsche Name traf nie zu: Bei jedem Lauf entstand eine neue
+  # Konfiguration, die alte blieb verwaist liegen. Gefunden am 2026-09-02.
   kc GET "/admin/realms/$REALM/authentication/executions/$id" >/dev/null
-  if kc_body | grep -q "authenticationConfig"; then
+  if kc_body | grep -q "authenticatorConfig"; then
     info "Rollenbedingung ist bereits eingestellt"
   else
     local code; code=$(kc POST "/admin/realms/$REALM/authentication/executions/$id/config" \
@@ -333,6 +450,8 @@ next((e['id'] for e in d if e.get('providerId') == 'conditional-user-role'), '')
       *)   bad "Rollenbedingung einstellen: HTTP $code $(kc_body)"; return 1 ;;
     esac
   fi
+
+  passkey_einrichten || return 1
 
   # Zuletzt binden. Erst hier wird es scharf.
   kc GET "/admin/realms/$REALM" >/dev/null

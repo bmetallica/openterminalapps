@@ -16,6 +16,7 @@ import { anmeldePfad, openInTab, parseRoute, viewPath, type Route } from './lib/
 import { ApiError, api, type Host, type Me, type Session, type Stream, type Template } from './lib/api'
 import { gb } from './lib/format'
 import { setLang, t, useLang, type Lang } from './lib/i18n'
+import { setTheme, useTheme, type Theme } from './lib/theme'
 import './styles/app.css'
 
 type View = 'dashboard' | 'workspaces' | 'webapps' | 'images' | 'registries' | 'storage'
@@ -220,6 +221,7 @@ export default function App() {
         </button>
 
         <LangSwitch />
+        <ThemeSwitch />
 
         <button className="rail__btn" onClick={() => void logout()}
           title={t('Abmelden ({name})', { name: me.username })}>
@@ -298,6 +300,35 @@ function LangSwitch() {
           title={l === 'de' ? 'Deutsch' : 'English'}
           onClick={() => setLang(l)}>
           {l.toUpperCase()}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/**
+ * Dunkel, hell oder „wie der Rechner".
+ *
+ * Drei sichtbare Schalter, wie bei der Sprache: Bei so wenigen Zuständen ist
+ * der aktuelle damit auf einen Blick zu erkennen, und ein Klappmenü wäre ein
+ * Klick mehr für etwas, das man selten ändert.
+ */
+function ThemeSwitch() {
+  const current = useTheme()
+  const namen: Record<Theme, string> = {
+    system: t('Wie der Rechner'),
+    hell: t('Hell'),
+    dunkel: t('Dunkel'),
+  }
+  const zeichen: Record<Theme, string> = { system: '◐', hell: '☀', dunkel: '☾' }
+  return (
+    <div className="rail__lang" role="radiogroup" aria-label={t('Gewand')}>
+      {(['system', 'hell', 'dunkel'] as Theme[]).map((v) => (
+        <button key={v} type="button" role="radio" aria-checked={current === v}
+          className={`rail__langopt${current === v ? ' is-on' : ''}`}
+          title={namen[v]} aria-label={namen[v]}
+          onClick={() => setTheme(v)}>
+          <span aria-hidden="true">{zeichen[v]}</span>
         </button>
       ))}
     </div>

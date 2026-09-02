@@ -94,12 +94,14 @@ In detail in [handbook chapter 2](docs/wiki/02-erste-schritte.md) (German).
 - **A quota per home directory** and a floor for free disk space — a comprehensible refusal instead
   of a container that stalls mid-work on a write
 - **Visibility per application and group**, for when a licence does not cover everyone
-- **Two-factor enforceable per group**; `/healthz` and `/metrics` for monitoring
+- **Two-factor enforceable per group**, with a **passkey** (fingerprint, face, security key) or a
+  one-time code — offered, not required; `/healthz` and `/metrics` for monitoring
 - Users, groups and permissions; administrators are `root` inside their own container
 - **Sign-in against LDAP or Active Directory**, with group mapping and a check button. Local
   accounts stay untouched — an entry of the same name cannot take one over
 - Sign-in limit configurable (30 min to 48 h), rolling — nobody working is ever signed out
-- Interface in German and English, switchable before signing in as well
+- Interface in German and English, **dark or light** (or matching the system) — both switchable
+  before signing in as well
 - The handbook lives **inside the application**, filtered by permission
 - **My account** for everyone: change your own password, set up two-factor with recovery codes
 
@@ -110,7 +112,11 @@ In detail in [handbook chapter 2](docs/wiki/02-erste-schritte.md) (German).
 - **Recipes** for anything that is not a plain package — with a guided builder for your own
 - **Find applications inside the image**: OTA reads the `.desktop` files and suggests name, symbol
   and start command. Nobody has to know where a binary lives
-- **Shared storage** for files that belong in every workspace — read-only inside the container
+- **Three kinds of storage**: shared storage for files that belong in every workspace (read-only
+  inside the container), a **personal one per user** under `/mnt/austausch` — writable, the way in
+  and back out —, and **a drive per group** under `/mnt/gruppen/<name>`: the same files for a team.
+  Membership decides who gets into a group drive and nothing else — an administrator only reaches
+  the groups they are in themselves
 - **A skeleton profile** per workspace: what a home directory starts out as. Individual paths can be
   enforced at every start — the exception, not the rule. Plus **a subtree per application** that
   only arrives the first time that application starts: whoever only uses the terminal does not need

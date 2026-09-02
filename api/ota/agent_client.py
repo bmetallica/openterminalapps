@@ -231,6 +231,42 @@ def user_read(username: str, path: str) -> tuple[bytes, str]:
     return resp.content, name
 
 
+# --- Gruppenlaufwerke ----------------------------------------------------
+#
+# Wer in eine Gruppe gehoert, entscheidet die API (routers/groupfiles.py).
+# Hier steht nur der Weg zum Agent.
+
+def group_list(group_id: str, path: str = "") -> dict[str, Any]:
+    return _call("GET", f"/groupfiles/{group_id}", params={"path": path})
+
+
+def group_upload(group_id: str, path: str, name: str, data: bytes) -> dict[str, Any]:
+    return _call("POST", f"/groupfiles/{group_id}/upload", data={"path": path},
+                 files={"file": (name, data)})
+
+
+def group_mkdir(group_id: str, path: str, name: str) -> dict[str, Any]:
+    return _call("POST", f"/groupfiles/{group_id}/dir",
+                 json={"path": path, "name": name})
+
+
+def group_remove(group_id: str, path: str) -> dict[str, Any]:
+    return _call("DELETE", f"/groupfiles/{group_id}", params={"path": path})
+
+
+def group_read(group_id: str, path: str) -> tuple[bytes, str]:
+    """Der Inhalt einer Datei und ihr Name. Kein JSON, deshalb der eigene Weg."""
+    import httpx
+
+    url = f"{settings().agent_url.rstrip('/')}/groupfiles/{group_id}/file"
+    with httpx.Client(timeout=300.0) as client:
+        resp = client.get(url, headers=_headers(), params={"path": path})
+    if resp.status_code >= 400:
+        raise HTTPException(resp.status_code, "Die Datei liess sich nicht lesen.")
+    name = path.rsplit("/", 1)[-1] or "datei"
+    return resp.content, name
+
+
 def pull_image(ref: str) -> dict[str, Any]:
     return _call("POST", "/images/pull", json={"ref": ref})
 

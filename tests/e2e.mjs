@@ -78,6 +78,13 @@ await page.evaluateOnNewDocument(() => {
   try { localStorage.setItem('ota.lang', 'de') } catch { /* privater Modus */ }
 })
 const errors = []
+
+// Was dieser Lauf angelegt hat und am Ende wieder verschwinden muss.
+//
+// Nicht erst im Erfolgsfall aufräumen: Bricht der Lauf mittendrin ab, blieb
+// sonst eine Prüfvorlage im Katalog stehen — und die sieht ein Mensch beim
+// nächsten Blick auf sein Dashboard. Genau das ist zweimal passiert.
+const aufzuraeumen = { vorlagen: [], sessions: [] }
 page.on('pageerror', (e) => errors.push(String(e)))
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()) })
 
@@ -510,6 +517,7 @@ try {
           return { ok: false, slug: 'Prüfung zweite Session', daten: angelegt.daten }
         }
         const vorlage = angelegt.daten
+        aufzuraeumen.vorlagen.push(vorlage.id)
 
         // Der Start dauert: Der Aufruf kehrt erst zurück, wenn der Container
         // steht **und** Traefik die Route kennt. In dieser Zeit lädt sich der
@@ -544,6 +552,7 @@ try {
         if (lage.vorlage) await api(`/api/templates/${lage.vorlage}`, { method: 'DELETE' })
       } else {
         const sid2 = lage.daten.id
+        aufzuraeumen.sessions.push(sid2)
         const cn2 = `ota-s-${sid2.slice(0, 12)}`
 
         // Warten, bis der zweite Container wirklich steht — und zwar so, wie
@@ -610,6 +619,8 @@ try {
         }
 
         // Aufräumen: weder Session noch Vorlage noch Zuhause bleiben stehen.
+        // Der schnelle Weg — das Netz für den Abbruchfall spannt der
+        // finally-Block ganz unten.
         //
         // Das Zuhause gehört ausdrücklich dazu: Eine Vorlage mit eigenem
         // Profil legt unter der Kennung des Nutzers ein Verzeichnis nach
@@ -1293,6 +1304,89 @@ try {
   await page.evaluate((name) =>
     fetch(`/api/shared?path=${encodeURIComponent(name)}`, { method: 'DELETE' }), stamp)
 
+  // ------------------------------------------------------------ Gewand
+  //
+  // Der klassische Fehler beim zweiten Farbsatz ist nicht, dass er hässlich
+  // wird — er ist, dass **eine** Farbe im Regelwerk stehenbleibt statt in
+  // einem Merkmal. Dann steht heller Text auf hellem Grund, und es fällt
+  // niemandem auf, der nur das dunkle Gewand benutzt.
+  //
+  // Deshalb wird hier nicht das Aussehen geprüft, sondern der Kontrast: Für
+  // die tragenden Flächen muss sich Text von Grund unterscheiden — in beiden
+  // Gewändern.
+  console.log('\nGewand')
+  {
+    const messen = () => page.evaluate(() => {
+      const hell = (farbe) => {
+        const m = farbe.match(/[\d.]+/g)
+        if (!m) return null
+        const [r, g, b, a] = m.map(Number)
+        if (a === 0) return null            // durchsichtig: der Grund darunter gilt
+        return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255
+      }
+      // Den wirklich sichtbaren Grund suchen: Ein Element ohne eigenen
+      // Hintergrund zeigt den seines Elternteils.
+      const grundVon = (el) => {
+        for (let e = el; e; e = e.parentElement) {
+          const l = hell(getComputedStyle(e).backgroundColor)
+          if (l !== null) return l
+        }
+        return hell(getComputedStyle(document.body).backgroundColor) ?? 0
+      }
+      const ziele = ['body', '.rail', '.rail__btn', '.panel', '.btn',
+                     '.btn--primary', '.h-page', '.sub']
+      const out = {}
+      for (const sel of ziele) {
+        const el = document.querySelector(sel)
+        if (!el) continue
+        out[sel] = {
+          text: hell(getComputedStyle(el).color),
+          grund: grundVon(el),
+        }
+      }
+      out.__body = hell(getComputedStyle(document.body).backgroundColor)
+      return out
+    })
+
+    const pruefe = (werte, wie) => {
+      const schwach = Object.entries(werte)
+        .filter(([k]) => !k.startsWith('__'))
+        .filter(([, v]) => v.text !== null && Math.abs(v.text - v.grund) < 0.25)
+        .map(([k, v]) => `${k} (${v.text.toFixed(2)} auf ${v.grund.toFixed(2)})`)
+      check(schwach.length === 0, schwach.length
+        ? `${wie}: zu wenig Kontrast bei ${schwach.join(', ')}`
+        : `${wie}: Text hebt sich überall vom Grund ab`)
+    }
+
+    // Ohne Zutun muss es dunkel sein. Das ist die eigentliche Prüfung an
+    // dieser Stelle: Die Vorgabe ist **dunkel** und nicht „wie der Rechner" —
+    // sonst wäre OTA für jeden, dessen Betriebssystem hell meldet, plötzlich
+    // hell. Genau das ist beim ersten Lauf passiert, und der Testbrowser
+    // meldet hell.
+    const dunkel = await messen()
+    check((dunkel.__body ?? 1) < 0.3,
+      `Ohne Zutun dunkel (Grundhelligkeit ${dunkel.__body?.toFixed(2)})`)
+    pruefe(dunkel, 'Dunkel')
+
+    await page.evaluate(() => {
+      localStorage.setItem('ota.theme', 'hell')
+      document.documentElement.setAttribute('data-theme', 'hell')
+    })
+    await new Promise((r) => setTimeout(r, 300))
+
+    const hellWerte = await messen()
+    check((hellWerte.__body ?? 0) > 0.7,
+      `Hell ist hell (Grundhelligkeit ${hellWerte.__body?.toFixed(2)})`)
+    pruefe(hellWerte, 'Hell')
+    await shot(page, '20-gewand-hell')
+
+    // Und wieder zurück — der Test hinterlässt kein umgestelltes Gewand.
+    await page.evaluate(() => {
+      localStorage.removeItem('ota.theme')
+      document.documentElement.removeAttribute('data-theme')
+    })
+  }
+
   // ------------------------------------------------------------ Abmelden
   console.log('\nAbmelden')
   await page.evaluate(() => {
@@ -1317,6 +1411,54 @@ try {
   bad(`Abbruch: ${err.message}`)
   try { await shot(page, 'zz-fehler') } catch { /* egal */ }
 } finally {
+  // Aufräumen mit einer **frischen** Seite. Die Tabs, über die der Lauf
+  // gearbeitet hat, können geschlossen, abgemeldet oder mitten in einer
+  // Navigation sein — ein `fetch` von dort scheitert dann mit "Failed to
+  // fetch", und zwar lautlos.
+  if (aufzuraeumen.vorlagen.length || aufzuraeumen.sessions.length) {
+    try {
+      const putz = await browser.newPage()
+      // `networkidle2` und eine Atempause: Die Seite leitet nach dem Laden
+      // noch auf die Anmeldemaske um, und ein `evaluate` mitten in dieser
+      // Navigation stirbt mit "Execution context was destroyed".
+      await putz.goto(`${BASE}/`, { waitUntil: 'networkidle2' })
+      await new Promise((r) => setTimeout(r, 500))
+      const angemeldet = await putz.evaluate(async (u, p) => {
+        const r = await fetch('/api/auth/login', {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: u, password: p }),
+        })
+        return r.ok
+      }, USER, PW)
+
+      if (angemeldet) {
+        for (const sid of aufzuraeumen.sessions) {
+          await putz.evaluate((id) => fetch(`/api/sessions/${id}`,
+            { method: 'DELETE', credentials: 'include' }).catch(() => {}), sid)
+        }
+        await new Promise((r) => setTimeout(r, 2000))
+        for (const tid of aufzuraeumen.vorlagen) {
+          await putz.evaluate((id) => fetch(`/api/templates/${id}`,
+            { method: 'DELETE', credentials: 'include' }).catch(() => {}), tid)
+        }
+        // Und nachsehen, statt es zu glauben.
+        const rest = await putz.evaluate(async (ids) => {
+          const alle = await (await fetch('/api/templates',
+            { credentials: 'include' })).json()
+          return alle.filter((t) => ids.includes(t.id)).map((t) => t.slug)
+        }, aufzuraeumen.vorlagen)
+        check(rest.length === 0, rest.length
+          ? `Prüfvorlagen blieben im Katalog stehen: ${rest.join(', ')}`
+          : 'Der Lauf hinterlässt keine Prüfvorlage im Katalog')
+      } else {
+        bad('Aufräumen nicht möglich — Anmeldung schlug fehl')
+      }
+      await putz.close()
+    } catch (err) {
+      bad(`Aufräumen fehlgeschlagen: ${err.message}`)
+    }
+  }
   await browser.close()
 }
 

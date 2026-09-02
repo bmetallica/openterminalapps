@@ -191,8 +191,13 @@ if [ -n "$SID" ]; then
   else
     bad "Support-Gruppe für die Prüfung liess sich nicht anlegen"
   fi
+  # Gezaehlt werden **fremde** Sessions, nicht alle. Ein Nutzer, der selbst
+  # gerade einen Arbeitsplatz offen hat, sieht ihn hier zu Recht — der Punkt
+  # ist, dass `all_users=true` ihm nichts zeigt, was ihm nicht gehoert.
+  # Frueher stand hier "0 Sessions insgesamt"; das ging nur so lange gut, wie
+  # der Testnutzer an dieser Stelle noch keine eigene hatte.
   SEEN=$(api "$TMP/user.jar" "$BASE/api/sessions?all_users=true" \
-    | python3 -c 'import sys,json;print(len(json.load(sys.stdin)))')
+    | jqp "str(len([s for s in d if s.get('username') != '$TEST_USER']))")
   expect "0" "$SEEN" "all_users=true zeigt einem Nutzer nichts Fremdes"
 else
   bad "Keine laufende Session zum Prüfen vorhanden"
@@ -792,6 +797,113 @@ next((u['auth_provider'] for u in d if u['username'] == '$ADMIN_USER'), '')")
     "$KC_INT/admin/realms/ota/users/$DID" -H "Authorization: Bearer $KT" >/dev/null 2>&1
 fi
 
+# ----------------------------------------- Passkey neben Einmalkennwort
+#
+# Wer die Rolle `zweiter-faktor` traegt, weist sich mit einem Passkey **oder**
+# einem Einmalkennwort aus. Geprueft wird hier vor allem der Fall, der beim
+# naheliegenden Aufbau schiefgeht: jemand, der **noch keins von beiden** hat.
+#
+# Der naheliegende Aufbau waere, beide Verfahren nebeneinander auf ALTERNATIVE
+# zu stellen. Gemessen am 2026-09-02: Dann endet die Anmeldung fuer so
+# jemanden mit „Invalid username or password" — eine Sperre mit einer
+# irrefuehrenden Meldung, und niemand kaeme mehr herein. Deshalb zwei
+# Unterfluesse, und deshalb dieser Test.
+echo
+echo "Passkey neben Einmalkennwort"
+
+if [ -z "${OTA_KEYCLOAK_SECRET:-}" ]; then
+  bad "OTA_KEYCLOAK_SECRET fehlt — die Passkey-Prüfungen entfallen"
+else
+  KC_ADM=$(docker exec -i ota-agent curl -s -X POST \
+    "$KC_INT/realms/master/protocol/openid-connect/token" \
+    -d "client_id=admin-cli" -d "username=${KEYCLOAK_ADMIN_USER:-setup}" \
+    --data-urlencode "password=${KEYCLOAK_ADMIN_PW:-}" -d "grant_type=password" \
+    | jqp "d.get('access_token','')")
+
+  if [ -z "$KC_ADM" ]; then
+    bad "Kein Keycloak-Token — die Passkey-Prüfungen entfallen"
+  else
+    kcadm() {  # kcadm <methode> <pfad> [daten]
+      if [ -n "${3:-}" ]; then
+        docker exec -i ota-agent curl -s -X "$1" "$KC_INT$2" \
+          -H "Authorization: Bearer $KC_ADM" -H 'Content-Type: application/json' -d "$3"
+      else
+        docker exec -i ota-agent curl -s -X "$1" "$KC_INT$2" -H "Authorization: Bearer $KC_ADM"
+      fi
+    }
+
+    SCHRITTE=$(kcadm GET "/admin/realms/ota/authentication/flows/ota-browser/executions")
+
+    baum() { echo "$SCHRITTE" | LVL="$1" KEY="$2" python3 -c "
+import json, os, sys
+lvl = int(os.environ['LVL']); key = os.environ['KEY']
+t = [e['requirement'] for e in json.load(sys.stdin)
+     if e['level'] == lvl and (e.get('providerId') == key or e.get('displayName') == key)]
+print(t[0] if t else 'FEHLT')"; }
+
+    expect "ALTERNATIVE" "$(baum 2 ota-passkey)"        "Der Passkey-Zweig steht als Alternative"
+    expect "ALTERNATIVE" "$(baum 2 ota-einmalkennwort)" "Der Einmalkennwort-Zweig ebenso"
+    expect "REQUIRED"    "$(baum 3 webauthn-authenticator)" "Im Passkey-Zweig wird ein Passkey verlangt"
+    expect "REQUIRED"    "$(baum 3 conditional-user-configured)" \
+      "Und zwar nur, wenn einer hinterlegt ist"
+    expect "REQUIRED"    "$(baum 3 auth-otp-form)" "Der andere Zweig verlangt das Einmalkennwort"
+    # Auf der Ebene darueber duerfen sie **nicht** stehen — sonst liefen sie
+    # zusaetzlich, und der Sinn der Zweige waere dahin.
+    expect "DISABLED"    "$(baum 2 auth-otp-form)" "Auf der Ebene darüber ist es abgeschaltet"
+    expect "DISABLED"    "$(baum 2 webauthn-authenticator)" "Der Passkey dort ebenso"
+
+    # Und jetzt die Messung am lebenden Objekt.
+    PK="pk-pruef-$$"
+    kcadm POST "/admin/realms/ota/users" \
+      "{\"username\":\"$PK\",\"enabled\":true,\"emailVerified\":true,
+        \"email\":\"$PK@ota.test\",\"firstName\":\"P\",\"lastName\":\"K\",
+        \"requiredActions\":[],
+        \"credentials\":[{\"type\":\"password\",\"value\":\"PkPruef2026!xy\",\"temporary\":false}]}" \
+      >/dev/null
+    PK_ID=$(kcadm GET "/admin/realms/ota/users?username=$PK" | jqp "d[0]['id'] if d else ''")
+    ROLLE=$(kcadm GET "/admin/realms/ota/roles/zweiter-faktor")
+    kcadm POST "/admin/realms/ota/users/$PK_ID/role-mappings/realm" "[$ROLLE]" >/dev/null
+
+    kc_anmelden() {  # kc_anmelden <name> <passwort> -> letzte Adresse + Seite
+      docker exec -i ota-agent sh -c "
+        rm -f /tmp/pk.jar
+        URL='$KC_INT/realms/ota/protocol/openid-connect/auth?client_id=ota&redirect_uri=$(python3 -c "
+import urllib.parse, os
+print(urllib.parse.quote('http://ota-keycloak:8080/cb'))")&response_type=code&scope=openid&state=p'
+        curl -s -c /tmp/pk.jar -b /tmp/pk.jar -o /tmp/pk1.html \"\$URL\"
+        A=\$(grep -o 'action=\"[^\"]*\"' /tmp/pk1.html | head -1 | sed 's/action=\"//;s/\"\$//;s/&amp;/\&/g')
+        curl -s -c /tmp/pk.jar -b /tmp/pk.jar -L -o /tmp/pk2.html -w '%{url_effective}' -X POST \"\$A\" \
+          --data-urlencode 'username=$1' --data-urlencode 'password=$2' --data-urlencode 'credentialId='
+        echo; cat /tmp/pk2.html"
+    }
+
+    AUSGANG=$(kc_anmelden "$PK" "PkPruef2026!xy")
+    ZIEL=$(echo "$AUSGANG" | head -1)
+
+    # Der Kern: **keine** Sperre. Wer die Rolle traegt und nichts eingerichtet
+    # hat, wird zur Einrichtung geschickt — nicht abgewiesen.
+    case "$ZIEL" in
+      *required-action*) ok "Ohne Passkey und ohne Code führt der Weg zur Einrichtung" ;;
+      *)                 bad "Der Weg endete bei $ZIEL statt bei der Einrichtung" ;;
+    esac
+    if grep -qi "Invalid username or password" <<<"$AUSGANG"; then
+      bad "Die Anmeldung sperrt aus — genau der Fehler, den die Zweige verhindern sollen"
+    else
+      ok "Und ohne die irreführende Meldung „Invalid username or password“"
+    fi
+
+    # Gegenprobe: ohne die Rolle kommt derselbe Weg glatt durch.
+    kcadm DELETE "/admin/realms/ota/users/$PK_ID/role-mappings/realm" "[$ROLLE]" >/dev/null
+    OHNE=$(kc_anmelden "$PK" "PkPruef2026!xy" | head -1)
+    case "$OHNE" in
+      *"/cb?"*|*code=*) ok "Ohne die Rolle genügt weiterhin das Passwort" ;;
+      *)                bad "Auch ohne Rolle wurde ein zweiter Faktor verlangt ($OHNE)" ;;
+    esac
+
+    kcadm DELETE "/admin/realms/ota/users/$PK_ID" >/dev/null
+  fi
+fi
+
 # ------------------------------------------------------- Einmal-Skripte
 #
 # Der Fall: Ein neues Golden Image braucht eine Aenderung im Zuhause, die das
@@ -939,6 +1051,109 @@ fi
 api "$TMP/user.jar" -X DELETE "$BASE/api/files?path=eigen.txt" >/dev/null
 REST=$(api "$TMP/user.jar" "$BASE/api/files" | jqp "str(len(d['entries']))")
 expect "0" "$REST" "Löschen räumt die eigene Ablage wieder"
+
+# --------------------------------------------- Gruppenlaufwerke
+#
+# Die dritte Ablage: dieselben Dateien fuer ein Team. Geprueft wird vor allem
+# die Grenze — wer nicht in der Gruppe ist, sieht nichts, auch nicht als
+# Administrator.
+echo
+echo "Gruppenlaufwerke"
+
+ADMIN_GID=$(api "$TMP/admin.jar" "$BASE/api/groupfiles" | jqp "
+next((g['id'] for g in d if g['name'] == 'admins'), '')")
+USER_GID=$(api "$TMP/user.jar" "$BASE/api/groupfiles" | jqp "
+next((g['id'] for g in d if g['name'] == 'users'), '')")
+
+[ -n "$ADMIN_GID" ] && ok "Der Administrator sieht das Laufwerk seiner Gruppe" \
+                    || bad "Der Administrator sieht kein Gruppenlaufwerk"
+[ -n "$USER_GID" ] && ok "Der Nutzer sieht das Laufwerk seiner Gruppe" \
+                   || bad "Der Nutzer sieht kein Gruppenlaufwerk"
+
+FREMD=$(api "$TMP/user.jar" "$BASE/api/groupfiles" | jqp "
+str(len([g for g in d if g['name'] == 'admins']))")
+expect "0" "$FREMD" "Und nicht das der Gruppe, in der er nicht ist"
+
+if [ -n "$ADMIN_GID" ] && [ -n "$USER_GID" ]; then
+  # Der Kern: Auch ein Administrator kommt nicht an ein fremdes Laufwerk.
+  # Gruppen zu verwalten heisst nicht, in die Dateien zu sehen.
+  expect "404" "$(code "$TMP/admin.jar" "$BASE/api/groupfiles/$USER_GID")" \
+    "Auch der Administrator kommt nicht in ein fremdes Laufwerk"
+  expect "404" "$(code "$TMP/user.jar" "$BASE/api/groupfiles/$ADMIN_GID")" \
+    "Und der Nutzer erst recht nicht"
+  expect "404" "$(code "$TMP/user.jar" "$BASE/api/groupfiles/$ADMIN_GID/file?path=egal")" \
+    "Auch nicht an einzelne Dateien daraus"
+
+  # Schreiben und lesen im eigenen Laufwerk.
+  MARKE_G="gruppendatei-$$"
+  echo "$MARKE_G" > "$TMP/gruppe.txt"
+  api "$TMP/user.jar" -F "file=@$TMP/gruppe.txt" \
+    "$BASE/api/groupfiles/$USER_GID/upload" >/dev/null
+  ZURUECK=$(api "$TMP/user.jar" "$BASE/api/groupfiles/$USER_GID/file?path=gruppe.txt" \
+    | tr -d '\r\n')
+  expect "$MARKE_G" "$ZURUECK" "Was ein Mitglied ablegt, kann es wieder lesen"
+
+  # Und der eigentliche Zweck: der Weg in den Container.
+  # Ausdruecklich der Container des **Testnutzers** — er ist in `users`, der
+  # Administrator nicht. Am Container eines Administrators liesse sich die
+  # Grenze gar nicht messen.
+  CN_G="${USER_CNAME:-}"
+  if [ -z "$CN_G" ] || ! docker inspect "$CN_G" >/dev/null 2>&1; then
+    SID_G=$(api "$TMP/user.jar" "$BASE/api/sessions" | jqp "
+next((s['id'] for s in d if s['status'] in ('running','starting')), '')")
+    if [ -z "$SID_G" ]; then
+      WS_G=$(api "$TMP/user.jar" "$BASE/api/templates" | jqp "
+next((t['id'] for t in d if t['mode'] == 'workspace'), '')")
+      SID_G=$(api "$TMP/user.jar" -X POST "$BASE/api/sessions" \
+        -H 'Content-Type: application/json' -d "{\"template_id\":\"$WS_G\"}" \
+        | jqp "d.get('id','')")
+    fi
+    [ -n "$SID_G" ] && CN_G="ota-s-$(echo "$SID_G" | cut -c1-12)"
+  fi
+
+  if [ -n "$CN_G" ] && docker inspect "$CN_G" >/dev/null 2>&1; then
+    DRIN_G=$(docker exec "$CN_G" sh -c \
+      'cat /mnt/gruppen/users/gruppe.txt 2>/dev/null' | tr -d '\r\n')
+    expect "$MARKE_G" "$DRIN_G" "Und liegt im Container unter /mnt/gruppen/users"
+
+    # Beschreibbar, anders als die gemeinsame Ablage.
+    RUECK_G="von-innen-$$"
+    docker exec -u 1000 "$CN_G" sh -c \
+      "echo $RUECK_G > /mnt/gruppen/users/rueckweg.txt" 2>/dev/null
+    RAUS_G=$(api "$TMP/user.jar" \
+      "$BASE/api/groupfiles/$USER_GID/file?path=rueckweg.txt" | tr -d '\r\n')
+    expect "$RUECK_G" "$RAUS_G" "Was der Container schreibt, sieht der Browser"
+
+    VERWEIS_G=$(docker exec "$CN_G" sh -c \
+      'readlink /home/kasm-user/Gruppen 2>/dev/null || echo -')
+    expect "/mnt/gruppen" "$(echo "$VERWEIS_G" | tr -d '\r\n')" \
+      "Im Zuhause steht ein Verweis darauf"
+
+    # Das Laufwerk der fremden Gruppe darf im Container nicht auftauchen.
+    FREMD_G=$(docker exec "$CN_G" sh -c \
+      'ls /mnt/gruppen 2>/dev/null | tr "\n" " "' | tr -d '\r')
+    case "$FREMD_G" in
+      *admins*) bad "Im Container liegt ein Laufwerk einer fremden Gruppe ($FREMD_G)" ;;
+      *) ok "Nur die eigenen Gruppen sind eingehängt ($FREMD_G)" ;;
+    esac
+
+    api "$TMP/user.jar" -X DELETE \
+      "$BASE/api/groupfiles/$USER_GID?path=rueckweg.txt" >/dev/null
+  else
+    bad "Keine laufende Session des Testnutzers für das Gruppenlaufwerk"
+  fi
+
+  # Verzeichnis nach der Kennung, nicht nach dem Namen — dieselbe Lehre wie
+  # bei den Profilen: Ein Gruppenname laesst sich aendern.
+  GROUPS_ROOT="${OTA_GROUPFILES_ROOT:-/srv/ota/groupfiles}"
+  [ -d "$GROUPS_ROOT/$USER_GID" ] \
+    && ok "Das Verzeichnis heisst nach der Kennung ($USER_GID)" \
+    || bad "Unter $GROUPS_ROOT/$USER_GID liegt nichts"
+
+  api "$TMP/user.jar" -X DELETE "$BASE/api/groupfiles/$USER_GID?path=gruppe.txt" >/dev/null
+  REST_G=$(api "$TMP/user.jar" "$BASE/api/groupfiles/$USER_GID" | jqp "str(len(d['entries']))")
+  expect "0" "$REST_G" "Löschen räumt das Laufwerk wieder"
+fi
 
 # ------------------------------------------ Pfade an der Kennung
 #

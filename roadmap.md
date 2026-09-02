@@ -113,10 +113,12 @@ Image ein, zieht ein Wegwerf-Verzeichnis hoch und misst im Browser nach.
       6 (Bild — die Brücke trägt jetzt auch `image/png`), 9 (PRIMARY, und die Prüfung, dass es die
       Displaygrenze **nicht** überschreitet), 10 (abgeschaltet heisst abgeschaltet) und 11 (nach
       Pause und Fortsetzen) sind dazugekommen
-- [ ] **Offen**: Fall 3 (zwischen zwei Sessions — zwei Container gleichzeitig im Browser), Fall 7
-      (IntelliJ, Java/AWT — der Start dauert Minuten) und Fall 12 (Firefox ohne `readText()` — der
-      Testbrowser ist Chromium)
-      in Chrome **und** Firefox von Hand durchgehen
+- [x] **Alle zwölf Fälle laufen** (2026-09-01). Zuletzt dazugekommen: Fall 3 (zwischen zwei
+      Sessions — `tests/e2e.mjs` startet einen zweiten Container mit eigenem Profil und schickt
+      den Text über die System-Zwischenablage des Browsers), Fall 7 (Java/AWT mit einem laufenden
+      AWT-Prozess, auf Zuruf über `OTA_PRUEFE_JAVA=1`) und Fall 12 (in Chromium mit abgeschaltetem
+      `readText` — kein Ersatz für einen Lauf in Firefox, aber es prüft genau den Pfad, der dort
+      greift, und zwar bei jedem Lauf)
 - [x] Heartbeat, Idle-Reaper, Orphan-GC
 
 **Fertig, wenn**: Ein Klick startet einen Container, der Desktop erscheint, die Abnahmematrix läuft in
@@ -367,8 +369,12 @@ Session-Prozesse, und die ereignisgesteuerte statt abfragende Brücke (braucht e
       **nächsten** Start dieser Anwendung — ein laufendes Display wird nicht umgestellt, wie bei
       allen Ressourcen in OTA. Geprüft in `scripts/test-clipboard-bridge.sh`: setzen, Anwendung neu
       starten, im Container nachmessen, zurückstellen
-- [ ] App-Katalog um **Skeleton-Teilbaum** ergänzen. Startbefehl, Icon, Sperrgrund, festes Display,
-      Sichtbarkeit und Auflösung stehen bereits
+- [x] **Skeleton-Teilbaum je App** (2026-09-01) — unter *Workspaces → Skeleton* oben umschaltbar.
+      Er kommt beim **ersten Start dieser Anwendung**, nicht beim Start des Arbeitsplatzes, und
+      bevor die Anwendung läuft: andersherum legte sie erst ihre Voreinstellungen an und der
+      Teilbaum überschriebe hinterher, was der Mensch schon sieht. Gemerkt wird das im Zuhause
+      (`~/.ota/app-skeleton/<app>`) und nicht in der Datenbank — `set_apps` ersetzt den Katalog
+      komplett, eine daran hängende Buchführung wäre nach jeder Änderung weg
 - [x] Extensions beim **Build** installieren, nicht beim Start
 - [x] **Sichtbarkeit je App und Gruppe** — für den Fall, dass eine Lizenz nicht für alle reicht.
       Leer heisst „für alle", sonst wäre jeder bestehende Katalog mit dem Einführen der Regel
@@ -670,12 +676,49 @@ sondern daraus, dass jemand es benutzt hat:
 ## M9 — Optionale Erweiterungen · 2–3 Wochen
 
 - [x] ~~**OIDC** mit PKCE, Claim→Gruppen-Mapping~~ — mit M11 erledigt (`auth-roadmap.md`)
-- [ ] **WebAuthn/Passkeys** — braucht seit M11 keine Arbeit in OTA mehr, nur einen
-      Authentifizierungsfluss in Keycloak. Offen bleibt die Entscheidung, ob er verlangt wird
+- [x] **WebAuthn/Passkeys** (2026-09-02) — als zweiter Faktor neben dem Einmalkennwort, nicht
+      statt seiner. Entschieden: **angeboten, nicht verlangt.** Wer einen Passkey hinterlegt, weist
+      sich damit aus; wer keinen hat, bekommt weiter die Codeabfrage. In OTA war dafür keine Zeile
+      nötig — der Fluss steht in `scripts/keycloak-init.sh`, idempotent.
+
+      **Der naheliegende Aufbau sperrt aus.** Beide Verfahren nebeneinander auf ALTERNATIVE zu
+      stellen, gemessen am 2026-09-02: Wer die Rolle trägt und noch keins von beiden eingerichtet
+      hat, kommt gar nicht mehr herein — die Anmeldung endet mit „Invalid username or password".
+      Eine vorgemerkte Ersteinrichtung hilft nicht, denn vorgemerkte Aktionen laufen **nach** der
+      Anmeldung. Deshalb zwei Unterflüsse: `ota-passkey` (mit der Bedingung „beim Nutzer
+      eingerichtet") und `ota-einmalkennwort`, beide ALTERNATIVE. Der Aussperrfall wird bei jedem
+      Testlauf gemessen, nicht geglaubt
+- [x] **Nebenbefund**: Die Idempotenzprüfung der Rollenbedingung griff nie — sie suchte nach
+      `authenticationConfig`, der einzelne Schritt heisst das Feld aber `authenticatorConfig`. Bei
+      jedem `make identity` entstand eine neue Konfiguration, die alte blieb verwaist liegen
 - [ ] **Guacamole-Engine** für RDP/VNC-Ziele — löst `HauptPC` und `VNC-HauptPC` ab
 - [ ] **code-server** als leichte Engine für reine Editor-Sessions (Extensions dann über Open VSX)
-- [ ] Gemeinsame Gruppenlaufwerke
-- [ ] Branding, helles Theme, GPU-Durchreichung
+- [x] **Gemeinsame Gruppenlaufwerke** (2026-09-02) — die dritte Ablage neben der gemeinsamen und
+      der eigenen. Je Gruppe ein Verzeichnis, in jedem Arbeitsplatz seiner Mitglieder unter
+      `/mnt/gruppen/<name>` beschreibbar eingehängt, im Zuhause als „Gruppen". **Die
+      Mitgliedschaft entscheidet, und sonst nichts** — auch ein Administrator kommt nur an die
+      Laufwerke seiner eigenen Gruppen; wer wirklich hinein muss, trägt sich ein, und das steht im
+      Protokoll. Ein Entzug wirkt im Browser sofort, im laufenden Container beim nächsten Start
+      (einen Bind-Mount kann man einem laufenden Container nicht entziehen, ohne ihn zu beenden).
+      Benannt nach der Kennung, nicht nach dem Namen — dieselbe Lehre wie bei den Profilen.
+      Abschaltbar je Workspace, Vorgabe an
+- [x] **Helles Gewand** (2026-09-02) — dunkel, hell oder „wie der Rechner", umschaltbar in der
+      Leiste **und** auf der Anmeldemaske. Es liegt im Browser (`localStorage`) und nicht am
+      Konto: eine Frage des Arbeitsplatzes, nicht der Identität. Nicht die Umkehrung des dunklen,
+      sondern derselbe Gedanke in Hell — die vier Zustandsfarben bleiben, was sie sind, nur ihre
+      Hintergründe werden kräftiger, weil ein Schleier auf Weiss verschwindet.
+      Dafür mussten erst dreizehn Festfarben aus dem Regelwerk in Merkmale wandern; genau die
+      wären beim Umschalten stehengeblieben. `tests/e2e.mjs` misst deshalb nicht das Aussehen,
+      sondern den **Kontrast** in beiden Gewändern: Text muss sich überall vom Grund abheben.
+
+      Zwei Funde beim Messen: Die Vorgabe musste **dunkel** werden statt „wie der Rechner" — die
+      meisten Rechner melden hell, und OTA wäre beim nächsten Aufruf für fast alle plötzlich hell
+      gewesen. Und die Keycloak-Anmeldemaske folgt jetzt mit: Sie liegt auf derselben Herkunft und
+      liest denselben `localStorage`. Dort stand der Schriftzug im hellen Gewand weiss auf weiss —
+      PatternFly setzt ihn mit `!important`; behoben über die Variable, mit der diese Regel
+      rechnet, nicht mit einem Gegen-`!important`
+- [ ] Branding und GPU-Durchreichung. Die Durchreichung lässt sich hier nicht ehrlich bauen —
+      die Maschine hat eine QEMU-Standard-VGA, keine GPU
 
 ---
 

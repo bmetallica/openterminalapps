@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ApiError, api, type SharedListing } from '../lib/api'
+import { ApiError, api, type GroupDrive, type SharedListing } from '../lib/api'
 import { ago } from '../lib/format'
 import { t as tr, useLang } from '../lib/i18n'
 
 /**
- * Eine Ablage — es gibt zwei, und dieselbe Ansicht zeigt beide.
+ * Eine Ablage — es gibt drei, und dieselbe Ansicht zeigt alle.
  *
  * * **Gemeinsam** gehört der Verwaltung. Sie liegt in jedem Arbeitsplatz
  *   unter `/mnt/ota` und als „Gemeinsam" im Home, dort **nur lesbar**: der
@@ -12,6 +12,10 @@ import { t as tr, useLang } from '../lib/i18n'
  * * **Eigen** gehört einem Menschen. Sie liegt in seinem Arbeitsplatz unter
  *   `/mnt/austausch` und als „Austausch" im Home, **beschreibbar** — der
  *   schnelle Weg in den Container hinein und wieder heraus.
+ * * Ein **Gruppenlaufwerk** gehört einer Gruppe: dieselben Dateien für alle
+ *   Mitglieder, unter `/mnt/gruppen/<name>` und als „Gruppen" im Home,
+ *   ebenfalls beschreibbar. Sie erscheinen als Umschaltung neben der eigenen
+ *   Ablage — und nur, wenn es überhaupt eine gibt.
  *
  * Getrennt sind sie, weil sie verschiedene Fragen beantworten. Zusammen in
  * einer Ansicht sind sie, weil die Handgriffe dieselben sind: ziehen,
@@ -29,12 +33,29 @@ export function Storage({ onToast, canWrite, shelf = 'gemeinsam' }: {
   shelf?: Shelf
 }) {
   const eigen = shelf === 'eigen'
-  const holen = eigen ? api.filesList : api.sharedList
-  const legen = eigen ? api.filesUpload : api.sharedUpload
-  const ordnen = eigen ? api.filesMkdir : api.sharedMkdir
-  const werfen = eigen ? api.filesRemove : api.sharedRemove
-  const quelle = eigen ? '/api/files/file' : '/api/shared/file' 
   useLang()
+  // '' heisst: die eigene Ablage (oder die gemeinsame, je nach `shelf`).
+  // Sonst die Kennung eines Gruppenlaufwerks.
+  const [laufwerk, setLaufwerk] = useState('')
+  const [gruppen, setGruppen] = useState<GroupDrive[]>([])
+  const gruppe = gruppen.find((g) => g.id === laufwerk)
+
+  const holen = laufwerk
+    ? (p: string) => api.groupList(laufwerk, p)
+    : eigen ? api.filesList : api.sharedList
+  const legen = laufwerk
+    ? (p: string, f: File) => api.groupUpload(laufwerk, p, f)
+    : eigen ? api.filesUpload : api.sharedUpload
+  const ordnen = laufwerk
+    ? (p: string, n: string) => api.groupMkdir(laufwerk, p, n)
+    : eigen ? api.filesMkdir : api.sharedMkdir
+  const werfen = laufwerk
+    ? (p: string) => api.groupRemove(laufwerk, p)
+    : eigen ? api.filesRemove : api.sharedRemove
+  const quelle = laufwerk
+    ? `/api/groupfiles/${laufwerk}/file`
+    : eigen ? '/api/files/file' : '/api/shared/file'
+
   const [data, setData] = useState<SharedListing | null>(null)
   const [path, setPath] = useState('')
   const [over, setOver] = useState(false)
@@ -52,6 +73,13 @@ export function Storage({ onToast, canWrite, shelf = 'gemeinsam' }: {
   }, [holen])
 
   useEffect(() => { void load(path) }, [load, path])
+
+  useEffect(() => {
+    // Nur in der eigenen Ansicht. Die gemeinsame Ablage ist die der
+    // Verwaltung; Gruppenlaufwerke gehören dort nicht dazwischen.
+    if (!eigen) return
+    api.myGroupDrives().then(setGruppen).catch(() => setGruppen([]))
+  }, [eigen])
 
   async function upload(files: FileList | File[]) {
     const list = Array.from(files)
@@ -122,9 +150,13 @@ export function Storage({ onToast, canWrite, shelf = 'gemeinsam' }: {
       <header className="topbar">
         <div>
           <p className="silk" style={{ marginBottom: 6 }}>
-            {eigen ? tr('Deine Dateien') : tr('Verwaltung')}
+            {gruppe ? tr('Gemeinsam im Team')
+              : eigen ? tr('Deine Dateien') : tr('Verwaltung')}
           </p>
-          <h1 className="h-page">{eigen ? tr('Meine Ablage') : tr('Gemeinsame Ablage')}</h1>
+          <h1 className="h-page">
+            {gruppe ? gruppe.name
+              : eigen ? tr('Meine Ablage') : tr('Gemeinsame Ablage')}
+          </h1>
         </div>
         {canWrite && (
           <div style={{ display: 'flex', gap: 10 }}>
@@ -138,8 +170,28 @@ export function Storage({ onToast, canWrite, shelf = 'gemeinsam' }: {
         )}
       </header>
 
+      {gruppen.length > 0 && (
+        <div className="chips" style={{ marginBottom: 14 }}>
+          <button type="button" className={`chip${laufwerk === '' ? ' is-on' : ''}`}
+            aria-pressed={laufwerk === ''}
+            onClick={() => { setLaufwerk(''); setPath('') }}>
+            {tr('Meine Ablage')}
+          </button>
+          {gruppen.map((g) => (
+            <button key={g.id} type="button"
+              className={`chip${laufwerk === g.id ? ' is-on' : ''}`}
+              aria-pressed={laufwerk === g.id}
+              onClick={() => { setLaufwerk(g.id); setPath('') }}>
+              {g.name}
+            </button>
+          ))}
+        </div>
+      )}
+
       <p className="sub" style={{ marginBottom: 18 }}>
-        {eigen
+        {gruppe
+          ? tr('Dieselben Dateien für alle Mitglieder von „{name}". Im Arbeitsplatz unter /mnt/gruppen/{name} und als „Gruppen" im Home — beschreibbar. Wer die Gruppe verlässt, sieht sie beim nächsten Sessionstart nicht mehr.', { name: gruppe.name })
+          : eigen
           ? tr('Liegt in deinem Arbeitsplatz unter /mnt/austausch und als „Austausch" im Home — beschreibbar. Was du hier ablegst, liegt gleich darauf im Container; was du dort hineinlegst, findest du hier.')
           : tr('Liegt in jedem Arbeitsplatz unter /mnt/ota und als „Gemeinsam" im Home — dort nur lesbar. Geschrieben wird ausschliesslich hier.')}
       </p>
@@ -147,7 +199,7 @@ export function Storage({ onToast, canWrite, shelf = 'gemeinsam' }: {
       {/* Pfad als Weg zurück, wie im Workspace-Editor. */}
       <nav className="wb__crumb" style={{ marginBottom: 14 }} aria-label={tr('Pfad')}>
         <button type="button" className="wb__up" onClick={() => setPath('')}>
-          {eigen ? tr('Meine Ablage') : tr('Gemeinsame Ablage')}
+          {gruppe ? gruppe.name : eigen ? tr('Meine Ablage') : tr('Gemeinsame Ablage')}
         </button>
         {parts.map((part, i) => (
           <span key={i} style={{ display: 'contents' }}>
@@ -172,7 +224,9 @@ export function Storage({ onToast, canWrite, shelf = 'gemeinsam' }: {
         <div className="empty">
           <p className="empty__title">{tr('Hier liegt nichts')}</p>
           <p className="empty__body">
-            {canWrite
+            {gruppe
+              ? tr('Was hier liegt, sehen alle Mitglieder. Zieh Dateien in die Fläche oben oder leg einen Ordner an.')
+              : canWrite
               ? tr('Zieh Dateien in die Fläche oben oder leg einen Ordner an.')
               : tr('Die Administration legt hier Dateien für alle Arbeitsplätze ab.')}
           </p>

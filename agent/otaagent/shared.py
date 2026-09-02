@@ -84,6 +84,42 @@ def user_root(username: str) -> Path:
     return target
 
 
+def group_root(group_id: str) -> Path:
+    """Das Laufwerk einer Gruppe. Legt es an, wenn es das nicht gibt.
+
+    Benannt nach der **Kennung** der Gruppe, nicht nach ihrem Namen — aus
+    demselben Grund wie bei den Profilen (siehe `security.profile_path` in der
+    API): Ein Gruppenname laesst sich in der Verwaltung aendern, und ab diesem
+    Moment zeigte der Pfad woanders hin. Im Container traegt der
+    Einhaengepunkt dann trotzdem den Namen; er kommt von der API mit.
+
+    Eigentuemer ist 1000:1000, und das Verzeichnis traegt das setgid-Bit:
+    Alles, was darin entsteht, gehoert derselben Gruppe. Ohne das koennte ein
+    Container Dateien anlegen, die ein anderer nicht mehr aendern kann — und
+    genau das ist bei einem gemeinsamen Laufwerk der Normalfall, nicht die
+    Ausnahme.
+    """
+    if not NAME_OK.match(group_id or ""):
+        raise SharedError("Diese Gruppenkennung taugt nicht als Ablage.")
+
+    base = Path(os.environ.get("OTA_GROUPFILES_ROOT", "/srv/ota/groupfiles"))
+    base.mkdir(parents=True, exist_ok=True)
+    target = (base / group_id).resolve()
+    # Nach dem Aufloesen pruefen, nicht davor — dieselbe Regel wie in
+    # `user_root` und `_resolve`.
+    if base.resolve() not in target.parents:
+        raise SharedError("Dieser Pfad liegt ausserhalb der Gruppenlaufwerke.")
+
+    if not target.exists():
+        target.mkdir(parents=True)
+        try:
+            os.chown(target, 1000, 1000)
+        except (PermissionError, OSError):
+            pass
+        os.chmod(target, 0o2775)
+    return target
+
+
 def _resolve(rel: str, *, must_exist: bool = True, base: Path | None = None) -> Path:
     """Loest einen Pfad innerhalb einer Ablage auf — oder lehnt ab.
 

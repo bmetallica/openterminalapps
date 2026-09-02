@@ -473,6 +473,15 @@ def start_session(
             # Nur fuer den Verweis im Dateisystem, damit dort jemand etwas
             # findet. Ueber den Pfad entscheidet er nicht.
             "shelf_name": user.username,
+            # Die Laufwerke der Gruppen, in denen dieser Mensch **jetzt** ist.
+            # Wer waehrend der Session hinausfaellt, behaelt sie bis zum
+            # naechsten Start: Einem laufenden Container einen Bind-Mount zu
+            # entziehen ginge nur, indem man ihn beendet — und jemanden mitten
+            # in der Arbeit hinauszuwerfen waere schlimmer als die Stunde bis
+            # zum naechsten Start (auth-roadmap.md). Im Browser wirkt der
+            # Entzug sofort.
+            "group_shelves": ([{"id": str(g.id), "name": g.name}
+                               for g in user.groups] if tpl.group_shelf else []),
             # Einmal-Skripte, die dieser Nutzer noch nicht hatte. Welche das
             # sind, weiss nur die API — der Agent fuehrt aus und berichtet.
             "once_scripts": _offene_einmal_skripte(db, tpl, user),

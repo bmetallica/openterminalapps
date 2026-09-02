@@ -113,7 +113,9 @@ Ausführlich in [Handbuch, Kapitel 2](docs/wiki/02-erste-schritte.md).
 - **Kontingent je Zuhause** und eine Untergrenze für den freien Plattenplatz — eine verständliche
   Ablehnung statt eines Containers, der mitten in der Arbeit beim Schreiben stehenbleibt
 - **Sichtbarkeit je Anwendung und Gruppe**, für den Fall, dass eine Lizenz nicht für alle reicht
-- **Zwei-Faktor je Gruppe erzwingbar**; `/healthz` und `/metrics` für die Überwachung
+- **Zwei-Faktor je Gruppe erzwingbar**, wahlweise mit **Passkey** (Fingerabdruck, Gesicht,
+  Sicherheitsschlüssel) oder Einmalkennwort — angeboten, nicht verlangt; `/healthz` und `/metrics`
+  für die Überwachung
 - Nutzer, Gruppen und Rechte; Administratoren sind in ihrem eigenen Container `root`
 - **Zentrale Anmeldung über Keycloak**, mitgeliefert im Stack — oder ein vorhandenes anbinden. OTA
   ist dessen Verwalter: Konten, Gruppen und die **AD-Anbindung** richtet man in OTAs Oberfläche
@@ -125,7 +127,8 @@ Ausführlich in [Handbuch, Kapitel 2](docs/wiki/02-erste-schritte.md).
   entscheidet, wer die Kachel sieht. Was jemand darin darf, entscheidet die Anwendung — OTA baut
   ihr Rechtemodell nicht nach
 - Anmeldefrist einstellbar (30 min bis 48 h), rollend — wer arbeitet, wird nicht abgemeldet
-- Oberfläche auf Deutsch und Englisch, umschaltbar auch vor der Anmeldung
+- Oberfläche auf Deutsch und Englisch, **dunkel oder hell** (oder wie der Rechner) — beides
+  umschaltbar auch vor der Anmeldung
 - Das Handbuch liegt **im Programm**, gefiltert nach Rechten
 - **Mein Konto** für jeden: Passwort selbst ändern, Zwei-Faktor mit Rückfallcodes einrichten
 
@@ -136,9 +139,12 @@ Ausführlich in [Handbuch, Kapitel 2](docs/wiki/02-erste-schritte.md).
 - **Rezepte** für alles, was kein einfaches Paket ist — mit geführtem Bauer für eigene
 - **Anwendungen im Image finden**: OTA liest die `.desktop`-Dateien und schlägt Name, Zeichen und
   Startbefehl vor. Niemand muss wissen, wo eine Binärdatei liegt
-- **Zwei Ablagen**: die gemeinsame für Dateien, die in jeden Arbeitsplatz sollen (im Container nur
-  lesbar), und eine **eigene je Nutzer** unter `/mnt/austausch` — beschreibbar, der Weg hinein und
-  wieder heraus. Auch in der Kontrollleiste einer laufenden Session, mit Ziehen und Ablegen
+- **Drei Ablagen**: die gemeinsame für Dateien, die in jeden Arbeitsplatz sollen (im Container nur
+  lesbar), eine **eigene je Nutzer** unter `/mnt/austausch` — beschreibbar, der Weg hinein und
+  wieder heraus —, und ein **Laufwerk je Gruppe** unter `/mnt/gruppen/<name>`: dieselben Dateien
+  für ein Team. Alle drei auch in der Kontrollleiste einer laufenden Session, mit Ziehen und
+  Ablegen. Über ein Gruppenlaufwerk entscheidet die Mitgliedschaft und sonst nichts — auch ein
+  Administrator kommt nur an die Gruppen, in denen er selbst ist
 - **Skeleton-Profil** je Workspace: womit ein Zuhause anfängt. Einzelne Pfade auf Wunsch bei jedem
   Start durchgesetzt — die Ausnahme, nicht die Regel. Dazu **je Anwendung ein eigener Teilbaum**,
   der erst kommt, wenn diese Anwendung zum ersten Mal startet: Wer nur das Terminal benutzt,

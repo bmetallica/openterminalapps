@@ -56,6 +56,80 @@
   --shadow-pop: 0 16px 40px rgba(0,0,0,.55);
 
   --ease: cubic-bezier(.2,.7,.3,1);
+
+  /* Was frueher als feste Farbe mitten in den Regeln stand. Ein Merkmal
+     daraus zu machen ist keine Ordnungsliebe: Erst dadurch laesst sich das
+     helle Gewand ueberhaupt vollstaendig setzen. Eine Farbe, die nur im
+     Regelwerk steht, bleibt beim Umschalten stehen — und dann steht heller
+     Text auf hellem Grund. */
+  --btn-hover:  #1B2436;   /* Grund eines Knopfs unter dem Zeiger */
+  --on-key:     #0F172A;   /* Text auf der Primaerflaeche */
+  --key-bright: #F8FAFC;   /* die hellste Stufe der Leiter */
+  --key-shade:  #94A3B8;   /* die dunkelste im Reglerknopf */
+  --info-text:  #7DD3FC;   /* Hinweise */
+  --warn-text:  #FCD34D;   /* Warnungen */
+  --halt-text:  #FCA5A5;   /* Fehlermeldungen */
+  --warn-edge:  rgba(240,167,66,.28);
+  --info-edge:  rgba(95,184,214,.24);
+  --card-shadow: rgba(0,0,0,.5);
+}
+
+/* ------------------------------------------------------------------
+   Das helle Gewand.
+
+   Nicht die Umkehrung des dunklen, sondern derselbe Gedanke in Hell: Die
+   Flaechenleiter laeuft von Papierweiss nach Grau, der Text von Tinte nach
+   Grau, und die vier Zustandsfarben bleiben, was sie sind — sie sind
+   Information und muessen in beiden Gewaendern dasselbe bedeuten. Nur ihre
+   Hintergruende werden kraeftiger, weil ein 14-Prozent-Schleier auf Weiss
+   verschwindet.
+
+   Gesetzt wird es ueber `data-theme` am Wurzelelement (`web/src/lib/theme.ts`).
+   ------------------------------------------------------------------ */
+:root[data-theme="hell"] {
+  --ground:    #F1F4F9;
+  --bay:       #FFFFFF;
+  --bay-2:     #E9EDF4;
+  --well:      #F7F9FC;
+  --edge:      #D7DEE8;
+  --edge-lit:  #B4BFCD;
+
+  --text:      #0F172A;
+  --label:     #4A5568;
+  --mute:      #6B7684;
+
+  /* Die Primaeraktion dreht sich um: dunkle Flaeche, heller Text. Sie bleibt
+     damit das kraeftigste Element im Bild — genau wie im dunklen Gewand. */
+  --key:       #1E293B;
+  --key-dim:   #334155;
+  --on-key:    #F8FAFC;
+  --key-bright:#334155;
+  --key-shade: #0F172A;
+
+  --accent:    #0E7490;
+  --accent-dim:#155E75;
+
+  --live:      #047857;
+  --paused:    #1D4ED8;
+  --caution:   #B45309;
+  --halt:      #B91C1C;
+
+  --live-bg:    rgba(4, 120, 87, .12);
+  --paused-bg:  rgba(29, 78, 216, .10);
+  --caution-bg: rgba(180, 83, 9, .12);
+  --halt-bg:    rgba(185, 28, 28, .10);
+
+  --btn-hover:  #E9EDF4;
+  --info-text:  #155E75;
+  --warn-text:  #92400E;
+  --halt-text:  #991B1B;
+  --warn-edge:  rgba(180, 83, 9, .30);
+  --info-edge:  rgba(29, 78, 216, .24);
+
+  /* Schatten auf Weiss: leiser, sonst wirken Karten wie ausgeschnitten. */
+  --card-shadow:   rgba(15, 23, 42, .16);
+  --shadow-drawer: -24px 0 60px rgba(15, 23, 42, .16);
+  --shadow-pop:    0 16px 40px rgba(15, 23, 42, .18);
 }
 
 * { box-sizing: border-box; }
@@ -290,11 +364,11 @@ button, input, select, textarea { font: inherit; color: inherit; }
   font-size: 13.5px; font-weight: 500; cursor: pointer; white-space: nowrap;
   transition: background .14s var(--ease), border-color .14s var(--ease), color .14s var(--ease);
 }
-.btn:hover { border-color: var(--edge-lit); background: #1B2436; }
+.btn:hover { border-color: var(--edge-lit); background: var(--btn-hover); }
 .btn:disabled { opacity: .4; cursor: not-allowed; }
 
-.btn--primary { background: var(--key); border-color: var(--key); color: #0F172A; font-weight: 600; }
-.btn--primary:hover { background: #F8FAFC; border-color: #F8FAFC; }
+.btn--primary { background: var(--key); border-color: var(--key); color: var(--on-key); font-weight: 600; }
+.btn--primary:hover { background: var(--key-dim); border-color: var(--key-dim); }
 
 .btn--ghost { background: none; border-color: transparent; color: var(--label); }
 .btn--ghost:hover { background: var(--bay-2); color: var(--text); border-color: transparent; }
@@ -380,14 +454,14 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .fader__input::-webkit-slider-thumb {
   -webkit-appearance: none; appearance: none;
   width: 15px; height: 24px; border-radius: 4px;
-  background: linear-gradient(180deg, #F8FAFC 0%, var(--key) 45%, #94A3B8 100%);
+  background: linear-gradient(180deg, var(--key-bright) 0%, var(--key) 45%, var(--key-shade) 100%);
   border: 1px solid rgba(0,0,0,.5);
   box-shadow: 0 2px 5px rgba(0,0,0,.5);
   cursor: inherit;
 }
 .fader__input::-moz-range-thumb {
   width: 15px; height: 24px; border-radius: 4px; border: 1px solid rgba(0,0,0,.5);
-  background: linear-gradient(180deg, #F8FAFC 0%, var(--key) 45%, #94A3B8 100%);
+  background: linear-gradient(180deg, var(--key-bright) 0%, var(--key) 45%, var(--key-shade) 100%);
   box-shadow: 0 2px 5px rgba(0,0,0,.5); cursor: inherit;
 }
 
@@ -555,8 +629,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
 .delta {
   margin-top: 11px; padding: 10px 13px;
-  background: var(--paused-bg); border: 1px solid rgba(95,184,214,.28);
-  border-radius: var(--r-ctl); font-size: 12.5px; color: #7DD3FC;
+  background: var(--paused-bg); border: 1px solid var(--info-edge);
+  border-radius: var(--r-ctl); font-size: 12.5px; color: var(--info-text);
 }
 
 /* ============================================================
@@ -807,8 +881,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
   padding: 10px 13px; border-radius: var(--r-ctl);
   font-size: 12.5px; line-height: 1.5; margin: 0 0 4px;
 }
-.note-warn { background: var(--caution-bg); border: 1px solid rgba(240,167,66,.28); color: #FCD34D; }
-.note-info { background: var(--paused-bg); border: 1px solid rgba(95,184,214,.24); color: #7DD3FC; margin-bottom: 20px; }
+.note-warn { background: var(--caution-bg); border: 1px solid var(--warn-edge); color: var(--warn-text); }
+.note-info { background: var(--paused-bg); border: 1px solid var(--info-edge); color: var(--info-text); margin-bottom: 20px; }
 
 /* ============================================================
    Anmeldung
@@ -839,7 +913,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .login__error {
   margin: 0 0 14px; padding: 10px 13px;
   background: var(--halt-bg); border: 1px solid rgba(242,102,111,.32);
-  border-radius: var(--r-ctl); color: #FCA5A5; font-size: 12.5px; line-height: 1.5;
+  border-radius: var(--r-ctl); color: var(--halt-text); font-size: 12.5px; line-height: 1.5;
 }
 
 .login .field:last-of-type { margin-bottom: 18px; }

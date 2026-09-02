@@ -97,6 +97,14 @@ braucht keine Verwaltungsrechte — es geht um die eigene Person.
 | **Zwei-Faktor** | Einrichten, Rückfallcodes erneuern, abschalten |
 | **Sprache** | Deutsch oder Englisch, am Konto gemerkt statt nur im Browser |
 
+Daneben, unten in der Leiste und **auch schon auf der Anmeldemaske**: die Sprache und das
+**Gewand** — dunkel, hell oder „wie der Rechner". Beide liegen im Browser und nicht am Konto: Sie
+sind eine Frage des Arbeitsplatzes, nicht der Identität. Dieselbe Person am hellen Bildschirm im
+Büro und am dunklen zu Hause soll dafür nicht ihr Konto umstellen müssen.
+
+„Wie der Rechner" ist die Vorgabe und folgt dem Betriebssystem, auch wenn es abends von selbst
+umschaltet. Wer sich festlegt, überschreibt das dauerhaft.
+
 > Eine Auflösung lässt sich nicht einstellen, und das ist kein Versehen: Der ferne Bildschirm folgt
 > der Grösse des Browserfensters ([Kapitel 3](03-arbeitsplatz.md)).
 

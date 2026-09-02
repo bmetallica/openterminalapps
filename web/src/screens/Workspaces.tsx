@@ -58,6 +58,7 @@ function toPayload(d: Draft) {
     start_script: d.start_script,
     skeleton_enforce: d.skeleton_enforce,
     user_shelf: d.user_shelf,
+    group_shelf: d.group_shelf,
     is_enabled: d.is_enabled,
     group_ids: d.group_ids,
   }
@@ -366,6 +367,16 @@ function Editor({ tpl, host, groups, images, onSaved, onClose, onToast }: {
               name={tr('Eigene Ablage einhängen')}
               note={tr('Der übliche Weg, Dateien hinein und heraus zu bekommen')}
               onChange={(v) => set('user_shelf', v)} />
+          </Field>
+
+          <Field label={tr('Gruppenlaufwerke')}
+            hint={draft.group_shelf
+              ? tr('Je Gruppe des Nutzers ein Ordner unter /mnt/gruppen und als „Gruppen" im Home. Alle Mitglieder sehen dasselbe.')
+              : tr('Ohne sie bleibt dieser Arbeitsplatz abgeschottet — auch von den Dateien der eigenen Gruppen.')}>
+            <Toggle on={draft.group_shelf}
+              name={tr('Gruppenlaufwerke einhängen')}
+              note={tr('Der übliche Weg, im Team an denselben Dateien zu arbeiten')}
+              onChange={(v) => set('group_shelf', v)} />
           </Field>
 
           <Field label={tr('Persistentes Profil')}
