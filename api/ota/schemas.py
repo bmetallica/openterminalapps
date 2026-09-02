@@ -214,6 +214,8 @@ class TemplateOut(BaseModel):
     skeleton_enforce: list[str] = []
     user_shelf: bool = True
     group_shelf: bool = True
+    # "kasmvnc" (Vorgabe) oder "selkies". Siehe `Template.stream_engine`.
+    stream_engine: str = "kasmvnc"
     is_enabled: bool
     apps: list[AppOut] = []
     group_ids: list[uuid.UUID] = []
@@ -242,6 +244,8 @@ class TemplateIn(BaseModel):
     skeleton_enforce: list[str] = []
     user_shelf: bool = True
     group_shelf: bool = True
+    # "kasmvnc" (Vorgabe) oder "selkies". Siehe `Template.stream_engine`.
+    stream_engine: str = "kasmvnc"
     is_enabled: bool = True
     # `None` heisst „nicht mitgeschickt" und laesst die Zuweisung stehen; eine
     # leere Liste heisst „niemand mehr". Ohne diese Unterscheidung nimmt ein
@@ -413,6 +417,10 @@ class SessionOut(BaseModel):
     error: str | None = None
     url: str
     streams: list[StreamOut] = []
+    # Welche Streaming-Maschine diese Session überträgt. Die Oberfläche
+    # braucht das: Reconnect-Erkennung, Leerlaufuhr und Zwischenablage sind
+    # gegen KasmVNCs Weboberfläche geschrieben und greifen bei Selkies nicht.
+    stream_engine: str = "kasmvnc"
 
 
 class SessionStartIn(BaseModel):

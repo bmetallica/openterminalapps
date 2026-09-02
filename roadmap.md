@@ -787,6 +787,27 @@ Dafür braucht es ein KDC und einen Dateiserver; ohne beides lässt sich nichts 
 prüfen. **Die Passwort-Durchreichung bleibt draussen** (§17.9), auch wenn sie der kürzeste Weg
 wäre — und mit Keycloak dazwischen ist sie noch weniger zu rechtfertigen als vorher.
 
+**Die Streaming-Maschine** 🔨 **im Versuch, auf dem Zweig `webrtc-viewer`.** Ein zweiter Weg steht
+und läuft: `ota/base-selkies:test` überträgt einen H.264-Strom über WebRTC statt rechteckiger
+Ausschnitte über RFB. Eine Vorlage wählt ihn über `stream_engine: selkies`; die Vorgabe bleibt
+`kasmvnc`, und der bisherige Weg ist unverändert. Ausführlich in
+[Kapitel 20](docs/wiki/20-selkies-versuch.md).
+
+Was der Versuch schon beantwortet: **Es geht** — durch Traefik, mit OTAs Anmeldung davor, und die
+Auflösung folgt dem Browserfenster. Drei Fallen lagen auf dem Weg, alle gemessen und behoben: Der
+Client baut zwei Adressen aus der Wurzel statt aus dem Pfad (derselbe Fehler wie damals bei
+KasmVNC), `cvt` gibt es in Ubuntu 24.04 nicht mehr, und coturn darf als Nutzer 1000 nicht nach
+`/var/run` schreiben.
+
+Was er **nicht** beantwortet und was vor einer Entscheidung gemessen gehört: wie viel besser es
+wirklich ist (Latenz und Bild nebeneinander), was es an CPU kostet (x264 in Software, ohne GPU
+zahlt das jede Sitzung), und ob das Modell „ein Bildschirm je Sitzung" den Alltag trägt — der
+Anwendungsumschalter je Display gibt es dort nicht. Offen ausserdem: **eine Sitzung je Host**,
+weil die TURN-Ports fest stehen.
+
+Die alte Notiz dazu, unverändert gültig als Begründung, warum es Selkies ist und nichts
+Selbstgebautes:
+
 **Die Streaming-Maschine** — die einzige Richtung, in der „etwas Eigenes" wirklich besser wäre.
 Nicht ein selbstgebautes Protokoll (x11vnc ist einfädig und ungepflegt, TigerVNC ist der Stamm,
 von dem KasmVNC abzweigt — wir würden gerade die Teile weglassen, die ihn ausmachen), sondern ein

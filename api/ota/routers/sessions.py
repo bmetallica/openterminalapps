@@ -155,8 +155,15 @@ def _out(s: SessionModel) -> SessionOut:
         # Seite, nicht an den aktuellen Pfad. Ohne diesen Parameter versucht er
         # wss://host/websockify — das landet bei der Weboberflaeche, die mit
         # 200 statt mit einem Upgrade antwortet, und es fliesst kein Bild.
-        url=f"/s/{s.id}/?path=s/{s.id}/websockify{STREAM_ARGS}",
+        #
+        # Selkies braucht nichts davon: Es liefert seine eigene Oberflaeche
+        # unter der Wurzel aus und findet seinen Signalisierungsweg selbst.
+        # Die KasmVNC-Parameter dort anzuhaengen waere nicht nur nutzlos,
+        # sondern irrefuehrend — sie wuerden aussehen, als taeten sie etwas.
+        url=(f"/s/{s.id}/" if s.template.stream_engine == "selkies"
+             else f"/s/{s.id}/?path=s/{s.id}/websockify{STREAM_ARGS}"),
         streams=[_stream_out(s, x) for x in s.streams],
+        stream_engine=s.template.stream_engine,
     )
 
 
@@ -213,15 +220,24 @@ def _buche_einmal_skripte(db: DbSession, user, ergebnisse: list[dict]) -> None:
 
 
 def _traefik_labels(sess_id: uuid.UUID, user_id: uuid.UUID, vnc_user: str,
-                    secret: str) -> dict[str, str]:
+                    secret: str, engine: str = "kasmvnc") -> dict[str, str]:
     """Routing-Regeln fuer diese eine Session.
 
     Der Authorization-Header wird von Traefik gesetzt, nicht vom Browser.
-    Das KasmVNC-Passwort verlaesst den Server damit nie.
+    Das Passwort der Streaming-Maschine verlaesst den Server damit nie.
+
+    `engine` entscheidet ueber Ziel-Port und -Schema:
+
+    * **kasmvnc** — 6901, HTTPS (KasmVNC beendet TLS selbst und laesst sich
+      nicht davon abbringen).
+    * **selkies** — 8080, HTTP. Traefik beendet TLS; Selkies laeuft dahinter
+      im Klartext (`--enable_https=false`). Es gibt dort auch keine
+      zusaetzlichen Displays: Selkies uebertraegt genau einen Bildschirm.
     """
     sid = str(sess_id)
     name = f"s-{sess_id.hex}"
     basic = base64.b64encode(f"{vnc_user}:{secret}".encode()).decode()
+    port, schema = ("8080", "http") if engine == "selkies" else ("6901", "https")
 
     labels = {
         "traefik.enable": "true",
@@ -243,13 +259,20 @@ def _traefik_labels(sess_id: uuid.UUID, user_id: uuid.UUID, vnc_user: str,
         f"traefik.http.middlewares.{name}-basic.headers."
         f"customrequestheaders.Authorization": f"Basic {basic}",
 
-        f"traefik.http.services.{name}.loadbalancer.server.port": "6901",
-        f"traefik.http.services.{name}.loadbalancer.server.scheme": "https",
+        f"traefik.http.services.{name}.loadbalancer.server.port": port,
+        f"traefik.http.services.{name}.loadbalancer.server.scheme": schema,
         f"traefik.http.services.{name}.loadbalancer.serverstransport": "ota-insecure@file",
 
         "ota.session_id": sid,
         "ota.user_id": str(user_id),
+        "ota.engine": engine,
     }
+
+    # Selkies überträgt genau **einen** Bildschirm. Die Routen für weitere
+    # Displays gäbe es dort ins Leere — und mit ihnen die Erwartung, es liefe
+    # dasselbe Arbeitsplatzmodell.
+    if engine == "selkies":
+        return labels
 
     # Routen für die App-Displays gleich mitgeben. Labels lassen sich an einem
     # laufenden Container nicht mehr ändern, deshalb werden sie hier auf Vorrat
@@ -491,7 +514,12 @@ def start_session(
             "skeleton_enforce": list(tpl.skeleton_enforce or []),
             # Laeuft nach dem Start als Nutzer im Container.
             "start_script": tpl.start_script or "",
-            "labels": _traefik_labels(sess.id, user.id, sess.vnc_user, sess.vnc_secret),
+            "labels": _traefik_labels(sess.id, user.id, sess.vnc_user,
+                                      sess.vnc_secret, tpl.stream_engine),
+            # Welche Streaming-Maschine im Container laeuft. Der Agent
+            # entscheidet daran, worauf er beim Start wartet und welche Ports
+            # er nach aussen durchreicht.
+            "engine": tpl.stream_engine,
         })
     except HTTPException:
         sess.status = "failed"

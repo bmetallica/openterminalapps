@@ -129,8 +129,16 @@ startxfce4 > /tmp/xfce.log 2>&1 &
 # `autocutsel` gleicht die beiden X-Auswahlpuffer ab. Ohne das ist die
 # Zwischenablage im Container je nach Anwendung mal PRIMARY, mal CLIPBOARD —
 # und beim Einfügen kommt die vorletzte Auswahl heraus.
-autocutsel -selection CLIPBOARD -fork 2>/dev/null || true
-autocutsel -selection PRIMARY -fork 2>/dev/null || true
+#
+# **Mit `&`, nicht nur mit `-fork`.** Der Schalter verspricht, sich in den
+# Hintergrund zu verabschieden, tut es hier aber nicht: Der Prozess bleibt
+# Kind der Startshell, und die wartet auf ihn. Gemessen am 2026-09-02 — das
+# Startskript blieb an dieser Zeile stehen, und alles danach lief nie. Am
+# auffälligsten: `custom_startup.sh`, also das, was ein abgeleitetes Image
+# überhaupt starten soll. Gemerkt hat es niemand, weil der Port zu diesem
+# Zeitpunkt längst offen ist und die Prüfung genau daran hing.
+autocutsel -selection CLIPBOARD -fork > /dev/null 2>&1 &
+autocutsel -selection PRIMARY -fork > /dev/null 2>&1 &
 
 # --- Das Startskript des abgeleiteten Images -----------------------------
 #

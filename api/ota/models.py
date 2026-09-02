@@ -247,6 +247,16 @@ class Template(Base):
     group_shelf: Mapped[bool] = mapped_column(Boolean, default=True,
                                               server_default="true")
 
+    # Welche Streaming-Maschine den Bildschirm überträgt.
+    #
+    # `kasmvnc` ist die Vorgabe und bleibt es: Sie trägt heute jeden
+    # Arbeitsplatz. `selkies` ist der zweite Weg — H.264 über WebRTC statt
+    # rechteckiger Bildausschnitte über RFB. Er steckt noch im Versuch und
+    # bringt eine Einschränkung mit, die man kennen muss: **ein Bildschirm je
+    # Sitzung**, keine Anwendung je Display.
+    stream_engine: Mapped[str] = mapped_column(String(16), default="kasmvnc",
+                                               server_default="kasmvnc")
+
     persistence_scope: Mapped[str] = mapped_column(String(16), default="user")
     idle_minutes: Mapped[int] = mapped_column(Integer, default=60)
     idle_action: Mapped[str] = mapped_column(String(16), default="stop")

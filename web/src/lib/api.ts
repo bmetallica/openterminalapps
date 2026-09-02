@@ -95,6 +95,14 @@ export type Session = {
   error: string | null
   url: string
   streams: Stream[]
+  /**
+   * Welche Streaming-Maschine überträgt: `kasmvnc` oder `selkies`.
+   *
+   * Der Viewer braucht das, weil Reconnect-Erkennung, Leerlaufuhr und
+   * Zwischenablage gegen KasmVNCs Weboberfläche geschrieben sind — bei
+   * Selkies gibt es die Elemente nicht, auf die sie zeigen.
+   */
+  stream_engine: 'kasmvnc' | 'selkies'
 }
 
 export type MyStorage = {

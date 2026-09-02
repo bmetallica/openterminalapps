@@ -139,6 +139,10 @@ class StartRequest(BaseModel):
     vnc_user: str = "kasm_user"
     vnc_secret: str
     mode: str = "workspace"
+    # Welche Streaming-Maschine im Image laeuft: "kasmvnc" (Vorgabe) oder
+    # "selkies". Sie entscheidet ueber den Port, auf den der Agent wartet, und
+    # darueber, ob TURN-Ports nach aussen durchgereicht werden.
+    engine: str = "kasmvnc"
     labels: dict[str, str] = {}
     # Laeuft nach dem Start als Nutzer im Container. Siehe _run_start_script.
     start_script: str = ""
@@ -516,6 +520,39 @@ def start_container(req: StartRequest) -> dict[str, Any]:
             log.warning("Eigene Ablage fuer %s nicht einhaengbar: %s",
                         req.shelf_user, exc)
 
+    # --- Selkies: der Medienstrom geht nicht durch Traefik ----------------
+    #
+    # KasmVNC schickt alles durch den einen HTTPS-Weg. Selkies überträgt das
+    # Bild als WebRTC über UDP, und dafür braucht es einen Weg vom Browser zum
+    # Container, den Traefik nicht kennt. Vermittelt wird über einen
+    # TURN-Server **im Container selbst**; seine Ports gehen hier nach aussen.
+    #
+    # Feste Ports und keine Vergabe je Sitzung: Damit läuft genau **eine**
+    # Selkies-Sitzung je Host. Das reicht für den Versuch, um den es hier
+    # geht, und eine Portvergabe, die niemand braucht, wäre Arbeit ohne
+    # Nutzen. Steht die Entscheidung für diesen Weg, gehört sie als Erstes
+    # nachgeholt.
+    ports: dict[str, Any] = {}
+    if req.engine == "selkies":
+        turn_port = int(os.environ.get("OTA_SELKIES_TURN_PORT", "3478"))
+        turn_min = int(os.environ.get("OTA_SELKIES_TURN_MIN", "65500"))
+        turn_max = int(os.environ.get("OTA_SELKIES_TURN_MAX", "65510"))
+        turn_host = os.environ.get("OTA_SELKIES_TURN_HOST", "")
+        if not turn_host:
+            log.warning("OTA_SELKIES_TURN_HOST ist nicht gesetzt — der Strom "
+                        "bleibt voraussichtlich schwarz")
+        env.setdefault("SELKIES_TURN_HOST", turn_host)
+        env.setdefault("SELKIES_TURN_PORT", str(turn_port))
+        env.setdefault("TURN_MIN_PORT", str(turn_min))
+        env.setdefault("TURN_MAX_PORT", str(turn_max))
+        # Jeder Port einzeln und nicht als Bereich: Die Docker-Bibliothek
+        # nimmt eine Zeichenkette wie "65500-65510" nicht an und antwortet mit
+        # `invalid port '65500-65510': invalid syntax`. Elf Einträge sind
+        # ueberschaubar.
+        ports = {f"{turn_port}/tcp": turn_port, f"{turn_port}/udp": turn_port}
+        for p in range(turn_min, turn_max + 1):
+            ports[f"{p}/udp"] = p
+
     try:
         container = client.containers.run(
             req.image,
@@ -524,6 +561,7 @@ def start_container(req: StartRequest) -> dict[str, Any]:
             environment=env,
             mounts=mounts,
             network=SESSION_NETWORK,
+            ports=ports or None,
             labels=req.labels,
             nano_cpus=int(req.cores * 1_000_000_000),
             mem_limit=req.memory_bytes,
@@ -566,7 +604,8 @@ def start_container(req: StartRequest) -> dict[str, Any]:
     if req.elevated:
         _elevate(container)
 
-    _wait_for_vnc(container)
+    # Selkies hoert auf 8080, KasmVNC auf 6901.
+    _wait_for_vnc(container, port=8080 if req.engine == "selkies" else 6901)
 
     # Reihenfolge mit Absicht: erst das Skeleton, dann der Verweis auf die
     # Ablage, dann das Startskript. Das Skeleton legt den Grundstand; das
@@ -755,7 +794,8 @@ def _fetch_from_registry(client: docker.DockerClient, ref: str) -> bool:
 VNC_BEREIT_SEKUNDEN = int(os.environ.get("OTA_VNC_READY_SECONDS", "90"))
 
 
-def _wait_for_vnc(container, seconds: int = VNC_BEREIT_SEKUNDEN) -> bool:
+def _wait_for_vnc(container, seconds: int = VNC_BEREIT_SEKUNDEN,
+                  port: int = 6901) -> bool:
     """Wartet, bis KasmVNC im Container Verbindungen annimmt.
 
     Ohne das meldet die API die Session als bereit, sobald Docker den Container
@@ -768,7 +808,7 @@ def _wait_for_vnc(container, seconds: int = VNC_BEREIT_SEKUNDEN) -> bool:
     """
     probe = (
         f"for i in $(seq 1 {seconds * 2}); do "
-        "(exec 3<>/dev/tcp/127.0.0.1/6901) 2>/dev/null && exit 0; "
+        f"(exec 3<>/dev/tcp/127.0.0.1/{port}) 2>/dev/null && exit 0; "
         "sleep 0.5; done; exit 1"
     )
     try:

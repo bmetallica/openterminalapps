@@ -152,6 +152,14 @@ services:
       OTA_GROUPFILES_ROOT: "${OTA_GROUPFILES_ROOT:-/srv/ota/groupfiles}"
       # Skeleton-Profile je Workspace: womit ein Zuhause anfaengt.
       OTA_SKELETON_ROOT: "${OTA_SKELETON_ROOT:-/srv/ota/skeletons}"
+      # Wohin der Browser für den WebRTC-Medienstrom greift, wenn eine
+      # Vorlage auf Selkies steht (Versuchsweg, `roadmap.md`). Es muss die
+      # Adresse sein, unter der die **Browser** diesen Host erreichen — nicht
+      # die eines Docker-Netzes. Leer heisst: kein Selkies.
+      OTA_SELKIES_TURN_HOST: "${OTA_SELKIES_TURN_HOST:-}"
+      OTA_SELKIES_TURN_PORT: "${OTA_SELKIES_TURN_PORT:-3478}"
+      OTA_SELKIES_TURN_MIN: "${OTA_SELKIES_TURN_MIN:-65500}"
+      OTA_SELKIES_TURN_MAX: "${OTA_SELKIES_TURN_MAX:-65510}"
       OTA_SESSION_NETWORK: ota_sessions
       OTA_PUBLIC_NETWORK: ota_public
       OTA_BACKUP_ROOT: "${OTA_BACKUP_ROOT:-/srv/ota/backups}"
