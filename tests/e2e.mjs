@@ -281,6 +281,46 @@ try {
   const viewLogs = []
   view?.on('console', (m) => viewLogs.push(m.text()))
   check(!!view, 'Session öffnet in einem eigenen Tab')
+
+  // ------------------------------------------------------------ Symbole
+  //
+  // Jedes Paket bringt sein Symbol mit; OTA liest es aus der .desktop-Datei
+  // und liefert es unter einer eigenen Adresse aus. Geprüft wird hier, was
+  // eine Schnittstellenprüfung nicht sieht: dass die Bilder im Browser
+  // wirklich ankommen. Ein 200 mit `image/png` sagt nichts darüber, ob das,
+  // was drinsteht, ein Bild ist — `naturalWidth` schon.
+  //
+  // Und zwar **hier**, gleich nach dem Start: Den Anwendungsstreifen zeigt
+  // das Dashboard nur zu einer laufenden Session. Weiter unten stand der
+  // Abschnitt zwar auch, übersprang sich aber jedes Mal selbst.
+  console.log('\nSymbole der Anwendungen')
+  {
+    await page.bringToFront()
+    await page.waitForSelector('.strip__app', { timeout: 30000 }).catch(() => {})
+    // Bilder laden nachträglich (`loading="lazy"`), deshalb kurz nachfassen.
+    let bilder = { anzahl: 0, geladen: 0, kaputt: 0 }
+    for (let i = 0; i < 20; i++) {
+      bilder = await page.evaluate(() => {
+        const els = [...document.querySelectorAll('.strip__icon img')]
+        return {
+          anzahl: els.length,
+          geladen: els.filter((x) => x.naturalWidth > 0).length,
+          kaputt: els.filter((x) => x.complete && x.naturalWidth === 0).length,
+        }
+      })
+      if (bilder.anzahl > 0 && bilder.geladen === bilder.anzahl) break
+      await new Promise((r) => setTimeout(r, 500))
+    }
+    if (bilder.anzahl === 0) {
+      bad('Keine Anwendung mit Symbol im Katalog — im Image nachsehen und freigeben')
+    } else {
+      check(bilder.geladen === bilder.anzahl,
+        `Alle Symbole sind im Browser angekommen (${bilder.geladen} von ${bilder.anzahl})`)
+      check(bilder.kaputt === 0,
+        bilder.kaputt ? `${bilder.kaputt} Symbol(e) blieben leer` : 'Keins blieb leer')
+    }
+    await view.bringToFront()
+  }
   check(/\/view\/s\/[0-9a-f-]{36}/.test(view.url()),
     `Der Tab hat eine eigene Adresse (${new URL(view.url()).pathname})`)
 
@@ -1399,8 +1439,14 @@ try {
 
   // ------------------------------------------------------------ JS-Fehler
   console.log('\nKonsole')
+  // `ERR_NETWORK_CHANGED` steht bewusst mit auf der Liste: Es lässt sich von
+  // Anwendungscode gar nicht auslösen — Chromium meldet es, wenn sich die
+  // Netzkonfiguration des Rechners **während** einer laufenden Anfrage
+  // ändert. Genau das tut diese Prüfreihe selbst: Sie startet und entfernt
+  // Session-Container, und jeder davon hängt Dockers Bridge um. Ein Fehler,
+  // den der Test sich selbst macht, sagt über OTA nichts.
   const relevant = errors.filter((e) =>
-    !/favicon|net::ERR_CERT|Failed to load resource: the server responded with a status of 40/i.test(e))
+    !/favicon|net::ERR_CERT|net::ERR_NETWORK_CHANGED|Failed to load resource: the server responded with a status of 40/i.test(e))
   const wsErrors = errors.filter((e) => /websocket|websockify/i.test(e))
   check(wsErrors.length === 0,
     wsErrors.length ? `Websocket-Fehler: ${wsErrors[0].slice(0, 90)}` : 'Keine Websocket-Fehler')

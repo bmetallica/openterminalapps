@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { AppIcon } from '../components/AppIcon'
 import { ApiError, api, type SkeletonEntry, type Template } from '../lib/api'
 import { size } from '../lib/format'
 import { t as tr, useLang } from '../lib/i18n'
@@ -115,7 +116,7 @@ export function Skeleton({ tpl, enforce, onEnforce, onToast }: {
               className={`chip${app === a.slug ? ' is-on' : ''}`}
               aria-pressed={app === a.slug}
               onClick={() => { setApp(a.slug); setPath('') }}>
-              {a.icon} {a.name}
+              <AppIcon url={a.icon_url} glyph={a.icon} size={15} /> {a.name}
             </button>
           ))}
         </div>

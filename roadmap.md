@@ -375,6 +375,20 @@ Session-Prozesse, und die ereignisgesteuerte statt abfragende Brücke (braucht e
       Teilbaum überschriebe hinterher, was der Mensch schon sieht. Gemerkt wird das im Zuhause
       (`~/.ota/app-skeleton/<app>`) und nicht in der Datenbank — `set_apps` ersetzt den Katalog
       komplett, eine daran hängende Buchführung wäre nach jeder Änderung weg
+- [x] **Symbole aus den Paketen** (2026-09-02) — bisher trug jede Anwendung nur ein Zeichen aus
+      einer festen Liste. Das echte Symbol steht in derselben `.desktop`-Datei, die OTA ohnehin
+      liest; wo die Datei dazu liegt, regelt die Freedesktop-Spezifikation. Gemessen an einem
+      echten Arbeitsplatz-Image: **16 von 16** brachten eins mit.
+
+      Zwei Entscheidungen dabei, beide gemessen statt geraten. **Verkleinert wird in der API**, auf
+      128 Pixel: VSCodium liefert 428 KB, und ungeprüft läge das in der Datenbank und in jeder
+      Antwort. Und ausgeliefert wird es unter einer **eigenen Adresse** statt als Datenadresse im
+      Katalog — der wiegt sonst 140 KB, und das Dashboard lädt ihn alle 15 Sekunden neu. Ein
+      Fingerabdruck im Anhang sorgt dafür, dass nach einem Image-Update trotzdem das neue kommt.
+
+      Das Dekodieren liegt bewusst in der API und nicht im Agent: Hier wird ein Bild aus einem
+      fremden Paket verarbeitet, und der Agent ist der einzige Dienst mit dem Docker-Socket
+      ([ADR-002](docs/adr/002-nur-der-agent-fasst-docker-an.md))
 - [x] Extensions beim **Build** installieren, nicht beim Start
 - [x] **Sichtbarkeit je App und Gruppe** — für den Fall, dass eine Lizenz nicht für alle reicht.
       Leer heisst „für alle", sonst wäre jeder bestehende Katalog mit dem Einführen der Regel

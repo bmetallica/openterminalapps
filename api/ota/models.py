@@ -364,6 +364,16 @@ class TemplateApp(Base):
     slug: Mapped[str] = mapped_column(String(64))
     name: Mapped[str] = mapped_column(String(255))
     icon: Mapped[str] = mapped_column(String(16), default="▢")
+    # Das echte Symbol aus dem Paket, als Datenadresse (`data:image/png;…`).
+    # Leer heisst: Das Image bringt keins mit, dann zeigt die Oberflaeche das
+    # Zeichen oben.
+    #
+    # In der Datenbank und nicht als Datei: Es gehoert zu genau diesem
+    # Katalogeintrag, wiegt nach dem Verkleinern (`ota/icons.py`) wenige
+    # Kilobyte und wandert damit von selbst durch Sicherung und
+    # Wiederherstellung. Eine Datei daneben waere ein zweiter Ort, der beim
+    # Zurueckspielen fehlen kann.
+    icon_data: Mapped[str | None] = mapped_column(Text)
     exec_cmd: Mapped[str] = mapped_column(String(512))
     exec_args: Mapped[str] = mapped_column(String(512), default="")
     # Nur informativ fuers UI: woher diese App ihre Erweiterungen bezieht.

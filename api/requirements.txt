@@ -19,4 +19,14 @@ httpx==0.28.1
 python-multipart==0.0.20
 pyotp==2.9.0
 qrcode==8.0
+# Zum Verkleinern der Anwendungssymbole aus den Images. Ein Paket bringt sein
+# Symbol in der Groesse mit, die es fuer richtig haelt — VSCodium liefert
+# 428 KB. Ungeprueft weitergereicht laege das in der Datenbank und in jeder
+# Antwort des Katalogs.
+#
+# Bewusst in der API und nicht im Agent: Hier wird ein Bild aus einem fremden
+# Paket dekodiert, und der Agent ist der einzige Dienst mit dem
+# Docker-Socket. Fremde Daten gehoeren dorthin, wo ohnehin fremde Daten
+# verarbeitet werden ([ADR-002](../docs/adr/002-nur-der-agent-fasst-docker-an.md)).
+pillow==11.1.0
 ldap3==2.9.1

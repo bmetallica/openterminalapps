@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import base64
+import binascii
+import hashlib
 import re
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session as DbSession
 
-from .. import agent_client, audit
+from .. import agent_client, audit, icons
 from ..db import get_db
 from ..deps import current_user, require_permission
 from ..models import (
@@ -333,6 +336,13 @@ def discover_apps(
             # angepasst hat, will das nicht bei jedem Durchsehen verlieren.
             "name": current.name if current else entry["name"],
             "icon": current.icon if current else entry["icon"],
+            # Das Symbol dagegen kommt **immer** frisch aus dem Image, solange
+            # es dort eins gibt: Es ist keine Einstellung, sondern das, was
+            # das Paket mitbringt — und nach einem Update sieht es womoeglich
+            # anders aus. Nur wenn das Image keins hergibt, bleibt das schon
+            # gespeicherte stehen.
+            "icon_data": (icons.verkleinern(str(entry.get("icon_data") or ""))
+                          or (current.icon_data if current else "") or ""),
         })
 
     for slug, app in known.items():
@@ -340,6 +350,7 @@ def discover_apps(
             continue
         out.append({
             "slug": slug, "name": app.name, "icon": app.icon,
+            "icon_data": app.icon_data or "",
             "exec_cmd": app.exec_cmd, "exec_args": app.exec_args,
             "categories": [], "needs_terminal": False,
             "binary": app.exec_cmd.rsplit("/", 1)[-1],
@@ -350,6 +361,66 @@ def discover_apps(
         })
 
     return sorted(out, key=lambda a: (a["missing"], str(a["name"]).lower()))
+
+
+@router.get("/{template_id}/apps/{slug}/icon")
+def app_icon(
+    template_id: uuid.UUID,
+    slug: str,
+    request: Request,
+    v: str = "",
+    user: User = Depends(current_user),
+    db: DbSession = Depends(get_db),
+) -> Response:
+    """Das Symbol einer Anwendung als Bild.
+
+    Warum ein eigener Weg und nicht die Datenadresse im Katalog: Das Dashboard
+    laedt die Vorlagen alle 15 Sekunden neu (siehe `AppOut.icon_url`). Als
+    Adresse holt der Browser jedes Symbol **einmal** und legt es beiseite.
+
+    Der Fingerabdruck steckt im Anhang `?v=`; er ist Teil der Adresse und
+    damit Teil dessen, was der Browser sich merkt. Aendert sich das Symbol
+    nach einem Image-Update, aendert sich die Adresse — und das alte kommt
+    nicht mehr aus dem Zwischenspeicher. Deshalb darf hier lange
+    zwischengespeichert werden, ohne dass jemand ein veraltetes Bild sieht.
+
+    Sichtbar fuer jeden, der die Vorlage ueberhaupt sehen darf. Ein Symbol ist
+    kein Geheimnis — aber die Liste der Anwendungen eines fremden
+    Arbeitsplatzes ist eine Auskunft, und die gibt es hier so wenig wie
+    anderswo.
+    """
+    tpl = db.get(Template, template_id)
+    if not tpl or not user_can_see_template(tpl, user):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Nicht gefunden")
+
+    app = next((a for a in tpl.apps if a.slug == slug), None)
+    if app is None or not app.icon_data:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Kein Symbol hinterlegt")
+
+    treffer = re.match(r"^data:(image/[a-z+]+);base64,(.+)$", app.icon_data, re.S)
+    if not treffer:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Kein Symbol hinterlegt")
+    try:
+        rohdaten = base64.b64decode(treffer.group(2))
+    except (binascii.Error, ValueError):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Kein Symbol hinterlegt") from None
+
+    marke = hashlib.sha256(app.icon_data.encode("utf-8", "replace")).hexdigest()[:8]
+    etag = f'"{marke}"'
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag})
+
+    return Response(
+        content=rohdaten,
+        media_type=treffer.group(1),
+        headers={
+            # Ein Tag, und ausdruecklich `private`: Das Symbol haengt an einer
+            # Vorlage, die nicht jeder sehen darf — es hat in keinem
+            # gemeinsamen Zwischenspeicher zu liegen.
+            "Cache-Control": "private, max-age=86400",
+            "ETag": etag,
+        },
+    )
 
 
 @router.put("/{template_id}/apps", dependencies=[Depends(manage)])
@@ -386,6 +457,12 @@ def set_apps(
 
     known_groups = set(db.scalars(select(Group.id)).all())
 
+    # Die Symbole der bisherigen Eintraege merken. Der Katalog wird gleich
+    # komplett ersetzt, und wer ihn speichert, ohne vorher das Image
+    # durchgesehen zu haben, schickt keins mit — ohne diese Zeile waeren
+    # danach alle Symbole weg.
+    alte_symbole = {a.slug: (a.icon_data or "") for a in tpl.apps}
+
     tpl.apps.clear()
     db.flush()
     for order, entry in enumerate(body):
@@ -394,6 +471,13 @@ def set_apps(
         # sollen gar nicht erst gespeichert werden — sonst steht in der
         # Oberfläche gleich wieder eine Auswahl, die niemand getroffen hat.
         fields["group_ids"] = [str(g) for g in fields.get("group_ids") or [] if g in known_groups]
+        # Das Symbol kommt aus dem Browser und ist damit fremde Eingabe: Es
+        # geht durch dieselbe Pruefung wie eines aus einem Image — richtiges
+        # Format, kleine Kante, keine Verweise nach draussen. Was dabei
+        # durchfaellt, wird still zu „kein Symbol"; die Oberflaeche zeigt dann
+        # das Zeichen.
+        fields["icon_data"] = (icons.verkleinern(fields.get("icon_data") or "")
+                               or alte_symbole.get(entry.slug, ""))
         tpl.apps.append(TemplateApp(sort_order=order, **fields))
 
     audit.record(db, "template.apps_set", actor=actor, object_type="template",

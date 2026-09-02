@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { AppIcon } from '../components/AppIcon'
 import { api, type Session, type Stream, type Template } from '../lib/api'
 import { startClipboardBridge, type Bridge } from '../lib/clipboardBridge'
 import { Led } from '../components/controls'
@@ -377,7 +378,8 @@ export function SessionViewer({
                     <button key={st.app_slug}
                       className={`strip__app${active ? ' is-on' : ''}`}
                       onClick={() => onSwitch(st)}>
-                      <span className="strip__icon" aria-hidden="true">{app?.icon ?? '▢'}</span>
+                      <AppIcon className="strip__icon" url={app?.icon_url}
+                        glyph={app?.icon} size={18} />
                       <span className="strip__name">{app?.name ?? st.app_slug}</span>
                       <span className="strip__led" aria-hidden="true" />
                     </button>

@@ -21,7 +21,16 @@ export type Me = {
 export type App = {
   slug: string
   name: string
+  /** Das Zeichen — Rückfall, wenn das Image kein Symbol mitbringt. */
   icon: string
+  /**
+   * Adresse des echten Symbols aus dem Paket, leer wenn es keins gibt.
+   *
+   * Bewusst eine Adresse und nicht das Bild selbst: Das Dashboard lädt die
+   * Vorlagen alle 15 Sekunden neu, und ein Katalog mit sechzehn Symbolen als
+   * Datenadressen wiegt 140 KB. So holt der Browser jedes Bild einmal.
+   */
+  icon_url: string
   registry_hint: string | null
   blocked_reason: string | null
   is_enabled: boolean
@@ -135,6 +144,14 @@ export type DiscoveredApp = {
   slug: string
   name: string
   icon: string
+  /**
+   * Das Symbol als Datenadresse — hier **doch** das Bild selbst.
+   *
+   * Beim Durchsehen ist das richtig: Die Liste wird einmal geholt, das Bild
+   * ist noch nirgends gespeichert und hat deshalb auch keine Adresse. Erst
+   * beim Speichern wandert es in den Katalog, und ab da gibt es `icon_url`.
+   */
+  icon_data: string
   exec_cmd: string
   exec_args: string
   categories: string[]

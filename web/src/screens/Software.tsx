@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { AppIcon } from '../components/AppIcon'
 import { Field, Toggle } from '../components/controls'
 import {
   ApiError, api,
@@ -339,6 +340,9 @@ export function Software({ tpl, onToast, onChanged }: {
         slug: a.slug,
         name: a.name,
         icon: a.icon,
+        // Das Symbol aus dem Paket wandert mit in den Katalog. Ab dann
+        // liefert die API es unter einer eigenen Adresse aus.
+        icon_data: a.icon_data,
         exec_cmd: a.exec_cmd,
         exec_args: a.exec_args,
         is_enabled: true,
@@ -681,12 +685,21 @@ export function Software({ tpl, onToast, onChanged }: {
           <div className="applist">
             {apps.map((a, i) => (
               <div key={a.slug} className={`applist__row${a.missing ? ' is-blocked' : ''}`}>
-                <button type="button" className="tile__icon applist__glyph"
-                  title={tr('Anderes Zeichen wählen')}
-                  onClick={() => setApps(apps.map((x, j) =>
-                    j === i ? { ...x, icon: nextGlyph(x.icon) } : x))}>
-                  {a.icon}
-                </button>
+                {/* Bringt das Paket ein Symbol mit, wird es gezeigt — und
+                    der Zeichenwechsler entfällt. Ein Knopf, der ein Bild
+                    zeigt und beim Klicken nichts sichtbar tut, wäre die
+                    schlechtere Antwort als gar keiner. */}
+                {a.icon_data ? (
+                  <AppIcon className="tile__icon applist__glyph"
+                    url={a.icon_data} glyph={a.icon} size={20} />
+                ) : (
+                  <button type="button" className="tile__icon applist__glyph"
+                    title={tr('Anderes Zeichen wählen')}
+                    onClick={() => setApps(apps.map((x, j) =>
+                      j === i ? { ...x, icon: nextGlyph(x.icon) } : x))}>
+                    {a.icon}
+                  </button>
+                )}
                 <span className="applist__body">
                   <input className="applist__rename" value={a.name}
                     aria-label={tr('Name von {app}', { app: a.name })}

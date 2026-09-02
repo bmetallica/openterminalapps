@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { AppIcon } from '../components/AppIcon'
 import { Led, stateClass } from '../components/controls'
 import {
   ApiError, api,
@@ -56,7 +57,7 @@ function Bay({ session, template, onOpen, onAct, onApp, busy, busyApp }: {
                   disabled={!running || busyApp === a.slug}
                   title={on ? tr('{app} anzeigen', { app: a.name }) : tr('{app} starten', { app: a.name })}
                   onClick={() => (on && stream ? onOpen(session, stream) : onApp(session, a.slug))}>
-                  <span className="strip__icon" aria-hidden="true">{a.icon}</span>
+                  <AppIcon className="strip__icon" url={a.icon_url} glyph={a.icon} size={18} />
                   <span className="strip__name">{a.name}</span>
                   {busyApp === a.slug
                     ? <span className="strip__wait" aria-label={tr('startet')} />
@@ -174,6 +175,7 @@ function ShortcutSection({ templates }: { templates: Template[] }) {
         key: `${t.slug}/${a.slug}`,
         name: a.name,
         icon: a.icon || '▢',
+        icon_url: a.icon_url,
         von: t.friendly_name,
         pfad: installPath(t.slug, a.slug),
       }))
@@ -182,6 +184,7 @@ function ShortcutSection({ templates }: { templates: Template[] }) {
       key: t.slug,
       name: t.friendly_name,
       icon: t.icon || '▣',
+      icon_url: '',
       von: tr('Ganzer Arbeitsplatz'),
       pfad: installPath(t.slug),
     }]
@@ -207,7 +210,7 @@ function ShortcutSection({ templates }: { templates: Template[] }) {
           <div className="shortcuts">
             {eintraege.map((e) => (
               <button key={e.key} className="shortcut" onClick={() => openInTab(e.pfad)}>
-                <span className="shortcut__icon" aria-hidden="true">{e.icon}</span>
+                <AppIcon className="shortcut__icon" url={e.icon_url} glyph={e.icon} size={18} />
                 <span className="shortcut__text">
                   <span className="shortcut__name">{e.name}</span>
                   <span className="silk">{e.von}</span>

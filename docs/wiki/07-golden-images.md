@@ -195,7 +195,38 @@ Was bleibt, ist eine Liste mit Schaltern. Zusätzlich lässt sich je Eintrag än
 | | |
 |---|---|
 | **Name** | direkt in der Zeile. „GNU Image Manipulation Program" heißt bei euch vielleicht schlicht „GIMP" |
-| **Zeichen** | Klick auf das Symbol schaltet weiter. Die Auswahl ist bewusst klein — die Oberfläche hat eine feste Zeichensprache |
+| **Zeichen** | Klick auf das Symbol schaltet weiter. Erscheint nur, wenn das Paket **kein** eigenes Symbol mitbringt — sonst steht dort das echte |
+
+### Das Symbol aus dem Paket ✅
+
+Unter `Icon` steht in der `.desktop`-Datei meist nur ein Name („firefox"), keine Datei. Wo das Bild
+dazu liegt, regelt die Freedesktop-Spezifikation, und OTA sucht es dort: unter
+`/usr/share/icons/<thema>/<größe>/apps/`, im alten `/usr/share/pixmaps`, notfalls über die ganze
+Ablage. Gesucht wird von gross nach klein und PNG vor SVG — gross, weil die Oberfläche skaliert und
+ein hochskaliertes 16er-Symbol matschig aussieht.
+
+Gemessen an einem echten Arbeitsplatz-Image: **16 von 16 Anwendungen** brachten ein Symbol mit.
+
+Zwei Dinge passieren dabei automatisch:
+
+- **Verkleinert.** Ein Paket liefert die Grösse, die es für richtig hält: 554 Bytes bei Vim,
+  42 KB bei GIMP, **428 KB bei VSCodium**. OTA rechnet alles auf höchstens 128 Pixel Kantenlänge
+  herunter. Ohne das läge ein halbes Megabyte in der Datenbank und in jeder Antwort des Katalogs.
+- **Geprüft.** Ein SVG mit einem Verweis nach draussen wird nicht übernommen. Sonst riefe das
+  Dashboard bei jedem Öffnen einen fremden Server auf — für jeden Betrachter.
+
+> **Bestehende Kataloge bekommen die Symbole nicht von selbst.** Sie stammen aus dem Image, und das
+> liest OTA nur beim Durchsehen. Einmal **Im Image nachsehen** und **Freigeben** genügt; danach
+> stehen sie überall — im Dashboard, im Umschalter der laufenden Session, im Skeleton-Reiter.
+
+Ausgeliefert werden sie unter einer eigenen Adresse und nicht im Katalog selbst. Der Grund ist
+messbar: Ein Katalog mit sechzehn Symbolen als Datenadressen wiegt 140 KB, und das Dashboard lädt
+die Vorlagen **alle 15 Sekunden** neu. Als Adresse holt der Browser jedes Bild einmal und legt es
+beiseite; ein Fingerabdruck im Anhang sorgt dafür, dass nach einem Image-Update trotzdem das neue
+kommt.
+
+Bringt ein Image kein Symbol mit — etwa bei einem selbst gebauten Startskript ohne
+`.desktop`-Eintrag —, bleibt es beim Zeichen, und der Zeichenwechsler erscheint wieder.
 
 Zwei Hinweise erscheinen von selbst:
 

@@ -112,6 +112,9 @@ In detail in [handbook chapter 2](docs/wiki/02-erste-schritte.md) (German).
 - **Recipes** for anything that is not a plain package — with a guided builder for your own
 - **Find applications inside the image**: OTA reads the `.desktop` files and suggests name, symbol
   and start command. Nobody has to know where a binary lives
+- **The real icon from the package** — the fox, not a circle. OTA looks where the Freedesktop
+  specification puts it, scales it down to 128 pixels (VSCodium ships 428 KB) and serves it
+  cacheably
 - **Three kinds of storage**: shared storage for files that belong in every workspace (read-only
   inside the container), a **personal one per user** under `/mnt/austausch` — writable, the way in
   and back out —, and **a drive per group** under `/mnt/gruppen/<name>`: the same files for a team.

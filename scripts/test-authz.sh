@@ -1052,6 +1052,132 @@ api "$TMP/user.jar" -X DELETE "$BASE/api/files?path=eigen.txt" >/dev/null
 REST=$(api "$TMP/user.jar" "$BASE/api/files" | jqp "str(len(d['entries']))")
 expect "0" "$REST" "Löschen räumt die eigene Ablage wieder"
 
+# ------------------------------------------ Symbole aus den Paketen
+#
+# Jedes Linux-Paket bringt sein Symbol mit, und es steht in der
+# `.desktop`-Datei, die OTA ohnehin liest. Geprueft wird die ganze Kette:
+# finden, verkleinern, speichern, ausliefern — und dass das Ausliefern denen
+# verschlossen bleibt, die den Arbeitsplatz gar nicht sehen duerfen.
+echo
+echo "Symbole aus den Paketen"
+
+WS_I=$(api "$TMP/admin.jar" "$BASE/api/templates" | jqp "
+next((t['id'] for t in d if t['mode'] == 'workspace' and t['apps']), '')")
+
+if [ -z "$WS_I" ]; then
+  bad "Kein Arbeitsplatz mit Anwendungen — Symbole nicht prüfbar"
+else
+  GEFUNDEN=$(api "$TMP/admin.jar" "$BASE/api/templates/$WS_I/apps/discover")
+  MIT=$(echo "$GEFUNDEN" | jqp "str(len([a for a in d if a.get('icon_data')]))")
+  ALLE=$(echo "$GEFUNDEN" | jqp "str(len(d))")
+  [ "${MIT:-0}" -ge 1 ] \
+    && ok "Das Durchsehen bringt Symbole mit ($MIT von $ALLE)" \
+    || bad "Keine einzige Anwendung brachte ein Symbol mit"
+
+  # Verkleinert wird in der API. VSCodium liefert ein Symbol von 428 KB; was
+  # ungeprueft durchginge, laege so in der Datenbank und in jeder Antwort.
+  GROESSTES=$(echo "$GEFUNDEN" | jqp "
+str(max([len(a.get('icon_data') or '') for a in d] or [0]))")
+  if [ "${GROESSTES:-0}" -le 131072 ]; then
+    ok "Keins ist grösser als 128 KB (grösstes: $((GROESSTES / 1024)) KB)"
+  else
+    bad "Ein Symbol kam ungekürzt durch ($((GROESSTES / 1024)) KB)"
+  fi
+
+  # Speichern, wie die Oberflaeche es tut — nur die schon im Katalog.
+  echo "$GEFUNDEN" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+aus = [{"slug": a["slug"], "name": a["name"], "icon": a["icon"],
+        "icon_data": a.get("icon_data", ""), "exec_cmd": a["exec_cmd"],
+        "exec_args": a["exec_args"], "is_enabled": True,
+        "fixed_display": a.get("fixed_display"),
+        "group_ids": a.get("group_ids") or [],
+        "x_res": a.get("x_res"), "y_res": a.get("y_res")}
+       for a in d if a.get("in_catalog")]
+print(json.dumps(aus))' > "$TMP/apps.json"
+  api "$TMP/admin.jar" -X PUT "$BASE/api/templates/$WS_I/apps" \
+    -H 'Content-Type: application/json' -d "@$TMP/apps.json" >/dev/null
+
+  SYM_URL=$(api "$TMP/admin.jar" "$BASE/api/templates/$WS_I" | jqp "
+next((a['icon_url'] for a in d['apps'] if a.get('icon_url')), '')")
+  [ -n "$SYM_URL" ] \
+    && ok "Nach dem Speichern trägt der Katalog Adressen statt Bilder" \
+    || bad "Im Katalog steht keine Symboladresse"
+
+  if [ -n "$SYM_URL" ]; then
+    # Die Adresse und nicht das Bild — sonst laege ein Katalog mit sechzehn
+    # Anwendungen bei 140 KB, und das Dashboard laedt ihn alle 15 Sekunden.
+    KATALOG=$(api "$TMP/admin.jar" "$BASE/api/templates/$WS_I" | wc -c)
+    if [ "$KATALOG" -le 20480 ]; then
+      ok "Und bleibt schlank ($((KATALOG / 1024)) KB)"
+    else
+      bad "Der Katalog wiegt $((KATALOG / 1024)) KB — steckt das Bild doch darin?"
+    fi
+
+    KOPF="$TMP/symkopf.txt"
+    CODE_I=$(curl -s --cacert "$CA" -b "$TMP/admin.jar" "$BASE$SYM_URL" \
+      -D "$KOPF" -o "$TMP/sym.bin" -w '%{http_code}')
+    expect "200" "$CODE_I" "Das Symbol lässt sich abrufen"
+    TYP_I=$(grep -i "^content-type" "$KOPF" | tr -d '\r' | cut -d' ' -f2)
+    case "$TYP_I" in
+      image/png|image/svg+xml) ok "Und kommt als Bild ($TYP_I)" ;;
+      *) bad "Unerwarteter Typ: $TYP_I" ;;
+    esac
+
+    # Zwischenspeichern: Ohne das holte der Browser jedes Symbol alle 15
+    # Sekunden neu.
+    grep -qi "cache-control:.*max-age" "$KOPF" \
+      && ok "Der Browser darf es beiseitelegen" \
+      || bad "Keine Zwischenspeicher-Angabe — es käme bei jedem Laden neu"
+    grep -qi "cache-control:.*private" "$KOPF" \
+      && ok "Und ausdrücklich nur für ihn, nicht für einen gemeinsamen Speicher" \
+      || bad "Das Symbol dürfte in einem gemeinsamen Zwischenspeicher liegen"
+
+    ETAG_I=$(grep -i "^etag" "$KOPF" | tr -d '\r' | cut -d' ' -f2)
+    CODE_I=$(curl -s --cacert "$CA" -b "$TMP/admin.jar" "$BASE$SYM_URL" \
+      -H "If-None-Match: $ETAG_I" -o /dev/null -w '%{http_code}')
+    expect "304" "$CODE_I" "Beim zweiten Mal genügt „unverändert“"
+
+    CODE_I=$(curl -s --cacert "$CA" "$BASE$SYM_URL" -o /dev/null -w '%{http_code}')
+    expect "401" "$CODE_I" "Ohne Anmeldung gibt es kein Symbol"
+
+    expect "404" "$(code "$TMP/admin.jar" "$BASE/api/templates/$WS_I/apps/gibt-es-nicht/icon")" \
+      "Eine unbekannte Anwendung ergibt 404"
+  fi
+
+  # Fremde Eingabe: Was als Symbol hereinkommt, ist erst einmal nur Text. Ein
+  # Verweis nach draussen darin waere ein Aufruf an einen fremden Server —
+  # beim Öffnen des Dashboards, für jeden Betrachter.
+  BOESE=$(python3 -c "
+import base64
+svg = b'<svg xmlns=\"http://www.w3.org/2000/svg\"><image href=\"http://example.invalid/x.png\"/></svg>'
+print('data:image/svg+xml;base64,' + base64.b64encode(svg).decode())")
+  ERSTER=$(jqp "d[0]['slug'] if d else ''" < "$TMP/apps.json")
+  BOESE="$BOESE" python3 -c "
+import json, os
+apps = json.load(open('$TMP/apps.json'))
+if apps:
+    apps[0]['icon_data'] = os.environ['BOESE']
+print(json.dumps(apps))" > "$TMP/boese.json"
+  api "$TMP/admin.jar" -X PUT "$BASE/api/templates/$WS_I/apps" \
+    -H 'Content-Type: application/json' -d "@$TMP/boese.json" >/dev/null
+  # In eine Datei und nicht in eine Variable: Was zurueckkommt, kann ein PNG
+  # sein, und ein NULL-Byte in einer Kommandoersetzung gibt eine Warnung —
+  # die Pruefung waere richtig, das Protokoll aber unruhig.
+  api "$TMP/admin.jar" "$BASE/api/templates/$WS_I/apps/$ERSTER/icon" \
+    > "$TMP/sym-boese.bin" 2>/dev/null
+  if grep -qa "example.invalid" "$TMP/sym-boese.bin"; then
+    bad "Ein Symbol mit fremdem Verweis ging durch"
+  else
+    ok "Ein Symbol mit Verweis nach draussen wird nicht übernommen"
+  fi
+
+  # Und zurueckstellen, damit die Symbole für die weiteren Prüfungen stehen.
+  api "$TMP/admin.jar" -X PUT "$BASE/api/templates/$WS_I/apps" \
+    -H 'Content-Type: application/json' -d "@$TMP/apps.json" >/dev/null
+fi
+
 # --------------------------------------------- Gruppenlaufwerke
 #
 # Die dritte Ablage: dieselben Dateien fuer ein Team. Geprueft wird vor allem

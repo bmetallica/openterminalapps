@@ -9,6 +9,7 @@ import {
   ApiError, api,
   type Allocation, type Group, type Host, type HostImage, type Template,
 } from '../lib/api'
+import { AppIcon } from '../components/AppIcon'
 import { Skeleton } from './Skeleton'
 import { t as tr, useLang } from '../lib/i18n'
 import { Software } from './Software'
@@ -270,8 +271,7 @@ function Editor({ tpl, host, groups, images, onSaved, onClose, onToast }: {
             <div className="applist">
               {draft.apps.map((a) => (
                 <div key={a.slug} className={`applist__row${a.blocked_reason ? ' is-blocked' : ''}`}>
-                  <span className="tile__icon" style={{ width: 30, height: 30, fontSize: 15 }}
-                    aria-hidden="true">{a.icon}</span>
+                  <AppIcon className="tile__icon" url={a.icon_url} glyph={a.icon} size={18} />
                   <span className="applist__body">
                     <span className="applist__name">{a.name}</span>
                     {a.blocked_reason

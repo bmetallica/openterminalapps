@@ -4,7 +4,10 @@ Der Sinn: Nach dem Einbauen von Firefox oder GIMP soll niemand nachschlagen
 muessen, wie der Startbefehl heisst, wo die Binaerdatei liegt und wie das
 Programm in der Oberflaeche heissen soll. Das steht alles schon im Image —
 in den `.desktop`-Dateien, die jedes Linux-Paket mitbringt, damit ein
-Startmenue es anzeigen kann. OTA liest genau die.
+Startmenue es anzeigen kann. OTA liest genau die — samt dem **Symbol**: Unter
+`Icon` steht dort meist nur ein Name, und wo die Datei dazu liegt, regelt die
+Freedesktop-Spezifikation. Das Bild kommt als Datenadresse zurueck und landet
+im Katalog; ein Zeichen bleibt als Rueckfall fuer Images ohne Symbol.
 
 Gelesen wird in einem kurzlebigen Container aus dem Image selbst. Der
 Alternativweg, die Image-Schichten von aussen auszupacken, waere schneller,
@@ -55,6 +58,50 @@ needs_no_sandbox() {
   return 1
 }
 
+# Das Symbol der Anwendung als Datei finden.
+#
+# In der .desktop-Datei steht unter Icon meist nur ein **Name**
+# ("firefox", "org.gnome.gimp"), kein Pfad. Wo die Datei dazu liegt, regelt
+# die Freedesktop-Spezifikation: unter /usr/share/icons/<thema>/<groesse>/
+# apps/, im alten /usr/share/pixmaps, oder als absoluter Pfad.
+#
+# Gesucht wird von gross nach klein und PNG vor SVG. Gross zuerst, weil die
+# Oberflaeche skaliert und ein hochskaliertes 16er-Symbol matschig aussieht;
+# PNG vor SVG, weil manche Pakete SVGs mit Verweisen auf Schriften oder
+# andere Dateien mitbringen, die im <img> eines Browsers nicht aufloesen.
+#
+# XPM wird uebergangen: Das Format kann kein Browser darstellen. Lieber gar
+# kein Symbol als ein kaputtes Bild.
+icon_file() {
+  name="$1"
+  [ -z "$name" ] && return 1
+  case "$name" in
+    /*) [ -f "$name" ] && { printf '%s' "$name"; return 0; }; return 1 ;;
+  esac
+  # Ohne Endung suchen; manche Dateien tragen sie trotzdem im Icon-Feld.
+  base=${name%.png}; base=${base%.svg}; base=${base%.xpm}
+  for groesse in 128 256 96 64 48 scalable 512 32; do
+    for thema in hicolor Adwaita Papirus breeze gnome default; do
+      for endung in png svg; do
+        p="/usr/share/icons/$thema/${groesse}x${groesse}/apps/$base.$endung"
+        [ "$groesse" = scalable ] && p="/usr/share/icons/$thema/scalable/apps/$base.$endung"
+        [ -f "$p" ] && { printf '%s' "$p"; return 0; }
+      done
+    done
+  done
+  for p in "/usr/share/pixmaps/$base.png" "/usr/share/pixmaps/$base.svg" \
+           "/usr/share/icons/$base.png" "/usr/share/icons/$base.svg"; do
+    [ -f "$p" ] && { printf '%s' "$p"; return 0; }
+  done
+  # Zuletzt breit suchen. Erst hier, weil ein find ueber /usr/share/icons in
+  # einem grossen Image spuerbar dauert — und in den allermeisten Faellen
+  # haben die Pfade oben schon getroffen.
+  p=$(find /usr/share/icons /usr/share/pixmaps -name "$base.png" -o -name "$base.svg" \
+        2>/dev/null | head -1)
+  [ -n "$p" ] && { printf '%s' "$p"; return 0; }
+  return 1
+}
+
 for dir in /usr/share/applications /usr/local/share/applications /var/lib/flatpak/exports/share/applications; do
   [ -d "$dir" ] || continue
   for f in "$dir"/*.desktop; do
@@ -65,14 +112,34 @@ for dir in /usr/share/applications /usr/local/share/applications /var/lib/flatpa
     first=$(printf '%s' "$exec_line" | awk '{print $1}')
     sandbox=no
     needs_no_sandbox "$first" && sandbox=yes
+    stem=$(basename "$f" .desktop)
     printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-      "$(basename "$f" .desktop)" \
+      "$stem" \
       "$(field Name)" \
       "$exec_line" \
       "$(field NoDisplay)" \
       "$(field Terminal)" \
       "$(field Categories)" \
       "$sandbox"
+
+    # Das Bild auf einer eigenen Zeile, nicht als achte Spalte: Ein
+    # base64-Block ist einige Kilobyte lang, und eine Tabelle, deren Zeilen
+    # mal 80 und mal 30000 Zeichen haben, liest sich weder im Protokoll noch
+    # beim Suchen eines Fehlers.
+    if bild=$(icon_file "$(field Icon)"); then
+      groesse=$(wc -c < "$bild" 2>/dev/null || echo 0)
+      # Grosszuegig, weil die API anschliessend auf 128 Pixel herunterrechnet
+      # (`ota/icons.py`) — aber nicht unbegrenzt: VSCodium liefert ein Symbol
+      # von 428 KB, und was noch deutlich mehr wiegt, ist keins mehr.
+      if [ "$groesse" -gt 0 ] && [ "$groesse" -le 1048576 ]; then
+        case "$bild" in
+          *.svg) typ="image/svg+xml" ;;
+          *)     typ="image/png" ;;
+        esac
+        daten=$(base64 -w0 < "$bild" 2>/dev/null || base64 < "$bild" | tr -d '\n')
+        [ -n "$daten" ] && printf 'ICON\t%s\t%s\t%s\n' "$stem" "$typ" "$daten"
+      fi
+    fi
   done
 done
 """
@@ -172,8 +239,23 @@ def applications(image_ref: str) -> list[dict[str, object]]:
 
     text = raw.decode("utf-8", "replace") if isinstance(raw, bytes) else str(raw)
 
+    # Erst die Symbole einsammeln. Sie stehen auf eigenen Zeilen und koennen
+    # vor oder nach ihrer Anwendung kommen — deshalb ein eigener Durchgang.
+    symbole: dict[str, str] = {}
+    for line in text.splitlines():
+        if not line.startswith("ICON\t"):
+            continue
+        teile = line.split("\t")
+        if len(teile) != 4:
+            continue
+        _, stem, typ, daten = teile
+        if daten:
+            symbole[stem.strip()] = f"data:{typ.strip()};base64,{daten.strip()}"
+
     found: dict[str, dict[str, object]] = {}
     for line in text.splitlines():
+        if line.startswith("ICON\t"):
+            continue
         parts = line.split("\t")
         if len(parts) != 7:
             continue
@@ -200,7 +282,12 @@ def applications(image_ref: str) -> list[dict[str, object]]:
         found.setdefault(slug, {
             "slug": slug,
             "name": name,
+            # Das Zeichen bleibt: Es ist der Rueckfall, wenn ein Image kein
+            # Symbol mitbringt — und der Platzhalter, solange das Bild laedt.
             "icon": _glyph(categories),
+            # Das echte Symbol aus dem Paket, als Datenadresse. Leer heisst:
+            # Es gab keins, dann zeigt die Oberflaeche das Zeichen.
+            "icon_data": symbole.get(stem, ""),
             "exec_cmd": cmd,
             "exec_args": args,
             "categories": [c for c in categories.split(";") if c],

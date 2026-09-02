@@ -139,6 +139,9 @@ Ausführlich in [Handbuch, Kapitel 2](docs/wiki/02-erste-schritte.md).
 - **Rezepte** für alles, was kein einfaches Paket ist — mit geführtem Bauer für eigene
 - **Anwendungen im Image finden**: OTA liest die `.desktop`-Dateien und schlägt Name, Zeichen und
   Startbefehl vor. Niemand muss wissen, wo eine Binärdatei liegt
+- **Das echte Symbol aus dem Paket** — den Fuchs, nicht einen Kreis. OTA sucht es dort, wo die
+  Freedesktop-Spezifikation es hinlegt, rechnet es auf 128 Pixel herunter (VSCodium liefert 428 KB)
+  und liefert es zwischenspeicherbar aus
 - **Drei Ablagen**: die gemeinsame für Dateien, die in jeden Arbeitsplatz sollen (im Container nur
   lesbar), eine **eigene je Nutzer** unter `/mnt/austausch` — beschreibbar, der Weg hinein und
   wieder heraus —, und ein **Laufwerk je Gruppe** unter `/mnt/gruppen/<name>`: dieselben Dateien

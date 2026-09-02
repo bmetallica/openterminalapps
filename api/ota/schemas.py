@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import hashlib
 import uuid
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Any
 
-from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, model_validator
 
 
 def _adresse(wert: object) -> str:
@@ -41,6 +42,14 @@ def _adresse(wert: object) -> str:
 
 
 Adresse = Annotated[str, BeforeValidator(_adresse)]
+
+
+# In der Datenbank ist das Symbol NULL-bar: Alle Eintraege aus der Zeit vor
+# den Symbolen haben dort nichts stehen, und ein `UPDATE` ueber alle Zeilen
+# nur fuer einen Vorgabewert waere die teurere Antwort. Nach aussen ist es
+# aber immer eine Zeichenkette — sonst muesste jede Stelle in der Oberflaeche
+# zwischen „leer" und „nicht gesetzt" unterscheiden, und das ist dasselbe.
+Symbol = Annotated[str, BeforeValidator(lambda v: v or "")]
 
 
 class LoginIn(BaseModel):
@@ -139,6 +148,18 @@ class AppOut(BaseModel):
     slug: str
     name: str
     icon: str
+    # **Die Adresse des Symbols, nicht das Symbol selbst.**
+    #
+    # Naheliegend waere gewesen, die Datenadresse hier mitzuschicken — sie
+    # steht ja ohnehin in der Zeile. Gemessen: Ein Katalog mit sechzehn
+    # Anwendungen wiegt so 140 KB, und das Dashboard laedt die Vorlagen
+    # **alle 15 Sekunden** neu. Das waere ein knappes Megabyte je Minute und
+    # offenem Tab, fuer Bilder, die sich nie aendern.
+    #
+    # Als Adresse holt der Browser jedes Symbol einmal und legt es beiseite.
+    # Der Fingerabdruck im Anhang sorgt dafuer, dass nach einem Image-Update
+    # trotzdem das neue kommt: andere Adresse, kein alter Zwischenspeicher.
+    icon_url: str = ""
     registry_hint: str | None = None
     blocked_reason: str | None = None
     is_enabled: bool = True
@@ -147,6 +168,27 @@ class AppOut(BaseModel):
     # NULL heisst: die Aufloesung des Arbeitsplatzes.
     x_res: int | None = None
     y_res: int | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _adresse_bauen(cls, wert: Any) -> Any:
+        """Setzt `icon_url`, solange der Datensatz noch greifbar ist.
+
+        Als `before`-Validator und nicht als `computed_field`: Ein berechnetes
+        Feld sieht nur das fertige Modell, und dort steht die Kennung der
+        Vorlage nicht mehr — die haengt am Datensatz.
+        """
+        daten = getattr(wert, "icon_data", None)
+        tid = getattr(wert, "template_id", None)
+        slug = getattr(wert, "slug", None)
+        if not (daten and tid and slug):
+            return wert
+        marke = hashlib.sha256(daten.encode("utf-8", "replace")).hexdigest()[:8]
+        felder = ("slug", "name", "icon", "registry_hint", "blocked_reason",
+                  "is_enabled", "fixed_display", "group_ids", "x_res", "y_res")
+        werte: dict[str, Any] = {f: getattr(wert, f, None) for f in felder}
+        werte["icon_url"] = f"/api/templates/{tid}/apps/{slug}/icon?v={marke}"
+        return werte
 
 
 class TemplateOut(BaseModel):
@@ -336,6 +378,11 @@ class AppIn(BaseModel):
     slug: str
     name: str
     icon: str = "▢"
+    # Leer heisst hier **nicht** „Symbol loeschen", sondern „keins
+    # mitgeschickt" — `set_apps` laesst ein gespeichertes dann stehen. Sonst
+    # verlaere ein Katalog seine Symbole, sobald ihn jemand speichert, ohne
+    # vorher das Image durchgesehen zu haben.
+    icon_data: Symbol = ""
     exec_cmd: str
     exec_args: str = ""
     registry_hint: str | None = None
