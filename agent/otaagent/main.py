@@ -10,6 +10,7 @@ from __future__ import annotations
 import base64
 import logging
 import os
+from pathlib import Path
 import re
 import shutil
 import secrets
@@ -144,6 +145,9 @@ class StartRequest(BaseModel):
     # keine. Die Vorlage kann das abschalten, und die API entscheidet es —
     # der Agent haengt nur ein, was ihm gesagt wird.
     shelf_user: str = ""
+    # Nur fuer den Verweis im Dateisystem. Ueber den Pfad entscheidet
+    # `shelf_user`; dieser Name darf sich aendern, ohne dass etwas umzieht.
+    shelf_name: str = ""
     # Skripte, die fuer **diesen** Nutzer noch nie gelaufen sind. Welche das
     # sind, weiss die API — der Agent fuehrt aus und berichtet, was dabei
     # herauskam. Siehe `_run_once_scripts`.
@@ -401,6 +405,10 @@ def start_container(req: StartRequest) -> dict[str, Any]:
 
     if req.profile_path:
         _ensure_profile(req.profile_path)
+        # Der Verweis unter dem Namen, damit im Dateisystem jemand etwas
+        # findet. Er zeigt auf das Verzeichnis der Kennung und wandert beim
+        # Umbenennen mit — das Verzeichnis bleibt, wo es ist.
+        shared_store.verweis_setzen(Path(req.profile_path).parent, req.shelf_name)
         mounts.append(docker.types.Mount(
             target="/home/kasm-user", source=req.profile_path, type="bind",
         ))
@@ -420,10 +428,11 @@ def start_container(req: StartRequest) -> dict[str, Any]:
     # nicht doppelt wiederfinden.
     if req.shelf_user:
         try:
+            ablage = shared_store.user_root(req.shelf_user)
             mounts.append(docker.types.Mount(
-                target=USERFILES_MOUNT, source=str(shared_store.user_root(req.shelf_user)),
-                type="bind",
+                target=USERFILES_MOUNT, source=str(ablage), type="bind",
             ))
+            shared_store.verweis_setzen(ablage, req.shelf_name)
         except shared_store.SharedError as exc:
             log.warning("Eigene Ablage fuer %s nicht einhaengbar: %s",
                         req.shelf_user, exc)
@@ -647,7 +656,15 @@ def _fetch_from_registry(client: docker.DockerClient, ref: str) -> bool:
         return False
 
 
-def _wait_for_vnc(container, seconds: int = 40) -> bool:
+# Wie lange auf KasmVNC gewartet wird. 40 Sekunden waren zu knapp: Auf einem
+# Rechner, auf dem noch anderes laeuft — und im Testlauf startet OTA mehrere
+# Container kurz hintereinander —, braucht ein Arbeitsplatz mit grossem Zuhause
+# laenger. Das Ergebnis war eine Session, die als „nicht bereit" galt, obwohl
+# sie Sekunden spaeter stand. Laenger zu warten kostet nur im Fehlerfall.
+VNC_BEREIT_SEKUNDEN = int(os.environ.get("OTA_VNC_READY_SECONDS", "90"))
+
+
+def _wait_for_vnc(container, seconds: int = VNC_BEREIT_SEKUNDEN) -> bool:
     """Wartet, bis KasmVNC im Container Verbindungen annimmt.
 
     Ohne das meldet die API die Session als bereit, sobald Docker den Container
@@ -670,6 +687,23 @@ def _wait_for_vnc(container, seconds: int = 40) -> bool:
                         container.name, seconds)
         return code == 0
     except APIError as exc:
+        # Der haeufigste Grund ist nicht „nicht pruefbar", sondern „der
+        # Container ist waehrenddessen gestorben". Ohne diesen Zweig standen
+        # danach drei raetselhafte 409er im Protokoll — Einmal-Skript,
+        # Ablagenverweis, Startskript —, und der eigentliche Satz fehlte.
+        try:
+            container.reload()
+            zustand = container.attrs.get("State", {})
+            if zustand.get("Status") != "running":
+                log.warning(
+                    "%s ist waehrend des Wartens gestorben (Code %s%s). "
+                    "Das Protokoll des Containers sagt, warum: docker logs %s",
+                    container.name, zustand.get("ExitCode"),
+                    ", OOM" if zustand.get("OOMKilled") else "", container.name,
+                )
+                return False
+        except APIError:
+            pass
         log.warning("Bereitschaft nicht pruefbar: %s", exc)
         return False
 
@@ -785,6 +819,9 @@ def exec_in_container(cid: str, req: ExecRequest) -> dict[str, Any]:
 class AppStartRequest(BaseModel):
     slug: str
     command: str
+    # Der Workspace, zu dem diese Anwendung gehoert. Nur dafuer da, ihren
+    # Skeleton-Teilbaum zu finden — leer heisst: keinen suchen.
+    template_slug: str = ""
     # Ab 1, nicht ab 2: Einzelinstanz-Anwendungen gehoeren auf den
     # Hauptbildschirm des Containers. Das Startskript legt auf einem bereits
     # offenen Display kein zweites an.
@@ -812,6 +849,18 @@ def start_app(cid: str, req: AppStartRequest) -> dict[str, Any]:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Container nicht gefunden")
 
     port = 6900 + req.display
+
+    # Der Teilbaum dieser Anwendung, bevor sie startet — sonst legt sie ihre
+    # Voreinstellungen an und der Teilbaum kaeme zu spaet. Er wird nur beim
+    # ersten Mal je Zuhause kopiert; die Buchfuehrung steht im Zuhause selbst.
+    if req.template_slug:
+        try:
+            ergebnis = skeleton_ops.apply_app(container.id, req.template_slug, req.slug)
+            if ergebnis.get("kopiert"):
+                log.info("Teilbaum von %s ins Zuhause gelegt: %s",
+                         req.slug, ", ".join(ergebnis["kopiert"])[:200])
+        except Exception as exc:      # noqa: BLE001 — ein Start scheitert daran nicht
+            log.warning("Teilbaum von %s nicht kopierbar: %s", req.slug, exc)
 
     code, out = _run(container, app_scripts.display_script(
         req.display, port, req.geometry, req.title, req.send_primary,
@@ -934,23 +983,28 @@ class FreezeRequest(BaseModel):
 class SkeletonDirRequest(BaseModel):
     pfad: str = ""
     name: str
+    # Leer heisst: im Skeleton des Workspace. Sonst im Teilbaum dieser
+    # Anwendung.
+    app_slug: str = ""
 
 
 @app.get("/skeleton/{slug}", dependencies=[Depends(require_token)])
-def skeleton_list(slug: str, pfad: str = "") -> dict[str, Any]:
+def skeleton_list(slug: str, pfad: str = "", app_slug: str = "") -> dict[str, Any]:
     try:
-        return skeleton_ops.listing(slug, pfad)
+        return skeleton_ops.listing(slug, pfad, app_slug or None)
     except skeleton_ops.SkeletonError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
 
 @app.post("/skeleton/{slug}/upload", dependencies=[Depends(require_token)])
 async def skeleton_upload(slug: str, pfad: str = Form(default=""),
+                          app_slug: str = Form(default=""),
                           files: list[UploadFile] = File(...)) -> dict[str, Any]:
     raus = []
     for f in files:
         try:
-            raus.append(skeleton_ops.save(slug, pfad, f.filename or "", await f.read()))
+            raus.append(skeleton_ops.save(slug, pfad, f.filename or "",
+                                          await f.read(), app_slug or None))
         except skeleton_ops.SkeletonError as exc:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
     return {"dateien": raus}
@@ -959,15 +1013,15 @@ async def skeleton_upload(slug: str, pfad: str = Form(default=""),
 @app.post("/skeleton/{slug}/dir", dependencies=[Depends(require_token)])
 def skeleton_mkdir(slug: str, req: SkeletonDirRequest) -> dict[str, Any]:
     try:
-        return skeleton_ops.make_dir(slug, req.pfad, req.name)
+        return skeleton_ops.make_dir(slug, req.pfad, req.name, req.app_slug or None)
     except skeleton_ops.SkeletonError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
 
 @app.delete("/skeleton/{slug}", dependencies=[Depends(require_token)])
-def skeleton_remove(slug: str, pfad: str) -> dict[str, str]:
+def skeleton_remove(slug: str, pfad: str, app_slug: str = "") -> dict[str, str]:
     try:
-        return skeleton_ops.remove(slug, pfad)
+        return skeleton_ops.remove(slug, pfad, app_slug or None)
     except skeleton_ops.SkeletonError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 

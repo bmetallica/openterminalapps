@@ -1,7 +1,8 @@
 # 7 · Golden Images
 
 *Für Administratoren.* ✅ Build-Pipeline mit Live-Protokoll, Rezepte, App-Erkennung, Versionen,
-Aktivierung und Rückrollen · ✅ Session einfrieren · 🔨 Skeleton-Verwaltung (M5)
+Aktivierung und Rückrollen · ✅ Session einfrieren · ✅ Skeleton-Verwaltung, je Arbeitsplatz und
+je Anwendung · ✅ eigenes Basisimage `ota/base-xfce`
 
 > **Kasm auf demselben Host stört nicht mehr.** Sein Agent löschte anfangs jedes
 > gebaute Golden Image, weil es das Label `com.kasmweb.image=true` vom Basisimage
@@ -248,12 +249,43 @@ Beim Arbeitsplatz enthält das Golden Image mehrere Anwendungen. Je App wird hin
 ```
 Anzeigename · Icon · Startbefehl und Argumente
 bevorzugte Auflösung ✅
-Skeleton-Teilbaum   .config/Code/User/       für VS Code
-                    .config/JetBrains/        für IntelliJ
-                    .config/VSCodium/User/    für VSCodium
+Skeleton-Teilbaum   je Anwendung ein eigener Baum ✅
 Extension-Liste     wird beim BUILD installiert, nicht beim Start
 Sichtbarkeit        je Gruppe zuschaltbar ✅
 ```
+
+### Der Skeleton-Teilbaum je Anwendung
+
+Unter *Workspaces → Skeleton* steht oben eine Reihe: **Ganzer Arbeitsplatz** und daneben jede
+Anwendung. Der Unterschied ist der Zeitpunkt.
+
+| | Ganzer Arbeitsplatz | Je Anwendung |
+|---|---|---|
+| **Kommt** | beim ersten Start des Arbeitsplatzes, solange das Zuhause leer ist | beim ersten Start **dieser Anwendung**, auch Monate später |
+| **Wie oft** | einmal je Zuhause | einmal je Zuhause und Anwendung |
+| **„Durchsetzen"** | ja, für einzelne Pfade | nein — dafür ist der Baum des Arbeitsplatzes da |
+| **Gedacht für** | `.bashrc`, Firmenzertifikat, Desktop-Verknüpfungen | `.config/Code/User/`, `.config/JetBrains/`, `.config/VSCodium/User/` |
+
+**Warum getrennt.** Ein Arbeitsplatz trägt ein Dutzend Anwendungen, und nicht jeder Mensch startet
+jede davon. Die Einstellungen der Entwicklungsumgebung in das Zuhause von jemandem zu legen, der
+nur das Terminal benutzt, macht das Zuhause voll und die Fehlersuche schwer — bei einer Beschwerde
+steht dann Konfiguration herum, die nie eine Anwendung gelesen hat.
+
+Der Teilbaum kommt **bevor** die Anwendung startet. Andersherum legte sie erst ihre
+Voreinstellungen an, und der Teilbaum überschriebe hinterher, was der Mensch schon auf dem
+Bildschirm sieht.
+
+Gemerkt wird das im Zuhause selbst, unter `~/.ota/app-skeleton/<anwendung>` — nicht in der
+Datenbank. Zwei Gründe: Der Anwendungskatalog wird beim Speichern komplett ersetzt, eine daran
+hängende Buchführung wäre nach jeder Katalogänderung weg. Und die Frage lautet ohnehin „hat
+**dieses Zuhause** den Teilbaum schon?", die kann nur das Zuhause beantworten. Ein Workspace ohne
+persistentes Profil bekommt ihn folgerichtig bei jedem Start neu.
+
+> **Erneut ausrollen** — dieselbe Geste wie „Nochmal" bei den Einmal-Skripten, nur von Hand:
+> ```
+> docker exec <container> rm -f /home/kasm-user/.ota/app-skeleton/<anwendung>
+> ```
+> Beim nächsten Start dieser Anwendung kommt der Teilbaum wieder.
 
 **Extensions gehören in den Build, nicht in den Start.** Sonst wartet jeder Nutzer bei jedem Start
 auf Downloads, und ein Ausfall des Marketplace legt den Arbeitsplatz lahm. Die Liste steht unter

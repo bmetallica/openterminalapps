@@ -45,6 +45,27 @@ steht:
 **OTA ist für die linke Spalte gebaut** (`plan.md` §17.4b). Wer in die rechte will, hat damit kein
 Lizenzproblem des Projekts, sondern eine Reihe eigener Prüfungen vor sich — angefangen bei VS Code.
 
+### Die Stückliste
+
+Für die rechte Spalte gibt es sie auf Knopfdruck:
+
+```bash
+make sbom                        # alle OTA-Images
+scripts/sbom.sh ota/api:dev      # oder einzelne
+```
+
+Je Image entstehen unter `sbom/` zwei Dateien, **SPDX** und **CycloneDX** — die beiden Formate, die
+Abnehmer üblicherweise verlangen. Erzeugt wird sie von `syft`, das als Container läuft; zu
+installieren ist nichts, und der Docker-Socket geht nur lesend hinein.
+
+Von Hand gepflegt kann so eine Liste nicht werden: Ein Arbeitsplatz-Image bringt weit über tausend
+Pakete mit, und am Tag nach dem nächsten `apt upgrade` wäre die Liste falsch. Eine falsche
+Stückliste ist schlimmer als keine, weil jemand ihr glaubt.
+
+Die Dateien gehören **nicht** ins Repository. Sie gelten für genau den Stand, aus dem sie stammen,
+und veralten mit dem nächsten Build; wer ein Image weitergibt, erzeugt sie frisch und legt sie
+dazu.
+
 ## Microsoft VS Code
 
 Die EULA sagt in §1a wörtlich:
@@ -121,6 +142,34 @@ DSGVO-Thema. Empfehlung: im Skeleton-Profil `"telemetry.telemetryLevel": "off"` 
   selbst an, dass sie nicht zwingend vollständig ist. Wer ein KasmVNC-haltiges Image verteilt, gibt
   deshalb die Lizenz- und Hinweisdateien der jeweiligen Fassung mit, statt sich auf
   „KasmVNC = GPL-2.0" zu verlassen
+
+### Darf KasmVNC in unser eigenes Image?
+
+Ja — geprüft am 2026-09-01, als das eigene Basisimage entstand
+([Kapitel 19](19-eigenes-basisimage.md)).
+
+Nachgesehen wurde nicht in einem Blogeintrag, sondern in der Datei, die im gebauten Image selbst
+liegt: `/usr/share/doc/kasmvncserver/copyright` sagt `License: GPL-2+`, und die Urheberzeile führt
+Kasm Technologies neben AT&T, RealVNC, TightVNC, Sun und dem TigerVNC-Team — KasmVNC ist ein
+TigerVNC-Abkömmling und erbt dessen Lizenz.
+
+Das Paket wird **unverändert** aus dem offiziellen Release übernommen, nicht gepatcht, nicht
+gelinkt, und als eigenes Programm gestartet. Im Image liegt es neben anderer Software, ohne sie
+anzustecken — der Fall, den die GPL *mere aggregation* nennt.
+
+**Es ist sogar sauberer als der bisherige Weg.** Bisher leitet jeder Arbeitsplatz von einem
+`kasmweb/*`-Image ab, und dessen fertiges Abbild ist gerade nicht MIT (siehe nächster Abschnitt) —
+was darin unter welchen Bedingungen steht, muss man Paket für Paket herausfinden. Ubuntu + XFCE +
+offizielles KasmVNC-Paket besteht dagegen aus einzeln nachlesbaren Bestandteilen.
+
+Bei einer Weitergabe gehört dazu: die Lizenzdateien im Image lassen (sie liegen ohnehin unter
+`/usr/share/doc/kasmvncserver/`), auf
+`github.com/kasmtech/KasmVNC/releases/tag/v<Fassung>` verweisen — die Fassung steht im Dockerfile
+als `KASMVNC_VERSION` — und die erzeugte Stückliste beilegen (`make sbom`).
+
+**Was nicht geht:** Kasms *Workspaces*-Plattform ist proprietär — Agent, Manager, API, die
+Weboberfläche des Produkts. Davon kommt nichts in ein OTA-Image. Und der Name gehört Kasm: Unser
+Image heisst `ota/base-xfce`, nicht „Kasm" irgendetwas.
 
 ## Kasm-Images — MIT
 

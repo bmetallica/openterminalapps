@@ -205,6 +205,13 @@ Der Entwurf steht bereits (`web/`, `plan.md` §13). Hier wird er verkabelt.
       Minuten ohne Maus oder Tastatur; Zusehen zählte dort als Nichtstun. Der Viewer stellt sie
       jetzt beim Verbinden auf ein Jahr, die Stream-Adresse hebt sie zusätzlich auf das erlaubte
       Maximum. Über die Laufzeit entscheidet `idle_minutes` der Vorlage
+- [x] **Der Aufräumer entfernte startende Container** (2026-09-02): Die Session-Zeile wurde nur
+      geflusht und erst nach dem vollständigen Start committet — für den minütlichen Aufräumer gab
+      es sie in dieser Zeit nicht, und er hielt den Container für eine Waise. Unter Last über eine
+      Minute Fenster. Die Symptome sahen jedes Mal anders aus: Startskript mit Rückgabe 137,
+      Einmal-Skript ohne Ausgabe, „KasmVNC nach 40s nicht bereit", 409er hinterher. Behoben an
+      beiden Enden — committen vor dem Containerstart, und der Aufräumer vergleicht zusätzlich die
+      Session-Kennung aus dem Container-Label. Geprüft wird die Ursache, nicht das Symptom
 - [x] **Totes Display wird wiederbelebt** (2026-08-28): War das `Xvnc` einer Anwendung
       abgestürzt, führte OTA sie weiter als `running`, und der Start kehrte wortlos zurück — die
       Anwendung war für immer tot. Der Start sieht jetzt beim Agent nach
@@ -213,11 +220,16 @@ Der Entwurf steht bereits (`web/`, `plan.md` §13). Hier wird er verkabelt.
 - [x] **Brücke zwischen den Displays** (`plan.md` §10.4): spiegelt CLIPBOARD über alle offenen
       Displays, Schleifenschutz über Prüfsumme, folgt den Rechten des Templates, startet
       automatisch beim ersten App-Start. Geprüft durch `scripts/test-clipboard-bridge.sh`
-- [ ] **Offen**: Abfrage im halben Sekundentakt statt XFIXES-Ereignissen. Das Basisimage bringt
-      weder `clipnotify` noch python-xlib mit; mit eigenem Basisimage (M5) wird die Schleife
-      ereignisgesteuert
-- [ ] `xsel`, `xdotool`, `autocutsel` ins eigene Basisimage — im Kasm-Image fehlen sie
+- [x] **Ereignisse statt Abfragen** (2026-09-01): `clipnotify -l` je Display meldet jede Änderung,
+      statt dass die Brücke im halben Sekundentakt nachfragt. Die Brücke entscheidet **im
+      Container**, ob sie das kann — in den Kasm-Images fehlt `clipnotify`, dort bleibt es beim
+      Takt. Der Gewinn ist nicht die Last (acht Aufrufe je Sekunde tun keinem weh), sondern die
+      Verzögerung: statt bis zu einer halben Sekunde nun Millisekunden. Gemessen in
+      `scripts/build-base-image.sh`
+- [x] `xsel`, `xdotool`, `autocutsel`, `clipnotify` im eigenen Basisimage — im Kasm-Image fehlen sie
 - [x] Abnahmefall 8: Kopieren zwischen zwei Apps im Container, beide Richtungen
+- [x] Abnahmefall 3 (zwischen zwei Sessions), 7 (Java/AWT) und 12 (ohne `readText()`) — siehe
+      `plan.md` §10.5
 
 **Ressourcen**
 - [x] Grenzen gelten für den Container als Ganzes (`plan.md` §9.3); Spitzenlast-Dimensionierung
@@ -416,7 +428,15 @@ Session-Prozesse, und die ereignisgesteuerte statt abfragende Brücke (braucht e
          root, und aus einer Ausnahme für eine Person wäre die Voreinstellung für alle geworden.
          Danach wird sie im laufenden Container wieder hingelegt: Wer ein Image baut, soll dabei
          nicht sein eigenes `sudo` verlieren
-- [ ] **Eigenes Basisimage** `ota/base-xfce` (Ubuntu + XFCE + KasmVNC aus offiziellem Release)
+- [x] **Eigenes Basisimage** `ota/base-xfce` (2026-09-01) — Ubuntu 24.04 + XFCE + KasmVNC 1.4.0
+      aus dem offiziellen Release, **965 MB statt 20 GB**. Es trägt vorerst `:test`, keine Vorlage
+      zeigt darauf, `ota/arbeitsplatz` bleibt unberührt. `scripts/build-base-image.sh --pruefen`
+      misst 27 Punkte gegen den Vertrag mit dem Agent: Port 6901, Kennung 1000, `.kasmpasswd`
+      unter dem Namen `kasm_user` (das ist die Schnittstelle — OTA setzt vor dem Stream einen
+      Basic-Auth-Header damit), ein zweites Display, eine Anwendung darauf, die Zwischenablage
+      ereignisgesteuert. Mit `OTA_PRUEFE_JAVA=1` kommt Abnahmefall 7 dazu.
+      **Lizenz geprüft**: KasmVNC ist GPL-2+, das Einbauen ist erlaubt und sauberer als das
+      Ableiten von `kasmweb/*` (THIRD-PARTY-NOTICES.md)
 - [x] **Erweiterungen in der Oberfläche**, mit dem Hinweis daneben, dass sie ausschliesslich in
       Microsofts VS Code landen: VSCodium hat seinen eigenen Satz aus Open VSX, und dieselbe
       Kennung ist dort nicht dieselbe Installation. Vorher nahm die Schnittstelle die Liste
@@ -672,11 +692,13 @@ Erst mit Hardware für die Zielgröße (`plan.md` §17.1).
 
 ## Querschnittsthemen (laufend)
 
-- **Stückliste (SBOM) für veröffentlichte Images** 🔨 — eine von Hand gepflegte Liste kann mit
-  einem Image aus hunderten Paketen nicht Schritt halten. Wer ein Image weitergibt, braucht eine
-  erzeugte Stückliste (SPDX oder CycloneDX, etwa `syft`). Für den Betrieb im eigenen Haus, für den
-  OTA gebaut ist, stellt sich die Frage nicht — dort wird nichts weitergegeben
-  ([THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md))
+- **Stückliste (SBOM) für veröffentlichte Images** ✅ (2026-09-01) — `make sbom` bzw.
+  `scripts/sbom.sh` erzeugt je Image eine Stückliste in **SPDX und CycloneDX** (`syft` als
+  Container, nichts zu installieren; der Docker-Socket geht nur lesend hinein). Gemessen:
+  `ota/api:dev` 137 Pakete, `ota/agent:dev` 359. Die Dateien landen unter `sbom/` und gehören
+  nicht ins Repository — sie gelten für genau den Stand, aus dem sie stammen. Gebraucht werden
+  sie, sobald ein Image das Haus verlässt; für den Betrieb im eigenen Haus stellt sich die Frage
+  nicht ([THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md))
 
 - **Tests**: je Endpunkt ein Autorisierungstest; Integrationstest „Session starten → verbinden →
   stoppen" gegen echtes Docker; CI vor jedem Merge
@@ -708,14 +730,16 @@ Dafür braucht es ein KDC und einen Dateiserver; ohne beides lässt sich nichts 
 prüfen. **Die Passwort-Durchreichung bleibt draussen** (§17.9), auch wenn sie der kürzeste Weg
 wäre — und mit Keycloak dazwischen ist sie noch weniger zu rechtfertigen als vorher.
 
-**Das eigene Basisimage** `ota/base-xfce` (Rest von M5). An ihm hängen die letzten drei offenen
-Kleinigkeiten der Zwischenablage: eine ereignisgesteuerte Brücke statt der Abfrage im halben
-Sekundentakt (`clipnotify` fehlt im Kasm-Image), `xsel`/`xdotool`/`autocutsel`, und die
-Abnahmefälle 3, 7 und 12. Feinschliff, keine Voraussetzung.
-
-**Der Skeleton-Teilbaum je App** (Rest von M5): Startbefehl, Symbol, Sperrgrund, festes Display,
-Sichtbarkeit und Auflösung stehen schon je App — was ein Zuhause mitbringt, hängt weiterhin am
-ganzen Workspace.
+**Die Streaming-Maschine** — die einzige Richtung, in der „etwas Eigenes" wirklich besser wäre.
+Nicht ein selbstgebautes Protokoll (x11vnc ist einfädig und ungepflegt, TigerVNC ist der Stamm,
+von dem KasmVNC abzweigt — wir würden gerade die Teile weglassen, die ihn ausmachen), sondern ein
+**Wechsel des Verfahrens: WebRTC statt RFB**, mit GStreamer und H.264/VP8. Der Gewinn wäre echt:
+deutlich niedrigere Latenz, brauchbares Video, GPU-Kodierung. Der Preis ebenso: UDP und ein
+TURN-Weg durch Traefik, eine Audiokette — und vor allem sind Reconnect-Automat,
+Leerlauf-Abschaltung und Zwischenablage in `SessionViewer.tsx` gegen die postMessage-Schnittstelle
+des KasmVNC-Clients geschrieben. Deshalb ein eigener Meilenstein mit eigener Abnahme und nicht
+nebenbei: ein zweites Testimage `ota/base-webrtc:test` neben dem heutigen, dann wird **gemessen**
+statt geglaubt.
 
 Aus `plan.md` §17 bleibt **Hardware** (§17.1). **Domain und Zertifikat** (§17.2) haben sich in der
 Praxis entschieden: Die Anlage läuft hinter einem Reverse Proxy mit einem Zertifikat der

@@ -117,6 +117,11 @@ test:
 	@# überhaupt prüfen zu können.
 	@./scripts/test-backup.sh
 
+.PHONY: sbom
+# Stückliste je Image — nötig, sobald ein Image das Haus verlässt.
+sbom:
+	@./scripts/sbom.sh
+
 .PHONY: backup
 backup:
 	@mkdir -p backups

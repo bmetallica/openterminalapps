@@ -65,7 +65,14 @@ def _reap_once() -> None:
         }
 
         known: set[str] = set()
+        # Und die Kennungen der Sessions selbst. Waehrend eines Starts steht
+        # `container_id` noch nicht in der Zeile — der Container existiert
+        # dann bereits und traegt die Session-Kennung als Kennzeichnung.
+        # Ohne diesen zweiten Satz haelt der Aufraeumer ihn fuer eine Waise
+        # und entfernt ihn mitten im Start.
+        known_sessions: set[str] = set()
         for sess in live:
+            known_sessions.add(str(sess.id))
             if sess.container_id:
                 known.add(sess.container_id)
 
@@ -73,7 +80,9 @@ def _reap_once() -> None:
             # Session mehr. Sie hier stehen zu lassen hat einen konkreten
             # Preis: Sie zaehlt als „live", und der naechste Startversuch auf
             # derselben Vorlage bekommt sie zurueck statt einer neuen.
-            if not _container_da(sess):
+            # Eine Session ohne Container-Kennung startet gerade erst. Sie
+            # hat noch keinen Container, den man vermissen koennte.
+            if sess.container_id and not _container_da(sess):
                 sess.status = "stopped"
                 sess.ended_at = now
                 sess.end_reason = "container_weg"
@@ -124,6 +133,8 @@ def _reap_once() -> None:
             for orphan in agent_client.orphans():
                 cid = orphan["container_id"]
                 if cid in known or cid in keep_stopped:
+                    continue
+                if orphan.get("session_id") in known_sessions:
                     continue
                 log.info("Container ohne gültige Session entfernt: %s (%s)",
                          cid[:12], orphan["status"])

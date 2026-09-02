@@ -202,3 +202,34 @@ def read(rel: str, base: Path | None = None) -> tuple[str, bytes]:
     if not target.is_file():
         raise SharedError("Das ist keine Datei.")
     return target.name, target.read_bytes()
+
+
+def verweis_setzen(ziel: Path, name: str) -> None:
+    """Legt neben einem Verzeichnis einen Verweis unter dem Anmeldenamen an.
+
+    Verzeichnisse heissen nach der Kennung — sie aendert sich nie, ein
+    Anmeldename schon (siehe `security.profile_path` in der API). Fuer einen
+    Menschen, der im Dateisystem nachsieht, ist eine Reihe von UUIDs aber
+    unbrauchbar. Deshalb dieser Verweis: Er traegt den Namen, zeigt auf die
+    Kennung und wird beim Umbenennen einfach neu gesetzt.
+
+    Ein bestehender Verweis auf dasselbe Ziel bleibt. Ein **echtes**
+    Verzeichnis dieses Namens wird nie angefasst: Dort liegen womoeglich die
+    Daten von vor der Umstellung.
+    """
+    if not name or not NAME_OK.match(name):
+        return
+    try:
+        ziel = ziel.resolve()
+        verweis = ziel.parent / name
+        if verweis.is_symlink():
+            if os.readlink(verweis) == ziel.name:
+                return
+            verweis.unlink()
+        elif verweis.exists():
+            return
+        os.symlink(ziel.name, verweis)
+    except OSError:
+        # Ein fehlender Verweis ist ein Schoenheitsfehler, kein Grund, einen
+        # Start abzubrechen.
+        pass

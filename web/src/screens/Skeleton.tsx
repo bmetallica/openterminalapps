@@ -13,6 +13,11 @@ import { t as tr, useLang } from '../lib/i18n'
  * Dass das die Ausnahme ist und nicht die Regel, steht auch so in der
  * Oberfläche: Ein Zuhause gehört dem Menschen, der darin arbeitet. Für ein
  * Wurzelzertifikat ist Überschreiben richtig, für ein Farbschema nicht.
+ *
+ * Dazu je Anwendung ein eigener Teilbaum, oben umschaltbar. Er kommt erst,
+ * wenn **diese Anwendung** zum ersten Mal startet — ein Arbeitsplatz trägt
+ * ein Dutzend Anwendungen, und wer nur das Terminal benutzt, braucht die
+ * Einstellungen der Entwicklungsumgebung nicht in seinem Zuhause.
  */
 export function Skeleton({ tpl, enforce, onEnforce, onToast }: {
   tpl: Template
@@ -21,6 +26,8 @@ export function Skeleton({ tpl, enforce, onEnforce, onToast }: {
   onToast: (m: string, tone?: 'ok' | 'bad') => void
 }) {
   useLang()
+  // '' heisst: das Skeleton des Workspace. Sonst die Kennung der Anwendung.
+  const [app, setApp] = useState('')
   const [path, setPath] = useState('')
   const [entries, setEntries] = useState<SkeletonEntry[] | null>(null)
   const [busy, setBusy] = useState(false)
@@ -29,21 +36,23 @@ export function Skeleton({ tpl, enforce, onEnforce, onToast }: {
 
   const load = useCallback(async (p: string) => {
     try {
-      const data = await api.skeletonList(tpl.id, p)
+      const data = await api.skeletonList(tpl.id, p, app)
       setEntries(data.eintraege)
       setPath(data.pfad)
     } catch (err) {
       onToast(err instanceof ApiError ? err.message : tr('Laden fehlgeschlagen'), 'bad')
     }
-  }, [tpl.id, onToast])
+  }, [tpl.id, app, onToast])
 
-  useEffect(() => { void load('') }, [load])
+  // Auch beim Wechsel der Anwendung wieder ganz oben anfangen: Ein Pfad aus
+  // dem einen Baum bedeutet im anderen nichts.
+  useEffect(() => { setEntries(null); void load('') }, [load])
 
   async function upload(files: FileList | null) {
     if (!files?.length) return
     setBusy(true)
     try {
-      for (const f of Array.from(files)) await api.skeletonUpload(tpl.id, path, f)
+      for (const f of Array.from(files)) await api.skeletonUpload(tpl.id, path, f, app)
       await load(path)
       onToast(tr('{n} Datei(en) abgelegt.', { n: String(files.length) }))
     } catch (err) {
@@ -58,7 +67,7 @@ export function Skeleton({ tpl, enforce, onEnforce, onToast }: {
     if (!name) return
     setBusy(true)
     try {
-      await api.skeletonMkdir(tpl.id, path, name)
+      await api.skeletonMkdir(tpl.id, path, name, app)
       await load(path)
     } catch (err) {
       onToast(err instanceof ApiError ? err.message : tr('Anlegen fehlgeschlagen'), 'bad')
@@ -70,8 +79,11 @@ export function Skeleton({ tpl, enforce, onEnforce, onToast }: {
   async function remove(entry: SkeletonEntry) {
     setBusy(true)
     try {
-      const res = await api.skeletonRemove(tpl.id, entry.pfad)
-      onEnforce(enforce.filter((p) => p !== entry.pfad && !p.startsWith(entry.pfad + '/')))
+      const res = await api.skeletonRemove(tpl.id, entry.pfad, app)
+      // Die Durchsetzungsliste hängt am Workspace, nicht an einer Anwendung.
+      if (!app) {
+        onEnforce(enforce.filter((p) => p !== entry.pfad && !p.startsWith(entry.pfad + '/')))
+      }
       await load(path)
       onToast(res.status)
     } catch (err) {
@@ -86,8 +98,28 @@ export function Skeleton({ tpl, enforce, onEnforce, onToast }: {
   return (
     <>
       <p className="sub" style={{ marginBottom: 14 }}>
-        {tr('Was hier liegt, kommt beim ersten Start in das Zuhause eines Nutzers — solange es noch leer ist. Danach gehört das Zuhause ihm. Punktdateien sind erlaubt und der Normalfall.')}
+        {app
+          ? tr('Was hier liegt, kommt beim ersten Start genau dieser Anwendung in das Zuhause — einmal je Zuhause, und bevor die Anwendung läuft. Punktdateien sind erlaubt und der Normalfall.')
+          : tr('Was hier liegt, kommt beim ersten Start in das Zuhause eines Nutzers — solange es noch leer ist. Danach gehört das Zuhause ihm. Punktdateien sind erlaubt und der Normalfall.')}
       </p>
+
+      {(tpl.apps?.length ?? 0) > 0 && (
+        <div className="chips" style={{ marginBottom: 12 }}>
+          <button type="button" className={`chip${app === '' ? ' is-on' : ''}`}
+            aria-pressed={app === ''}
+            onClick={() => { setApp(''); setPath('') }}>
+            {tr('Ganzer Arbeitsplatz')}
+          </button>
+          {(tpl.apps ?? []).map((a) => (
+            <button key={a.slug} type="button"
+              className={`chip${app === a.slug ? ' is-on' : ''}`}
+              aria-pressed={app === a.slug}
+              onClick={() => { setApp(a.slug); setPath('') }}>
+              {a.icon} {a.name}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="viewer__row" style={{ marginBottom: 12 }}>
         <button className="btn btn--sm" disabled={busy}
@@ -134,15 +166,17 @@ export function Skeleton({ tpl, enforce, onEnforce, onToast }: {
               <span className="filerow__size data">
                 {size(e.bytes)}
               </span>
-              <button type="button"
-                className={`chip chip--sm${on ? ' is-on' : ''}`}
-                aria-pressed={on}
-                title={tr('Bei jedem Start überschreiben')}
-                onClick={() => onEnforce(on
-                  ? enforce.filter((p) => p !== e.pfad)
-                  : [...enforce, e.pfad])}>
-                {tr('durchsetzen')}
-              </button>
+              {!app && (
+                <button type="button"
+                  className={`chip chip--sm${on ? ' is-on' : ''}`}
+                  aria-pressed={on}
+                  title={tr('Bei jedem Start überschreiben')}
+                  onClick={() => onEnforce(on
+                    ? enforce.filter((p) => p !== e.pfad)
+                    : [...enforce, e.pfad])}>
+                  {tr('durchsetzen')}
+                </button>
+              )}
               <button className="btn btn--sm btn--halt" disabled={busy}
                 onClick={() => void remove(e)}>{tr('Löschen')}</button>
             </div>
@@ -150,7 +184,7 @@ export function Skeleton({ tpl, enforce, onEnforce, onToast }: {
         })}
       </div>
 
-      {enforce.length > 0 && (
+      {!app && enforce.length > 0 && (
         <p className="note-warn" style={{ marginTop: 14 }}>
           <b>{tr('{n} Pfad(e) werden bei jedem Start überschrieben:', { n: String(enforce.length) })}</b>{' '}
           <span className="data">{enforce.join(', ')}</span>{' '}
@@ -159,7 +193,9 @@ export function Skeleton({ tpl, enforce, onEnforce, onToast }: {
       )}
 
       <p className="note-info" style={{ marginTop: 14 }}>
-        {tr('Änderungen an „durchsetzen“ gelten erst nach dem Speichern. Die Dateien selbst sind sofort abgelegt.')}
+        {app
+          ? tr('Der Teilbaum kommt genau einmal je Zuhause. Wer ihn erneut ausrollen will, löscht im Zuhause die Merkdatei unter ~/.ota/app-skeleton/.')
+          : tr('Änderungen an „durchsetzen“ gelten erst nach dem Speichern. Die Dateien selbst sind sofort abgelegt.')}
       </p>
     </>
   )

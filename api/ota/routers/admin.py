@@ -357,7 +357,7 @@ def user_usage(username: str, db: DbSession = Depends(get_db)) -> dict:
 
     quota = settings_store.profile_quota_bytes(db)
     try:
-        used = int(agent_client.profile_usage(user.username, fresh=True).get("bytes", 0))
+        used = int(agent_client.profile_usage(str(user.id), fresh=True).get("bytes", 0))
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status.HTTP_502_BAD_GATEWAY,
                             f"Der Platz liess sich nicht messen: {exc}") from exc

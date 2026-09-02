@@ -374,7 +374,7 @@ def start_session(
     quota = settings_store.profile_quota_bytes(db)
     if quota and tpl.persistence_scope != "none":
         try:
-            used = int(agent_client.profile_usage(user.username).get("bytes", 0))
+            used = int(agent_client.profile_usage(str(user.id)).get("bytes", 0))
         except Exception:  # noqa: BLE001 — eine Messung darf keinen Start verhindern
             used = 0
         if used >= quota:
@@ -425,7 +425,25 @@ def start_session(
         vnc_secret=vnc_secret(user, profile), status="starting",
     )
     db.add(sess)
-    db.flush()
+    # **Committen, nicht nur flushen** — bevor der Container entsteht.
+    #
+    # Ein `flush` schreibt die Zeile nur innerhalb dieser Transaktion. Fuer
+    # jede andere Verbindung gibt es die Session bis zum `commit` nicht — und
+    # der kam frueher erst am Ende, nach dem vollstaendigen Start des
+    # Containers samt Skeleton, Einmal-Skripten und Startskript. Das dauert
+    # unter Last ueber eine Minute.
+    #
+    # In genau diesem Fenster laeuft der Aufraeumer (`main._reap_once`,
+    # minuetlich). Er sieht einen Container mit OTA-Kennzeichnung, findet in
+    # der Datenbank keine Session dazu — und entfernt ihn. Mitten im Start.
+    #
+    # Das Ergebnis sah jedes Mal anders aus und nie nach der Ursache: ein
+    # Startskript, das mit 137 endet (SIGKILL), ein Einmal-Skript ohne
+    # Ausgabe, „KasmVNC war nach 40s noch nicht bereit", drei 409er
+    # hinterher. Aufgefallen ist es als sprunghaft fehlschlagende Pruefungen
+    # auf einem gut ausgelasteten Rechner — je laenger der Start dauert,
+    # desto wahrscheinlicher der Treffer.
+    db.commit()
 
     env = {str(k): str(v) for k, v in (tpl.env or {}).items()}
     env.setdefault("VNC_RESOLUTION", f"{tpl.x_res}x{tpl.y_res}")
@@ -449,7 +467,12 @@ def start_session(
             # /mnt/austausch. Die Vorlage kann sie abschalten — fuer
             # Arbeitsplaetze, aus denen bewusst nichts herausgetragen werden
             # soll. Leer heisst: nicht einhaengen.
-            "shelf_user": user.username if tpl.user_shelf else "",
+            # Die Kennung, nicht der Name — aus demselben Grund wie beim
+            # Profil (siehe security.profile_path).
+            "shelf_user": str(user.id) if tpl.user_shelf else "",
+            # Nur fuer den Verweis im Dateisystem, damit dort jemand etwas
+            # findet. Ueber den Pfad entscheidet er nicht.
+            "shelf_name": user.username,
             # Einmal-Skripte, die dieser Nutzer noch nicht hatte. Welche das
             # sind, weiss nur die API — der Agent fuehrt aus und berichtet.
             "once_scripts": _offene_einmal_skripte(db, tpl, user),
@@ -716,6 +739,11 @@ def start_app(
     result = agent_client.start_app(sess.container_id, {
         "slug": slug,
         "command": f"{app.exec_cmd} {app.exec_args}".strip(),
+        # Damit der Agent den Skeleton-Teilbaum dieser Anwendung findet. Er
+        # kommt beim **ersten** Start dieser Anwendung in dieses Zuhause, und
+        # zwar bevor sie laeuft — sonst legt sie ihre Voreinstellungen an, und
+        # der Teilbaum ueberschriebe hinterher, was der Mensch schon sieht.
+        "template_slug": sess.template.slug,
         "display": display,
         # Die Aufloesung der Anwendung, sonst die des Arbeitsplatzes. Der
         # Strom passt sich anschliessend ohnehin dem Browserfenster an

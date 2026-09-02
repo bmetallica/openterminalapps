@@ -246,13 +246,33 @@ def may_attach_to_session(sess: SessionModel, user: User) -> bool:
 
 
 def profile_path(user: User, tpl: Template) -> str:
-    """Wohin das persistente Home dieses Nutzers gemountet wird."""
+    """Wohin das persistente Home dieses Nutzers gemountet wird.
+
+    **Benannt nach der Kennung, nicht nach dem Anmeldenamen.**
+
+    Frueher stand hier `user.username`, und das ging so lange gut, wie OTA die
+    Namen selbst vergab. Seit die Konten aus Keycloak kommen, zieht OTA einen
+    dort geaenderten Namen nach (`kcidentity.anmelden`) — und ab diesem Moment
+    zeigte diese Funktion auf ein anderes Verzeichnis. Wer im Verzeichnis
+    umbenannt wird, weil er heiratet oder die Abteilung wechselt, faende beim
+    naechsten Start ein leeres Zuhause; das alte laege noch da, aber niemand
+    suchte dort, und eine Meldung dazu gaebe es nicht.
+
+    Genommen wird `user.id` und nicht der Keycloak-`sub`: Sie ist fuer **alle**
+    Konten da, auch fuer das lokale Notfallkonto, und sie ist ohnehin der
+    Schluessel, an dem Sessions, Kontingente und Protokoll haengen.
+
+    Damit im Dateisystem trotzdem jemand etwas findet, legt der Agent neben
+    dem Verzeichnis einen Verweis unter dem Namen an — er wandert beim
+    Umbenennen mit, das Verzeichnis bleibt.
+    """
     root = settings().profiles_root.rstrip("/")
-    if tpl.persistence_scope == "template":
-        return f"{root}/{user.username}/{tpl.slug}"
     if tpl.persistence_scope == "none":
         return ""
-    return f"{root}/{user.username}/user"
+    kennung = str(user.id)
+    if tpl.persistence_scope == "template":
+        return f"{root}/{kennung}/{tpl.slug}"
+    return f"{root}/{kennung}/user"
 
 
 def as_uuid(value: str) -> uuid.UUID | None:

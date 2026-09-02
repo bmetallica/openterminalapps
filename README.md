@@ -140,7 +140,9 @@ Ausführlich in [Handbuch, Kapitel 2](docs/wiki/02-erste-schritte.md).
   lesbar), und eine **eigene je Nutzer** unter `/mnt/austausch` — beschreibbar, der Weg hinein und
   wieder heraus. Auch in der Kontrollleiste einer laufenden Session, mit Ziehen und Ablegen
 - **Skeleton-Profil** je Workspace: womit ein Zuhause anfängt. Einzelne Pfade auf Wunsch bei jedem
-  Start durchgesetzt — die Ausnahme, nicht die Regel
+  Start durchgesetzt — die Ausnahme, nicht die Regel. Dazu **je Anwendung ein eigener Teilbaum**,
+  der erst kommt, wenn diese Anwendung zum ersten Mal startet: Wer nur das Terminal benutzt,
+  braucht die Einstellungen der Entwicklungsumgebung nicht in seinem Zuhause
 - **Session einfrieren**: im eigenen Arbeitsplatz einrichten, Vorschau ansehen, als neue Fassung
   übernehmen. Das Home bleibt draussen, Geheimnisse werden markiert, die sudo-Ausnahme entfernt
 - **Skript beim Sessionstart** je Workspace, für alles, was ins Home gehört, aber nicht ins Image
@@ -148,6 +150,12 @@ Ausführlich in [Handbuch, Kapitel 2](docs/wiki/02-erste-schritte.md).
   die das Skeleton nicht mehr erreicht und die das Startskript sonst bei jedem Start wiederholte
 
 **Betrieb**
+- **Eigenes Basisimage** `ota/base-xfce`: Ubuntu 24.04 + XFCE + KasmVNC, **965 MB statt 20 GB** —
+  ohne Anwendung, ohne das Kasm-Label und ohne das geerbte Startskript, das eine Anwendung im
+  Drei-Sekunden-Takt neu startete. Steht als `:test` bereit und löst noch nichts ab;
+  `scripts/build-base-image.sh --pruefen` misst 27 Punkte gegen den Vertrag mit dem Agent
+- **Stückliste je Image** (`make sbom`) in SPDX und CycloneDX — gebraucht, sobald ein Image das
+  Haus verlässt
 - Eigene Registry im Stack; fehlt ein Image lokal, wird es beim Start von dort geholt
 - Sicherung und Wiederherstellung von Profil, Container und Datenbank, manuell und nach Plan
 - HTTPS ab Werk, eigene kleine CA, austauschbar oder hinter einem Reverse Proxy
@@ -177,11 +185,12 @@ nicht — dieselbe Trennung gilt für das Dateisystem des Hosts.
 | `deploy/` | Compose-Stack, Traefik, Registry, Zertifikate |
 | `extension/` | Firefox-Erweiterung für die Zwischenablage |
 | `docs/wiki/` | Handbuch — wird im Programm als Hilfe ausgeliefert |
-| `tests/`, `scripts/` | Prüfungen, Zertifikat, Migration aus Kasm |
+| `images/` | Eigenes Basisimage `ota/base-xfce` (Ubuntu + XFCE + KasmVNC) |
+| `tests/`, `scripts/` | Prüfungen, Zertifikat, Migration aus Kasm, Stückliste |
 
 ## Dokumentation
 
-- **[Handbuch](docs/wiki/README.md)** — Bedienung, Verwaltung, Betrieb, Fehlersuche (17 Kapitel)
+- **[Handbuch](docs/wiki/README.md)** — Bedienung, Verwaltung, Betrieb, Fehlersuche (19 Kapitel)
 - **[plan.md](plan.md)** — Architektur **und die Begründungen dahinter**, samt der Sackgassen
 - **[docs/adr/](docs/adr/README.md)** — Entscheidungen, die teuer rückgängig zu machen sind, mit den
   Alternativen, die nicht getragen hätten

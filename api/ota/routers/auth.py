@@ -230,7 +230,7 @@ def my_storage(
     """
     quota = settings_store.profile_quota_bytes(db)
     try:
-        used = int(agent_client.profile_usage(user.username).get("bytes", 0))
+        used = int(agent_client.profile_usage(str(user.id)).get("bytes", 0))
     except Exception:  # noqa: BLE001 — eine Anzeige darf nichts umwerfen
         return {"bytes": 0, "quota_bytes": quota, "percent": None, "level": "unbekannt"}
 

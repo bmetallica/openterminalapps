@@ -588,6 +588,9 @@ class IdentityTestIn(BaseModel):
 class SkeletonDirIn(BaseModel):
     path: str = ""
     name: str
+    # Leer heisst: im Skeleton des Workspace. Sonst im Teilbaum dieser
+    # Anwendung.
+    app: str = ""
 
 
 class ImagePullIn(BaseModel):

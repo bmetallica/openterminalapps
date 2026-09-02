@@ -131,11 +131,10 @@ Diese Punkte scheitern in Eigenbauten regelmäßig, und zwar **lautlos**:
 ### Abnahme
 
 „Copy-Paste geht" ist keine prüfbare Aussage. Die vollständige Matrix mit zwölf Fällen steht in
-`plan.md` §10.5 und wird in **Chrome und Firefox** durchlaufen. Die beiden Fälle, die erfahrungsgemäß
-durchrutschen: IntelliJ (Java behandelt X11-Zwischenablage eigenwillig) und der Weg zwischen zwei
-Apps im selben Arbeitsplatz.
+`plan.md` §10.5. Die beiden Fälle, die erfahrungsgemäß durchrutschen: IntelliJ (Java behandelt die
+X11-Zwischenablage eigenwillig) und der Weg zwischen zwei Apps im selben Arbeitsplatz.
 
-**Zehn von zwölf Fällen laufen bei jedem Testlauf automatisch mit** (`make test`):
+**Elf von zwölf Fällen laufen bei jedem Testlauf automatisch mit** (`make test`):
 
 | | |
 |---|---|
@@ -146,9 +145,38 @@ Apps im selben Arbeitsplatz.
 | PRIMARY auf demselben Display, **und** dass es die Displaygrenze nicht überschreitet | dito |
 | Nach Pause und Fortsetzen | dito |
 | Abgeschaltet heisst abgeschaltet, und kommt beim Wiedereinschalten zurück | dito |
+| Zwischen **zwei Sessions** desselben Nutzers | `tests/e2e.mjs` — zwei echte Container, der Weg führt über die System-Zwischenablage des Browsers |
+| Ein Browser **ohne `readText()`** | `tests/e2e.mjs` — in Chromium mit abgeschaltetem `readText`. Kein Ersatz für einen Lauf in Firefox, aber es prüft genau den Pfad, der dort greift, bei jedem Lauf |
 
-Offen bleiben drei: zwischen **zwei Sessions** (zwei Container gleichzeitig im Browser), **IntelliJ**
-(der Start dauert Minuten) und **Firefox ohne `readText()`** — der Testbrowser ist Chromium.
+Der zwölfte ist **IntelliJ** beziehungsweise Java/AWT. Er läuft auf Zuruf:
+
+```bash
+OTA_PRUEFE_JAVA=1 scripts/build-base-image.sh --nur-pruefen
+```
+
+Nicht bei jedem Lauf, weil er ein JDK in den Prüfcontainer nachinstalliert (~300 MB). Ins Image
+gehört das nicht — ein Basisimage, von dem jeder Arbeitsplatz abstammt, trägt kein JDK mit sich
+herum, nur damit ein Test es vorfindet.
+
+> **Warum Java eine eigene Zeile hat.** X11 kennt keinen Speicher, in dem etwas liegt: Es gibt
+> einen *Besitzer* der Auswahl, und wer den Inhalt will, fragt den Besitzer. AWT bedient diese
+> Frage aus einem eigenen Thread und gibt den Besitz auf, sobald die virtuelle Maschine endet.
+> Ein Programm, das kopiert und sich sofort beendet, hinterlässt deshalb eine leere
+> Zwischenablage — bei Gtk- und Electron-Anwendungen passiert das nicht.
+
+### Ereignisse statt Abfragen
+
+Seit dem 2026-09-01 wartet die Brücke auf Ereignisse, statt im halben Sekundentakt nachzufragen:
+`clipnotify -l` je Display meldet jede Änderung. Entschieden wird das **im Container** — fehlt
+`clipnotify` (so in allen Kasm-Images), bleibt es beim Takt. Beide Wege teilen sich denselben
+Abgleich darunter.
+
+Der Gewinn ist nicht die Last, sondern die Verzögerung: Im Takt liegt zwischen Kopieren und
+Einfügen bis zu eine halbe Sekunde, in der die Nachbaranwendung noch den alten Inhalt hat. Wer
+schnell genug ist, fügt das Vorherige ein — und das sieht aus wie ein Fehler, den niemand
+reproduzieren kann. Über Ereignisse sind es Millisekunden.
+
+`clipnotify` liegt in OTAs eigenem Basisimage ([Kapitel 19](19-eigenes-basisimage.md)).
 
 ## Dateien
 

@@ -62,7 +62,10 @@ def run_profile_backup(db: DbSession, user: User, trigger: str,
     db.commit()
 
     try:
-        result = agent_client.backup_profile(user.username)
+        # Der Pfad haengt an der Kennung, nicht am Namen — siehe
+        # `security.profile_path`. Der Name steht daneben im Datensatz,
+        # damit die Liste lesbar bleibt.
+        result = agent_client.backup_profile(str(user.id))
         backup.path = result["path"]
         backup.size_bytes = result["size_bytes"]
         backup.file_count = result["file_count"]
@@ -402,9 +405,13 @@ def restore(
         raise HTTPException(status.HTTP_404_NOT_FOUND,
                             "Diese Sicherung gibt es nicht oder sie ist unbrauchbar.")
 
-    if backup.username:
+    if backup.user_id or backup.username:
+        # Bevorzugt ueber die Kennung: Ein Konto kann seit der Sicherung
+        # umbenannt worden sein, die Kennung nicht.
+        bedingung = (SessionModel.user_id == backup.user_id if backup.user_id
+                     else User.username == backup.username)
         running = db.scalars(select(SessionModel).join(User).where(
-            User.username == backup.username,
+            bedingung,
             SessionModel.status.in_(LIVE),
         )).all()
         if running:
@@ -416,7 +423,8 @@ def restore(
             )
 
     if backup.kind == "profile":
-        result = agent_client.restore_profile(backup.username, backup.path)
+        ziel = str(backup.user_id) if backup.user_id else backup.username
+        result = agent_client.restore_profile(ziel, backup.path)
         detail = result.get("previous_kept_at")
         audit.record(db, "backup.restored", actor=actor, object_type="user",
                      object_id=backup.username, request=request,

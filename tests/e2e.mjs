@@ -379,6 +379,263 @@ try {
       check(buttons.some((b) => b?.includes('In die Session')) &&
             buttons.some((b) => b?.includes('Aus der Session')),
         'Beide Richtungen sind als Rueckfallweg bedienbar')
+
+      // Abnahmefall 12 — ein Browser ohne readText().
+      //
+      // Firefox gibt `navigator.clipboard.readText()` ohne Erweiterung nicht
+      // her. Der Weg dorthin ist deshalb das `paste`-Ereignis: Es liefert den
+      // Inhalt mit, ohne dass der Browser etwas freigeben muss.
+      //
+      // Geprüft wird hier in Chromium — mit abgeschaltetem readText. Das ist
+      // **kein** Ersatz für einen Lauf in Firefox und soll auch keiner sein;
+      // es prüft genau den Pfad, der dort greift, und zwar bei jedem Lauf.
+      // Ohne das fällt ein Bruch dieses Pfades erst jemandem in Firefox auf.
+      {
+        await view.evaluate(() => {
+          window.__otaReadText = navigator.clipboard.readText
+          const strip = (nav) => {
+            try {
+              Object.defineProperty(nav.clipboard, 'readText',
+                { value: undefined, configurable: true })
+            } catch { /* egal */ }
+          }
+          strip(navigator)
+          try {
+            const n = document.querySelector('.viewer__frame').contentWindow.navigator
+            window.__otaReadTextInner = n.clipboard.readText
+            strip(n)
+          } catch { /* fremde Herkunft */ }
+        })
+        const weg = await view.evaluate(() => typeof navigator.clipboard.readText)
+        check(weg === 'undefined', 'readText() ist für diesen Fall abgeschaltet')
+
+        const viaPaste = `PER-PASTE-EREIGNIS-${Date.now()} äöü`
+        await view.evaluate((t) => {
+          const dt = new DataTransfer()
+          dt.setData('text', t)
+          window.dispatchEvent(new ClipboardEvent('paste',
+            { clipboardData: dt, bubbles: true }))
+        }, viaPaste)
+        await new Promise((r) => setTimeout(r, 1500))
+        const angekommen = await view.evaluate(() => {
+          const d = document.querySelector('.viewer__frame').contentDocument
+          return d.getElementById('noVNC_clipboard_text').value
+        })
+        check(angekommen === viaPaste,
+          `Ohne readText() trägt das paste-Ereignis (${angekommen.slice(0, 24)}…)`)
+
+        // Wieder anschalten. Der Rest des Laufs braucht readText — bliebe es
+        // aus, schluege danach jede Prüfung fehl, die aus dem Browser liest,
+        // und der Grund stünde weit oben.
+        await view.evaluate(() => {
+          try {
+            Object.defineProperty(navigator.clipboard, 'readText',
+              { value: window.__otaReadText, configurable: true })
+          } catch { /* egal */ }
+          try {
+            const n = document.querySelector('.viewer__frame').contentWindow.navigator
+            Object.defineProperty(n.clipboard, 'readText',
+              { value: window.__otaReadTextInner, configurable: true })
+          } catch { /* fremde Herkunft */ }
+        })
+        const zurueck = await view.evaluate(() => typeof navigator.clipboard.readText)
+        check(zurueck === 'function', 'readText() ist danach wieder da')
+      }
+    }
+
+    // Abnahmefall 3 — Text zwischen zwei Sessions desselben Nutzers.
+    //
+    // Die Brücke im Container spannt über die Displays **einer** Session. Von
+    // einer Session in die andere führt kein Weg im Container — der Weg geht
+    // über den Browser: Session A → Systemzwischenablage → Session B. Genau
+    // dieser Weg wird hier gegangen, mit zwei echten Containern.
+    {
+      const sid1 = /\/view\/s\/([0-9a-f-]{36})/.exec(view.url())?.[1] ?? ''
+
+      // Die Aufrufe laufen über den Session-Tab und nicht über das
+      // Dashboard: Das Dashboard lauscht auf Katalogänderungen und lädt sich
+      // neu, sobald eine Vorlage dazukommt — ein `fetch`, das dabei noch
+      // unterwegs ist, stirbt mit "Failed to fetch". Genau daran ist der
+      // erste Anlauf gescheitert.
+      const api = async (pfad, init) => view.evaluate(async (p, i) => {
+        try {
+          const r = await fetch(p, { credentials: 'include', ...(i ?? {}) })
+          const text = await r.text()
+          let daten = null
+          try { daten = JSON.parse(text) } catch { daten = { detail: text.slice(0, 200) } }
+          return { ok: r.ok, status: r.status, daten }
+        } catch (e) {
+          return { ok: false, status: 0, daten: { detail: String(e) } }
+        }
+      }, pfad, init ?? null)
+
+      const jsonPost = (pfad, koerper) => api(pfad, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(koerper),
+      })
+
+      const lage = await (async () => {
+        const sessions = await api('/api/sessions')
+        const laufend = (sessions.daten ?? []).find((x) => x.id === sid1)
+        const vorlagen = await api('/api/templates')
+        const alteVorlage = (vorlagen.daten ?? []).find((t) => t.id === laufend?.template_id)
+        if (!alteVorlage) return { fehlt: true }
+
+        // Eine eigene Vorlage für diesen Fall, statt eine vorhandene zu
+        // nehmen. Zwei Gründe, beide gemessen:
+        //
+        //   * Eine vorhandene Vorlage kann auf ein Image zeigen, das auf
+        //     diesem Host nicht liegt. Dann wäre nicht die Zwischenablage
+        //     kaputt, sondern der Katalog.
+        //   * Vor allem aber teilen sich zwei Vorlagen mit
+        //     `persistence_scope: 'user'` **dasselbe Zuhause** — OTA lehnt
+        //     die zweite Session zu Recht ab ("Zwei Arbeitsplätze auf einem
+        //     Profil geraten sich in die Quere").
+        //
+        // Deshalb: dasselbe Image wie die laufende Session (das liegt
+        // garantiert da) und ein eigenes Profil.
+        const angelegt = await jsonPost('/api/templates', {
+          friendly_name: 'Prüfung zweite Session',
+          description: 'Von tests/e2e.mjs angelegt, Abnahmefall 3. '
+            + 'Wird am Ende des Laufs wieder entfernt.',
+          mode: alteVorlage.mode,
+          image_ref: alteVorlage.image_ref,
+          cores: 2,
+          memory_bytes: 2 * 1024 * 1024 * 1024,
+          persistence_scope: 'template',
+          idle_minutes: 30,
+        })
+        if (!angelegt.ok) {
+          return { ok: false, slug: 'Prüfung zweite Session', daten: angelegt.daten }
+        }
+        const vorlage = angelegt.daten
+
+        // Der Start dauert: Der Aufruf kehrt erst zurück, wenn der Container
+        // steht **und** Traefik die Route kennt. In dieser Zeit lädt sich der
+        // Tab womöglich neu, und dann stirbt das `fetch` mit "Failed to
+        // fetch" — obwohl die Session serverseitig längst läuft. Gemessen:
+        // Der Aufruf meldete einen Fehler, und daneben lief der Container.
+        //
+        // Deshalb wird die Antwort nicht geglaubt, sondern nachgesehen.
+        const gestartet = await jsonPost('/api/sessions', { template_id: vorlage.id })
+        if (gestartet.ok) {
+          return { slug: vorlage.slug, ok: true, daten: gestartet.daten,
+                   vorlage: vorlage.id }
+        }
+        for (let i = 0; i < 45; i++) {
+          await new Promise((r) => setTimeout(r, 2000))
+          const liste = await api('/api/sessions')
+          const meine = (liste.daten ?? []).find((x) => x.template_id === vorlage.id)
+          if (meine) {
+            return { slug: vorlage.slug, ok: true, daten: meine,
+                     vorlage: vorlage.id, nachgesehen: true }
+          }
+        }
+        return { ok: false, slug: vorlage.slug, daten: gestartet.daten,
+                 vorlage: vorlage.id }
+      })()
+
+      if (lage.fehlt) {
+        ok('Nur eine Vorlage vorhanden — Abnahmefall 3 übersprungen')
+      } else if (!lage.ok) {
+        ok(`Zweite Session (${lage.slug}) nicht startbar: `
+           + `${lage.daten?.detail ?? '?'} — Abnahmefall 3 übersprungen`)
+        if (lage.vorlage) await api(`/api/templates/${lage.vorlage}`, { method: 'DELETE' })
+      } else {
+        const sid2 = lage.daten.id
+        const cn2 = `ota-s-${sid2.slice(0, 12)}`
+
+        // Warten, bis der zweite Container wirklich steht — und zwar so, wie
+        // der Agent es tut: am offenen Port, nicht an einer festen Zeit.
+        let bereit = false
+        for (let i = 0; i < 90; i++) {
+          await new Promise((r) => setTimeout(r, 2000))
+          try {
+            execSync(`docker exec ${cn2} bash -lc `
+              + `'(exec 3<>/dev/tcp/127.0.0.1/6901)' 2>/dev/null`,
+              { shell: '/bin/bash', stdio: 'ignore' })
+            bereit = true
+            break
+          } catch { /* noch nicht */ }
+        }
+        check(bereit, `Zweite Session ${lage.slug} steht (${cn2}`
+          + `${lage.nachgesehen ? ', nachgesehen statt geglaubt' : ''})`)
+
+        if (bereit) {
+          // In Session A kopieren …
+          const wandertext = `ZWISCHEN-SESSIONS-${Date.now()} äöü ß`
+          const cn1 = `ota-s-${sid1.slice(0, 12)}`
+          execSync(`docker exec -u 1000 ${cn1} bash -c `
+            + `'export HOME=/home/kasm-user XAUTHORITY=/home/kasm-user/.Xauthority; `
+            + `printf %s ${JSON.stringify(wandertext)} | timeout 3 xclip -d :1 -selection clipboard -i' &`,
+            { shell: '/bin/bash' })
+          await new Promise((r) => setTimeout(r, 3500))
+
+          // … über den Browser holen …
+          const imBrowser = await view.evaluate(() => navigator.clipboard.readText())
+          check(imBrowser === wandertext,
+            'Session A → Browser (Voraussetzung für den Weg zu Session B)')
+
+          // … und in Session B einfügen. Der Tab muss dafür vorn liegen: Die
+          // Brücke zieht den Systeminhalt nur nach, solange das Fenster den
+          // Fokus hat — sonst läse jeder offene Tab dauernd fremde Inhalte.
+          const view2 = await browser.newPage()
+          await view2.goto(`${BASE}/view/s/${sid2}`, { waitUntil: 'domcontentloaded' })
+          await view2.waitForSelector('.viewer__frame', { timeout: 120000 })
+          for (let i = 0; i < 20; i++) {
+            await new Promise((r) => setTimeout(r, 1500))
+            const c = await view2.evaluate(() => document.querySelector('.viewer__frame')
+              ?.contentDocument?.documentElement?.className ?? '')
+            if (c.includes('noVNC_connected')) break
+          }
+          await view2.bringToFront()
+          await view2.evaluate((t) => navigator.clipboard.writeText(t), wandertext)
+
+          let inB = ''
+          for (let i = 0; i < 20; i++) {
+            await new Promise((r) => setTimeout(r, 1000))
+            try {
+              inB = execSync(`docker exec -u 1000 ${cn2} bash -c `
+                + `'export HOME=/home/kasm-user XAUTHORITY=/home/kasm-user/.Xauthority; `
+                + `timeout 2 xclip -d :1 -selection clipboard -o'`,
+                { shell: '/bin/bash' }).toString()
+            } catch { inB = '' }
+            if (inB === wandertext) break
+          }
+          check(inB === wandertext,
+            `Browser → Session B: der Text kommt in der zweiten Session an `
+            + `(${inB.slice(0, 24)}…)`)
+          await view2.close()
+        }
+
+        // Aufräumen: weder Session noch Vorlage noch Zuhause bleiben stehen.
+        //
+        // Das Zuhause gehört ausdrücklich dazu: Eine Vorlage mit eigenem
+        // Profil legt unter der Kennung des Nutzers ein Verzeichnis nach
+        // ihrem Namen an, und das Löschen der Vorlage räumt es **nicht** weg
+        // — zu Recht, denn im Betrieb sind das die Daten von Menschen. Hier
+        // ist es Prüfmüll, und ohne diese Zeilen wächst er mit jedem Lauf.
+        let zuhause = ''
+        try {
+          zuhause = execSync(`docker inspect ${cn2} --format `
+            + `'{{range .Mounts}}{{if eq .Destination "/home/kasm-user"}}{{.Source}}{{end}}{{end}}'`,
+            { shell: '/bin/bash' }).toString().trim()
+        } catch { /* Container schon weg */ }
+
+        await api(`/api/sessions/${sid2}`, { method: 'DELETE' })
+        if (lage.vorlage) await api(`/api/templates/${lage.vorlage}`, { method: 'DELETE' })
+
+        // Nur, wenn der Pfad wirklich zu dieser Prüfvorlage gehört. Ein
+        // `rm -rf` auf einen Pfad, den ein Container gemeldet hat, ohne
+        // Gegenprobe wäre genau die Art Zeile, die irgendwann ein echtes
+        // Zuhause trifft.
+        if (/\/profiles\/[0-9a-f-]{36}\/pr[a-z0-9-]*zweite-session/.test(zuhause)) {
+          await new Promise((r) => setTimeout(r, 2000))
+          try { execSync(`rm -rf ${JSON.stringify(zuhause)}`, { shell: '/bin/bash' }) }
+          catch { /* dann bleibt es liegen */ }
+        }
+      }
     }
 
     // Abbruch und Selbstheilung.

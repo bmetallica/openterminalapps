@@ -940,6 +940,56 @@ api "$TMP/user.jar" -X DELETE "$BASE/api/files?path=eigen.txt" >/dev/null
 REST=$(api "$TMP/user.jar" "$BASE/api/files" | jqp "str(len(d['entries']))")
 expect "0" "$REST" "Löschen räumt die eigene Ablage wieder"
 
+# ------------------------------------------ Pfade an der Kennung
+#
+# Zuhause und eigene Ablage hiessen frueher nach dem Anmeldenamen. Seit die
+# Konten aus Keycloak kommen, zieht OTA einen dort geaenderten Namen nach —
+# und ab diesem Moment zeigte der Pfad woanders hin: Der Mensch faende ein
+# leeres Zuhause, waehrend das alte danebenlaege. Deshalb entscheidet jetzt
+# `users.id` ueber den Pfad. Genau das wird hier geprueft, und zwar am
+# einzigen Fall, der zaehlt: einer Umbenennung.
+echo
+echo "Pfade an der Kennung"
+
+PROFILE_ROOT="${OTA_PROFILES_ROOT:-/srv/ota/profiles}"
+ABLAGEN_ROOT="${OTA_USERFILES_ROOT:-/srv/ota/userfiles}"
+db_sql() {
+  docker compose -f deploy/docker-compose.yml --env-file deploy/.env \
+    exec -T db psql -U "${POSTGRES_USER:-ota}" -d "${POSTGRES_DB:-ota}" -tAc "$1" \
+    2>/dev/null | tr -d ' \r'
+}
+
+[ -d "$PROFILE_ROOT/$TEST_UID" ] \
+  && ok "Das Zuhause liegt unter der Kennung ($TEST_UID)" \
+  || bad "Unter $PROFILE_ROOT/$TEST_UID liegt kein Zuhause"
+
+if [ -L "$PROFILE_ROOT/$TEST_USER" ]; then
+  expect "$TEST_UID" "$(readlink "$PROFILE_ROOT/$TEST_USER")" \
+    "Daneben steht ein Verweis unter dem Namen"
+else
+  bad "Der Verweis $PROFILE_ROOT/$TEST_USER fehlt"
+fi
+
+MARKE="ueberlebt-$$"
+echo "$MARKE" > "$TMP/bleibt.txt"
+api "$TMP/user.jar" -F "file=@$TMP/bleibt.txt" "$BASE/api/files/upload" >/dev/null
+
+# Umbenannt wird in der Datenbank, weil genau das `kcidentity.anmelden` tut,
+# wenn in Keycloak jemand einen Namen aendert. Ueber die Verwaltung geht es
+# absichtlich nicht.
+NEUER="$TEST_USER-umbenannt"
+db_sql "UPDATE users SET username='$NEUER' WHERE id='$TEST_UID'" >/dev/null
+INHALT=$(api "$TMP/user.jar" "$BASE/api/files/file?path=bleibt.txt" | tr -d '\r\n')
+expect "$MARKE" "$INHALT" "Nach dem Umbenennen liegt die eigene Ablage noch da"
+NEU_DA=$(db_sql "SELECT username FROM users WHERE id='$TEST_UID'")
+expect "$NEUER" "$NEU_DA" "Der Name ist wirklich ein anderer"
+[ -d "$ABLAGEN_ROOT/$NEUER" ] \
+  && bad "Es ist ein zweites Verzeichnis unter dem neuen Namen entstanden" \
+  || ok "Und es ist kein zweites Verzeichnis entstanden"
+db_sql "UPDATE users SET username='$TEST_USER' WHERE id='$TEST_UID'" >/dev/null
+
+api "$TMP/user.jar" -X DELETE "$BASE/api/files?path=bleibt.txt" >/dev/null
+
 # ------------------------------------------- Anwendung ohne Display
 # Stirbt das X-Display einer Anwendung, kehrte der Startaufruf zurück, ohne
 # etwas zu tun: Der Eintrag sagte „läuft". Damit war die Anwendung für immer
@@ -988,6 +1038,62 @@ next((st['status'] for s in d if s['id'] == '$SID_D'
     DA=$(docker exec "$CN_D" sh -c "ls /tmp/.X11-unix/X$D_NUM 2>/dev/null | wc -l")
     expect "1" "${DA:-?}" "Ein erneuter Start macht das Display wieder auf"
   fi
+fi
+
+# ------------------------------- Eine startende Session ist sichtbar
+#
+# Der Aufraeumer laeuft minuetlich, sieht Container mit OTA-Kennzeichnung und
+# entfernt die, zu denen er keine Session findet. Solange die Session-Zeile
+# nur geflusht und nicht committet war, gab es sie fuer ihn nicht — und er
+# entfernte den Container **mitten im Start**.
+#
+# Das Ergebnis sah jedes Mal anders aus und nie nach der Ursache: ein
+# Startskript mit Rueckgabe 137, ein Einmal-Skript ohne Ausgabe, „KasmVNC war
+# nach 40s noch nicht bereit". Deshalb hier die Ursache selbst, und nicht die
+# Symptome: Die Zeile muss fuer eine **andere** Verbindung sichtbar sein,
+# waehrend der Container noch entsteht.
+echo
+echo "Eine startende Session ist für andere sichtbar"
+
+WS_R=$(api "$TMP/admin.jar" "$BASE/api/templates" | jqp "
+next((t['id'] for t in d if t['mode'] == 'workspace'), '')")
+SID_R=$(api "$TMP/admin.jar" "$BASE/api/sessions" | jqp "
+next((s['id'] for s in d if s['template_id'] == '$WS_R'), '')")
+if [ -n "$SID_R" ]; then
+  ALT_R="ota-s-$(echo "$SID_R" | cut -c1-12)"
+  api "$TMP/admin.jar" -X DELETE "$BASE/api/sessions/$SID_R" >/dev/null
+  for _ in $(seq 1 20); do docker inspect "$ALT_R" >/dev/null 2>&1 || break; sleep 2; done
+fi
+
+# Im Hintergrund starten und waehrenddessen in der Datenbank nachsehen — mit
+# einer eigenen Verbindung, denn genau darum geht es.
+( api "$TMP/admin.jar" -X POST "$BASE/api/sessions" -H 'Content-Type: application/json' \
+    -d "{\"template_id\":\"$WS_R\"}" > "$TMP/start.json" 2>/dev/null ) &
+START_PID=$!
+
+SICHTBAR=0
+for _ in $(seq 1 40); do
+  ZAHL=$(docker compose -f deploy/docker-compose.yml --env-file deploy/.env \
+    exec -T db psql -U "${POSTGRES_USER:-ota}" -d "${POSTGRES_DB:-ota}" -tAc \
+    "SELECT count(*) FROM sessions WHERE status = 'starting'" 2>/dev/null | tr -d ' \r')
+  if [ "${ZAHL:-0}" -ge 1 ]; then SICHTBAR=1; break; fi
+  kill -0 "$START_PID" 2>/dev/null || break
+  sleep 1
+done
+wait "$START_PID" 2>/dev/null
+
+[ "$SICHTBAR" = "1" ] \
+  && ok "Die Zeile steht in der Datenbank, bevor der Start durch ist" \
+  || bad "Die startende Session war für eine andere Verbindung unsichtbar"
+
+SID_R=$(jqp "d.get('id','')" < "$TMP/start.json" 2>/dev/null)
+if [ -n "$SID_R" ]; then
+  CN_R="ota-s-$(echo "$SID_R" | cut -c1-12)"
+  docker inspect "$CN_R" --format '{{.State.Status}}' 2>/dev/null | grep -q running \
+    && ok "Und der Container hat den Start überlebt" \
+    || bad "Der Container ist während des Starts verschwunden"
+else
+  bad "Der Start lieferte keine Session: $(head -c 160 "$TMP/start.json" 2>/dev/null)"
 fi
 
 # ---------------------------------------- Session ohne Container
@@ -1147,6 +1253,95 @@ keep = ("friendly_name","description","icon","categories","mode","image_ref","co
 b = {k: d[k] for k in keep if k in d}
 b["skeleton_enforce"] = json.loads(os.environ["VORHER"])
 print(json.dumps(b))')" >/dev/null
+fi
+
+# --------------------------------------- Skeleton je Anwendung
+#
+# Ein Arbeitsplatz trägt ein Dutzend Anwendungen, und nicht jeder Mensch
+# startet jede davon. Deshalb hat jede Anwendung einen eigenen Teilbaum, der
+# erst kommt, wenn **sie** zum ersten Mal startet — und danach nie wieder.
+echo
+echo "Skeleton je Anwendung"
+
+if [ -z "${WS_S:-}" ]; then
+  bad "Kein Workspace mit Anwendungen — Teilbaum nicht prüfbar"
+else
+  APP_T=$(api "$TMP/admin.jar" "$BASE/api/templates/$WS_S" | jqp "
+next((a['slug'] for a in d.get('apps') or [] if a.get('is_enabled')), '')")
+  MARKE_T="ota-teilbaum-$$"
+
+  if [ -z "$APP_T" ]; then
+    bad "Der Workspace hat keine nutzbare Anwendung"
+  else
+    printf 'vom-teilbaum\n' > "$TMP/$MARKE_T"
+    api "$TMP/admin.jar" -X POST "$SKEL/upload?path=&app=$APP_T" \
+      -F "file=@$TMP/$MARKE_T" >/dev/null
+    api "$TMP/admin.jar" "$SKEL?app=$APP_T" | grep -q "$MARKE_T" \
+      && ok "Die Datei liegt im Teilbaum von $APP_T" \
+      || bad "Die Datei kam im Teilbaum nicht an"
+
+    # Der Teilbaum ist **kein** Inhalt des Workspace-Skeletons. Stünde er
+    # dort, käme er beim ersten Start als sichtbares Verzeichnis `.apps` ins
+    # Zuhause — und niemand wüsste, was das ist.
+    api "$TMP/admin.jar" "$SKEL" | grep -q "$MARKE_T\|\.apps" \
+      && bad "Der Teilbaum taucht im Skeleton des Workspace auf" \
+      || ok "Und nicht im Skeleton des ganzen Arbeitsplatzes"
+
+    # Eine Anwendung, die es nicht gibt, ist kein frei wählbarer
+    # Verzeichnisname.
+    RC_T=$(code "$TMP/admin.jar" "$SKEL?app=gibt-es-nicht")
+    expect "404" "$RC_T" "Eine fremde Anwendungskennung wird abgewiesen"
+
+    # Und jetzt der Weg ins Zuhause. Der Teilbaum kommt beim Start der
+    # Anwendung, nicht beim Start des Arbeitsplatzes.
+    if [ -z "${CN_S:-}" ] || ! docker inspect "$CN_S" >/dev/null 2>&1; then
+      bad "Keine laufende Session für den Teilbaum"
+    else
+      docker exec "$CN_S" rm -f "/home/kasm-user/$MARKE_T" \
+        "/home/kasm-user/.ota/app-skeleton/$APP_T" 2>/dev/null || true
+
+      docker exec "$CN_S" test -e "/home/kasm-user/$MARKE_T" \
+        && bad "Der Teilbaum lag schon vor dem Start der Anwendung im Zuhause" \
+        || ok "Vor dem Start der Anwendung liegt er nicht im Zuhause"
+
+      api "$TMP/admin.jar" -X POST "$BASE/api/sessions/$SID_S/apps/$APP_T" >/dev/null
+      DA_T=""
+      for _ in $(seq 1 20); do
+        DA_T=$(docker exec "$CN_S" sh -c "cat /home/kasm-user/$MARKE_T 2>/dev/null" | tr -d '\r\n')
+        [ -n "$DA_T" ] && break
+        sleep 1
+      done
+      expect "vom-teilbaum" "$DA_T" "Beim Start der Anwendung kommt er an"
+
+      OWNER_T=$(docker exec "$CN_S" stat -c '%u:%g' "/home/kasm-user/$MARKE_T" 2>/dev/null)
+      expect "1000:1000" "$OWNER_T" "Und gehört dem Nutzer, nicht root"
+
+      docker exec "$CN_S" test -e "/home/kasm-user/.ota/app-skeleton/$APP_T" \
+        && ok "Die Merkdatei steht im Zuhause" \
+        || bad "Die Merkdatei fehlt — er käme bei jedem Start erneut"
+
+      # Der Kern: beim zweiten Start bleibt liegen, was der Mensch geändert
+      # hat. Ein Teilbaum, der jedes Mal überschreibt, wäre etwas anderes —
+      # dafür gibt es „durchsetzen" am Workspace.
+      docker exec -u 1000 "$CN_S" sh -c "echo VON-HAND > /home/kasm-user/$MARKE_T"
+      D_NUM_T=$(api "$TMP/admin.jar" "$BASE/api/sessions/$SID_S" | jqp "
+next((str(s['display_num']) for s in d.get('streams') or [] if s['app_slug'] == '$APP_T'), '')")
+      [ -n "$D_NUM_T" ] && api "$TMP/admin.jar" -X DELETE \
+        "$BASE/api/sessions/$SID_S/apps/$APP_T" >/dev/null
+      sleep 3
+      api "$TMP/admin.jar" -X POST "$BASE/api/sessions/$SID_S/apps/$APP_T" >/dev/null
+      sleep 6
+      NOCH_T=$(docker exec "$CN_S" sh -c "cat /home/kasm-user/$MARKE_T 2>/dev/null" | tr -d '\r\n')
+      expect "VON-HAND" "$NOCH_T" "Beim zweiten Start bleibt das Zuhause, wie es ist"
+
+      docker exec "$CN_S" rm -f "/home/kasm-user/$MARKE_T" 2>/dev/null || true
+    fi
+
+    api "$TMP/admin.jar" -X DELETE "$SKEL?path=$MARKE_T&app=$APP_T" >/dev/null
+    WEG_T=$(api "$TMP/admin.jar" "$SKEL?app=$APP_T" | jqp "
+str(len([e for e in d['eintraege'] if e['name'] == '$MARKE_T']))")
+    expect "0" "$WEG_T" "Gelöscht ist gelöscht"
+  fi
 fi
 
 # ------------------------------------------------- Session einfrieren

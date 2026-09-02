@@ -42,23 +42,29 @@ def host_info() -> dict[str, Any]:
     return _call("GET", "/host")
 
 
-def skeleton_list(slug: str, path: str = "") -> dict[str, Any]:
+# `app` waehlt den Teilbaum einer einzelnen Anwendung. Leer heisst: das
+# Skeleton des Workspace selbst.
+
+def skeleton_list(slug: str, path: str = "", app: str = "") -> dict[str, Any]:
     from urllib.parse import quote
-    return _call("GET", f"/skeleton/{slug}?pfad={quote(path)}")
+    return _call("GET", f"/skeleton/{slug}?pfad={quote(path)}&app_slug={quote(app)}")
 
 
-def skeleton_upload(slug: str, path: str, name: str, data: bytes) -> dict[str, Any]:
-    return _call("POST", f"/skeleton/{slug}/upload", data={"pfad": path},
+def skeleton_upload(slug: str, path: str, name: str, data: bytes,
+                    app: str = "") -> dict[str, Any]:
+    return _call("POST", f"/skeleton/{slug}/upload",
+                 data={"pfad": path, "app_slug": app},
                  files={"files": (name, data)})
 
 
-def skeleton_mkdir(slug: str, path: str, name: str) -> dict[str, Any]:
-    return _call("POST", f"/skeleton/{slug}/dir", json={"pfad": path, "name": name})
+def skeleton_mkdir(slug: str, path: str, name: str, app: str = "") -> dict[str, Any]:
+    return _call("POST", f"/skeleton/{slug}/dir",
+                 json={"pfad": path, "name": name, "app_slug": app})
 
 
-def skeleton_remove(slug: str, path: str) -> dict[str, Any]:
+def skeleton_remove(slug: str, path: str, app: str = "") -> dict[str, Any]:
     from urllib.parse import quote
-    return _call("DELETE", f"/skeleton/{slug}?pfad={quote(path)}")
+    return _call("DELETE", f"/skeleton/{slug}?pfad={quote(path)}&app_slug={quote(app)}")
 
 
 def freeze_preview(container_id: str) -> dict[str, Any]:

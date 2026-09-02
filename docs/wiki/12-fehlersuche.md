@@ -20,6 +20,47 @@ statt auf `running` — das Dashboard versucht es dann weiter, statt eine Sackga
 Kommt die Seite trotzdem, ist die Session wirklich weg: beendet, aufgeräumt oder der Container
 gestorben. Ein Blick in **Betrieb → Sessions** zeigt, was gilt.
 
+## Sessions scheitern sprunghaft — und jedes Mal woanders
+
+Das hier war der unangenehmste Fall bisher, weil er nie zweimal gleich aussah. Die Symptome, alle
+vom selben Grund:
+
+- `Startskript in ota-s-… endete mit 137` — das ist SIGKILL
+- ein Einmal-Skript, das nichts zurückgibt, und OTA bucht es folgerichtig als „nicht gelaufen"
+- `KasmVNC in ota-s-… war nach 40s noch nicht bereit`
+- drei 409er direkt danach: `container … is not running`
+- in der Oberfläche: „Der Arbeitsplatz läuft gerade nicht", obwohl er gerade gestartet wurde
+
+Gemeinsam war nur, dass es **unter Last** häufiger passierte und bei einem ruhigen Rechner kaum.
+Genau das führt in die Irre: Es sieht nach Speichermangel aus. War es nicht — der Container
+benutzte 231 MB von 3 GB, und nichts wurde vom Kernel wegen Speichers getötet.
+
+**Die Ursache** lag zwei Ebenen weiter oben. Die API legte die Session-Zeile mit `flush` an, nicht
+mit `commit`. Ein `flush` schreibt nur *innerhalb* der eigenen Transaktion; für jede andere
+Verbindung gab es die Session bis zum abschließenden `commit` nicht — und der kam erst, wenn der
+Container vollständig stand: Skeleton kopiert, Einmal-Skripte gelaufen, Startskript durch, KasmVNC
+bereit. Unter Last dauert das über eine Minute.
+
+In genau diesem Fenster läuft der **Aufräumer** (`_reap_once` in `api/ota/main.py`, minütlich). Er
+sieht einen Container mit OTA-Kennzeichnung, findet in der Datenbank keine Session dazu — und
+entfernt ihn. Mitten im Start. Je länger der Start dauerte, desto wahrscheinlicher der Treffer.
+
+**Behoben** an beiden Enden:
+
+1. Die Session-Zeile wird **committet, bevor der Container entsteht**. Ab da ist sie für jede
+   Verbindung da.
+2. Der Aufräumer vergleicht zusätzlich die **Session-Kennung** aus dem Container-Label, nicht nur
+   die `container_id` — die steht während des Starts noch nicht in der Zeile.
+
+Geprüft wird die Ursache und nicht das Symptom: `scripts/test-authz.sh` startet eine Session im
+Hintergrund und sieht währenddessen mit einer **zweiten** Verbindung in der Datenbank nach, ob die
+Zeile da ist.
+
+> **Die Lehre daraus**, falls etwas Ähnliches auftaucht: Wenn Fehler sprunghaft sind und unter Last
+> häufiger, ist die Versuchung groß, an Zeitgrenzen zu drehen. Das hätte hier das Fenster nur
+> verschoben. Die Frage, die weiterhalf, war nicht „warum ist es zu langsam", sondern „wer bringt
+> den Prozess um".
+
 ## Der Stream bricht nach Minuten ab, obwohl die Grenze bei Stunden steht
 
 Zwei Ursachen, die zusammen genau das Bild ergaben: Man sieht einem Build zu oder liest ein langes

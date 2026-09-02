@@ -35,6 +35,7 @@ heute schon funktioniert.
 7. [Golden Images](07-golden-images.md)
 8. [Nutzer, Gruppen und Rechte](08-nutzer-und-gruppen.md)
 18. [Zentrale Anmeldung (Keycloak)](18-zentrale-anmeldung.md)
+19. [Das eigene Basisimage](19-eigenes-basisimage.md)
 9. [Kasm-Images und Registries einbinden](09-kasm-images-und-registries.md)
 16. [Images verwalten](16-images-verwalten.md)
 17. [Ablagen und Startskript](17-ablage-und-startskript.md)

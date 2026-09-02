@@ -17,3 +17,10 @@ deploy/traefik/traefik.yml
 *.swp
 *.swo
 *~
+
+# Ein gebautes index.html gehoert nicht ins Repository — es entsteht im
+# Image und war hier nur versehentlich abgelegt.
+deploy/index.html
+
+# Stücklisten werden erzeugt (scripts/sbom.sh) und gelten je Build.
+sbom/

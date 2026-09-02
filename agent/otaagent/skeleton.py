@@ -9,6 +9,17 @@ kommt. Zwei Zeitpunkte, und der Unterschied ist der ganze Sinn:
 * **Bei jedem Start** werden nur die Pfade kopiert, die der Administrator
   ausdrücklich als *durchgesetzt* markiert hat — und die überschreiben, was
   der Nutzer geändert hat.
+* **Beim ersten Start einer einzelnen Anwendung** ihr eigener Teilbaum, falls
+  einer hinterlegt ist. Er liegt unter ``.apps/<anwendung>`` im Skeleton des
+  Workspace und wird beim Workspace-Start ausdrücklich **nicht** mitkopiert.
+
+  Warum eigenständig: Ein Arbeitsplatz trägt ein Dutzend Anwendungen, und
+  nicht jeder Mensch startet jede davon. Die Einstellungen von IntelliJ ins
+  Zuhause von jemandem zu legen, der nur das Terminal benutzt, macht das
+  Zuhause voll und die Fehlersuche schwer. Gemerkt wird das im Zuhause selbst
+  (``~/.ota/app-skeleton/<anwendung>``) und nicht in der Datenbank — der
+  Anwendungskatalog wird beim Speichern komplett ersetzt, eine daran hängende
+  Buchführung wäre jedes Mal weg.
 
 Der zweite Fall ist mit Bedacht die Ausnahme. Ein Zuhause gehört dem Menschen,
 der darin arbeitet; ihm bei jedem Start Einstellungen zu überschreiben, ist
@@ -48,22 +59,38 @@ class SkeletonError(ValueError):
     """Eine Angabe taugt nicht. Die Meldung geht an den Menschen."""
 
 
-def root(slug: str) -> Path:
+# Wo die Teilbaeume der einzelnen Anwendungen liegen — innerhalb des
+# Skeletons des Workspace, damit Sicherung und Umzug beides zusammen fassen,
+# aber mit fuehrendem Punkt und ausdruecklich vom Rundumkopieren ausgenommen.
+APPS_DIR = ".apps"
+
+# Woran ein Container erkennt, dass der Teilbaum einer Anwendung schon
+# angekommen ist. Im Zuhause, nicht in der Datenbank — siehe Modulkopf.
+MARKER_DIR = ".ota/app-skeleton"
+
+
+def root(slug: str, app: str | None = None) -> Path:
+    """Das Skeleton eines Workspace — oder das einer einzelnen Anwendung."""
     if not SLUG.match(slug or ""):
         raise SkeletonError("Das ist keine gültige Workspace-Kennung.")
     base = Path(os.environ.get("OTA_SKELETON_ROOT", "/srv/ota/skeletons")) / slug
+    if app is not None:
+        if not SLUG.match(app or ""):
+            raise SkeletonError("Das ist keine gültige Anwendungs-Kennung.")
+        base = base / APPS_DIR / app
     base.mkdir(parents=True, exist_ok=True)
     return base.resolve()
 
 
-def _resolve(slug: str, rel: str, *, must_exist: bool = True) -> Path:
+def _resolve(slug: str, rel: str, *, must_exist: bool = True,
+             app: str | None = None) -> Path:
     """Loest einen Pfad im Skeleton auf — oder lehnt ab.
 
     Zuerst aufloesen, dann pruefen: Ein `..` faellt dabei genauso auf wie ein
     Symlink, der nach draussen zeigt. Dieselbe Reihenfolge wie in `shared.py`,
     und aus demselben Grund.
     """
-    base = root(slug)
+    base = root(slug, app)
     rel = (rel or "").strip().strip("/")
     if rel and any(part in FORBIDDEN for part in rel.split("/")):
         raise SkeletonError("Dieser Pfad ist nicht erlaubt.")
@@ -89,19 +116,25 @@ def _safe_name(name: str) -> str:
     return clean
 
 
-def listing(slug: str, rel: str = "") -> dict[str, Any]:
-    here = _resolve(slug, rel)
+def listing(slug: str, rel: str = "", app: str | None = None) -> dict[str, Any]:
+    here = _resolve(slug, rel, app=app)
     if not here.is_dir():
         raise SkeletonError("Das ist kein Verzeichnis.")
 
+    basis = root(slug, app)
     eintraege = []
     for kind in (True, False):          # Verzeichnisse zuerst
         for p in sorted(here.iterdir(), key=lambda x: x.name.lower()):
             if p.is_dir() != kind:
                 continue
+            # Die Teilbaeume der Anwendungen sind kein Inhalt des Workspace-
+            # Skeletons. Sie haetten dort nur eine Bedeutung: „Verzeichnis,
+            # das man besser nicht anfasst."
+            if app is None and here == basis and p.name == APPS_DIR:
+                continue
             eintraege.append({
                 "name": p.name,
-                "pfad": str(p.relative_to(root(slug))),
+                "pfad": str(p.relative_to(basis)),
                 "verzeichnis": p.is_dir(),
                 "bytes": _size_of(p),
             })
@@ -124,30 +157,31 @@ def _size_of(path: Path) -> int:
     return gesamt
 
 
-def save(slug: str, rel: str, name: str, data: bytes) -> dict[str, Any]:
+def save(slug: str, rel: str, name: str, data: bytes,
+         app: str | None = None) -> dict[str, Any]:
     if len(data) > MAX_BYTES:
         raise SkeletonError(
             f"Die Datei ist grösser als {MAX_BYTES // 1024**2} MB. Ein Skeleton "
             "ist für Einstellungen gedacht; grosse Dateien gehören in die "
             "gemeinsame Ablage."
         )
-    ziel = _resolve(slug, rel) / _safe_name(name)
+    ziel = _resolve(slug, rel, app=app) / _safe_name(name)
     ziel.parent.mkdir(parents=True, exist_ok=True)
     ziel.write_bytes(data)
     _own(ziel)
-    return {"pfad": str(ziel.relative_to(root(slug))), "bytes": len(data)}
+    return {"pfad": str(ziel.relative_to(root(slug, app))), "bytes": len(data)}
 
 
-def make_dir(slug: str, rel: str, name: str) -> dict[str, Any]:
-    ziel = _resolve(slug, rel) / _safe_name(name)
+def make_dir(slug: str, rel: str, name: str, app: str | None = None) -> dict[str, Any]:
+    ziel = _resolve(slug, rel, app=app) / _safe_name(name)
     ziel.mkdir(parents=True, exist_ok=True)
     _own(ziel)
-    return {"pfad": str(ziel.relative_to(root(slug)))}
+    return {"pfad": str(ziel.relative_to(root(slug, app)))}
 
 
-def remove(slug: str, rel: str) -> dict[str, str]:
-    ziel = _resolve(slug, rel)
-    if ziel == root(slug):
+def remove(slug: str, rel: str, app: str | None = None) -> dict[str, str]:
+    ziel = _resolve(slug, rel, app=app)
+    if ziel == root(slug, app):
         raise SkeletonError("Das Skeleton selbst lässt sich nicht löschen.")
     if ziel.is_dir():
         shutil.rmtree(ziel)
@@ -197,12 +231,16 @@ def apply(container_id: str, slug: str, enforce: list[str], *,
     except SkeletonError:
         return {"kopiert": [], "grund": "kein Skeleton"}
 
-    if not any(base.iterdir()):
+    inhalt = [p for p in base.iterdir() if p.name != APPS_DIR]
+    if not inhalt:
         return {"kopiert": [], "grund": "Skeleton ist leer"}
 
     quellen: list[Path] = []
     if fresh:
-        quellen = [base]
+        # Der ganze Baum — aber ohne `.apps`. Frueher stand hier `[base]` und
+        # damit ein `docker cp <base>/. `; das haette die Teilbaeume aller
+        # Anwendungen als sichtbares Verzeichnis im Zuhause abgelegt.
+        quellen = inhalt
     else:
         for rel in enforce or []:
             try:
@@ -210,18 +248,22 @@ def apply(container_id: str, slug: str, enforce: list[str], *,
             except SkeletonError:
                 continue          # Pfad geloescht — kein Grund, den Start zu stoppen
 
+    kopiert = _kopiere(container_id, base, quellen)
+    return {"kopiert": kopiert, "grund": "erster Start" if fresh else "durchgesetzt"}
+
+
+def _kopiere(container_id: str, base: Path, quellen: list[Path]) -> list[str]:
+    """Legt die genannten Quellen an ihrer Stelle im Zuhause ab."""
     kopiert: list[str] = []
     for quelle in quellen:
-        # Der Punkt am Ende bedeutet „der Inhalt", nicht „das Verzeichnis".
-        # Ohne ihn entstuende /home/kasm-user/<slug>/…
-        arg = f"{quelle}/." if quelle == base else str(quelle)
-        ziel = HOME if quelle == base else f"{HOME}/{quelle.relative_to(base).parent}"
+        rel = quelle.relative_to(base)
+        ziel = f"{HOME}/{rel.parent}" if str(rel.parent) != "." else HOME
         try:
             subprocess.run(
-                ["docker", "cp", arg, f"{container_id}:{ziel}"],
+                ["docker", "cp", str(quelle), f"{container_id}:{ziel}"],
                 capture_output=True, timeout=300, check=True,
             )
-            kopiert.append(str(quelle.relative_to(base)) if quelle != base else ".")
+            kopiert.append(str(rel))
         except (subprocess.SubprocessError, OSError):
             continue
 
@@ -233,5 +275,47 @@ def apply(container_id: str, slug: str, enforce: list[str], *,
              "chown", "-R", "1000:1000", HOME],
             capture_output=True, timeout=300,
         )
+    return kopiert
 
-    return {"kopiert": kopiert, "grund": "erster Start" if fresh else "durchgesetzt"}
+
+def apply_app(container_id: str, slug: str, app: str) -> dict[str, Any]:
+    """Legt den Teilbaum einer einzelnen Anwendung ins Zuhause — **einmal**.
+
+    Gemerkt wird es im Zuhause selbst, unter ``~/.ota/app-skeleton/<app>``.
+    Das ist Absicht und nicht Bequemlichkeit:
+
+    * Der Anwendungskatalog wird beim Speichern komplett ersetzt (`set_apps`
+      in der API), die Zeilen bekommen dabei neue Kennungen. Eine Buchfuehrung
+      an der Datenbankzeile waere nach jeder Katalogaenderung weg.
+    * Die Frage lautet ohnehin „hat **dieses Zuhause** den Teilbaum schon?" —
+      und nur das Zuhause kann sie beantworten. Ein Workspace ohne
+      persistentes Profil bekommt ihn folgerichtig bei jedem Start neu.
+
+    Wer den Teilbaum erneut ausrollen will, loescht die Merkdatei — dieselbe
+    Geste wie das „Nochmal" bei den Einmal-Skripten.
+    """
+    try:
+        base = root(slug, app)
+    except SkeletonError:
+        return {"kopiert": [], "grund": "kein Teilbaum"}
+
+    inhalt = list(base.iterdir())
+    if not inhalt:
+        return {"kopiert": [], "grund": "kein Teilbaum"}
+
+    marker = f"{HOME}/{MARKER_DIR}/{app}"
+    schon = subprocess.run(
+        ["docker", "exec", "-u", "1000", container_id, "test", "-e", marker],
+        capture_output=True, timeout=30,
+    )
+    if schon.returncode == 0:
+        return {"kopiert": [], "grund": "war schon da"}
+
+    kopiert = _kopiere(container_id, base, inhalt)
+    if kopiert:
+        subprocess.run(
+            ["docker", "exec", "-u", "1000", container_id, "sh", "-c",
+             f"mkdir -p {HOME}/{MARKER_DIR} && date -Iseconds > {marker}"],
+            capture_output=True, timeout=30,
+        )
+    return {"kopiert": kopiert, "grund": "erster Start dieser Anwendung"}

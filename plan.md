@@ -1241,11 +1241,17 @@ Brücke in den Container und startet sie automatisch, sobald die zweite Anwendun
 Geprüft durch `scripts/test-clipboard-bridge.sh` — beide Richtungen, Umlaute, mehrzeiliger Code
 mit Tabulatoren.
 
-Eine Abweichung vom Entwurf, bewusst: Die Brücke **fragt im halben Sekundentakt ab**, statt auf
-XFIXES-Ereignisse zu warten. Grund ist das Basisimage — es bringt weder `clipnotify` noch
-python-xlib mit. Eine halbe Sekunde ist für Menschen nicht spürbar und kostet bei vier Displays
-rund acht Aufrufe je Sekunde. Sobald ein eigenes Basisimage gebaut wird (Roadmap M5), gehört
-`clipnotify` hinein und die Schleife wird ereignisgesteuert.
+**Nachtrag 2026-09-01: die Brücke ist ereignisgesteuert** — dort, wo das Image es hergibt. Sie
+startet je Display ein `clipnotify -l`, das bei jeder Änderung eine Zeile schreibt, und wartet
+darauf, statt im halben Sekundentakt nachzufragen. Entschieden wird das **im Container**: Fehlt
+`clipnotify` (so in allen Kasm-Images), bleibt es beim Takt. Beide Wege teilen sich denselben
+Abgleich darunter; was sich unterscheidet, ist ausschliesslich das Warten.
+
+Der Gewinn ist nicht die Last — acht Aufrufe je Sekunde tun keinem weh —, sondern die
+Verzögerung: Im Takt liegt zwischen Kopieren und Einfügen bis zu eine halbe Sekunde, in der die
+Nachbaranwendung noch den alten Inhalt hat. Wer schnell genug ist, fügt das Vorherige ein, und
+das sieht aus wie ein Fehler, den niemand reproduzieren kann. Über Ereignisse sind es
+Millisekunden.
 
 **Zwei Fallen beim Bauen**, beide derselbe Fehler in zwei Gewändern: Ein Abgleich über
 `pgrep -f <muster>` findet das **eigene Skript**, weil dessen Kommandozeile das Muster enthält —
@@ -1280,7 +1286,8 @@ dort aussah, und wenn sich die Brücke in der Praxis als zickig erweist, ist Xpr
 
 Fall 8 und 12 sind die, die erfahrungsgemäß durchrutschen.
 
-**Stand 2026-08-28:** Zehn der zwölf Fälle laufen automatisiert mit.
+**Stand 2026-09-01:** Alle zwölf Fälle laufen automatisiert mit — elf bei jedem Lauf, einer
+(Java/AWT) auf Zuruf.
 
 | Fall | Wo | Stand |
 |---|---|---|
@@ -1291,7 +1298,9 @@ Fall 8 und 12 sind die, die erfahrungsgemäß durchrutschen.
 | 9 (PRIMARY) | `test-clipboard-bridge.sh` | ✅ auf demselben Display; **nicht** über Displays hinweg, und das mit Absicht |
 | 10 (abgeschaltet) | `test-clipboard-bridge.sh` | ✅ Brücke läuft nicht, und kommt beim Wiedereinschalten zurück |
 | 11 (nach Pause) | `test-clipboard-bridge.sh` | ✅ |
-| 3, 7, 12 | — | offen |
+| 3 (zwei Sessions) | `tests/e2e.mjs` | ✅ mit zwei echten Containern: kopieren in Session A, über die System-Zwischenablage des Browsers, ankommen in Session B. Der Test legt sich dafür eine eigene Vorlage mit **eigenem Profil** an — zwei Vorlagen mit `persistence_scope: user` teilen sich ein Zuhause, und OTA lehnt die zweite Session zu Recht ab |
+| 7 (Java/AWT) | `scripts/build-base-image.sh` mit `OTA_PRUEFE_JAVA=1` | ✅ beide Richtungen, mit einem laufenden AWT-Prozess. Nicht bei jedem Lauf: Der Test installiert ein JDK in den Prüfcontainer (~300 MB). Ins **Image** gehört das nicht — ein Basisimage, von dem jeder Arbeitsplatz abstammt, trägt kein JDK mit sich herum, nur damit ein Test es vorfindet |
+| 12 (ohne `readText()`) | `tests/e2e.mjs` | ✅ in Chromium **mit abgeschaltetem `readText`**. Das ist kein Ersatz für einen Lauf in Firefox und soll keiner sein: Es prüft genau den Pfad, der dort greift, und zwar bei jedem Lauf. Ohne das fiele ein Bruch erst jemandem in Firefox auf |
 
 **Zu Fall 6.** Ein Bild kommt nicht als Text aus der Zwischenablage. Wer nur `xclip -o` fragt,
 bekommt nichts und hält sie für leer — ein Screenshot wäre in der Nachbaranwendung unerreichbar,

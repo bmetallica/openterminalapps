@@ -102,6 +102,46 @@ KasmVNC bleibt GPL-2.0 — zwei Programme, die nebeneinander laufen.
 > Lizenz- und Hinweisdateien der jeweiligen KasmVNC-Fassung mitgeben, statt
 > sich auf „KasmVNC = GPL-2.0" zu verlassen.
 
+#### Darf KasmVNC in ein eigenes Image? — Ja, und es ist sauberer als vorher
+
+Geprüft am 2026-09-01, weil die Frage beim Bau von `images/base-xfce` aufkam.
+
+**Die Lizenz.** KasmVNC steht unter **GPL-2.0-or-later**. Nachgesehen nicht in
+einem Blogeintrag, sondern in der Datei, die im Paket selbst liegt —
+`/usr/share/doc/kasmvncserver/copyright` im gebauten Image sagt `License:
+GPL-2+`, und `LICENSE.TXT` im Quell-Repository ist der GPL-2-Text. Die
+Urheberzeile führt Kasm Technologies neben AT&T, RealVNC, TightVNC, Sun,
+TigerVNC und anderen: KasmVNC ist ein TigerVNC-Abkömmling und erbt dessen
+Lizenz.
+
+**Was das erlaubt.** Ein GPL-Programm in ein Image zu legen und zu starten,
+ist genau der Fall, für den die GPL gemacht ist. Das Paket wird unverändert
+aus dem offiziellen Release übernommen — kein Patch, kein Fork, kein Linken.
+OTA spricht mit ihm über Netz und Prozessgrenze (siehe oben), und im Image
+liegt es neben anderer Software, ohne sie anzustecken (*mere aggregation*,
+GPL-2.0 §2 letzter Absatz).
+
+**Was zu tun ist, wenn ein Image das Haus verlässt.** Dann — und nur dann —
+greifen die Pflichten: Lizenztext und Hinweise bleiben drin (sie liegen
+ohnehin unter `/usr/share/doc/kasmvncserver/`), und der Quellcode dieser
+Fassung muss verfügbar sein. Für ein unverändertes Release-Paket genügt der
+Verweis auf `https://github.com/kasmtech/KasmVNC/releases/tag/v<Fassung>` —
+die Fassung steht im Dockerfile als `KASMVNC_VERSION`. Dazu die erzeugte
+Stückliste (`scripts/sbom.sh`), die ohnehin jedes Paket im Image nennt.
+
+**Der eigentliche Punkt: es ist sauberer als der bisherige Weg.** Bisher
+leitet jeder Arbeitsplatz von einem `kasmweb/*`-Image ab. Dessen fertiges
+Abbild ist gerade **nicht** MIT (siehe der nächste Abschnitt) — es ist ein
+Bündel aus fremder Software unter „Other", und was darin unter welchen
+Bedingungen steht, muss man Paket für Paket herausfinden. Ein eigenes Image
+aus Ubuntu, XFCE und dem offiziellen KasmVNC-Paket besteht dagegen aus
+Bestandteilen mit bekannten, einzeln nachlesbaren Lizenzen.
+
+**Was nicht geht:** Kasms *Workspaces*-Plattform ist proprietär — Agent,
+Manager, API, die Weboberfläche des Produkts. Davon kommt nichts in ein
+OTA-Image, und der Name gehört ebenfalls Kasm: Ein Image von OTA heißt
+`ota/base-xfce` und nicht „Kasm" irgendetwas.
+
 ### Kasm-Workspaces-Images — MIT nur für die Rezepte
 
 Kasm schreibt in die **erste Zeile** seiner Lizenzdatei:

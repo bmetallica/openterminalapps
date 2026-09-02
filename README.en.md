@@ -112,13 +112,21 @@ In detail in [handbook chapter 2](docs/wiki/02-erste-schritte.md) (German).
   and start command. Nobody has to know where a binary lives
 - **Shared storage** for files that belong in every workspace — read-only inside the container
 - **A skeleton profile** per workspace: what a home directory starts out as. Individual paths can be
-  enforced at every start — the exception, not the rule
+  enforced at every start — the exception, not the rule. Plus **a subtree per application** that
+  only arrives the first time that application starts: whoever only uses the terminal does not need
+  the IDE's settings in their home
 - **Freeze a session**: set it up in your own workspace, review the preview, adopt it as a new
   version. The home stays out, secrets are flagged, the sudo exception is removed
 - **A script at session start**, per workspace, for anything that belongs in the home directory but
   not in the image
 
 **Operations**
+- **An own base image** `ota/base-xfce`: Ubuntu 24.04 + XFCE + KasmVNC, **965 MB instead of 20 GB** —
+  no application, no Kasm label, and none of the inherited start script that restarted an
+  application every three seconds. It carries `:test` and replaces nothing yet;
+  `scripts/build-base-image.sh --pruefen` measures 27 points against the agent's contract
+- **A bill of materials per image** (`make sbom`) in SPDX and CycloneDX — needed as soon as an image
+  leaves the building
 - Own registry in the stack; if an image is missing locally it is fetched from there at start
 - Backup and restore of profile, container and database, by hand and on a schedule
 - HTTPS out of the box with a small own CA, replaceable or behind a reverse proxy
@@ -147,11 +155,12 @@ the same separation applies to the host filesystem.
 | `deploy/` | Compose stack, Traefik, registry, certificates |
 | `extension/` | Firefox add-on for the clipboard |
 | `docs/wiki/` | Handbook — served inside the application as help |
-| `tests/`, `scripts/` | Checks, certificate, migration from Kasm |
+| `images/` | The own base image `ota/base-xfce` (Ubuntu + XFCE + KasmVNC) |
+| `tests/`, `scripts/` | Checks, certificate, migration from Kasm, bill of materials |
 
 ## Documentation
 
-- **[Handbook](docs/wiki/README.md)** — use, administration, operations, troubleshooting (17
+- **[Handbook](docs/wiki/README.md)** — use, administration, operations, troubleshooting (19
   chapters, German)
 - **[plan.md](plan.md)** — architecture **and the reasoning behind it**, dead ends included
 - **[docs/adr/](docs/adr/README.md)** — decisions that are expensive to reverse, with the

@@ -677,23 +677,28 @@ export const api = {
     call<PackageCheck[]>(
       `/templates/${templateId}/packages?names=${encodeURIComponent(names.join(','))}`),
 
-  skeletonList: (templateId: string, path = '') =>
+  // `app` wählt den Teilbaum einer einzelnen Anwendung. Leer heisst: das
+  // Skeleton des Workspace selbst.
+  skeletonList: (templateId: string, path = '', app = '') =>
     call<{ pfad: string; eintraege: SkeletonEntry[] }>(
-      `/templates/${templateId}/skeleton?path=${encodeURIComponent(path)}`),
-  skeletonUpload: (templateId: string, path: string, file: File) => {
+      `/templates/${templateId}/skeleton?path=${encodeURIComponent(path)}`
+      + `&app=${encodeURIComponent(app)}`),
+  skeletonUpload: (templateId: string, path: string, file: File, app = '') => {
     const body = new FormData()
     body.append('file', file, file.name)
     return call<unknown>(
-      `/templates/${templateId}/skeleton/upload?path=${encodeURIComponent(path)}`,
+      `/templates/${templateId}/skeleton/upload?path=${encodeURIComponent(path)}`
+      + `&app=${encodeURIComponent(app)}`,
       { method: 'POST', body })
   },
-  skeletonMkdir: (templateId: string, path: string, name: string) =>
+  skeletonMkdir: (templateId: string, path: string, name: string, app = '') =>
     call<unknown>(`/templates/${templateId}/skeleton/dir`, {
-      method: 'POST', body: JSON.stringify({ path, name }),
+      method: 'POST', body: JSON.stringify({ path, name, app }),
     }),
-  skeletonRemove: (templateId: string, path: string) =>
+  skeletonRemove: (templateId: string, path: string, app = '') =>
     call<{ status: string }>(
-      `/templates/${templateId}/skeleton?path=${encodeURIComponent(path)}`,
+      `/templates/${templateId}/skeleton?path=${encodeURIComponent(path)}`
+      + `&app=${encodeURIComponent(app)}`,
       { method: 'DELETE' }),
 
   builds: (templateId: string) => call<Build[]>(`/templates/${templateId}/builds`),

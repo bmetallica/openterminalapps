@@ -1071,6 +1071,8 @@ export const EN: Record<string, string> = {
   'Skeleton': 'Skeleton',
   'Was hier liegt, kommt beim ersten Start in das Zuhause eines Nutzers — solange es noch leer ist. Danach gehört das Zuhause ihm. Punktdateien sind erlaubt und der Normalfall.':
     'Whatever is here goes into a user\u2019s home directory at their first start — as long as it is still empty. After that the home belongs to them. Dotfiles are allowed and are the normal case.',
+  'Was hier liegt, kommt beim ersten Start genau dieser Anwendung in das Zuhause — einmal je Zuhause, und bevor die Anwendung läuft. Punktdateien sind erlaubt und der Normalfall.':
+    'Whatever is here goes into the home directory the first time this particular application starts \u2014 once per home, and before the application runs. Dotfiles are allowed and are the normal case.',
   'Dateien ablegen': 'Add files',
   'Verzeichnis anlegen': 'Create directory',
   'Name des Verzeichnisses': 'Name of the directory',
@@ -1086,6 +1088,8 @@ export const EN: Record<string, string> = {
     'Whatever the user changes there is gone at the next start. Right for a root certificate, rarely right for settings.',
   'Änderungen an „durchsetzen“ gelten erst nach dem Speichern. Die Dateien selbst sind sofort abgelegt.':
     'Changes to “enforce” take effect only after saving. The files themselves are stored immediately.',
+  'Der Teilbaum kommt genau einmal je Zuhause. Wer ihn erneut ausrollen will, löscht im Zuhause die Merkdatei unter ~/.ota/app-skeleton/.':
+    'The subtree arrives exactly once per home. To roll it out again, delete the marker file under ~/.ota/app-skeleton/ in that home.',
   'Entfernen fehlgeschlagen': 'Removal failed',
   'Verzeichnis (LDAP / Active Directory)': 'Directory (LDAP / Active Directory)',
   'Konten aus einem Verzeichnis anmelden lassen, statt sie von Hand anzulegen. Lokale Konten bleiben davon unberührt — sie werden weiterhin lokal geprüft, auch wenn im Verzeichnis ein gleichnamiger Eintrag steht.': 'Let accounts sign in from a directory instead of creating them by hand. Local accounts are untouched — they are still checked locally, even if the directory holds an entry with the same name.',

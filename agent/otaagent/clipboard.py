@@ -15,11 +15,21 @@ PRIMARY wird **nicht** gespiegelt, und das ist Absicht: Das ist die
 fluechtige Markierung, nicht die Zwischenablage. Wer in einer Anwendung Text
 markiert, wuerde sonst die Markierung in jeder anderen ueberschreiben.
 
-Warum Abfragen statt XFIXES-Ereignissen: Das Basisimage bringt weder
-``clipnotify`` noch python-xlib mit. Ein Intervall von einer halben Sekunde
-ist fuer Menschen nicht spuerbar und kostet bei vier Displays etwa acht
-Aufrufe je Sekunde. Sobald ein eigenes Basisimage gebaut wird (Roadmap M5),
-gehoert ``clipnotify`` hinein und diese Schleife wird ereignisgesteuert.
+Ereignisse statt Abfragen — wenn das Image es hergibt. ``clipnotify -l``
+meldet jede Aenderung der Auswahl, statt dass die Bruecke im halben
+Sekundentakt nachfragt. Es liegt in OTAs eigenem Basisimage
+(``images/base-xfce``); die Kasm-Images bringen es nicht mit. Die Bruecke
+entscheidet deshalb **im Container** und nicht hier: Ist ``clipnotify`` da,
+wartet sie auf Ereignisse; ist es nicht da, bleibt es bei der Abfrage. Beide
+Wege teilen sich denselben Abgleich darunter — was sich aendert, ist
+ausschliesslich das Warten.
+
+Der Unterschied ist nicht die Last (acht Aufrufe je Sekunde tun keinem weh),
+sondern die Verzoegerung: Bei einer Abfrage im halben Sekundentakt liegt
+zwischen Kopieren und Einfuegen bis zu eine halbe Sekunde, in der die
+Nachbaranwendung noch den alten Inhalt hat. Wer schnell genug ist, fuegt das
+Vorherige ein — und das sieht aus wie ein Fehler, der nicht reproduzierbar
+ist. Ueber Ereignisse sind es Millisekunden.
 """
 
 from __future__ import annotations
@@ -34,8 +44,31 @@ export XAUTHORITY=$HOME/.Xauthority
 INTERVAL=@INTERVAL@
 STATE=/tmp/ota-clipboard-state
 PIDFILE=/tmp/ota-clipboard.pid
+FIFO=/tmp/ota-clipboard.events
+# Sicherheitsnetz: So lange wird hoechstens auf ein Ereignis gewartet. Geht
+# eines verloren — ein Display verschwindet mitten im Kopieren —, faellt die
+# Bruecke danach von selbst wieder in den Takt, statt stehenzubleiben.
+MAXWARTEN=5
 
 echo $$ > "$PIDFILE"
+
+# Ereignisse oder Abfragen? Das entscheidet sich hier, im Container, und
+# nicht beim Agent: Nur hier ist zu sehen, ob `clipnotify` vorhanden ist.
+EREIGNISSE=0
+if command -v clipnotify >/dev/null 2>&1; then
+  EREIGNISSE=1
+  rm -f "$FIFO"
+  mkfifo "$FIFO" 2>/dev/null || EREIGNISSE=0
+fi
+if [ "$EREIGNISSE" = "1" ]; then
+  # Beide Richtungen offenhalten. Sonst kehrt `read` jedes Mal zurueck,
+  # wenn der letzte Schreiber die Roehre schliesst — und aus dem Warten
+  # wuerde eine Endlosschleife mit voller Last.
+  exec 9<>"$FIFO"
+  echo "bridge: ereignisgesteuert (clipnotify)" >&2
+else
+  echo "bridge: Abfrage alle ${INTERVAL}s (clipnotify fehlt im Image)" >&2
+fi
 
 # Was zuletzt als gemeinsamer Stand galt. Der Vergleich laeuft ueber eine
 # Pruefsumme, damit grosse Inhalte nicht bei jedem Durchlauf durch die
@@ -81,8 +114,61 @@ write_clip() {  # write_clip <display> <datei> <typ>
   fi
 }
 
+# Je Display eine Wache. `clipnotify -l` beendet sich nicht, sondern schreibt
+# bei jeder Aenderung eine Zeile — daraus wird hier der Name des Displays.
+#
+# Die Wachen werden bei jedem Durchlauf nachgezogen, denn Displays kommen und
+# gehen: Der Agent macht eines auf, sobald eine Anwendung startet, und wieder
+# zu, wenn sie endet.
+WACHEN=""
+
+wachen_pflegen() {
+  local offen; offen=" $(displays | tr '\n' ' ')"
+  local neu="" eintrag d pid
+
+  for d in $(displays); do
+    pid=""
+    for eintrag in $WACHEN; do
+      case "$eintrag" in "$d":*) pid="${eintrag#*:}" ;; esac
+    done
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+      neu="$neu $d:$pid"
+      continue
+    fi
+    ( DISPLAY=":$d" clipnotify -l -s clipboard 2>/dev/null \
+        | while read -r _; do echo "$d" >&9; done ) &
+    neu="$neu $d:$!"
+  done
+
+  # Wachen fuer Displays, die es nicht mehr gibt, beenden.
+  for eintrag in $WACHEN; do
+    d="${eintrag%%:*}"; pid="${eintrag#*:}"
+    case "$offen" in
+      *" $d "*) ;;
+      *) kill "$pid" 2>/dev/null || true ;;
+    esac
+  done
+
+  WACHEN="$neu"
+}
+
+warten() {
+  if [ "$EREIGNISSE" != "1" ]; then
+    sleep "$INTERVAL"
+    return
+  fi
+  wachen_pflegen
+  read -t "$MAXWARTEN" -r _ <&9 || true
+  # Ein einziges Kopieren loest oft mehrere Ereignisse aus — erst PRIMARY,
+  # dann CLIPBOARD, bei manchen Anwendungen noch ein drittes. Kurz
+  # nachfassen und den Rest wegraeumen, sonst laeuft der Abgleich drei Mal
+  # fuer denselben Inhalt.
+  sleep 0.05
+  while read -t 0.05 -r _ <&9; do :; done
+}
+
 while true; do
-  sleep "$INTERVAL"
+  warten
 
   ds=$(displays)
   [ -z "$ds" ] && continue
@@ -127,9 +213,17 @@ done
 STOP = r'''
 PIDFILE=/tmp/ota-clipboard.pid
 if [ -f "$PIDFILE" ]; then
-  kill "$(cat "$PIDFILE")" 2>/dev/null || true
+  PID=$(cat "$PIDFILE")
+  # Die ganze Prozessgruppe, nicht nur die Bruecke selbst.
+  #
+  # Sie startet je Display eine Wache (`clipnotify -l`) als Kindprozess.
+  # Stirbt nur die Bruecke, bleiben die Wachen als Waisen zurueck und halten
+  # eine Roehre offen, die niemand mehr liest. Die Bruecke wird mit `setsid`
+  # gestartet und ist damit Fuehrerin ihrer Gruppe — deshalb geht das.
+  kill -- "-$PID" 2>/dev/null || kill "$PID" 2>/dev/null || true
   rm -f "$PIDFILE"
 fi
+rm -f /tmp/ota-clipboard.events
 echo "bridge-stopped"
 '''
 
