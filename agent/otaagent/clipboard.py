@@ -38,7 +38,7 @@ BRIDGE = r'''#!/usr/bin/env bash
 # OTA Zwischenablage-Bruecke. Wird vom Agent gestartet und gestoppt.
 set -u
 
-export HOME=/home/kasm-user
+export HOME=${HOME:-/home/kasm-user}
 export XAUTHORITY=$HOME/.Xauthority
 
 INTERVAL=@INTERVAL@

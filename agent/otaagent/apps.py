@@ -16,7 +16,7 @@ import shlex
 # required, but no authorization protocol specified").
 START_DISPLAY = r"""
 set -e
-export HOME=/home/kasm-user
+export HOME=${HOME:-/home/kasm-user}
 export XAUTHORITY=$HOME/.Xauthority
 
 DISPLAY_NUM=@DISPLAY@
@@ -62,7 +62,7 @@ echo "display-ready"
 
 START_APP = r"""
 set -e
-export HOME=/home/kasm-user
+export HOME=${HOME:-/home/kasm-user}
 export XAUTHORITY=$HOME/.Xauthority
 export DISPLAY=:@DISPLAY@
 
@@ -115,7 +115,7 @@ echo "app-started"
 """
 
 STOP_DISPLAY = r"""
-export HOME=/home/kasm-user
+export HOME=${HOME:-/home/kasm-user}
 export XAUTHORITY=$HOME/.Xauthority
 pkill -f "Xvnc :@DISPLAY@" 2>/dev/null || true
 pkill -f "xfwm4.*:@DISPLAY@" 2>/dev/null || true

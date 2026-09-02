@@ -60,7 +60,11 @@ CONTAINER_SKIP = (
     # schreibgeschuetzt eingehaengt ist, scheitert der ganze Vorgang mit
     #   failed to Lchown "mnt/ota": read-only file system
     # Gemessen am 2026-08-27, unmittelbar nachdem es die Ablage gab.
-    "/home/kasm-user", "/mnt/ota", "/mnt/austausch",
+    # `/home` und nicht `/home/kasm-user`: Wie das Zuhause heisst,
+    # bestimmt das Image (siehe _heimat_aus_env im Agent). Es ist immer
+    # ein Bind-Mount und gehoert nie in eine Container-Sicherung —
+    # gleich, unter welchem Namen.
+    "/home", "/mnt/ota", "/mnt/austausch",
 )
 # Hinweis: Die eingehaengten Verzeichnisse werden zusaetzlich aus den
 # Container-Angaben gelesen — siehe backup_container. Diese Liste deckt den

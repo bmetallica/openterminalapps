@@ -50,8 +50,10 @@ SLUG = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 # Ein Skeleton ist eine Handvoll Konfigurationsdateien, kein Datengrab.
 MAX_BYTES = 256 * 1024**2
 
-# Wohin im Container kopiert wird. Die Kasm-Images laufen als Nutzer 1000 mit
-# genau diesem Zuhause.
+# Wohin im Container kopiert wird, wenn niemand etwas anderes sagt. Die
+# Kasm-Images laufen als Nutzer 1000 mit genau diesem Zuhause; OTAs eigene
+# Images bringen ein anderes mit und melden es ueber `HOME` im Image. Der
+# Agent liest es dort ab und reicht es hier als `heim` durch.
 HOME = "/home/kasm-user"
 
 
@@ -215,7 +217,7 @@ def is_empty(profile_path: str) -> bool:
 
 
 def apply(container_id: str, slug: str, enforce: list[str], *,
-          fresh: bool) -> dict[str, Any]:
+          fresh: bool, heim: str = HOME) -> dict[str, Any]:
     """Kopiert das Skeleton in den Container.
 
     ``fresh`` entscheidet ueber alles: Bei einem leeren Zuhause wandert der
@@ -248,16 +250,17 @@ def apply(container_id: str, slug: str, enforce: list[str], *,
             except SkeletonError:
                 continue          # Pfad geloescht — kein Grund, den Start zu stoppen
 
-    kopiert = _kopiere(container_id, base, quellen)
+    kopiert = _kopiere(container_id, base, quellen, heim)
     return {"kopiert": kopiert, "grund": "erster Start" if fresh else "durchgesetzt"}
 
 
-def _kopiere(container_id: str, base: Path, quellen: list[Path]) -> list[str]:
+def _kopiere(container_id: str, base: Path, quellen: list[Path],
+             heim: str = HOME) -> list[str]:
     """Legt die genannten Quellen an ihrer Stelle im Zuhause ab."""
     kopiert: list[str] = []
     for quelle in quellen:
         rel = quelle.relative_to(base)
-        ziel = f"{HOME}/{rel.parent}" if str(rel.parent) != "." else HOME
+        ziel = f"{heim}/{rel.parent}" if str(rel.parent) != "." else heim
         try:
             subprocess.run(
                 ["docker", "cp", str(quelle), f"{container_id}:{ziel}"],
@@ -272,13 +275,14 @@ def _kopiere(container_id: str, base: Path, quellen: list[Path]) -> list[str]:
         # eigenes Zuhause nicht mehr.
         subprocess.run(
             ["docker", "exec", "-u", "0", container_id,
-             "chown", "-R", "1000:1000", HOME],
+             "chown", "-R", "1000:1000", heim],
             capture_output=True, timeout=300,
         )
     return kopiert
 
 
-def apply_app(container_id: str, slug: str, app: str) -> dict[str, Any]:
+def apply_app(container_id: str, slug: str, app: str,
+              heim: str = HOME) -> dict[str, Any]:
     """Legt den Teilbaum einer einzelnen Anwendung ins Zuhause — **einmal**.
 
     Gemerkt wird es im Zuhause selbst, unter ``~/.ota/app-skeleton/<app>``.
@@ -303,7 +307,7 @@ def apply_app(container_id: str, slug: str, app: str) -> dict[str, Any]:
     if not inhalt:
         return {"kopiert": [], "grund": "kein Teilbaum"}
 
-    marker = f"{HOME}/{MARKER_DIR}/{app}"
+    marker = f"{heim}/{MARKER_DIR}/{app}"
     schon = subprocess.run(
         ["docker", "exec", "-u", "1000", container_id, "test", "-e", marker],
         capture_output=True, timeout=30,
@@ -311,11 +315,11 @@ def apply_app(container_id: str, slug: str, app: str) -> dict[str, Any]:
     if schon.returncode == 0:
         return {"kopiert": [], "grund": "war schon da"}
 
-    kopiert = _kopiere(container_id, base, inhalt)
+    kopiert = _kopiere(container_id, base, inhalt, heim)
     if kopiert:
         subprocess.run(
             ["docker", "exec", "-u", "1000", container_id, "sh", "-c",
-             f"mkdir -p {HOME}/{MARKER_DIR} && date -Iseconds > {marker}"],
+             f"mkdir -p {heim}/{MARKER_DIR} && date -Iseconds > {marker}"],
             capture_output=True, timeout=30,
         )
     return {"kopiert": kopiert, "grund": "erster Start dieser Anwendung"}

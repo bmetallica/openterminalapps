@@ -105,6 +105,91 @@ Die Weboberfläche und die Signalisierung laufen weiterhin über Traefik, mit
 derselben Anmeldung und demselben Basic-Auth-Header wie bei KasmVNC. **Nur der
 Medienstrom geht daran vorbei.**
 
+## Das Nachfolge-Image: Debian 13, ohne KasmVNC
+
+`ota/base-selkies:test` leitet von `base-xfce` ab und schleppt damit KasmVNC
+mit — `Xvnc`, `kasmvncserver`, `kasmvncpasswd` und 3,4 MB Weboberfläche, von
+denen dort **nichts läuft**. Das war richtig, solange Selkies ein Versuch auf
+einer funktionierenden Grundlage war, und ist verkehrt herum, seit es streamt.
+
+`images/base-desktop/` beginnt deshalb bei `debian:13`:
+
+```bash
+docker build -t ota/base-desktop:test images/base-desktop
+```
+
+| | base-selkies | base-desktop |
+|---|---|---|
+| Grundlage | Ubuntu 24.04 über `base-xfce` | Debian 13 direkt |
+| KasmVNC | mit drin, läuft nie | nicht vorhanden |
+| Konto / Zuhause | `kasm-user` / `/home/kasm-user` | `ota` / `/home/ota` |
+| GStreamer | Bündel, 1.24.6, 366 MB unter `/opt` | aus der Distribution, 1.26.2 |
+| Grösse | 1,73 GB | 1,78 GB |
+
+Die Grösse ist der ehrliche Wermutstropfen: Das Bündel fällt weg, aber Debians
+`gstreamer1.0-plugins-bad` bringt fast dasselbe mit — CUDA-, Vulkan- und
+Wayland-Anteile, die ein Streaming-Server nie anfasst. Abspecken wäre ein
+eigener Schritt.
+
+### Wo das Zuhause liegt, sagt das Image
+
+Der Agent liest `HOME` aus der Image-Konfiguration und hängt das Profil
+dorthin (`_heimat_aus_env` in `agent/otaagent/main.py`); ohne Angabe bleibt es
+bei `/home/kasm-user`. Fremdimages wie `kasmweb/gimp` laufen dadurch
+unverändert weiter, und ein eigenes Image bestimmt seinen Pfad selbst. Der
+Wert wird geprüft, bevor er als Mount-Ziel dient — ein Image darf nicht
+bestimmen, wohin der Agent auf dem Host greift.
+
+Daneben legt das Startskript einen Verweis unter dem OTA-Anmeldenamen an:
+`/home/bmetallica` → `/home/ota`. Dasselbe Muster wie auf dem Host, wo unter
+der Kennung gespeichert und ein lesbarer Verweis danebengelegt wird. Eine
+Umbenennung in Keycloak verschiebt nur diesen Verweis; alles, was im Profil
+einen absoluten Pfad gespeichert hat — Editor-Einstellungen, virtuelle
+Umgebungen, `git config` — bleibt gültig. Genau das wäre kaputt, wenn das
+Zuhause selbst den Anmeldenamen trüge.
+
+### Drei Fallen beim Wechsel auf Debian
+
+Alle drei hatten dieselbe Form: Das Image baute grün durch, und der Fehler
+stand erst im Protokoll der ersten Sitzung.
+
+1. **`cannot import name '_gi_gst' from 'gi.overrides'`** — Das vorgebaute
+   Selkies-Bündel ist für **Python 3.12** übersetzt, Debian 13 hat 3.13.
+   Distribution und GStreamer hängen also über Python zusammen und lassen
+   sich nicht einzeln wechseln. Genommen wird deshalb Debians eigenes
+   GStreamer.
+2. **`Namespace GstWebRTC not available`** — Die Plugins waren da, die
+   Introspektionsdaten nicht. Sie liegen in `gir1.2-gst-plugins-bad-1.0`.
+3. **`ModuleNotFoundError: No module named 'distutils'`** — Mit Python 3.12
+   aus der Standardbibliothek geflogen (PEP 632); Selkies zieht `GPUtil`
+   herein, und das braucht es. `setuptools` bringt den Ersatz mit.
+
+Deshalb prüft das Dockerfile sich jetzt selbst, und der **Build** bricht ab
+statt der ersten Verbindung:
+
+```dockerfile
+&& gst-inspect-1.0 webrtcbin > /dev/null \
+&& gst-inspect-1.0 x264enc > /dev/null \
+&& python3 -c "… from gi.repository import Gst, GstWebRTC, GstSdp; …"
+…
+&& PYTHONPATH="$ORT" python -c "import gpu_monitor, gstwebrtc_app, signalling_web"
+```
+
+`selkies-gstreamer --help` taugt als Prüfung übrigens nicht — es verlangt
+einen laufenden X-Server.
+
+### Der Name für die Basic-Auth
+
+Aus `Session.vnc_user` baut die API den Header, den Traefik der Sitzung
+voranstellt. **In den Container kam der Name bisher nie** — dort stand
+`kasm_user` fest im Startskript, und solange beide zufällig übereinstimmten,
+fiel es nicht auf. Ein Image, das einen anderen Namen erwartet, antwortet mit
+401, und in der Oberfläche steht eine leere Seite.
+
+Jetzt lesen beide Seiten denselben Wert, und er hängt an der Streaming-
+Maschine: `ota` für Selkies, `kasm_user` für KasmVNC. Dort ist der Name keine
+Geschmacksfrage — die Passwortdatei der Kasm-Images kennt nur diesen.
+
 ## Netze mit kleiner Paketgrösse (VPN)
 
 Wer über ein VPN zugreift, dessen MTU deutlich unter 1500 liegt — WireGuard mit

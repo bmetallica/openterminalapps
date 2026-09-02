@@ -125,6 +125,46 @@ def require_token(x_agent_token: str = Header(default="")) -> None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Agent-Token ungültig")
 
 
+# Wo das Zuhause im Container liegt, wenn das Image nichts dazu sagt. Die
+# Kasm-Images und alles, was von ihnen abstammt, legen es hierhin.
+HEIMAT_VORGABE = "/home/kasm-user"
+
+
+def _heimat_aus_env(eintraege: list[str] | None) -> str:
+    """Liest HOME aus einer Docker-Umgebungsliste.
+
+    **Das Image weiss selbst, wo sein Zuhause liegt** — es legt das Konto an
+    und setzt `HOME`. Der Agent liest es dort ab, statt einen Pfad
+    festzuschreiben. Sonst haette jedes Image ohne Kasm-Erbe (`/home/ota`) ein
+    leeres Zuhause: Der Bind-Mount laege an einer Stelle, die niemand benutzt,
+    und der Nutzer faende beim naechsten Start nichts von dem wieder, was er
+    angelegt hat.
+
+    Der Wert wird geprueft, weil er als Mount-Ziel dient: absolut, ohne
+    Rueckwaertsschritte. Ein Image darf nicht bestimmen, wohin der Agent auf
+    dem Host greift.
+    """
+    for eintrag in eintraege or []:
+        name, _, wert = eintrag.partition("=")
+        if name == "HOME" and wert.startswith("/") and ".." not in wert:
+            return wert.rstrip("/") or HEIMAT_VORGABE
+    return HEIMAT_VORGABE
+
+
+def _heimat_image(client, image: str) -> str:
+    """Das Zuhause laut Image — vor dem Start, fuer das Mount-Ziel."""
+    try:
+        angaben = client.images.get(image).attrs
+    except APIError:
+        return HEIMAT_VORGABE
+    return _heimat_aus_env(angaben.get("Config", {}).get("Env"))
+
+
+def _heimat_container(container) -> str:
+    """Dasselbe fuer einen laufenden Container."""
+    return _heimat_aus_env(container.attrs.get("Config", {}).get("Env"))
+
+
 class StartRequest(BaseModel):
     session_id: str
     image: str
@@ -438,10 +478,26 @@ def start_container(req: StartRequest) -> dict[str, Any]:
 
     env = dict(req.env)
     env.setdefault("VNC_PW", req.vnc_secret)
+    # **Auch der Name, nicht nur das Passwort.** Aus `Template.vnc_user` baut
+    # die API den Basic-Auth-Header, den Traefik der Sitzung voranstellt — im
+    # Container kam der Name aber nie an. Solange dort `kasm_user`
+    # festgeschrieben stand, fiel das nicht auf; ein Image, das einen anderen
+    # Namen erwartet, antwortet mit 401, und in der Oberflaeche steht nur eine
+    # leere Seite. Wer die Spalte umstellte, sperrte sich lautlos aus.
+    env.setdefault("VNC_USER", req.vnc_user)
+    # Der Anmeldename, nur damit der Container einen lesbaren Verweis auf das
+    # Zuhause legen kann (`/home/<name>` -> `/home/ota`). Ueber den Pfad
+    # entscheidet er nicht — der steht im Image. Aendert sich der Name, wandert
+    # der Verweis und sonst nichts.
+    if req.shelf_name:
+        env.setdefault("OTA_LOGIN", req.shelf_name)
     env.setdefault("VNC_VIEW_ONLY_PW", secrets.token_urlsafe(16))
     # Ohne Verzoegerung zwischen Zwischenablage-Aktionen (plan.md §10.1).
     env.setdefault("VNCOPTIONS", "-PreferBandwidth -DynamicQualityMin=4 "
                                  "-DynamicQualityMax=7 -DLP_ClipDelay=0")
+
+    # Wohin das Zuhause gehoert, sagt das Image. Siehe _heimat_aus_env.
+    heimat = _heimat_image(client, req.image)
 
     mounts = []
     if req.mode == "workspace":
@@ -468,7 +524,7 @@ def start_container(req: StartRequest) -> dict[str, Any]:
         # Umbenennen mit — das Verzeichnis bleibt, wo es ist.
         shared_store.verweis_setzen(Path(req.profile_path).parent, req.shelf_name)
         mounts.append(docker.types.Mount(
-            target="/home/kasm-user", source=req.profile_path, type="bind",
+            target=heimat, source=req.profile_path, type="bind",
         ))
 
     # Die gemeinsame Ablage, nur lesbar. Sie haengt **nicht** im Home: Ein
@@ -636,7 +692,7 @@ def start_container(req: StartRequest) -> dict[str, Any]:
         try:
             result = skeleton_ops.apply(
                 container.id, req.template_slug, req.skeleton_enforce,
-                fresh=frisches_zuhause,
+                fresh=frisches_zuhause, heim=heimat,
             )
             if result.get("kopiert"):
                 log.info("Skeleton für %s angewandt (%s): %s", req.template_slug,
@@ -733,7 +789,7 @@ def _run_once_scripts(container, scripts: list[dict[str, str]]) -> list[dict[str
         try:
             res = container.exec_run(
                 ["bash", "-lc", runner], user="1000",
-                environment={"HOME": "/home/kasm-user",
+                environment={"HOME": _heimat_container(container),
                              "OTA_SHARED": SHARED_MOUNT,
                              "OTA_FILES": USERFILES_MOUNT},
             )
@@ -778,7 +834,8 @@ def _run_start_script(container, script: str) -> None:
     try:
         res = container.exec_run(
             ["bash", "-lc", runner], user="1000",
-            environment={"HOME": "/home/kasm-user", "OTA_SHARED": SHARED_MOUNT},
+            environment={"HOME": _heimat_container(container),
+                         "OTA_SHARED": SHARED_MOUNT},
         )
         if res.exit_code != 0:
             out = (res.output or b"").decode("utf-8", "replace")
@@ -872,8 +929,12 @@ def _elevate(container) -> None:
     eben kein sudo und merkt das beim ersten Versuch. Ein Container, der gar
     nicht erst hochkommt, waere das schlechtere Ergebnis.
     """
+    # Der Kontoname kommt aus dem Container, nicht aus einer Annahme: In
+    # Kasm-Images heisst 1000 `kasm-user`, in OTAs eigenen `ota`. Ein
+    # festgeschriebener Name schriebe hier eine sudo-Regel fuer jemanden, den
+    # es nicht gibt — und der Administrator merkte es erst beim ersten Versuch.
     script = (
-        "printf '%s\\n' 'kasm-user ALL=(ALL) NOPASSWD:ALL' "
+        "printf '%s ALL=(ALL) NOPASSWD:ALL\\n' \"$(id -un 1000)\" "
         "> /etc/sudoers.d/ota-admin && chmod 0440 /etc/sudoers.d/ota-admin"
     )
     try:
@@ -1008,7 +1069,9 @@ def start_app(cid: str, req: AppStartRequest) -> dict[str, Any]:
     # ersten Mal je Zuhause kopiert; die Buchfuehrung steht im Zuhause selbst.
     if req.template_slug:
         try:
-            ergebnis = skeleton_ops.apply_app(container.id, req.template_slug, req.slug)
+            ergebnis = skeleton_ops.apply_app(
+                container.id, req.template_slug, req.slug,
+                heim=_heimat_container(container))
             if ergebnis.get("kopiert"):
                 log.info("Teilbaum von %s ins Zuhause gelegt: %s",
                          req.slug, ", ".join(ergebnis["kopiert"])[:200])

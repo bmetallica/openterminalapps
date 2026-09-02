@@ -443,8 +443,19 @@ def start_session(
                 "Workspace unter Persistenz ein eigenes Profil.",
             )
 
+    # Der Name für die Basic-Auth zwischen Traefik und der Sitzung.
+    #
+    # Bei KasmVNC ist `kasm_user` **nicht** wählbar: Die Passwortdatei der
+    # Kasm-Images kennt genau diesen Namen, festgeschrieben in ihrem
+    # Startskript. Selkies dagegen nimmt entgegen, was der Agent ihm sagt —
+    # dort hat der fremde Name nichts verloren.
+    #
+    # Beide Seiten lesen denselben Wert: Aus ihm baut `_traefik_labels` den
+    # Header, und der Agent reicht ihn als `VNC_USER` in den Container. Vorher
+    # ging er nur nach Traefik, und die Sitzung nahm an, er hiesse `kasm_user`.
     sess = SessionModel(
         user_id=user.id, template_id=tpl.id, cores=cores, memory_bytes=memory,
+        vnc_user="ota" if tpl.stream_engine == "selkies" else "kasm_user",
         vnc_secret=vnc_secret(user, profile), status="starting",
     )
     db.add(sess)

@@ -88,9 +88,13 @@ def render_dockerfile(base_image: str, apt_packages: list[str],
         lines.append("# Extensions werden beim Build installiert, nicht beim Start.")
         for ext in vscode_extensions:
             safe = shlex.quote(ext)
+            # Der Kontoname steht nicht fest: In Kasm-Images heisst die
+            # Kennung 1000 `kasm-user`, in OTAs eigenen Images `ota`. Ein
+            # festgeschriebener Name liesse den Build hier scheitern, sobald
+            # jemand von einem eigenen Basisimage ableitet.
             lines.append(
-                f"RUN su kasm-user -c 'code --no-sandbox --force "
-                f"--install-extension {safe}' || echo 'Extension {safe} uebersprungen'"
+                f'RUN su "$(id -un 1000)" -c \'code --no-sandbox --force '
+                f'--install-extension {safe}\' || echo \'Extension {safe} uebersprungen\''
             )
         lines.append("")
 
