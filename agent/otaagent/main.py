@@ -986,7 +986,13 @@ def _proxy_einrichten(container) -> None:
     * **Anmeldungen, die nicht vom Startskript abstammen.** Wer sich per
       `docker exec` oder ueber einen Terminal-Emulator eine Login-Shell holt,
       bekommt die Umgebung des Containers nicht zwingend mit.
-      `/etc/environment` und `/etc/profile.d` schliessen die Luecke.
+      `/etc/profile.d/ota-proxy.sh` schliesst die Luecke.
+
+    **Bewusst nicht `/etc/environment`.** Dorthin liesse sich nur anhaengen,
+    und beim Einfrieren eines Containers waere die Zeile nicht mehr sauber
+    herauszuloesen — das Image truege dann eine Proxy-Adresse mit sich herum,
+    die anderswo falsch ist. Die beiden Dateien, die hier entstehen, stehen
+    dagegen in `freeze.STRIP` und verschwinden vor dem Einfrieren.
 
     **Absichtlich blind.** Gesetzt wird in jedem Session-Container, gleich aus
     welchem Image er stammt — auch in fremden. Eine Datei, die dort niemand
@@ -1023,9 +1029,9 @@ def _proxy_einrichten(container) -> None:
         (umgebung + "\n").encode("utf-8")).decode("ascii")
     apt_payload = base64.b64encode(apt.encode("utf-8")).decode("ascii")
     skript = (
-        f"echo {payload} | base64 -d >> /etc/environment && "
         f"echo {payload} | base64 -d | sed 's/^/export /' "
         "> /etc/profile.d/ota-proxy.sh && "
+        "chmod 0644 /etc/profile.d/ota-proxy.sh && "
         f"echo {apt_payload} | base64 -d > /etc/apt/apt.conf.d/99ota-proxy"
     )
     try:

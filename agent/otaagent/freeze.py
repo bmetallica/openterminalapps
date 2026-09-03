@@ -71,8 +71,18 @@ NOISE = (
 #
 # Sie fehlt danach nicht: Fuer jede Session eines Administrators wird sie neu
 # geschrieben.
+#
+# Dasselbe gilt fuer den Firmenproxy. OTA hinterlegt ihn beim Start in jeder
+# Sitzung, damit `apt` und Login-Shells ihn finden — er ist eine Einstellung
+# **dieser Anlage**, nicht eine Eigenschaft des Images. Eingefroren wuerde er
+# zur festen Zutat: Das Image truege dann eine Proxy-Adresse mit sich herum,
+# die anderswo falsch ist und die nach einem Wechsel niemand mehr findet.
+#
+# Sie fehlen danach nicht: Bei jedem Start werden sie neu geschrieben.
 STRIP = (
     "/etc/sudoers.d/ota-admin",
+    "/etc/apt/apt.conf.d/99ota-proxy",
+    "/etc/profile.d/ota-proxy.sh",
 )
 
 

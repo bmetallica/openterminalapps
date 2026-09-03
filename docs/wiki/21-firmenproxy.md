@@ -9,7 +9,7 @@ bleibt es. Dieses Kapitel gilt nur für Netze, in denen der Weg ins Internet
 ```
 OTA_HTTP_PROXY=http://proxy.firma.example:3128
 OTA_HTTPS_PROXY=http://proxy.firma.example:3128
-OTA_NO_PROXY=localhost,127.0.0.1,::1,ota-api,ota-agent,ota-db,ota-keycloak,ota-web,ota-traefik,ota-turn,ota-registry,.local,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
+OTA_NO_PROXY=localhost,127.0.0.1,::1,api,agent,db,keycloak,web,traefik,turn,registry,ota-api,ota-agent,ota-db,ota-keycloak,ota-web,ota-traefik,ota-turn,ota-registry,.local,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
 ```
 
 Danach `sudo make update`. Leer lassen heisst: kein Proxy, und alles verhält
@@ -52,6 +52,54 @@ Dockerfile: Docker kennt diese sechs Namen vorab, reicht sie in jedes `RUN`
 durch und schreibt sie **nicht** ins fertige Image. Nachgeprüft am 2026-09-03.
 Genau deshalb muss der Proxy für Session-Container getrennt gesetzt werden —
 was beim Bauen galt, gilt zur Laufzeit nicht mehr.
+
+## Später umstellen — ohne Neuaufsetzen
+
+Der übliche Fall: OTA läuft schon ohne Proxy, und das Netz ändert sich. Das
+geht im laufenden Betrieb.
+
+```bash
+# die drei Zeilen in deploy/.env eintragen, dann
+sudo make update
+```
+
+Nachgestellt und gemessen am 2026-09-03, in beide Richtungen:
+
+| Was | Wirkt ab wann |
+|---|---|
+| **API und Agent** | sofort nach `make update` |
+| **Neue Sitzungen** | sofort — Variablen, `/etc/profile.d`, apt-Konfiguration |
+| **Laufende Sitzungen** | erst nach Beenden und Neustart. Absicht: Niemand wird mitten in der Arbeit unterbrochen. |
+| **Das Basisimage** | muss **nicht** neu gebaut werden — der Proxy steckt nie im Image. Nur wenn der Proxy TLS aufbricht, braucht es einen Neubau mit der CA. |
+| **Golden Images** | bleiben gültig. Der nächste Bau nimmt den Proxy automatisch mit. |
+
+Zurückstellen ist derselbe Weg: Zeilen leeren, `make update`. Danach ist alles
+wie vorher — auch in neuen Sitzungen.
+
+> **Wenn eine Änderung nicht anzukommen scheint:** `sudo make restart` oder
+> `docker compose -f deploy/docker-compose.yml up -d --force-recreate api agent`.
+> Compose erzeugt einen Container nur neu, wenn es eine Änderung erkennt.
+
+### Die Falle, die dieser Test gefunden hat
+
+Beim Nachstellen fiel die erste Fassung dieses Kapitels durch: Nach dem
+Einschalten meldete die API **503 — „Der Container-Dienst ist nicht
+erreichbar"**. Der Grund stand in der Vorgabe für `OTA_NO_PROXY`:
+
+Im Compose-Netz erreichen sich die Dienste unter ihrem **Dienstnamen**
+(`agent`), nicht unter dem Containernamen (`ota-agent`). Die API ruft
+`http://agent:8100`. In der Liste stand nur `ota-agent` — also lief der Aufruf
+durch den Firmenproxy, der den Namen nicht kennt.
+
+Seither stehen **beide Formen** drin, und `make setup` trägt beide ein. Wer
+die Zeile von Hand pflegt, sollte es genauso halten:
+
+```
+…,api,agent,db,keycloak,web,traefik,turn,registry,ota-api,ota-agent,…
+```
+
+Das ist die Sorte Fehler, die am teuersten ist: Die Meldung zeigt auf den
+Agent, und der ist völlig gesund.
 
 ## Was in der Sitzung ankommt
 

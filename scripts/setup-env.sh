@@ -67,6 +67,12 @@ no_proxy_vorschlagen() {
   # decken jede Docker-Bruecke ab, ohne sie einzeln aufzuzaehlen: Die legt
   # Docker erst beim Start an, lange nach diesem Skript.
   liste="localhost,127.0.0.1,::1"
+  # **Beide Namen.** Im Compose-Netz erreichen sich die Dienste unter ihrem
+  # Dienstnamen (`agent`), nicht unter dem Containernamen (`ota-agent`) — die
+  # API ruft `http://agent:8100`. Steht nur der Containername in der Liste,
+  # laeuft dieser Aufruf durch den Firmenproxy, und die API meldet „Der
+  # Container-Dienst ist nicht erreichbar". Gemessen am 2026-09-03.
+  liste="$liste,api,agent,db,keycloak,web,traefik,turn,registry"
   liste="$liste,ota-api,ota-agent,ota-db,ota-keycloak,ota-web,ota-traefik,ota-turn,ota-registry"
   [ -n "$hn" ]   && liste="$liste,$hn"
   [ -n "$fqdn" ] && [ "$fqdn" != "$hn" ] && liste="$liste,$fqdn"

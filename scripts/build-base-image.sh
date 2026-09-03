@@ -35,10 +35,21 @@ bad()  { printf '  \033[31m✗\033[0m %s\n' "$1" >&2; fail=$((fail+1)); }
 # scheitert hinter einem Firmenproxy schon das erste `apt-get update`, und im
 # Protokoll steht ein Zeitablauf statt eines Grundes.
 #
-# Gelesen wird aus der Umgebung — wer `deploy/.env` einliest, hat sie:
-#
-#     set -a; . deploy/.env; set +a
-#     scripts/build-desktop-image.sh --pruefen
+# Gelesen wird aus `deploy/.env`, und zwar von hier aus. Frueher stand an
+# dieser Stelle der Hinweis, man moege die Datei vorher selbst einlesen — ein
+# Schritt, den man genau einmal vergisst, und dann scheitert der Bau hinter
+# dem Proxy, ohne dass der Grund irgendwo steht. Was in der Umgebung schon
+# gesetzt ist, gewinnt.
+if [ -f "$ROOT/deploy/.env" ]; then
+  # Nur die drei Proxy-Zeilen, nicht die ganze Datei: Dort stehen Geheimnisse,
+  # und die haben in der Umgebung eines Bauskripts nichts verloren.
+  for zeile in $(grep -E '^OTA_(HTTP|HTTPS|NO)_PROXY=' "$ROOT/deploy/.env" 2>/dev/null); do
+    name="${zeile%%=*}"; wert="${zeile#*=}"
+    [ -z "$wert" ] && continue
+    eval ": \${$name:=\$wert}" && export "$name"
+  done
+fi
+
 proxy_argumente() {
   for paar in "http_proxy:${OTA_HTTP_PROXY:-${http_proxy:-}}" \
               "https_proxy:${OTA_HTTPS_PROXY:-${https_proxy:-}}" \
