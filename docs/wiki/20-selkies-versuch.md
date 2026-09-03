@@ -247,6 +247,33 @@ beende diese Anwendung", und er muss erhalten bleiben.
 Gemessen auf einem Anwendungs-Bildschirm: minimiert `IsUnMapped` bis 1,2 s,
 ab 1,5 s wieder `IsViewable`; entmaximiert nach 600 ms wieder maximiert.
 
+### „git — kennt dieses Image nicht"
+
+Die Paketprüfung meldete auch für offensichtlich vorhandene Pakete
+„unbekannt", und die Vorschläge widersprachen sich dabei selbst:
+
+```
+git — kennt dieses Image nicht.
+Gemeint war vielleicht: golang-github-awslabs-amazon-ecr-credential-helper-dev …
+```
+
+Wenn die Vorschlagssuche Treffer liefert, ist die Paketliste ja da. Der Grund
+liegt eine Ebene tiefer: Die Prüfung liest apts Ausgabe und sucht darin
+`Candidate:`. Beides ist **übersetzt**, sobald das Image eine Sprache setzt —
+und OTAs eigenes Basisimage tut das (`de_DE`):
+
+```
+git:  Installiert: (keine)   Installationskandidat: 1:2.47.3-0+deb13u1
+```
+
+`Candidate:` kommt darin nicht vor, also blieb das Feld leer und jedes Paket
+galt als unbekannt. Die Vorschlagssuche (`apt-cache search`) liest keine
+Beschriftung und lieferte weiter Treffer — daher das widersprüchliche Bild.
+
+Die Prüfung setzt jetzt `LC_ALL=C LANGUAGE=C LANG=C`, bevor sie apt aufruft.
+Das ist ohnehin die Regel für alles, dessen Ausgabe ausgewertet wird: Wer
+Text parst, legt die Sprache fest.
+
 ### Der Mauszeiger, der sporadisch riesig wird
 
 Symptom: Der Zeiger wird plötzlich deutlich grösser und bleibt es für den Rest

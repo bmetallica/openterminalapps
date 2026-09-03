@@ -337,6 +337,14 @@ def _plainness(entry: dict[str, object]) -> tuple[int, int]:
 # Debian-Namen auf einem Ubuntu-Image scheitern zu lassen, ist vermeidbar —
 # die Frage "gibt es dieses Paket ueberhaupt" beantwortet apt in Sekunden.
 CHECK = r"""
+# **Apt auf Englisch zwingen.** Die Auswertung unten sucht nach `Candidate:`
+# und `Description:` — beides ist uebersetzt, sobald das Image eine Sprache
+# setzt. OTAs eigenes Basisimage tut das (de_DE), und dann antwortet apt mit
+# `Installationskandidat:`. Die Zeile passte nicht mehr, jedes Paket galt als
+# unbekannt, und die Vorschlagssuche lieferte trotzdem Treffer, weil sie keine
+# Beschriftung liest — ein Bild, das sich selbst widerspricht: "git kennt
+# dieses Image nicht, gemeint war vielleicht golang-github-…".
+export LC_ALL=C LANGUAGE=C LANG=C
 apt-get update >/dev/null 2>&1
 for pkg in @NAMES@; do
   cand=$(apt-cache policy "$pkg" 2>/dev/null | awk '/Candidate:/{print $2; exit}')
