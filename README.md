@@ -134,6 +134,16 @@ sudo make update          # .env ergänzen, bauen, starten
 | **Die Arbeitsplatz-Images** | Ein neues Basisimage wirkt erst, wenn die davon abgeleiteten Images neu gebaut werden — in der Verwaltung unter **Software**. |
 | **`deploy/.env`** | Wird nur ergänzt, nie überschrieben. Wer eine Einstellung ändern will, tut das selbst; die Vorlage daneben erklärt jede. |
 
+### Später auf einen Firmenproxy umstellen
+
+Derselbe Weg, im laufenden Betrieb und ohne Neuaufsetzen: die drei Zeilen in `deploy/.env`
+eintragen, `sudo make update`. Dienste und **neue** Sitzungen übernehmen ihn sofort; laufende
+behalten ihren Stand bis zum nächsten Start. Das Basisimage muss dafür **nicht** neu gebaut
+werden — der Proxy steckt nie im Image. Zurückstellen ist derselbe Weg.
+
+Gemessen in beide Richtungen; die Stolperstellen stehen in
+[Kapitel 21](docs/wiki/21-firmenproxy.md).
+
 ### Wenn etwas schiefgeht
 
 ```bash
@@ -217,6 +227,9 @@ dabei **nicht** zurückwandert, ist die Datenbank: Neue Spalten bleiben stehen. 
 - **Der ältere Weg bleibt** — `ota/base-xfce` (Ubuntu + KasmVNC) für Images von Kasm, die kein
   Selkies mitbringen. Umschaltbar je Arbeitsplatz unter **Streaming**;
   `scripts/build-base-image.sh --pruefen` prüft ihn weiterhin
+- **Firmenproxy** durchgängig: beim Bauen der Dienste, beim Bauen der Images, in jeder Sitzung und
+  in API und Agent. Auch dort, wo keine Umgebungsvariable hinreicht — `apt` bekommt seine eigene
+  Konfiguration. Umschaltbar im laufenden Betrieb, ohne Neuaufsetzen; ohne Proxy ist nichts zu tun
 - **Stückliste je Image** (`make sbom`) in SPDX und CycloneDX — gebraucht, sobald ein Image das
   Haus verlässt
 - Eigene Registry im Stack; fehlt ein Image lokal, wird es beim Start von dort geholt
