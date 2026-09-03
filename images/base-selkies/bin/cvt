@@ -1,0 +1,98 @@
+#!/usr/bin/env python3
+"""`cvt` — rechnet eine VESA-CVT-Modeline aus. Ersatz für das gleichnamige
+Werkzeug, das es in Ubuntu 24.04 nicht mehr gibt.
+
+**Warum das hier liegt.** Selkies passt die Auflösung des fernen Bildschirms
+an das Browserfenster an. Dafür legt es mit `xrandr --newmode` einen neuen
+Modus an, und die dazugehörige Modeline holt es sich mit `os.popen('cvt -r …')`
+(`selkies_gstreamer/resize.py`). Auf Ubuntu 24.04 gibt es dieses Werkzeug
+nicht mehr — **kein einziges Paket** liefert `/usr/bin/cvt`, nachgeprüft mit
+`apt-file`. Die Folge: Der Aufruf gibt nichts zurück, `xrandr --newmode`
+bekommt eine leere Modeline, und die Sitzung bleibt auf der vollen Grösse des
+Framebuffers stehen — bei uns 3840×2160, in ein 1440er Fenster gequetscht.
+
+**Was hier gerechnet wird, ist nicht erfunden.** Es ist die
+Reduced-Blanking-Variante aus VESA CVT 1.2, dieselbe, die `cvt -r` ausgibt.
+Nachgeprüft am Referenzwert für 1920×1080:
+
+    Modeline "1920x1080R"  138.50  1920 1968 2000 2080  1080 1083 1088 1111 +hsync -vsync
+
+Aufruf wie beim Original:  cvt [-r] <breite> <höhe> [bildrate]
+"""
+
+import math
+import sys
+
+ZELLE = 8              # CELL_GRAN: waagerechte Körnung
+MIN_V_PORCH = 3        # MIN_V_PORCH_RND
+RB_H_BLANK = 160       # gesamte waagerechte Austastlücke bei Reduced Blanking
+RB_H_SYNC = 32
+RB_H_BPORCH = 80
+RB_V_FPORCH = 3
+RB_MIN_V_BLANK = 460.0  # Mikrosekunden
+TAKT_SCHRITT = 0.25     # der Pixeltakt wird auf 0,25 MHz abgerundet
+
+
+def v_sync(breite: int, hoehe: int) -> int:
+    """Wie viele Zeilen der senkrechte Synchronimpuls dauert.
+
+    Haengt am Seitenverhaeltnis — so steht es in der Norm, und `cvt` haelt
+    sich daran. Ein falscher Wert hier ergibt eine Modeline, die xrandr zwar
+    annimmt, die aber nicht die ist, die `cvt -r` geliefert haette.
+    """
+    verhaeltnis = breite / hoehe
+    for soll, zeilen in ((4 / 3, 4), (16 / 9, 5), (16 / 10, 6),
+                         (5 / 4, 7), (15 / 9, 7)):
+        if abs(verhaeltnis - soll) < 0.02:
+            return zeilen
+    return 10
+
+
+def modeline(breite: int, hoehe: int, rate: float) -> str:
+    b = (breite // ZELLE) * ZELLE
+    h = int(hoehe)
+    vs = v_sync(b, h)
+
+    # Geschaetzte Dauer einer Zeile in Mikrosekunden.
+    h_periode = ((1_000_000.0 / rate) - RB_MIN_V_BLANK) / (h + MIN_V_PORCH)
+    austast_zeilen = math.floor(RB_MIN_V_BLANK / h_periode) + 1
+    austast_zeilen = max(austast_zeilen, RB_V_FPORCH + vs + MIN_V_PORCH)
+
+    v_gesamt = h + austast_zeilen
+    h_gesamt = b + RB_H_BLANK
+    takt = rate * v_gesamt * h_gesamt / 1_000_000.0
+    takt = math.floor(takt / TAKT_SCHRITT) * TAKT_SCHRITT
+
+    h_sync_start = b + (RB_H_BLANK - RB_H_SYNC - RB_H_BPORCH)
+    h_sync_ende = h_sync_start + RB_H_SYNC
+    v_sync_start = h + RB_V_FPORCH
+    v_sync_ende = v_sync_start + vs
+
+    return (f'Modeline "{b}x{h}R"  {takt:.2f}  '
+            f'{b} {h_sync_start} {h_sync_ende} {h_gesamt}  '
+            f'{h} {v_sync_start} {v_sync_ende} {v_gesamt} +hsync -vsync')
+
+
+def main() -> int:
+    args = [a for a in sys.argv[1:] if not a.startswith("-")]
+    if len(args) < 2:
+        print("usage: cvt [-r] <breite> <hoehe> [bildrate]", file=sys.stderr)
+        return 1
+    try:
+        breite, hoehe = int(args[0]), int(args[1])
+        rate = float(args[2]) if len(args) > 2 else 60.0
+    except ValueError:
+        print("Breite, Hoehe und Bildrate muessen Zahlen sein", file=sys.stderr)
+        return 1
+    if breite <= 0 or hoehe <= 0 or rate <= 0:
+        print("Breite, Hoehe und Bildrate muessen groesser als null sein", file=sys.stderr)
+        return 1
+
+    # Erste Zeile wie beim Original: eine Kommentarzeile, dann die Modeline.
+    print(f"# {breite}x{hoehe} {rate:.2f} Hz (CVT reduced blanking)")
+    print(modeline(breite, hoehe, rate))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

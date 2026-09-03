@@ -49,6 +49,15 @@ export type Template = {
   description: string
   icon: string
   categories: string[]
+  /**
+   * Welche Streaming-Maschine dieser Arbeitsplatz benutzt.
+   *
+   * `selkies` ist die Vorgabe — H.264 über WebRTC, der Weg von OTAs eigenem
+   * Basisimage. `kasmvnc` bleibt für Images von Kasm nötig: Die bringen kein
+   * Selkies mit, und ein Arbeitsplatz auf einem solchen Image bliebe sonst
+   * schwarz.
+   */
+  stream_engine: 'kasmvnc' | 'selkies'
   mode: 'workspace' | 'single_app'
   image_ref: string
   cores: number
@@ -95,6 +104,14 @@ export type Session = {
   error: string | null
   url: string
   streams: Stream[]
+  /**
+   * Welche Streaming-Maschine überträgt: `kasmvnc` oder `selkies`.
+   *
+   * Der Viewer braucht das, weil Reconnect-Erkennung, Leerlaufuhr und
+   * Zwischenablage gegen KasmVNCs Weboberfläche geschrieben sind — bei
+   * Selkies gibt es die Elemente nicht, auf die sie zeigen.
+   */
+  stream_engine: 'kasmvnc' | 'selkies'
 }
 
 export type MyStorage = {
@@ -348,6 +365,7 @@ export type Build = {
   apt_packages: string[]
   vscode_extensions: string[]
   setup_script: string
+  start_command: string
   comment: string
   status: 'queued' | 'building' | 'ok' | 'failed'
   log: string
@@ -757,7 +775,7 @@ export const api = {
     call<Build>(`/templates/${templateId}/builds/${id}`),
   startBuild: (templateId: string, body: {
     apt_packages: string[]; vscode_extensions?: string[]
-    setup_script?: string; comment?: string
+    setup_script?: string; start_command?: string; comment?: string
   }) => call<Build>(`/templates/${templateId}/builds`, {
     method: 'POST', body: JSON.stringify(body),
   }),

@@ -132,6 +132,19 @@ mein_container() {
 next(('ota-s-' + s['id'][:12] for s in d if s['status'] == 'running'), '')"
 }
 
+# Zu welcher Vorlage der Container gehoert, den wir markieren.
+#
+# Gebraucht, seit ein Konto mehrere Sitzungen gleichzeitig haben kann — etwa
+# einen Arbeitsplatz und daneben einen mit der zweiten Streaming-Maschine.
+# `/api/backups/run` sichert **jede** laufende Sitzung; wer sich danach „die
+# erste Container-Sicherung" greift, erwischt womoeglich eine andere als die,
+# in der die Markierung liegt. Genau daran ist die Pruefung am 2026-09-02
+# gescheitert, und es sah aus wie ein Fehler in der Sicherung.
+meine_vorlage() {
+  api "$BASE/api/sessions" | jqp "
+next((s['template_name'] for s in d if s['status'] == 'running'), '')"
+}
+
 CN=$(mein_container)
 if [ -z "$CN" ]; then
   TPL=$(api "$BASE/api/templates" \
@@ -145,6 +158,11 @@ if [ -z "$CN" ]; then
   fi
 fi
 if [ -n "$CN" ]; then
+  # Der Slug der Vorlage steht in der Sicherung; darueber wird sie
+  # wiedergefunden. Ueber den Anzeigenamen und nicht ueber den Slug, weil die
+  # Sitzungsliste nur den Namen fuehrt — verglichen wird gleich klein
+  # geschrieben und ohne Sonderzeichen.
+  MEINE_VORLAGE=$(meine_vorlage)
   MARKER="/etc/ota-pruefmarke-$$.txt"
   docker exec -u 0 "$CN" sh -c "echo pruefmarke > $MARKER" 2>/dev/null \
     && ok "Markierung ausserhalb des Home im Container angelegt" \
@@ -154,10 +172,14 @@ if [ -n "$CN" ]; then
       -d "{\"username\":\"$USER_NAME\",\"include_container\":true}" >/dev/null
   sleep 2
 
-  CB=$(api "$BASE/api/backups" | jqp "next((b for b in d if b['kind']=='container' and b['status']=='ok'), {})")
-  CSIZE=$(api "$BASE/api/backups" | jqp "next((b['size_bytes'] for b in d if b['kind']=='container' and b['status']=='ok'), 0)")
-  CFILES=$(api "$BASE/api/backups" | jqp "next((b['file_count'] for b in d if b['kind']=='container' and b['status']=='ok'), 0)")
-  CBID=$(api "$BASE/api/backups" | jqp "next((b['id'] for b in d if b['kind']=='container' and b['status']=='ok'), '')")
+  # Genau die Sicherung des Containers, den wir markiert haben — nicht
+  # irgendeine. Verglichen wird ueber die Vorlage; passt keine, bleibt es bei
+  # der ersten, dann meldet die Pruefung darunter ehrlich einen Fehlschlag.
+  AUSWAHL="[b for b in d if b['kind']=='container' and b['status']=='ok']"
+  PASSEND="[b for b in $AUSWAHL if b['template_slug'].replace('-','') in '$MEINE_VORLAGE'.lower().replace(' ','').replace('-','')]"
+  CSIZE=$(api "$BASE/api/backups" | jqp "next(iter([b['size_bytes'] for b in ($PASSEND or $AUSWAHL)]), 0)")
+  CFILES=$(api "$BASE/api/backups" | jqp "next(iter([b['file_count'] for b in ($PASSEND or $AUSWAHL)]), 0)")
+  CBID=$(api "$BASE/api/backups" | jqp "next(iter([b['id'] for b in ($PASSEND or $AUSWAHL)]), '')")
 
   [ "${CFILES:-0}" -gt 0 ] && ok "Container-Sicherung angelegt: $CFILES Einträge, $((CSIZE/1024)) KB" \
                            || bad "Container-Sicherung leer"
@@ -169,7 +191,7 @@ if [ -n "$CN" ]; then
     && ok "Archiv bleibt klein ($((CSIZE/1024)) KB) — keine Elternverzeichnisse mitgesichert" \
     || bad "Archiv ist $((CSIZE/1024/1024)) MB gross — vermutlich ganze Bäume mitgesichert"
 
-  CPATH=$(api "$BASE/api/backups" | jqp "next((b['path'] for b in d if b['kind']=='container' and b['status']=='ok'), '')")
+  CPATH=$(api "$BASE/api/backups" | jqp "next(iter([b['path'] for b in ($PASSEND or $AUSWAHL)]), '')")
   if [ -n "$CPATH" ] && [ -f "$CPATH" ]; then
     tar --zstd -tf "$CPATH" 2>/dev/null | grep -q "^etc/ota-pruefmarke-$$" \
       && ok "Markierung liegt unter dem richtigen Pfad im Archiv" \

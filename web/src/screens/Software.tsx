@@ -55,6 +55,8 @@ export function Software({ tpl, onToast, onChanged }: {
   const [custom, setCustom] = useState('')
   const [script, setScript] = useState('')
   const [scriptOpen, setScriptOpen] = useState(false)
+  // Nur für Einzelanwendungen: womit die Anwendung startet.
+  const [startBefehl, setStartBefehl] = useState('')
   const [extensions, setExtensions] = useState('')
   const [extOpen, setExtOpen] = useState(false)
   const [builds, setBuilds] = useState<Build[] | null>(null)
@@ -245,6 +247,7 @@ export function Software({ tpl, onToast, onChanged }: {
         apt_packages: packages,
         vscode_extensions: extensions.split(/[\s,]+/).filter(Boolean),
         setup_script: script,
+        start_command: tpl.mode === 'single_app' ? startBefehl : '',
         comment: packages.join(', ').slice(0, 240),
       })
       setWatching(started)
@@ -509,6 +512,15 @@ export function Software({ tpl, onToast, onChanged }: {
             onChange={(e) => setScript(e.target.value)} />
         )}
       </Field>
+
+      {tpl.mode === 'single_app' && (
+        <Field label={tr('Startbefehl')}
+          hint={tr('Womit die Anwendung startet. Beendet sie sich, wird sie neu gestartet — bei einer einzelnen Anwendung ist das gewollt. Leer lassen, wenn das Basisimage seine Anwendung selbst startet (so machen es die Kasm-Images).')}>
+          <input className="input" value={startBefehl} spellCheck={false}
+            placeholder="gimp" aria-label={tr('Startbefehl')}
+            onChange={(e) => setStartBefehl(e.target.value)} />
+        </Field>
+      )}
 
       <div className="viewer__row" style={{ marginTop: 4, marginBottom: 22 }}>
         <button className="btn btn--primary" disabled={busy || !!running} onClick={() => void build()}>

@@ -42,6 +42,80 @@ services:
       retries: 3
       start_period: 10s
 
+  # --- TURN: der Medienweg fuer Selkies ------------------------------------
+  #
+  # Nur fuer Vorlagen mit `stream_engine=selkies`. KasmVNC braucht ihn nicht;
+  # dort geht alles durch Traefik.
+  #
+  # **Warum ein eigener Dienst und nicht im Session-Container.** Genau so lief
+  # es zuerst, und es kann nicht funktionieren. Ein TURN-Server hinter einer
+  # Docker-Bridge meldet als Relay die Adresse des Hosts, verschickt die
+  # vermittelten Pakete aber mit der Container-Adresse als Absender. Gemessen
+  # mit `scripts/pruef-turn.py` gegen die alte Fassung:
+  #
+  #     5. Client -> Relay -> Peer: b'HINAUS' von 192.168.0.4:65502
+  #        Absender != Relay 192.168.66.224:65502
+  #
+  # Jeder WebRTC-Stack verwirft ein Paket, dessen Absender nicht zu dem
+  # Kandidaten passt, auf den er wartet. Im Browser sah das aus wie
+  # "Waiting for stream", im Container wie "Fatal SSL error" beim
+  # DTLS-Handschlag - die Ursache stand an keiner der beiden Stellen.
+  #
+  # `network_mode: host` ist deshalb keine Bequemlichkeit, sondern die
+  # Bedingung: Nur ohne NAT dazwischen stimmen gemeldete und tatsaechliche
+  # Adresse ueberein.
+  #
+  # Ein gemeinsamer Dienst statt einem je Sitzung bringt nebenbei das, was
+  # vorher fehlte: mehr als eine Selkies-Sitzung je Host. Der Portbereich
+  # wird nicht mehr je Container veroeffentlicht, sondern einmal geteilt.
+  turn:
+    image: coturn/coturn:4.6-alpine
+    container_name: ota-turn
+    restart: unless-stopped
+    network_mode: host
+    command:
+      - --listening-port=${OTA_TURN_PORT:-3478}
+      # Beide Adressen ausdruecklich und nicht 0.0.0.0: Der Host hat neben
+      # dem Firmennetz ein Dutzend Docker-Bruecken, und coturn boete sonst
+      # Relay-Kandidaten in Netzen an, die kein Browser erreicht.
+      #
+      # Ohne OTA_TURN_HOST bleibt der Dienst auf dem Rueckkanal. Er
+      # stoert dort niemanden, und ohne diese Angabe ist Selkies ohnehin
+      # nicht in Gebrauch.
+      - --listening-ip=${OTA_TURN_HOST:-127.0.0.1}
+      - --relay-ip=${OTA_TURN_HOST:-127.0.0.1}
+      # Rund hundert Relay-Ports fuer den ganzen Host. Vorher waren es elf je
+      # Container, und die waren nach drei Anlaeufen aufgebraucht - eine
+      # Anmeldung belegt vier Stueck, und coturn gibt sie erst nach Ablauf
+      # der Lebenszeit wieder frei.
+      - --min-port=${OTA_TURN_MIN:-49160}
+      - --max-port=${OTA_TURN_MAX:-49260}
+      - --realm=openterminalapps
+      # Kurzlebige Anmeldedaten aus einem HMAC statt eines festen Passworts:
+      # Selkies rechnet sie sich aus demselben Geheimnis aus und gibt sie dem
+      # Browser mit Ablaufzeit mit. Ein abgefangener Zugang ist damit Stunden
+      # spaeter wertlos - und das Sitzungspasswort steht nicht mehr drin.
+      - --use-auth-secret
+      - --static-auth-secret=${OTA_TURN_SECRET:-}
+      - --no-tls
+      - --no-dtls
+      - --no-cli
+      - --no-multicast-peers
+      # Kein Weg in die eigenen Netze. Ohne diese Zeilen stuende im Firmennetz
+      # ein Dienst, ueber den sich Datenbank und Keycloak erreichen liessen -
+      # vorbei an Traefik und ohne Anmeldung an OTA. Die Bereiche sind die
+      # Subnetze von ota_public, ota_internal und ota_sessions.
+      - --denied-peer-ip=0.0.0.0-0.255.255.255
+      - --denied-peer-ip=127.0.0.0-127.255.255.255
+      - --denied-peer-ip=169.254.0.0-169.254.255.255
+      - --denied-peer-ip=172.16.0.0-172.31.255.255
+      - --denied-peer-ip=192.168.0.0-192.168.15.255
+      # Knapp protokollieren. Für die Fehlersuche am Medienweg lohnt
+      # `OTA_TURN_LOG=verbose` in der .env — dann steht je Sitzung drin,
+      # welche Erlaubnisse entstehen und was durch die Relays geht.
+      - --${OTA_TURN_LOG:-simple-log}
+      - --log-file=stdout
+
   web:
     build:
       context: ../web
@@ -152,6 +226,19 @@ services:
       OTA_GROUPFILES_ROOT: "${OTA_GROUPFILES_ROOT:-/srv/ota/groupfiles}"
       # Skeleton-Profile je Workspace: womit ein Zuhause anfaengt.
       OTA_SKELETON_ROOT: "${OTA_SKELETON_ROOT:-/srv/ota/skeletons}"
+      # Wohin der Browser für den WebRTC-Medienstrom greift, wenn eine
+      # Vorlage auf Selkies steht (Versuchsweg, `roadmap.md`). Es muss die
+      # Adresse sein, unter der die **Browser** diesen Host erreichen — nicht
+      # die eines Docker-Netzes. Leer heisst: kein Selkies.
+      #
+      # Der Agent reicht die drei Angaben nur durch; erreichbar sein muss der
+      # Dienst `turn` weiter oben, nicht der Session-Container. Ports
+      # veröffentlicht der Agent für Selkies deshalb keine mehr.
+      OTA_TURN_HOST: "${OTA_TURN_HOST:-}"
+      OTA_TURN_PORT: "${OTA_TURN_PORT:-3478}"
+      OTA_TURN_SECRET: "${OTA_TURN_SECRET:-}"
+      OTA_TURN_PROTOCOL: "${OTA_TURN_PROTOCOL:-udp}"
+      OTA_TURN_ICE_POLICY: "${OTA_TURN_ICE_POLICY:-all}"
       OTA_SESSION_NETWORK: ota_sessions
       OTA_PUBLIC_NETWORK: ota_public
       OTA_BACKUP_ROOT: "${OTA_BACKUP_ROOT:-/srv/ota/backups}"

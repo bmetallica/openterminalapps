@@ -54,7 +54,7 @@ SECRET_HINTS = (
 NOISE = (
     "/tmp", "/var/tmp", "/run", "/var/run", "/proc", "/sys", "/dev",
     "/var/log", "/var/cache", "/var/lib/apt/lists",
-    "/home/kasm-user",  # Bind-Mount; wird ohnehin nicht eingefangen
+    "/home",            # Bind-Mount; wird ohnehin nicht eingefangen
     "/mnt/ota",         # Einhaengepunkt der gemeinsamen Ablage, ebenso
     "/mnt/austausch",   # und der der eigenen
     "/dockerstartup",

@@ -247,6 +247,16 @@ class Template(Base):
     group_shelf: Mapped[bool] = mapped_column(Boolean, default=True,
                                               server_default="true")
 
+    # Welche Streaming-Maschine den Bildschirm überträgt.
+    #
+    # `kasmvnc` ist die Vorgabe und bleibt es: Sie trägt heute jeden
+    # Arbeitsplatz. `selkies` ist der zweite Weg — H.264 über WebRTC statt
+    # rechteckiger Bildausschnitte über RFB. Er steckt noch im Versuch und
+    # bringt eine Einschränkung mit, die man kennen muss: **ein Bildschirm je
+    # Sitzung**, keine Anwendung je Display.
+    stream_engine: Mapped[str] = mapped_column(String(16), default="selkies",
+                                               server_default="kasmvnc")
+
     persistence_scope: Mapped[str] = mapped_column(String(16), default="user")
     idle_minutes: Mapped[int] = mapped_column(Integer, default=60)
     idle_action: Mapped[str] = mapped_column(String(16), default="stop")
@@ -550,6 +560,9 @@ class ImageBuild(Base):
     apt_packages: Mapped[list] = mapped_column(JSONB, default=list)
     vscode_extensions: Mapped[list] = mapped_column(JSONB, default=list)
     setup_script: Mapped[str] = mapped_column(Text, default="")
+    # Womit ein Einzelanwendungs-Image seine Anwendung startet. Fuer einen
+    # Arbeitsplatz bleibt es leer: Der startet seine Anwendungen auf Zuruf.
+    start_command: Mapped[str] = mapped_column(Text, default="")
     comment: Mapped[str] = mapped_column(String(512), default="")
 
     # queued | building | ok | failed | cancelled

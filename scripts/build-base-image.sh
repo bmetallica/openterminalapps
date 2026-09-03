@@ -257,6 +257,40 @@ pruefen() {
     echo "  · Abnahmefall 7 (Java/AWT) übersprungen — mit OTA_PRUEFE_JAVA=1 läuft er mit"
   fi
 
+  # Läuft das Startskript **zu Ende**?
+  #
+  # Der Port allein sagt das nicht: KasmVNC hört, lange bevor das Skript
+  # durch ist. Am 2026-09-02 blieb es an `autocutsel` hängen — und damit lief
+  # `custom_startup.sh` nie, also genau das, was ein abgeleitetes Image
+  # starten soll. Der Container sah dabei kerngesund aus.
+  #
+  # Geprüft wird deshalb am Ende der Kette: Das Startskript des Images legt
+  # eine Datei an, und die muss da sein.
+  docker exec -u 0 "$CN" bash -lc \
+    'printf "#!/bin/sh\ntouch /tmp/ota-startskript-lief\nwhile true; do sleep 3600; done\n" \
+     > /dockerstartup/custom_startup.sh && chmod +x /dockerstartup/custom_startup.sh' \
+    >/dev/null 2>&1
+  docker restart "$CN" >/dev/null 2>&1
+  GELAUFEN=""
+  for i in $(seq 1 60); do
+    sleep 1
+    docker exec "$CN" test -e /tmp/ota-startskript-lief 2>/dev/null && { GELAUFEN=ja; break; }
+  done
+  [ "$GELAUFEN" = "ja" ] \
+    && ok "Das Startskript läuft bis zum Ende durch (custom_startup.sh nach ${i}s)" \
+    || bad "custom_startup.sh lief nicht — das Startskript bleibt vorher stehen"
+
+  # Und danach ist der Strom wieder da: Ein Neustart darf ihn nicht kosten.
+  BEREIT2=0
+  for i in $(seq 1 60); do
+    if docker exec "$CN" bash -lc '(exec 3<>/dev/tcp/127.0.0.1/6901)' 2>/dev/null; then
+      BEREIT2=1; break
+    fi
+    sleep 1
+  done
+  [ "$BEREIT2" = "1" ] && ok "Und nach einem Neustart nimmt KasmVNC wieder an" \
+                       || bad "Nach dem Neustart kam KasmVNC nicht zurück"
+
   # Das Kasm-Label muss leer sein, sonst räumt Kasms Aufräumer das Image weg.
   LABEL=$(docker inspect "$TAG" --format '{{index .Config.Labels "com.kasmweb.image"}}')
   [ -z "$LABEL" ] && ok "Kein com.kasmweb.image-Label — Kasm lässt es stehen" \

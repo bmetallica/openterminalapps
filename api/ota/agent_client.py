@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import urllib.parse
 from typing import Any
 
 import httpx
@@ -119,12 +120,22 @@ def start_app(cid: str, payload: dict[str, Any]) -> dict[str, Any]:
     return _call("POST", f"/containers/{cid}/apps", json=payload)
 
 
+def image_engine(ref: str) -> str:
+    """Welche Streaming-Maschine das Image mitbringt — leer, wenn unbekannt."""
+    try:
+        return _call("GET", f"/images/engine?ref={urllib.parse.quote(ref)}").get("engine", "")
+    except HTTPException:
+        # Der Agent ist nicht erreichbar. Dann entscheidet die Vorgabe; eine
+        # Vorlage anzulegen soll daran nicht scheitern.
+        return ""
+
+
 def list_displays(cid: str) -> list[int]:
     return _call("GET", f"/containers/{cid}/apps")
 
 
-def stop_app(cid: str, display: int) -> dict[str, Any]:
-    return _call("DELETE", f"/containers/{cid}/apps/{display}")
+def stop_app(cid: str, display: int, engine: str = "kasmvnc") -> dict[str, Any]:
+    return _call("DELETE", f"/containers/{cid}/apps/{display}?engine={engine}")
 
 
 def clipboard_bridge(cid: str, enabled: bool, interval: float = 0.5) -> dict[str, Any]:

@@ -279,6 +279,64 @@ BUILTIN: tuple[dict, ...] = (
             "pin": False,
         },
     },
+    {
+        "slug": "pycharm-community",
+        "name": "PyCharm Community",
+        "glyph": "⌨",
+        "why": ("Aus dem APT-Depot von JetBrains. **Nur die Community-Ausgabe** "
+                "— sie steht unter Apache-2.0. Die kostenpflichtigen Ausgaben "
+                "liegen in demselben Depot und dürfen so nicht verteilt "
+                "werden; wer sie braucht, bringt seine Lizenz selbst mit."),
+        "kind": "apt_repo",
+        "params": {
+            "key_url": ("https://s3.eu-central-1.amazonaws.com/jetbrains-ppa/"
+                        "0xA6E8698A.pub.asc"),
+            "repo_line": ("deb http://jetbrains-ppa.s3-website."
+                          "eu-central-1.amazonaws.com any main"),
+            "package": "pycharm-community",
+            "slug": "jetbrains",
+            "pin": False,
+        },
+    },
+    {
+        "slug": "intellij-idea-community",
+        "name": "IntelliJ IDEA Community",
+        "glyph": "⌨",
+        "why": ("Dasselbe Depot wie PyCharm Community, dieselbe Lizenz "
+                "(Apache-2.0). Zwei Rezepte statt einem, weil ein Rezept "
+                "genau ein Paket installiert."),
+        "kind": "apt_repo",
+        "params": {
+            "key_url": ("https://s3.eu-central-1.amazonaws.com/jetbrains-ppa/"
+                        "0xA6E8698A.pub.asc"),
+            "repo_line": ("deb http://jetbrains-ppa.s3-website."
+                          "eu-central-1.amazonaws.com any main"),
+            "package": "intellij-idea-community",
+            "slug": "jetbrains",
+            "pin": False,
+        },
+    },
+    {
+        "slug": "vscode",
+        "name": "Visual Studio Code",
+        "glyph": "⌨",
+        "why": ("Das Original von Microsoft, aus dessen Depot. **Achtung, "
+                "Lizenz:** Die Bedingungen erlauben beliebig viele Kopien im "
+                "eigenen Unternehmensnetz, untersagen aber, die Software zu "
+                "veröffentlichen oder Dritten bereitzustellen. Ein Image mit "
+                "VS Code darf deshalb **nicht weitergegeben** werden. Wer "
+                "diese Grenze nicht braucht, nimmt VSCodium — dasselbe "
+                "Programm ohne Telemetrie, unter MIT. Siehe "
+                "THIRD-PARTY-NOTICES.md."),
+        "kind": "apt_repo",
+        "params": {
+            "key_url": "https://packages.microsoft.com/keys/microsoft.asc",
+            "repo_line": "deb https://packages.microsoft.com/repos/code stable main",
+            "package": "code",
+            "slug": "vscode",
+            "pin": False,
+        },
+    },
 )
 
 

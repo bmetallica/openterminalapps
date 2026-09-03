@@ -210,7 +210,8 @@ def freeze(
 
     build = ImageBuild(
         template_id=tpl.id, version=version, base_image=tpl.image_ref,
-        setup_script="", comment=(body.comment or "Eingefrorene Session")[:500],
+        setup_script="", start_command="",
+        comment=(body.comment or "Eingefrorene Session")[:500],
         status="building", built_by=actor.username,
         log=(f"Eingefroren aus Session {sess.id}\n"
              f"{vorschau.get('gesamt', 0)} Änderung(en) ausserhalb des Home, "
@@ -395,8 +396,8 @@ async def start_build(
     build = ImageBuild(
         template_id=tpl.id, version=version, base_image=base,
         apt_packages=body.apt_packages, vscode_extensions=body.vscode_extensions,
-        setup_script=body.setup_script, comment=body.comment,
-        status="queued", built_by=actor.username,
+        setup_script=body.setup_script, start_command=body.start_command,
+        comment=body.comment, status="queued", built_by=actor.username,
     )
     db.add(build)
     db.flush()
@@ -416,6 +417,7 @@ async def start_build(
         "apt_packages": body.apt_packages,
         "vscode_extensions": body.vscode_extensions,
         "setup_script": body.setup_script,
+        "start_command": body.start_command,
         # Arbeitsplatz-Images duerfen keine Anwendung von selbst starten.
         "mode": tpl.mode,
         "pause_containers": pause,

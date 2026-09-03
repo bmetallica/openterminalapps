@@ -13,6 +13,7 @@ nebenher Sessions bedient, wuerde ein paralleler Build die Nutzer ausbremsen.
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import shlex
@@ -37,7 +38,7 @@ _TIMEOUT = 45 * 60
 
 def render_dockerfile(base_image: str, apt_packages: list[str],
                       vscode_extensions: list[str], setup_script: str,
-                      mode: str = "workspace") -> str:
+                      mode: str = "workspace", start_command: str = "") -> str:
     """Erzeugt das Dockerfile aus den Angaben der Oberflaeche.
 
     Alle Eingaben werden mit shlex.quote entschaerft, bevor sie in eine
@@ -45,8 +46,10 @@ def render_dockerfile(base_image: str, apt_packages: list[str],
     hineingelegt und ausgefuehrt, nicht in eine Kommandozeile eingebettet.
 
     `mode` entscheidet ueber das Startverhalten: Ein Arbeitsplatz startet keine
-    Anwendung von selbst (siehe unten), ein Einzelanwendungs-Image behaelt das
-    Startskript des Basisimages.
+    Anwendung von selbst (siehe unten). Ein Einzelanwendungs-Image bekommt mit
+    `start_command` ein eigenes Startskript; ohne behaelt es das des
+    Basisimages — was bei den Kasm-Anwendungsimages richtig ist und bei OTAs
+    eigenem Basisimage einen leeren Schreibtisch ergaebe.
     """
     lines = [
         f"FROM {base_image}",
@@ -88,9 +91,13 @@ def render_dockerfile(base_image: str, apt_packages: list[str],
         lines.append("# Extensions werden beim Build installiert, nicht beim Start.")
         for ext in vscode_extensions:
             safe = shlex.quote(ext)
+            # Der Kontoname steht nicht fest: In Kasm-Images heisst die
+            # Kennung 1000 `kasm-user`, in OTAs eigenen Images `ota`. Ein
+            # festgeschriebener Name liesse den Build hier scheitern, sobald
+            # jemand von einem eigenen Basisimage ableitet.
             lines.append(
-                f"RUN su kasm-user -c 'code --no-sandbox --force "
-                f"--install-extension {safe}' || echo 'Extension {safe} uebersprungen'"
+                f'RUN su "$(id -un 1000)" -c \'code --no-sandbox --force '
+                f'--install-extension {safe}\' || echo \'Extension {safe} uebersprungen\''
             )
         lines.append("")
 
@@ -126,6 +133,41 @@ def render_dockerfile(base_image: str, apt_packages: list[str],
             "'# Anwendung von selbst. Das Skript darf sich nicht beenden,' "
             "'# sonst startet vnc_startup.sh es alle drei Sekunden neu.' "
             "'while true; do sleep 3600; done' "
+            "> /dockerstartup/custom_startup.sh \\",
+            " && chmod +x /dockerstartup/custom_startup.sh",
+            "",
+        ]
+
+    elif start_command.strip():
+        # Einzelanwendung mit ausdruecklichem Startbefehl.
+        #
+        # **Warum das noetig wurde.** Frueher stand hier nichts: Ein
+        # Einzelanwendungs-Image behielt das Startskript seines Basisimages,
+        # und bei den Kasm-Anwendungsimages stimmt das auch — die starten
+        # "ihre" Anwendung selbst. OTAs eigenes Basisimage bringt dagegen
+        # absichtlich einen Platzhalter mit, der **nichts** startet. Ein darauf
+        # gebautes Einzelanwendungs-Image zeigte deshalb einen leeren
+        # Schreibtisch, und der Grund stand nirgends.
+        #
+        # Beendet sich die Anwendung, startet das Startskript des Basisimages
+        # sie nach drei Sekunden neu. Bei einer Einzelanwendung ist genau das
+        # gewollt — anders als im Arbeitsplatz, wo dieselbe Aufsicht einmal
+        # 119 leere Fenster erzeugt hat (siehe oben).
+        skript = (
+            "#!/usr/bin/env bash\n"
+            "# Von OpenTerminalApps erzeugt: der Startbefehl dieses\n"
+            "# Einzelanwendungs-Images. Beendet sich die Anwendung, startet\n"
+            "# das Startskript des Basisimages sie neu.\n"
+            f"{start_command.strip()}\n"
+        )
+        # Ueber base64 statt direkt: Der Befehl kommt aus einem Textfeld und
+        # enthaelt Anfuehrungszeichen, Dollarzeichen und Zeilenumbrueche.
+        # Alles davon wuerde beim Einbetten in eine RUN-Zeile etwas anderes
+        # tun, als dort steht.
+        kodiert = base64.b64encode(skript.encode("utf-8")).decode("ascii")
+        lines += [
+            "# Der Startbefehl dieses Einzelanwendungs-Images.",
+            f"RUN printf '%s' {shlex.quote(kodiert)} | base64 -d "
             "> /dockerstartup/custom_startup.sh \\",
             " && chmod +x /dockerstartup/custom_startup.sh",
             "",
@@ -348,9 +390,9 @@ def _push(state: dict[str, Any], client: docker.DockerClient, tag: str) -> str |
 def start(tag: str, base_image: str, apt_packages: list[str],
           vscode_extensions: list[str], setup_script: str,
           pause_containers: list[str] | None = None,
-          mode: str = "workspace") -> dict[str, Any]:
+          mode: str = "workspace", start_command: str = "") -> dict[str, Any]:
     dockerfile = render_dockerfile(base_image, apt_packages, vscode_extensions,
-                                   setup_script, mode)
+                                   setup_script, mode, start_command)
     build_id = uuid.uuid4().hex
 
     _builds[build_id] = {

@@ -62,6 +62,26 @@ def list_templates(
     return [_out(t, user) for t in templates if user_can_see_template(t, user)]
 
 
+def _maschine(body: TemplateIn, vorher: str = "selkies") -> str:
+    """Welche Streaming-Maschine gilt — angegeben oder aus dem Image abgeleitet.
+
+    Wer sie ausdrücklich setzt, bekommt sie. Wer nichts sagt, bekommt die,
+    **die das Image mitbringt**: OTAs eigenes Basisimage meldet sich über
+    `SELKIES_HOME`, Kasm-Images tun das nicht.
+
+    Ohne diese Ableitung bekäme ein Arbeitsplatz auf einem Kasm-Image seit
+    der Umstellung stillschweigend Selkies. Der Agent wartete dann neunzig
+    Sekunden auf einen Port, den niemand öffnet, die Sitzung käme nie hoch,
+    und in der Oberfläche stünde „Der Container-Dienst ist nicht erreichbar" —
+    ein Satz, der auf etwas ganz anderes zeigt. Gemessen an der Prüfreihe:
+    18 Fehlschläge, alle mit derselben Wurzel.
+    """
+    if body.stream_engine:
+        return body.stream_engine
+    erkannt = agent_client.image_engine(body.image_ref)
+    return erkannt or vorher
+
+
 @router.post("", dependencies=[Depends(manage)], status_code=status.HTTP_201_CREATED)
 def create_template(
     body: TemplateIn,
@@ -73,7 +93,9 @@ def create_template(
     if db.scalar(select(Template).where(Template.slug == slug)):
         slug = f"{slug}-{uuid.uuid4().hex[:6]}"
 
-    tpl = Template(slug=slug, **body.model_dump(exclude={"group_ids"}))
+    daten = body.model_dump(exclude={"group_ids"})
+    daten["stream_engine"] = _maschine(body)
+    tpl = Template(slug=slug, **daten)
     tpl.groups = list(
         db.scalars(select(Group).where(Group.id.in_(body.group_ids or []))).all()
     )
@@ -108,7 +130,11 @@ def update_template(
     if not tpl:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Workspace nicht gefunden")
 
-    for key, value in body.model_dump(exclude={"group_ids"}).items():
+    daten = body.model_dump(exclude={"group_ids"})
+    # Beim Ändern zählt der bisherige Wert als Rückfallebene: Wer die Maschine
+    # nicht erwähnt, soll sie nicht verlieren.
+    daten["stream_engine"] = _maschine(body, tpl.stream_engine)
+    for key, value in daten.items():
         setattr(tpl, key, value)
     # Nur anfassen, wenn die Zuweisung mitgeschickt wurde. Siehe `TemplateIn`:
     # Ein PUT, das sie nicht erwaehnt, soll sie nicht loeschen.

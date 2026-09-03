@@ -46,6 +46,10 @@ export function SessionViewer({
   onToast: (m: string) => void
 }) {
   useLang()
+  // Welche Streaming-Maschine überträgt. Alles, was hier auf Elemente im
+  // iframe zeigt, ist gegen KasmVNCs Weboberfläche geschrieben — Selkies
+  // bringt seine eigene mit, und dort gibt es diese Elemente nicht.
+  const engine = session.stream_engine ?? 'kasmvnc'
   const src = stream?.url ?? session.url
   const label = stream
     ? template?.apps.find((a) => a.slug === stream.app_slug)?.name ?? stream.app_slug
@@ -91,7 +95,9 @@ export function SessionViewer({
    * dieses Fenster offen ist, schlaegt oben das Herz.
    */
   useEffect(() => {
-    if (!frameReady) return
+    // Nur KasmVNC kennt diese Nachricht und hat überhaupt eine Leerlaufuhr,
+    // die es abzustellen gälte.
+    if (!frameReady || engine !== 'kasmvnc') return
     const stellen = () => {
       try {
         frame.current?.contentWindow?.postMessage(
@@ -103,7 +109,7 @@ export function SessionViewer({
     stellen()
     const t = setTimeout(stellen, 3000)
     return () => clearTimeout(t)
-  }, [frameReady, nonce])
+  }, [frameReady, nonce, engine])
 
   // Strg+Alt+Shift schaltet die Leiste um — solange der Fokus NICHT im Stream
   // liegt.
@@ -169,6 +175,11 @@ export function SessionViewer({
    */
   useEffect(() => {
     if (!frameReady) return
+    // Selkies hat diese Klasse nicht, und es hat auch keinen stillen
+    // Abbruchbildschirm — es verbindet von sich aus neu. Hier zu raten,
+    // wäre schlimmer als nichts zu tun: Ein falsch erkannter Abbruch lädt
+    // den Rahmen neu und wirft eine laufende Sitzung weg.
+    if (engine !== 'kasmvnc') return
     let fehlt = 0
 
     const timer = setInterval(() => {
@@ -197,7 +208,7 @@ export function SessionViewer({
     }, 2500)
 
     return () => clearInterval(timer)
-  }, [frameReady, nonce])
+  }, [frameReady, nonce, engine])
 
   /* Wieder verbinden — aber nur, wenn es noch etwas zu verbinden gibt.
    *
@@ -248,7 +259,10 @@ export function SessionViewer({
   // Die Brücke steuert den Client von aussen an; der Stream kommt von
   // derselben Herkunft, also ist das möglich.
   useEffect(() => {
-    if (!frameReady || !frame.current) return
+    // Die Brücke greift in KasmVNCs Weboberfläche (`noVNC_clipboard_text`).
+    // Selkies bringt seine eigene Zwischenablage mit und braucht sie nicht;
+    // sie liefe dort ins Leere und meldete dem Nutzer eine kaputte Ablage.
+    if (!frameReady || !frame.current || engine !== 'kasmvnc') return
     bridge.current?.stop()
     bridge.current = startClipboardBridge(frame.current, { onNote: onToast })
     setClipReady(true)
@@ -257,7 +271,7 @@ export function SessionViewer({
       bridge.current = null
       setClipReady(false)
     }
-  }, [frameReady, src, onToast])
+  }, [frameReady, src, onToast, engine])
 
   // KasmVNC baut sein Dokument nach dem Laden noch um. Ein zweiter Versuch
   // kurz danach stellt sicher, dass der Zuhörer am Ende wirklich hängt.

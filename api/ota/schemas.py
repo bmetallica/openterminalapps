@@ -214,6 +214,8 @@ class TemplateOut(BaseModel):
     skeleton_enforce: list[str] = []
     user_shelf: bool = True
     group_shelf: bool = True
+    # "selkies" (Vorgabe) oder "kasmvnc". Siehe `Template.stream_engine`.
+    stream_engine: str = "selkies"
     is_enabled: bool
     apps: list[AppOut] = []
     group_ids: list[uuid.UUID] = []
@@ -242,6 +244,13 @@ class TemplateIn(BaseModel):
     skeleton_enforce: list[str] = []
     user_shelf: bool = True
     group_shelf: bool = True
+    # **Nicht angegeben heisst: aus dem Image ableiten.** OTAs eigenes
+    # Basisimage setzt `SELKIES_HOME`, Kasm-Images nicht — daran erkennt der
+    # Agent, welche Maschine drinsteckt. Ohne diese Ableitung bekaeme ein
+    # Arbeitsplatz auf einem Kasm-Image seit der Umstellung stillschweigend
+    # Selkies, der Agent wartete neunzig Sekunden auf einen Port, den niemand
+    # oeffnet, und die Sitzung kaeme nie hoch.
+    stream_engine: str | None = None
     is_enabled: bool = True
     # `None` heisst „nicht mitgeschickt" und laesst die Zuweisung stehen; eine
     # leere Liste heisst „niemand mehr". Ohne diese Unterscheidung nimmt ein
@@ -413,6 +422,10 @@ class SessionOut(BaseModel):
     error: str | None = None
     url: str
     streams: list[StreamOut] = []
+    # Welche Streaming-Maschine diese Session überträgt. Die Oberfläche
+    # braucht das: Reconnect-Erkennung, Leerlaufuhr und Zwischenablage sind
+    # gegen KasmVNCs Weboberfläche geschrieben und greifen bei Selkies nicht.
+    stream_engine: str = "kasmvnc"
 
 
 class SessionStartIn(BaseModel):
@@ -457,6 +470,11 @@ class BuildIn(BaseModel):
     apt_packages: list[str] = []
     vscode_extensions: list[str] = []
     setup_script: str = ""
+    # Nur fuer Einzelanwendungs-Images: der Aufruf der Anwendung. Leer heisst,
+    # dass das Basisimage sein eigenes Startskript behaelt — was bei den
+    # Kasm-Anwendungsimages stimmt und bei OTAs eigenen nicht: Deren
+    # Platzhalter startet absichtlich nichts.
+    start_command: str = ""
     comment: str = ""
     # Fremde Aufräumdienste für die Dauer des Builds anhalten. Standardmässig
     # an, weil ein Golden Image sonst auf diesem Host keine Minute überlebt.
@@ -479,6 +497,7 @@ class BuildOut(BaseModel):
     apt_packages: list[str]
     vscode_extensions: list[str]
     setup_script: str
+    start_command: str
     comment: str
     status: str
     log: str

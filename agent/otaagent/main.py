@@ -125,6 +125,46 @@ def require_token(x_agent_token: str = Header(default="")) -> None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Agent-Token ungültig")
 
 
+# Wo das Zuhause im Container liegt, wenn das Image nichts dazu sagt. Die
+# Kasm-Images und alles, was von ihnen abstammt, legen es hierhin.
+HEIMAT_VORGABE = "/home/kasm-user"
+
+
+def _heimat_aus_env(eintraege: list[str] | None) -> str:
+    """Liest HOME aus einer Docker-Umgebungsliste.
+
+    **Das Image weiss selbst, wo sein Zuhause liegt** — es legt das Konto an
+    und setzt `HOME`. Der Agent liest es dort ab, statt einen Pfad
+    festzuschreiben. Sonst haette jedes Image ohne Kasm-Erbe (`/home/ota`) ein
+    leeres Zuhause: Der Bind-Mount laege an einer Stelle, die niemand benutzt,
+    und der Nutzer faende beim naechsten Start nichts von dem wieder, was er
+    angelegt hat.
+
+    Der Wert wird geprueft, weil er als Mount-Ziel dient: absolut, ohne
+    Rueckwaertsschritte. Ein Image darf nicht bestimmen, wohin der Agent auf
+    dem Host greift.
+    """
+    for eintrag in eintraege or []:
+        name, _, wert = eintrag.partition("=")
+        if name == "HOME" and wert.startswith("/") and ".." not in wert:
+            return wert.rstrip("/") or HEIMAT_VORGABE
+    return HEIMAT_VORGABE
+
+
+def _heimat_image(client, image: str) -> str:
+    """Das Zuhause laut Image — vor dem Start, fuer das Mount-Ziel."""
+    try:
+        angaben = client.images.get(image).attrs
+    except APIError:
+        return HEIMAT_VORGABE
+    return _heimat_aus_env(angaben.get("Config", {}).get("Env"))
+
+
+def _heimat_container(container) -> str:
+    """Dasselbe fuer einen laufenden Container."""
+    return _heimat_aus_env(container.attrs.get("Config", {}).get("Env"))
+
+
 class StartRequest(BaseModel):
     session_id: str
     image: str
@@ -139,6 +179,10 @@ class StartRequest(BaseModel):
     vnc_user: str = "kasm_user"
     vnc_secret: str
     mode: str = "workspace"
+    # Welche Streaming-Maschine im Image laeuft: "kasmvnc" (Vorgabe) oder
+    # "selkies". Sie entscheidet ueber den Port, auf den der Agent wartet, und
+    # darueber, ob TURN-Ports nach aussen durchgereicht werden.
+    engine: str = "kasmvnc"
     labels: dict[str, str] = {}
     # Laeuft nach dem Start als Nutzer im Container. Siehe _run_start_script.
     start_script: str = ""
@@ -391,6 +435,30 @@ def image_packages(ref: str, names: str = "") -> list[dict[str, Any]]:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
 
 
+@app.get("/images/engine", dependencies=[Depends(require_token)])
+def image_engine(ref: str) -> dict[str, str]:
+    """Welche Streaming-Maschine bringt dieses Image mit?
+
+    **Das Image sagt es selbst.** OTAs eigenes Basisimage setzt
+    `SELKIES_HOME`; Images von Kasm tun das nicht. Gefragt wird nur die
+    Konfiguration — kein Container, keine Sekunde Wartezeit.
+
+    Warum ueberhaupt: Seit Selkies die Vorgabe ist, bekaeme ein Arbeitsplatz
+    auf einem Kasm-Image sonst stillschweigend die falsche Maschine. Der
+    Agent wartet dann neunzig Sekunden auf einen Port, den niemand oeffnet,
+    und der Anwender sieht eine Sitzung, die nicht hochkommt — ohne einen
+    Satz, der sagt warum.
+    """
+    try:
+        angaben = dc().images.get(ref).attrs
+    except APIError:
+        # Unbekanntes Image: Die Vorgabe entscheidet die API, nicht der Agent.
+        return {"engine": ""}
+    env = angaben.get("Config", {}).get("Env") or []
+    hat_selkies = any(e.split("=", 1)[0] == "SELKIES_HOME" for e in env)
+    return {"engine": "selkies" if hat_selkies else "kasmvnc"}
+
+
 @app.get("/images", dependencies=[Depends(require_token)])
 def list_images() -> list[dict[str, Any]]:
     out = []
@@ -434,10 +502,33 @@ def start_container(req: StartRequest) -> dict[str, Any]:
 
     env = dict(req.env)
     env.setdefault("VNC_PW", req.vnc_secret)
+    # **Auch der Name, nicht nur das Passwort.** Aus `Template.vnc_user` baut
+    # die API den Basic-Auth-Header, den Traefik der Sitzung voranstellt — im
+    # Container kam der Name aber nie an. Solange dort `kasm_user`
+    # festgeschrieben stand, fiel das nicht auf; ein Image, das einen anderen
+    # Namen erwartet, antwortet mit 401, und in der Oberflaeche steht nur eine
+    # leere Seite. Wer die Spalte umstellte, sperrte sich lautlos aus.
+    env.setdefault("VNC_USER", req.vnc_user)
+    # Der Anmeldename, nur damit der Container einen lesbaren Verweis auf das
+    # Zuhause legen kann (`/home/<name>` -> `/home/ota`). Ueber den Pfad
+    # entscheidet er nicht — der steht im Image. Aendert sich der Name, wandert
+    # der Verweis und sonst nichts.
+    if req.shelf_name:
+        env.setdefault("OTA_LOGIN", req.shelf_name)
+    # Die Betriebsart. Der Container richtet sich danach ein: Ein Arbeitsplatz
+    # bekommt den ganzen Schreibtisch, eine einzelne Anwendung nur einen
+    # Fenstermanager. Bisher wusste er es nicht und startete immer XFCE —
+    # hinter einer einzelnen Anwendung ist das Ballast, den niemand bedient,
+    # und auf einer Maschine ohne GPU kostet der Compositor Rechenzeit, die
+    # der Kodierer besser gebrauchen kann.
+    env.setdefault("OTA_MODE", req.mode)
     env.setdefault("VNC_VIEW_ONLY_PW", secrets.token_urlsafe(16))
     # Ohne Verzoegerung zwischen Zwischenablage-Aktionen (plan.md §10.1).
     env.setdefault("VNCOPTIONS", "-PreferBandwidth -DynamicQualityMin=4 "
                                  "-DynamicQualityMax=7 -DLP_ClipDelay=0")
+
+    # Wohin das Zuhause gehoert, sagt das Image. Siehe _heimat_aus_env.
+    heimat = _heimat_image(client, req.image)
 
     mounts = []
     if req.mode == "workspace":
@@ -464,7 +555,7 @@ def start_container(req: StartRequest) -> dict[str, Any]:
         # Umbenennen mit — das Verzeichnis bleibt, wo es ist.
         shared_store.verweis_setzen(Path(req.profile_path).parent, req.shelf_name)
         mounts.append(docker.types.Mount(
-            target="/home/kasm-user", source=req.profile_path, type="bind",
+            target=heimat, source=req.profile_path, type="bind",
         ))
 
     # Die gemeinsame Ablage, nur lesbar. Sie haengt **nicht** im Home: Ein
@@ -516,6 +607,61 @@ def start_container(req: StartRequest) -> dict[str, Any]:
             log.warning("Eigene Ablage fuer %s nicht einhaengbar: %s",
                         req.shelf_user, exc)
 
+    # --- Selkies: der Medienstrom geht nicht durch Traefik ----------------
+    #
+    # KasmVNC schickt alles durch den einen HTTPS-Weg. Selkies überträgt das
+    # Bild als WebRTC über UDP, und dafür braucht es einen Weg vom Browser zum
+    # Container, den Traefik nicht kennt. Vermittelt wird über den TURN-Dienst
+    # **aus dem Stack** (`deploy/docker-compose.yml`, Dienst `turn`).
+    #
+    # Hier steht deshalb nichts mehr über Ports. Der erste Anlauf liess einen
+    # eigenen TURN im Session-Container laufen und reichte dessen Ports nach
+    # aussen durch — das kann nicht funktionieren: Hinter einer Docker-Bridge
+    # meldet TURN die Adresse des Hosts als Relay, verschickt die Pakete aber
+    # mit der Container-Adresse als Absender. Gemessen mit
+    # `scripts/pruef-turn.py`; die Begründung steht beim Dienst `turn`.
+    #
+    # Dass die Portvergabe damit wegfällt, ist der Nebengewinn: Es laufen
+    # jetzt beliebig viele Selkies-Sitzungen je Host statt genau einer.
+    ports: dict[str, Any] = {}
+    if req.engine == "selkies":
+        turn_host = os.environ.get("OTA_TURN_HOST", "")
+        turn_secret = os.environ.get("OTA_TURN_SECRET", "")
+        if not turn_host or not turn_secret:
+            log.warning("OTA_TURN_HOST oder OTA_TURN_SECRET fehlt — der Strom "
+                        "bleibt voraussichtlich schwarz")
+        env.setdefault("SELKIES_TURN_HOST", turn_host)
+        env.setdefault("SELKIES_TURN_PORT",
+                       os.environ.get("OTA_TURN_PORT", "3478"))
+        env.setdefault("SELKIES_TURN_SHARED_SECRET", turn_secret)
+        # UDP oder TCP zwischen Browser und TURN.
+        #
+        # UDP ist der Normalfall und der schnellere Weg. TCP ist die Antwort
+        # auf Netze mit kleiner Paketgroesse: Ein WebRTC-Strom rechnet mit
+        # rund 1400 Byte je Paket, und wo weniger durchpasst — ein VPN mit
+        # MTU 1000 etwa — wird jedes groessere Paket zerlegt. Fragmente
+        # ueberleben eine NAT selten, und dann scheitert schon der
+        # DTLS-Handschlag, ohne dass irgendwo ein Fehler steht. Ueber TCP
+        # liegt alles in einem Strom, der sich der Pfadgroesse selbst anpasst.
+        env.setdefault("SELKIES_TURN_PROTOCOL",
+                       os.environ.get("OTA_TURN_PROTOCOL", "udp"))
+        # Darf der Browser auch direkt, oder muss alles ueber TURN?
+        #
+        # "all" ist die Vorgabe und der schnellere Weg. "relay" ist die
+        # Antwort auf Netze mit kleiner Paketgroesse: Chrome verschickt
+        # seinen DTLS-Handschlag mit fest 1200 Byte und passt sich einer
+        # kleineren Pfadgroesse nicht an — durch einen Tunnel mit MTU 1000
+        # kommt er nie an, waehrend die kleinen ICE-Pakete durchgehen. Nur
+        # ueber TURN (und dort ueber TCP) stellt sich die Frage nicht mehr.
+        env.setdefault("SELKIES_ICE_TRANSPORT_POLICY",
+                       os.environ.get("OTA_TURN_ICE_POLICY", "all"))
+        # Auch STUN auf den eigenen Server. Selkies fragt sonst
+        # `stun.l.google.com` — im Firmennetz ein Weg nach draussen, den
+        # niemand bestellt hat, und ohne Internet bleibt die Sitzung hängen.
+        env.setdefault("SELKIES_STUN_HOST", turn_host)
+        env.setdefault("SELKIES_STUN_PORT",
+                       os.environ.get("OTA_TURN_PORT", "3478"))
+
     try:
         container = client.containers.run(
             req.image,
@@ -524,6 +670,7 @@ def start_container(req: StartRequest) -> dict[str, Any]:
             environment=env,
             mounts=mounts,
             network=SESSION_NETWORK,
+            ports=ports or None,
             labels=req.labels,
             nano_cpus=int(req.cores * 1_000_000_000),
             mem_limit=req.memory_bytes,
@@ -566,7 +713,8 @@ def start_container(req: StartRequest) -> dict[str, Any]:
     if req.elevated:
         _elevate(container)
 
-    _wait_for_vnc(container)
+    # Selkies hoert auf 8080, KasmVNC auf 6901.
+    _wait_for_vnc(container, port=8080 if req.engine == "selkies" else 6901)
 
     # Reihenfolge mit Absicht: erst das Skeleton, dann der Verweis auf die
     # Ablage, dann das Startskript. Das Skeleton legt den Grundstand; das
@@ -575,7 +723,7 @@ def start_container(req: StartRequest) -> dict[str, Any]:
         try:
             result = skeleton_ops.apply(
                 container.id, req.template_slug, req.skeleton_enforce,
-                fresh=frisches_zuhause,
+                fresh=frisches_zuhause, heim=heimat,
             )
             if result.get("kopiert"):
                 log.info("Skeleton für %s angewandt (%s): %s", req.template_slug,
@@ -672,7 +820,7 @@ def _run_once_scripts(container, scripts: list[dict[str, str]]) -> list[dict[str
         try:
             res = container.exec_run(
                 ["bash", "-lc", runner], user="1000",
-                environment={"HOME": "/home/kasm-user",
+                environment={"HOME": _heimat_container(container),
                              "OTA_SHARED": SHARED_MOUNT,
                              "OTA_FILES": USERFILES_MOUNT},
             )
@@ -717,7 +865,8 @@ def _run_start_script(container, script: str) -> None:
     try:
         res = container.exec_run(
             ["bash", "-lc", runner], user="1000",
-            environment={"HOME": "/home/kasm-user", "OTA_SHARED": SHARED_MOUNT},
+            environment={"HOME": _heimat_container(container),
+                         "OTA_SHARED": SHARED_MOUNT},
         )
         if res.exit_code != 0:
             out = (res.output or b"").decode("utf-8", "replace")
@@ -755,7 +904,8 @@ def _fetch_from_registry(client: docker.DockerClient, ref: str) -> bool:
 VNC_BEREIT_SEKUNDEN = int(os.environ.get("OTA_VNC_READY_SECONDS", "90"))
 
 
-def _wait_for_vnc(container, seconds: int = VNC_BEREIT_SEKUNDEN) -> bool:
+def _wait_for_vnc(container, seconds: int = VNC_BEREIT_SEKUNDEN,
+                  port: int = 6901) -> bool:
     """Wartet, bis KasmVNC im Container Verbindungen annimmt.
 
     Ohne das meldet die API die Session als bereit, sobald Docker den Container
@@ -768,7 +918,7 @@ def _wait_for_vnc(container, seconds: int = VNC_BEREIT_SEKUNDEN) -> bool:
     """
     probe = (
         f"for i in $(seq 1 {seconds * 2}); do "
-        "(exec 3<>/dev/tcp/127.0.0.1/6901) 2>/dev/null && exit 0; "
+        f"(exec 3<>/dev/tcp/127.0.0.1/{port}) 2>/dev/null && exit 0; "
         "sleep 0.5; done; exit 1"
     )
     try:
@@ -810,8 +960,12 @@ def _elevate(container) -> None:
     eben kein sudo und merkt das beim ersten Versuch. Ein Container, der gar
     nicht erst hochkommt, waere das schlechtere Ergebnis.
     """
+    # Der Kontoname kommt aus dem Container, nicht aus einer Annahme: In
+    # Kasm-Images heisst 1000 `kasm-user`, in OTAs eigenen `ota`. Ein
+    # festgeschriebener Name schriebe hier eine sudo-Regel fuer jemanden, den
+    # es nicht gibt — und der Administrator merkte es erst beim ersten Versuch.
     script = (
-        "printf '%s\\n' 'kasm-user ALL=(ALL) NOPASSWD:ALL' "
+        "printf '%s ALL=(ALL) NOPASSWD:ALL\\n' \"$(id -un 1000)\" "
         "> /etc/sudoers.d/ota-admin && chmod 0440 /etc/sudoers.d/ota-admin"
     )
     try:
@@ -920,6 +1074,10 @@ class AppStartRequest(BaseModel):
     geometry: str = "1280x720"
     title: str = "OTA"
     send_primary: bool = False
+    # Welche Streaming-Maschine den Bildschirm bedient. Sie entscheidet, ob
+    # ein `Xvnc` aufgemacht wird oder ein `Xvfb` mit eigener Selkies-Instanz —
+    # und ueber den Port, auf dem der Strom liegt.
+    engine: str = "kasmvnc"
 
 
 def _run(container, cmd: list[str]) -> tuple[int, str]:
@@ -939,14 +1097,18 @@ def start_app(cid: str, req: AppStartRequest) -> dict[str, Any]:
     except NotFound:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Container nicht gefunden")
 
-    port = 6900 + req.display
+    # Ein Port je Bildschirm, getrennt nach Maschine. Traefik legt die Routen
+    # dafuer beim Start des Containers auf Vorrat an (siehe _traefik_labels).
+    port = (8080 + req.display) if req.engine == "selkies" else (6900 + req.display)
 
     # Der Teilbaum dieser Anwendung, bevor sie startet — sonst legt sie ihre
     # Voreinstellungen an und der Teilbaum kaeme zu spaet. Er wird nur beim
     # ersten Mal je Zuhause kopiert; die Buchfuehrung steht im Zuhause selbst.
     if req.template_slug:
         try:
-            ergebnis = skeleton_ops.apply_app(container.id, req.template_slug, req.slug)
+            ergebnis = skeleton_ops.apply_app(
+                container.id, req.template_slug, req.slug,
+                heim=_heimat_container(container))
             if ergebnis.get("kopiert"):
                 log.info("Teilbaum von %s ins Zuhause gelegt: %s",
                          req.slug, ", ".join(ergebnis["kopiert"])[:200])
@@ -955,6 +1117,7 @@ def start_app(cid: str, req: AppStartRequest) -> dict[str, Any]:
 
     code, out = _run(container, app_scripts.display_script(
         req.display, port, req.geometry, req.title, req.send_primary,
+        engine=req.engine,
     ))
     if code != 0 or "display-failed" in out:
         raise HTTPException(
@@ -973,12 +1136,15 @@ def start_app(cid: str, req: AppStartRequest) -> dict[str, Any]:
 
 
 @app.delete("/containers/{cid}/apps/{display}", dependencies=[Depends(require_token)])
-def stop_app(cid: str, display: int) -> dict[str, str]:
+def stop_app(cid: str, display: int, engine: str = "kasmvnc") -> dict[str, str]:
     try:
         container = dc().containers.get(cid)
     except NotFound:
         return {"status": "gone"}
-    _run(container, app_scripts.stop_script(display))
+    if engine == "selkies":
+        _run(container, app_scripts.stop_selkies_script(display))
+    else:
+        _run(container, app_scripts.stop_script(display))
     return {"status": "stopped"}
 
 
@@ -1037,6 +1203,9 @@ class BuildRequest(BaseModel):
     apt_packages: list[str] = []
     vscode_extensions: list[str] = []
     setup_script: str = ""
+    # Womit ein Einzelanwendungs-Image seine Anwendung startet. Leer laesst das
+    # Startskript des Basisimages stehen.
+    start_command: str = ""
     # Arbeitsplatz oder Einzelanwendung. Entscheidet, ob das Startskript des
     # Basisimages ueberschrieben wird — siehe builder.render_dockerfile.
     mode: str = "workspace"
@@ -1062,6 +1231,7 @@ def start_build(req: BuildRequest) -> dict[str, Any]:
     return builder.start(
         req.tag, req.base_image, req.apt_packages,
         req.vscode_extensions, req.setup_script, req.pause_containers, req.mode,
+        req.start_command,
     )
 
 
