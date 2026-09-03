@@ -36,7 +36,10 @@ const BASE = process.env.OTA_BASE ?? 'https://192.168.66.224:8443'
 const CDP = process.env.OTA_CDP ?? 'http://127.0.0.1:9223'
 const USER = process.env.OTA_TEST_ADMIN ?? env.OTA_TEST_ADMIN ?? 'notfall'
 const PW = process.env.OTA_TEST_ADMIN_PW ?? env.OTA_TEST_ADMIN_PW
-const SLUG = process.env.OTA_SLUG ?? 'arbeitsplatz-selkies-versuch'
+// Ohne Angabe die erste Selkies-Vorlage, die es gibt. Vorher stand hier der
+// Name einer Vorlage aus dieser einen Anlage — die es inzwischen nicht mehr
+// gibt, und in jeder anderen Anlage nie gab.
+const SLUG = process.env.OTA_SLUG ?? ''
 const WARTE = Number(process.env.OTA_WARTE ?? 60)
 
 const browser = await puppeteer.connect({ browserURL: CDP, defaultViewport: { width: 1440, height: 900 } })
@@ -77,8 +80,14 @@ if (angemeldet) {
 
 const sitzung = await page.evaluate(async (slug) => {
   const vorlagen = await (await fetch('/api/templates', { credentials: 'include' })).json()
-  const v = (Array.isArray(vorlagen) ? vorlagen : vorlagen.items ?? []).find((t) => t.slug === slug)
-  if (!v) return { fehler: `Vorlage ${slug} nicht sichtbar` }
+  const alle = Array.isArray(vorlagen) ? vorlagen : vorlagen.items ?? []
+  const v = slug
+    ? alle.find((t) => t.slug === slug)
+    : alle.find((t) => t.stream_engine === 'selkies' && t.mode === 'workspace' && t.is_enabled)
+  if (!v) {
+    return { fehler: slug ? `Vorlage ${slug} nicht sichtbar`
+                          : 'Keine Selkies-Vorlage vorhanden' }
+  }
   const a = await fetch('/api/sessions', {
     method: 'POST', credentials: 'include',
     headers: { 'content-type': 'application/json' },

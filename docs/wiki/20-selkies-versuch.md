@@ -447,27 +447,102 @@ gezielt nachstellen — er verschwindet mit den beiden Zeilen oben.
    nicht ganz. Aufgefallen ist er erst beim Vergleich der Paketgrössen
    zwischen einer funktionierenden und einer scheiternden Sitzung.
 
+## Was es kostet — gemessen
+
+Lange stand hier eine Vermutung. Am **2026-09-03** ist es gemessen, mit `make messung`: beide Wege
+bei 1280×720, dieselbe Last, derselbe Prüfbrowser hinter demselben TURN, auf dieser Maschine —
+vier Kerne, keine GPU, x264 in Software.
+
+| | Selkies | KasmVNC |
+|---|---|---|
+| CPU im Leerlauf, nur der Strom | **0,34 Kerne** | **0,00** |
+| CPU unter Last, nur der Strom | 0,38 Kerne | 0,41 Kerne |
+| Bandbreite im Leerlauf | 0,24 Mbit/s | 0,00 |
+| Bandbreite unter Last | **0,45 Mbit/s** | **25,4 Mbit/s** |
+| Reaktionszeit von Glas zu Glas, Median | **46 ms** | 120 ms |
+| CPU im Browser des Betrachters, unter Last | 0,18 Kerne | 0,41 Kerne |
+
+*„Nur der Strom" heisst: dieselbe Last einmal ohne und einmal mit Betrachter gemessen und die
+Differenz genommen. Beide Maschinen kodieren erst, wenn jemand zusieht; was die Anwendung selbst
+kostet, kürzt sich damit heraus. Die Last ist ein formatfüllendes Terminal mit 150 Zeilen
+Zufallstext je Sekunde — genug, dass die ganze Fläche sich ändert, und wenig genug, dass nicht das
+Zeichnen die Messung auffrisst.*
+
+Drei Dinge, die man vorher nicht wusste:
+
+**1. Unter Last kostet Selkies nicht mehr — es kostet dasselbe.** 0,38 gegen 0,41 Kerne. Die Sorge,
+H.264 in Software sei der teure Weg, war unbegründet: KasmVNC komprimiert seine Bildausschnitte
+genauso wenig umsonst.
+
+**2. Im Leerlauf kostet Selkies ein Drittel Kern, KasmVNC nichts.** Das ist der eigentliche
+Unterschied, und er dreht die Rechnung um: H.264 kodiert seine 30 Bilder je Sekunde auch dann, wenn
+sich nichts bewegt; VNC überträgt nur Änderungen und schweigt sonst. **Das ist die Zahl, an der die
+Kapazität hängt** — auf vier Kernen sind das rund zehn ruhende Selkies-Sitzungen, während ruhende
+KasmVNC-Sitzungen praktisch nichts kosten.
+
+**3. Bei der Bandbreite liegt Faktor 56 dazwischen.** 0,45 gegen 25,4 Mbit/s. Wer im selben Netz
+sitzt, merkt davon nichts. Über ein VPN merkt er es sofort — und genau dort läuft diese Anlage.
+
+Dazu zwei Beobachtungen am Rand: Selkies' schnellste Antwort lag bei 25 ms und die langsamste bei
+**2051 ms** — ein einzelner Aussetzer unter zwölf Blitzen, vermutlich ein verlorenes Schlüsselbild.
+KasmVNC ist gleichmässiger (74 bis 136 ms), aber nie so schnell. Und der Browser des Betrachters
+arbeitet bei KasmVNC mehr als doppelt so viel: Er setzt viele kleine Bildausschnitte zusammen,
+statt einen Videostrom zu dekodieren, den seine Hardware kennt.
+
+### Die naheliegende Stellschraube hilft nicht
+
+`SELKIES_FRAMERATE` in der Umgebung des Arbeitsplatzes, Vorgabe **30**. Die halbe Bildrate müsste
+die halbe Arbeit sein — das war die Erwartung. Gemessen (derselbe Aufbau, `SELKIES_FRAMERATE=15`):
+
+| bei 1280×720 | 30 Bilder/s | 15 Bilder/s |
+|---|---|---|
+| CPU im Leerlauf | 0,35 Kerne | **0,35 Kerne** |
+| CPU unter Last | 0,46 Kerne | **0,60 Kerne** |
+| Reaktionszeit, Median | 46 ms | **83 ms** |
+
+**Nichts gespart, und alles langsamer.** Im Leerlauf ändert die Bildrate gar nichts, unter Last
+kostet die kleinere sogar mehr — vermutlich, weil in jedem Bild dann doppelt so viel Änderung
+steckt. Die Reaktionszeit folgt brav dem Bildabstand (66 statt 33 ms), das Einstellen hat also
+gewirkt; es hat nur nicht das bewirkt, was es sollte.
+
+Daraus folgt: **Die Grundlast von einem Drittel Kern liegt nicht am Kodieren.** Sie muss aus dem
+Abgreifen des Bildschirms und der Farbumrechnung kommen, und die laufen unabhängig davon, wie oft
+kodiert wird. Wer sie senken will, muss dort ansetzen — nicht an der Bildrate. Nachgemessen ist das
+nicht; es ist die nächste Frage, nicht die Antwort.
+
+### Was daraus folgt
+
+- **Zugriff über VPN oder WAN → Selkies.** Faktor 56 bei der Bandbreite und weniger als die halbe
+  Reaktionszeit; das ist keine Geschmacksfrage.
+- **Viele Sitzungen, die meist ruhen, auf wenigen Kernen → KasmVNC.** Ein Dutzend offener, aber
+  unbenutzter Arbeitsplätze kostet bei Selkies mehrere Kerne und bei KasmVNC nichts. Die Bildrate
+  herunterzudrehen hilft dabei **nicht**, siehe oben — das ist gemessen und war eine Überraschung.
+  Was hilft: den Leerlauf-Aufräumer schärfer stellen, damit ruhende Sitzungen gar nicht erst
+  ruhen.
+- **Images von Kasm → KasmVNC**, weiterhin. Sie bringen kein Selkies mit.
+
+Die Rohdaten liegen in [`docs/messungen/`](../messungen/), der Messstand in
+`scripts/mess-streaming.mjs`. Der Lauf dauert eine Viertelstunde und will eine ruhige Maschine —
+deshalb steht er nicht in `make test`.
+
 ## Wie es weitergeht
 
-Der Versuch beantwortet die Frage „geht es überhaupt". Was er **nicht**
-beantwortet, und was vor einer Entscheidung gemessen gehört:
+Umgestellt wurde, weil der Weg trägt: Er läuft durch Traefik, mit OTAs
+Anmeldung davor, hinter einem VPN mit MTU 1000, mit mehreren Anwendungen
+gleichzeitig, und das Basisimage kommt ohne fremde Streaming-Software aus.
+Die Fragen, die hier lange offen standen — was es kostet, wie schnell es ist,
+ob das Modell trägt — sind beantwortet: die ersten beiden im Abschnitt oben,
+die dritte im Alltag. Es läuft eine Instanz je Anwendung, und der Umschalter
+in der Leiste ist geblieben.
 
-- **Wie viel besser ist es wirklich?** Latenz und Bildqualität nebeneinander,
-  auf denselben Inhalten, im selben Netz.
-- **Was kostet es an CPU?** H.264 in Software (x264) ist nicht umsonst. Auf
-  einer Maschine ohne GPU zahlt das jede Sitzung.
-- **Trägt das Modell „ein Bildschirm" den Alltag** — oder fehlt der
-  Anwendungsumschalter dann doch?
+Offen bleibt eine Frage, und sie stellt sich erst bei vielen Menschen
+gleichzeitig:
+
 - **Wie viele Sitzungen trägt ein TURN?** Eine Verbindung belegt vier
   Relay-Ports, und coturn gibt sie erst nach Ablauf der Lebenszeit frei. Der
   Vorgabebereich von hundert Ports reicht für rund zwanzig gleichzeitige
-  Sitzungen; wer mehr braucht, macht ihn grösser.
-
-Diese drei Fragen sind weiterhin offen — sie entscheiden nicht mehr **ob**,
-sondern **wie gut**. Umgestellt wurde, weil der Weg trägt: Er läuft durch
-Traefik, mit OTAs Anmeldung davor, hinter einem VPN mit MTU 1000, mit mehreren
-Anwendungen gleichzeitig, und das Basisimage kommt ohne fremde Streaming-
-Software aus.
+  Sitzungen; wer mehr braucht, macht ihn grösser. Gemessen ist das nicht —
+  gerechnet.
 
 Wer zurück will, stellt einen Arbeitsplatz in der Oberfläche unter
 **Streaming** auf KasmVNC. Für Images von Kasm ist das ohnehin nötig — die

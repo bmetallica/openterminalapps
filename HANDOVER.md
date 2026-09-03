@@ -215,8 +215,8 @@ aufgeräumt, deren Datenbankzeile noch `running` war, und mit `pkill -f` die eig
 
 ### ⚠️ Bekannte Bugs & Test-Status
 
-* **Testergebnis: `make test` vollständig grün — 424/424.**
-  `216 authz · 18 Zwischenablage · 107 e2e · 42 ldap · 2 Medienweg · 39 Sicherung`,
+* **Testergebnis: `make test` vollständig grün — 434/434** (2026-09-03).
+  `226 authz · 18 Zwischenablage · 107 e2e · 42 ldap · 2 Medienweg · 39 Sicherung`,
   dazu `scripts/build-desktop-image.sh --pruefen` **19/19**.
 * **Die Sicherungsprüfung war nie gefährlich.** Ich hatte sie zwei Tage lang gemieden, weil sie
   „Sitzungen beendet" — sie beendet aber nur die **eigenen**: `/api/sessions` liefert ohne
@@ -224,10 +224,10 @@ aufgeräumt, deren Datenbankzeile noch `running` war, und mit `pkill -f` die eig
   das Profil des Testkontos an. Die Reihe prüft das jetzt ausdrücklich nach. Übertriebene Vorsicht
   hat den weissen Fleck erst erzeugt.
 
-* **Testergebnis:** `scripts/test-authz.sh` **216/216**,
+* **Testergebnis:** `scripts/test-authz.sh` **226/226**,
   `scripts/build-desktop-image.sh --pruefen` **19/19**, `scripts/pruef-selkies.mjs` liefert ein
-  Bild (1252 Einzelbilder, 1440×900), `scripts/pruef-turn.py` grün. **Der vollständige `make test` ist am 2026-09-02 gelaufen: 424/424**
-  (216 authz · 18 Zwischenablage · 107 e2e · 42 ldap · 2 Streaming · 39 Sicherung).
+  Bild, `scripts/pruef-turn.py` grün. **Der vollständige `make test` ist am 2026-09-03 gelaufen: 434/434**
+  (226 authz · 18 Zwischenablage · 107 e2e · 42 ldap · 2 Streaming · 39 Sicherung).
 * **Zwei Fallen beim Prüfen, beide selbst gestellt:** Wer während eines Laufs Dienste neu startet,
   bekommt „Der Container-Dienst ist nicht erreichbar" und 16 Fehlschläge, die keine sind. Und wer
   Session-Container aufräumt, deren Datenbankzeile noch `running` ist, lässt den e2e auf einen
@@ -238,8 +238,7 @@ aufgeräumt, deren Datenbankzeile noch `running` war, und mit `pkill -f` die eig
 * **Vermutete Ursache — und was daraus wurde:** Kein Produktfehler, sondern ein **Testartefakt**. `/api/backups/run` sichert **jede** laufende Sitzung; die Prüfung griff sich „die erste Container-Sicherung". Während des Laufs lief unter demselben Konto zusätzlich meine Selkies-Sitzung, also war es die falsche. Mit zwei Streaming-Maschinen sind zwei Sitzungen je Konto der Normalfall, deshalb wählt die Prüfung die Sicherung jetzt über die Vorlage aus.
   **Nach der Korrektur: `test-backup.sh` → 39/39 grün, auch im vollständigen Lauf.** Erledigt; die Prüfung schont fremde Sitzungen jetzt ausdrücklich. Der erste Schritt unten.
 * **Weitere offene Kleinigkeiten** (Stand 2026-09-03):
-  * `kasmweb/gimp:1.18.0-rolling-daily` (Vorlage `gimp`) liegt nicht lokal — beim Start würde OTA versuchen, es zu holen. **Entschärft**: Die Vorlage ist abgeschaltet, ebenso `signal`. Wer sie einschaltet, braucht zuerst das Image.
-  * Die Vorlage `neuer-arbeitsplatz` zeigt auf eine fremde Registry (`192.168.66.12:5000`, Abbild `websshadmin`) — das Abbild liegt lokal vor, die Vorlage startet also, aber der Verweis ist falsch und die Vorlage sieht nach einem Versehen aus. Ebenso liegen die Versuchsvorlagen `arbeitsplatz-debian-versuch`, `terminal-einzel-app-versuch` und die Doppelung `neuer-arbeitsplatz-619928` noch herum.
+  * Die Vorlage `signal` zeigt auf `kasmweb/signal:1.18.0-rolling-daily`, und dieses Abbild liegt nicht lokal. Sie ist abgeschaltet, also harmlos — wer sie einschaltet, muss es erst holen.
   * Selkies: der Medienweg ist **im Browser bestätigt** (Bild und Zwischenablage, über WireGuard mit MTU 1000, TURN über TCP mit `relay`).
   * `ota/base-desktop:1` trägt rund 70 MB Ballast, den kein Weg benutzt: `libdnnl3.6` (43 MB) und `libflite1` (27 MB) hängen als Abhängigkeiten an GStreamer. Herauszubekommen nur mit `--force-depends`, was das Paketsystem beschädigt zurücklässt — deshalb bewusst drin.
   * Unbestätigte Beobachtung: Selkies scheint den TURN-Server alle 60 Sekunden an der laufenden Strecke auszutauschen. Im Betrieb bisher ohne Wirkung; nie nachgemessen.
@@ -248,10 +247,14 @@ aufgeräumt, deren Datenbankzeile noch `running` war, und mit `pkill -f` die eig
 
 ## 🚀 NÄCHSTE ARBEITSSCHRITTE (BACKLOG FÜR DEN AGENTEN)
 
-1. **Branding** (eigenes Logo/Farben je Anlage) — klein, gut machbar, rein Frontend.
-2. **Selkies nachmessen.** Die Entscheidung für Selkies fiel funktional (Bild, Zwischenablage, Einzelanwendung), nicht auf Zahlen. Was fehlt: Latenz und Bildqualität gegen KasmVNC auf denselben Inhalten im selben Netz, und **CPU-Last je Sitzung** — x264 läuft in Software, die Maschine hat keine GPU. Das ist die Zahl, die entscheidet, wie viele Sitzungen der Rechner trägt.
-3. **Mehrere Hosts (M10)** — braucht eine zweite Maschine. Vom Betreiber auf später gelegt (2026-09-03).
-4. **Aufräumen in den Vorlagen** — siehe „offene Kleinigkeiten" oben: falscher Registry-Verweis, Versuchsvorlagen, eine Doppelung.
+1. **Mehrere Hosts (M10)** — braucht eine zweite Maschine. Vom Betreiber auf später gelegt (2026-09-03).
+
+**Am 2026-09-03 erledigt** (was hier bis dahin als 1, 2 und 4 stand):
+
+* **Branding** ✅ — Name, Akzentfarbe und Zeichen unter **Einstellungen → Marke**; Handbuch [Kapitel 22](docs/wiki/22-marke.md).
+* **Selkies nachgemessen** ✅ — `make messung`, Zahlen in `docs/messungen/` und in [Kapitel 20](docs/wiki/20-selkies-versuch.md). **Der Messstand selbst war der schwierige Teil**, nicht die Messung: Der erste Lauf verglich zwei gesättigte Container (die Last rannte ungebremst), meldete für KasmVNC 0,00 Mbit/s (die Zählung sah nur `eth0`, der Strom lief über die zweite Karte) und mass die Grundlast auf achtfacher Fläche (ohne Betrachter steht Xvfb auf 3840x2160). Alle drei Fehler sind im Skript beschrieben — wer daran etwas ändert, sollte sie kennen.
+* **`make test` war nie vollständig** ✅ behoben — und das war ein echter Befund am Rande: Die Reihe holte ihre Zugangsdaten aus der Umgebung, das Makefile reichte aber nur `OTA_TEST_ADMIN_PW` durch. Ohne `OTA_KEYCLOAK_SECRET` und die Zugangsdaten des Keycloak-Admins übersprang `test-authz.sh` still ihre Keycloak- und Passkey-Abschnitte — rot, aber leicht zu überlesen, und **die vorherigen Läufe waren nur deshalb grün, weil die `.env` von Hand in der Umgebung stand**. `test-authz.sh` liest sie jetzt selbst (bereits gesetzte Werte gewinnen).
+* **Vorlagen aufgeräumt** ✅ — `neuer-arbeitsplatz` (zeigte auf eine fremde Registry) und die Doppelung `neuer-arbeitsplatz-619928` gelöscht, beide ohne je eine Sitzung; die beiden Versuchsvorlagen heissen jetzt nach dem, was sie sind; `gimp` zeigt auf die Marke, die auch lokal liegt. **`signal` bleibt offen**: abgeschaltet, und sein Abbild liegt nicht vor.
 
 **Ausdrücklich nicht anfassen:** Firefox-Erweiterung signieren (vom Nutzer ausgenommen), GPU-Durchreichung (keine GPU vorhanden).
 

@@ -260,6 +260,26 @@ class TemplateIn(BaseModel):
     group_ids: list[uuid.UUID] | None = None
 
 
+class BrandingIn(BaseModel):
+    """Was ein Administrator am Gesicht der Anlage aendern darf.
+
+    Beide Felder sind einzeln optional: Wer nur die Farbe dreht, schickt nur
+    die Farbe, und der Name bleibt stehen.
+    """
+
+    name: str | None = None
+    accent: str | None = None
+
+
+class BrandingOut(BaseModel):
+    name: str
+    accent: str
+    # Der Fingerabdruck steckt im Pfad, damit ein neues Zeichen eine neue
+    # Adresse bekommt und kein Browser das alte weiterzeigt.
+    logo_url: str | None = None
+    has_logo: bool = False
+
+
 class WebAppOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

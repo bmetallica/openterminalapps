@@ -1,5 +1,6 @@
 /** Typisierter Zugriff auf die OTA-API. */
 
+import type { Marke } from './branding'
 import { t } from './i18n'
 
 export type Me = {
@@ -824,6 +825,18 @@ export const api = {
 
   saveSettings: (body: Partial<GlobalSettings>) =>
     call<GlobalSettings>('/admin/settings', { method: 'PUT', body: JSON.stringify(body) }),
+
+  // Das Gesicht der Anlage. Lesen darf jeder — die Anmeldemaske braucht es,
+  // bevor irgendwer angemeldet ist (`lib/branding.ts`).
+  branding: () => call<Marke>('/branding'),
+  saveBranding: (body: { name?: string; accent?: string }) =>
+    call<Marke>('/branding', { method: 'PUT', body: JSON.stringify(body) }),
+  uploadLogo: (datei: File) => {
+    const body = new FormData()
+    body.append('datei', datei, datei.name)
+    return call<Marke>('/branding/logo', { method: 'POST', body })
+  },
+  clearLogo: () => call<Marke>('/branding/logo', { method: 'DELETE' }),
   adminSessions: () => call<AdminSession[]>('/admin/sessions'),
 
   backups: () => call<Backup[]>('/backups'),

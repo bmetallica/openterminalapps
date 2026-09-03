@@ -49,6 +49,14 @@ SECTIONS: dict[str, tuple[str, bool]] = {
     "15": ("Betrieb", True),
     "16": ("Für Administratoren", True),
     "17": ("Für Administratoren", True),
+    # Die Kapitel 18 bis 22 sind nach der ersten Fassung dieser Tabelle
+    # dazugekommen und landeten bis dahin unter „Weiteres" — sichtbar nur fuer
+    # Administratoren, aber in der falschen Rubrik.
+    "18": ("Für Administratoren", True),
+    "19": ("Für Administratoren", True),
+    "20": ("Für Administratoren", True),
+    "21": ("Für Administratoren", True),
+    "22": ("Für Administratoren", True),
 }
 
 SLUG_OK = re.compile(r"^[0-9a-z-]+$")

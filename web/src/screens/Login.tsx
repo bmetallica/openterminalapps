@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { ApiError, api, type Me } from '../lib/api'
+import { useMarke } from '../lib/branding'
 import { setLang, t, useLang, type Lang } from '../lib/i18n'
 import { setTheme, useTheme, type Theme } from '../lib/theme'
 
@@ -12,6 +13,7 @@ export function Login({ onDone, notfall = false, fehler }: {
 }) {
   const lang = useLang()
   const gewand = useTheme()
+  const marke = useMarke()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [totp, setTotp] = useState('')
@@ -41,7 +43,8 @@ export function Login({ onDone, notfall = false, fehler }: {
         {/* Der einzige Bildschirm, auf dem sich die Anwendung vorstellt,
             statt benutzt zu werden — hier darf die Marke Farbe haben. Der
             Schriftzug steckt im Bild, deshalb keine zweite Überschrift. */}
-        <img className="login__logo" src="/logo.svg" alt="OpenTerminalApps" />
+        <img className={`login__logo${marke.logo_url ? ' login__logo--eigen' : ''}`}
+          src={marke.logo_url ?? '/logo.svg'} alt={marke.name} />
         <p className="sub" style={{ marginBottom: notfall ? 12 : 22 }}>
           {notfall
             ? t('Notzugang mit lokalem Konto. Er umgeht die zentrale Anmeldung und wird protokolliert.')

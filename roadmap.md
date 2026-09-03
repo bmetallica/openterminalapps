@@ -742,8 +742,17 @@ sondern daraus, dass jemand es benutzt hat:
       liest denselben `localStorage`. Dort stand der Schriftzug im hellen Gewand weiss auf weiss —
       PatternFly setzt ihn mit `!important`; behoben über die Variable, mit der diese Regel
       rechnet, nicht mit einem Gegen-`!important`
-- [ ] Branding und GPU-Durchreichung. Die Durchreichung lässt sich hier nicht ehrlich bauen —
-      die Maschine hat eine QEMU-Standard-VGA, keine GPU
+- [x] **Branding** (2026-09-03) — Name, Akzentfarbe und Zeichen der Anlage, umstellbar unter
+      **Einstellungen → Marke**. Drei Dinge und keins mehr: wie die Anlage heisst, welche Farbe
+      heraussticht, welches Zeichen oben steht. Ein Farbwähler für Flächen, Text und Rahmen wäre
+      der nächste naheliegende Schritt gewesen und hätte vor allem unlesbare Anlagen erzeugt.
+      Das Zeichen liegt in der Datenbank und ist damit ohne Zutun mitgesichert; die Farbe geht
+      über eine Zwischenstufe im Stylesheet (`--brand-accent`), damit beide Gewänder auf einmal
+      folgen. **Die Anmeldemaske von Keycloak nimmt die Farbe mit** — über denselben
+      `localStorage`-Weg wie das Gewand, also ohne Anfrage und ohne Aufblitzen; beim allerersten
+      Besuch steht dort noch die Vorgabe. Handbuch [Kapitel 22](docs/wiki/22-marke.md)
+- [ ] GPU-Durchreichung. Lässt sich hier nicht ehrlich bauen — die Maschine hat eine
+      QEMU-Standard-VGA, keine GPU
 
 ---
 
@@ -816,6 +825,26 @@ Seither ist der Weg zweimal weitergegangen. `ota/base-desktop` ist der Nachfolge
 XFCE, Selkies, ohne KasmVNC**, Konto `ota` unter `/home/ota`, GStreamer 1.26 aus der Distribution
 statt aus dem Bündel. Und die Betriebsart **„Einzelne App"** überträgt jetzt wirklich nur die
 Anwendung — nur ein Fenstermanager, formatfüllend, mit einem Startbefehl aus dem Bildbauer.
+
+**Und seit 2026-09-03 ist der Weg vermessen** (`make messung`, Zahlen in `docs/messungen/`, Auswertung
+in [Kapitel 20](docs/wiki/20-selkies-versuch.md#was-es-kostet--gemessen)). Das Ergebnis dreht die
+Erwartung um: Unter Last kostet Selkies **nicht mehr** als KasmVNC (0,38 gegen 0,41 Kerne) — die
+Sorge um x264 in Software war unbegründet. Der Unterschied liegt woanders, an zwei Stellen. Im
+**Leerlauf** kostet Selkies 0,34 Kerne und KasmVNC nichts, denn H.264 kodiert seine 30 Bilder je
+Sekunde auch für ein stehendes Bild; das ist die Zahl, an der die Kapazität hängt. **Die
+naheliegende Stellschraube dagegen hilft nicht**: Mit `SELKIES_FRAMERATE=15` blieb die Grundlast
+bei 0,35 Kernen, unter Last stieg sie sogar auf 0,60, und die Reaktionszeit verdoppelte sich —
+die Grundlast liegt also nicht am Kodieren, sondern am Abgreifen des Bildschirms. Und bei der
+**Bandbreite** liegt Faktor 56
+dazwischen (0,45 gegen 25,4 Mbit/s) — im selben Netz belanglos, über ein VPN entscheidend. Die
+Reaktionszeit von Glas zu Glas: 46 gegen 120 Millisekunden im Mittel.
+
+Der Messstand war dabei der schwierigere Teil. Drei Fehler steckten im ersten Lauf, jeder für sich
+genug, um die Zahlen wertlos zu machen: Die Last rannte ungebremst und trieb **beide** Container an
+ihre Kerngrenze, sodass die Differenz — das eigentlich Gesuchte — null war. Die Bandbreitenzählung
+sah nur `eth0`, während der Strom über die zweite Netzkarte lief (gemeldet: 0,00 Mbit/s). Und die
+Grundlast wurde ohne Betrachter gemessen, wo Xvfb noch auf 3840×2160 steht — also auf achtfacher
+Fläche. Alle drei stehen als Warnung im Skript.
 
 Zwei Prüfwerkzeuge sind dabei entstanden, die dem Weg vorher fehlten: `scripts/pruef-turn.py`
 schickt ein Paket durch den TURN und vergleicht Absender mit Relay-Adresse, und

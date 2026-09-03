@@ -25,6 +25,7 @@ from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session as DbSession
 
+from .. import settings_store
 from ..db import get_db
 from ..models import Template, TemplateApp
 
@@ -41,12 +42,16 @@ BONE = "#EADFCB"
 
 def _lookup(db: DbSession, template: str, app: str | None) -> tuple[str, str]:
     """Name und Symbol fuer die Verknuepfung."""
+    # Der Rueckfall traegt den Namen der Anlage, nicht den des Projekts: Wer
+    # OTA umbenannt hat, will auf seinem Desktop nicht doch wieder „Open-
+    # TerminalApps" stehen haben.
+    anlage = settings_store.get(db, settings_store.BRAND_NAME)
     if not SLUG.match(template):
-        return "OpenTerminalApps", "▣"
+        return anlage, "▣"
 
     tpl = db.scalar(select(Template).where(Template.slug == template))
     if tpl is None:
-        return "OpenTerminalApps", "▣"
+        return anlage, "▣"
 
     if app and SLUG.match(app):
         entry = db.scalar(
@@ -79,7 +84,7 @@ def manifest(
         # zwei Symbole fuer dasselbe. Deshalb steht sie ausdruecklich da und
         # aendert sich nie.
         "id": f"ota-{template}" + (f"-{app}" if app else ""),
-        "name": f"{name} · OTA",
+        "name": f"{name} · {settings_store.get(db, settings_store.BRAND_NAME)}",
         "short_name": name[:12],
         "start_url": start,
         # Der Geltungsbereich ist mit Absicht die ganze Anwendung und nicht nur

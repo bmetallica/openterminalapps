@@ -12,6 +12,21 @@ CA="$ROOT/deploy/certs/ota-ca.crt"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
+# Die Zugangsdaten stehen in `deploy/.env` — hier gelesen und nicht von aussen
+# erwartet. Vorher hing das am `export` im Makefile, und dort standen nur
+# manche: Ohne `OTA_KEYCLOAK_SECRET` und die Zugangsdaten des Keycloak-Admins
+# uebersprang diese Reihe still ihre Keycloak- und Passkey-Abschnitte (rot,
+# aber leicht zu ueberlesen). Wer die Reihe von Hand aufruft, hatte dasselbe
+# Problem. Bereits gesetzte Werte gewinnen, damit sich ein Lauf gegen eine
+# andere Anlage weiterhin ueber die Umgebung steuern laesst.
+if [ -f "$ROOT/deploy/.env" ]; then
+  while IFS= read -r zeile; do
+    case "$zeile" in ''|'#'*) continue;; *=*) ;; *) continue;; esac
+    name="${zeile%%=*}"
+    [ -n "${!name:-}" ] || export "$name=${zeile#*=}"
+  done < "$ROOT/deploy/.env"
+fi
+
 ADMIN_USER="${OTA_TEST_ADMIN:-notfall}"
 ADMIN_PW="${OTA_TEST_ADMIN_PW:?OTA_TEST_ADMIN_PW fehlt. Trag es in deploy/.env ein.}"
 TEST_USER="ota-testnutzer"
@@ -2098,6 +2113,66 @@ curl -s --cacert "$CA" -b "$TMP/user.jar" -X DELETE "$BASE/api/auth/totp" \
 STATE=$(curl -s --cacert "$CA" -b "$TMP/user.jar" "$BASE/api/auth/me" | jqp "d.get('totp_enabled')")
 [ "$STATE" = "False" ] && ok "Abschalten mit Passwort und Code gelingt" \
                        || bad "Zweiter Faktor blieb an"
+
+# --------------------------------------------------------------------------
+# Die Marke
+#
+# Zwei Fragen, und nur die beiden: Kommt jeder an das Gesicht der Anlage heran
+# — die Anmeldemaske braucht es, bevor irgendwer angemeldet ist — und kann
+# trotzdem nur ein Verwalter es aendern?
+echo
+echo "Marke"
+
+expect "200" "$(code /dev/null "$BASE/api/branding")" \
+  "Die Marke ist ohne Anmeldung lesbar"
+
+VORHER=$(api "$TMP/admin.jar" "$BASE/api/branding" | jqp "d['name']")
+
+expect "403" "$(code "$TMP/user.jar" -X PUT "$BASE/api/branding" \
+  -H 'Content-Type: application/json' -d '{"name":"Gekapert"}')" \
+  "Ein Nutzer darf die Anlage nicht umbenennen"
+expect "403" "$(code "$TMP/user.jar" -X DELETE "$BASE/api/branding/logo")" \
+  "Ein Nutzer darf das Zeichen nicht entfernen"
+
+NACHHER=$(api "$TMP/admin.jar" "$BASE/api/branding" | jqp "d['name']")
+[ "$NACHHER" = "$VORHER" ] && ok "Der Name steht unveraendert ($NACHHER)" \
+                           || bad "Der Name wurde geaendert: $VORHER -> $NACHHER"
+
+# Keine Farbe, die keine ist. Geprueft wird auf dem Server und nicht im
+# Formular — eine Pruefung, die nur im Browser stattfindet, ist keine.
+expect "400" "$(code "$TMP/admin.jar" -X PUT "$BASE/api/branding" \
+  -H 'Content-Type: application/json' -d '{"accent":"knallrot"}')" \
+  "„knallrot“ ist keine Farbe"
+expect "400" "$(code "$TMP/admin.jar" -X PUT "$BASE/api/branding" \
+  -H 'Content-Type: application/json' -d '{"name":"   "}')" \
+  "Ein leerer Name wird abgelehnt"
+
+# Ein Zeichen darf zeichnen und sonst nichts. Geprueft wird beim Hochladen und
+# nicht ueber einen Kopf an der Antwort: Traefik setzt die Content-Security-
+# Policy fuer alle Antworten und ueberschreibt jede eigene (gemessen).
+printf '%s' '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>' \
+  > "$TMP/boese.svg"
+ANTWORT=$(api "$TMP/admin.jar" -X POST "$BASE/api/branding/logo" -F "datei=@$TMP/boese.svg")
+grep -q "nur zeichnen" <<<"$ANTWORT" \
+  && ok "Ein SVG mit Skript wird abgelehnt" \
+  || bad "Ein SVG mit Skript kam durch: $ANTWORT"
+
+printf '%s' '<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"><rect/></svg>' \
+  > "$TMP/boese2.svg"
+ANTWORT=$(api "$TMP/admin.jar" -X POST "$BASE/api/branding/logo" -F "datei=@$TMP/boese2.svg")
+grep -q "Ereignisbehandler" <<<"$ANTWORT" \
+  && ok "Ein SVG mit Ereignisbehandler wird abgelehnt" \
+  || bad "Ein SVG mit onload kam durch: $ANTWORT"
+
+# Und der Rundlauf: aendern, nachlesen, zuruecksetzen.
+api "$TMP/admin.jar" -X PUT "$BASE/api/branding" -H 'Content-Type: application/json' \
+  -d '{"name":"Pruefanlage","accent":"#AA3366"}' >/dev/null
+GEAENDERT=$(api "$TMP/admin.jar" "$BASE/api/branding" | jqp "d['name'] + ' ' + d['accent']")
+expect "Pruefanlage #AA3366" "$GEAENDERT" "Ein Verwalter darf beides setzen"
+api "$TMP/admin.jar" -X PUT "$BASE/api/branding" -H 'Content-Type: application/json' \
+  -d "{\"name\":\"$VORHER\",\"accent\":\"#06B6D4\"}" >/dev/null
+expect "$VORHER" "$(api "$TMP/admin.jar" "$BASE/api/branding" | jqp "d['name']")" \
+  "Und wieder zurueck"
 
 echo
 echo "─────────────────────────────────────"

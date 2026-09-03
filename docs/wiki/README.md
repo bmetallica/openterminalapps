@@ -38,6 +38,7 @@ heute schon funktioniert.
 19. [Das eigene Basisimage](19-eigenes-basisimage.md)
 20. [Selkies — der Streaming-Weg](20-selkies-versuch.md)
 21. [Betrieb hinter einem Firmenproxy](21-firmenproxy.md)
+22. [Die eigene Marke — Name, Farbe, Zeichen](22-marke.md)
 9. [Kasm-Images und Registries einbinden](09-kasm-images-und-registries.md)
 16. [Images verwalten](16-images-verwalten.md)
 17. [Ablagen und Startskript](17-ablage-und-startskript.md)

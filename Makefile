@@ -21,6 +21,8 @@ help:
 	@echo "  make admin     Ersten Administrator anlegen (NAME=... setzen)"
 	@echo "  make test      Alle Prüfreihen (Rechte, Zwischenablage, Oberfläche,"
 	@echo "                 Verzeichnis, Medienweg, Sicherung)"
+	@echo "  make messung   Die beiden Streaming-Maschinen vergleichen (~12 min,"
+	@echo "                 braucht eine ruhige Maschine)"
 	@echo "  make backup    Datenbank und Profile von Hand sichern"
 	@echo "  make cert      Serverzertifikat erneuern (CA bleibt)"
 	@echo
@@ -125,6 +127,11 @@ cert:
 # ergibt statt eines Make-Fehlers.
 -include deploy/.env
 export OTA_TEST_ADMIN_PW
+# Und das Geheimnis des Dienstkontos: Ohne das ueberspringt die Rechtepruefung
+# ihre Keycloak- und Passkey-Abschnitte — und zwar rot, nicht still. Es stand
+# lange nicht hier, und ein `make test` war deshalb nur dann vollstaendig, wenn
+# jemand die .env vorher von Hand in seine Umgebung geladen hatte.
+export OTA_KEYCLOAK_SECRET
 
 test:
 	@./scripts/test-authz.sh
@@ -150,6 +157,14 @@ test:
 	@# liefert ohne `all_users` ausschliesslich die des anfragenden Kontos,
 	@# und die Reihe prueft das ausdruecklich nach.
 	@./scripts/test-backup.sh
+
+.PHONY: messung
+# Was eine Sitzung kostet: CPU, Reaktionszeit, Bandbreite — Selkies gegen
+# KasmVNC unter derselben Last. Keine Prüfreihe, deshalb nicht in `make test`:
+# Der Lauf dauert eine Viertelstunde und misst Unsinn, wenn nebenher etwas
+# anderes läuft. Ergebnisse landen in `docs/messungen/`.
+messung:
+	@./scripts/mess-streaming.sh $(SELKIES) $(KASMVNC)
 
 .PHONY: sbom
 # Stückliste je Image — nötig, sobald ein Image das Haus verlässt.

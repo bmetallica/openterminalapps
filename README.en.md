@@ -15,7 +15,7 @@ key, the same clipboard.
 Alongside that, single applications can run as throwaway containers, and existing Kasm images and
 whole registries can be attached — as an addition, not as the foundation.
 
-> **Status:** running and in use. 251 automated checks, 76 of them in a real browser. What is still
+> **Status:** running and in use. 434 automated checks, 107 of them in a real browser. What is still
 > missing is listed openly in [roadmap.md](roadmap.md) — nothing there is dressed up.
 >
 > The documentation is written in German. This file is the exception.
@@ -186,7 +186,7 @@ were.
 make test
 ```
 
-**251 checks in five suites**, each one setting up its own preconditions:
+**434 checks in six suites**, each one setting up its own preconditions:
 
 | Suite | Checks |
 |---|---|
@@ -194,7 +194,8 @@ make test
 | `test-clipboard-bridge.sh` | Copying between two applications in one workspace: both directions, umlauts, an image, a megabyte, after a pause, and switched off |
 | `tests/e2e.mjs` | The interface in a real browser — down to whether the stream actually connects |
 | `test-ldap.sh` | Directory sign-in against a real OpenLDAP in a container — above all that a local account stays untouchable and an outage does not take it down |
-| `test-backup.sh` | Backup and restore of profile, container and database |
+| `test-streaming.sh` | The media path: does the TURN server actually relay, and does a picture arrive in the browser? The probe browser runs in a network from which the session container is **not** directly reachable — like a workstation on a corporate network |
+| `test-backup.sh` | Backup and restore of profile, container and database. It stops sessions to do so — **only its own**, and it checks that explicitly |
 
 The test credentials live in `deploy/.env` as `OTA_TEST_ADMIN_PW`, not in the source.
 

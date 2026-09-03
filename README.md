@@ -15,7 +15,7 @@ Projekte, denselben SSH-Schlüssel, dieselbe Zwischenablage.
 Daneben lassen sich einzelne Anwendungen als Wegwerf-Container starten und vorhandene Kasm-Images
 sowie ganze Registries einbinden — als Zusatz, nicht als Fundament.
 
-> **Stand:** läuft und wird benutzt. 251 automatische Prüfungen, davon 76 in einem echten Browser.
+> **Stand:** läuft und wird benutzt. 434 automatische Prüfungen, davon 107 in einem echten Browser.
 > Was noch fehlt, steht offen in [roadmap.md](roadmap.md) — nichts davon ist beschönigt.
 
 ---
@@ -284,7 +284,7 @@ aussahen, als sie waren.
 make test
 ```
 
-**424 Prüfungen in sechs Suiten**, jede stellt ihren Vorzustand selbst her:
+**434 Prüfungen in sechs Suiten**, jede stellt ihren Vorzustand selbst her:
 
 | Suite | Prüft |
 |---|---|
@@ -295,7 +295,13 @@ make test
 | `test-streaming.sh` | Der Medienweg: Vermittelt der TURN-Server wirklich, und kommt im Browser ein Bild an? Der Prüfbrowser läuft in einem Netz, aus dem der Session-Container **nicht** direkt erreichbar ist — wie ein Arbeitsplatz im Firmennetz |
 | `test-backup.sh` | Sicherung und Wiederherstellung von Profil, Container und Datenbank. Beendet dafür Sitzungen — **nur die eigenen**, und prüft das ausdrücklich nach |
 
-Die Zugangsdaten der Prüfung stehen in `deploy/.env` als `OTA_TEST_ADMIN_PW`, nicht im Quelltext.
+Die Zugangsdaten der Prüfung stehen in `deploy/.env` und nicht im Quelltext; die Reihen lesen sie
+von dort selbst, ein `make` davor ist also nicht nötig.
+
+Daneben steht `make messung` — **keine Prüfung, sondern eine Messung**: Sie vergleicht die beiden
+Streaming-Wege unter derselben Last und sagt, was eine Sitzung an CPU, Bandbreite und Reaktionszeit
+kostet. Sie dauert eine Viertelstunde und braucht eine ruhige Maschine, deshalb läuft sie nicht bei
+`make test` mit. Ergebnisse und Auswertung: [Kapitel 20](docs/wiki/20-selkies-versuch.md#was-es-kostet--gemessen).
 
 Ein voller Lauf dauert **rund eine halbe Stunde**: Er startet Container, friert ein Image ein und
 misst im Browser nach. Jede Suite lässt sich einzeln starten (`bash scripts/test-authz.sh`).

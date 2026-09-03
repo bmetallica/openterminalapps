@@ -12,7 +12,7 @@
 
 export const EN: Record<string, string> = {
   // ---------------------------------------------------------------- Rahmen
-  'OpenTerminalApps startet…': 'Starting OpenTerminalApps…',
+  '{name} startet…': 'Starting {name}…',
   'Willkommen, {name}': 'Welcome, {name}',
   'Hauptnavigation': 'Main navigation',
   'Abmelden ({name})': 'Sign out ({name})',
@@ -1163,4 +1163,25 @@ export const EN: Record<string, string> = {
   'Wird neu verbunden — Versuch {n}.': 'Reconnecting — attempt {n}.',
   'Sofort versuchen': 'Try now',
   'Deine Dateien sind davon nicht betroffen — sie liegen im Profil, nicht in der Sitzung.': 'Your files are unaffected — they live in the profile, not in the session.',
+
+  // Marke — das Gesicht der Anlage
+  'Marke': 'Brand',
+  'Name der Anlage': 'Name of this installation',
+  'Steht im Reiter des Browsers, auf der Anmeldemaske und in der Verknüpfung auf dem Desktop.': 'Shown in the browser tab, on the sign-in screen and in the desktop shortcut.',
+  'Die Anlage heisst jetzt {name}': 'The installation is now called {name}',
+  'Akzentfarbe': 'Accent colour',
+  'Die eine Farbe, die aus der Fläche heraussticht: aktive Schaltflächen, Regler, Markierungen. Für das helle Gewand wird sie automatisch abgedunkelt.': 'The one colour that stands out: active controls, faders, highlights. It is darkened automatically for the light theme.',
+  'Akzentfarbe gesetzt': 'Accent colour set',
+  'Akzentfarbe zurückgesetzt': 'Accent colour reset',
+  'Zeichen': 'Logo',
+  'SVG, PNG, WebP oder JPEG, höchstens 512 KB. Ein quadratisches Zeichen passt am besten — es steht auch klein in der Leiste und im Reiter des Browsers.': 'SVG, PNG, WebP or JPEG, 512 KB at most. A square logo works best — it also appears small in the rail and in the browser tab.',
+  'Zeichen hochladen': 'Upload logo',
+  'Anderes Zeichen': 'Replace logo',
+  'Zeichen übernommen': 'Logo saved',
+  'Zeichen entfernt': 'Logo removed',
+  'Zurücksetzen': 'Reset',
+  'Ein Name zwischen 1 und 48 Zeichen, bitte.': 'A name between 1 and 48 characters, please.',
+  'Als Zeichen gehen SVG, PNG, WebP und JPEG.': 'Logos may be SVG, PNG, WebP or JPEG.',
+  'Kein eigenes Zeichen hinterlegt.': 'No logo has been set.',
+  'Die Datei ist leer.': 'The file is empty.',
 }

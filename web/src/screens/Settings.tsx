@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { CapacityFader, Field } from '../components/controls'
 import { ApiError, api, type GlobalSettings } from '../lib/api'
+import { VORGABE, setzeMarke, useMarke } from '../lib/branding'
 import { idleLabel } from '../lib/format'
 import { Directory } from './Directory'
 import { t, useLang } from '../lib/i18n'
@@ -123,12 +124,124 @@ export function Settings({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad'
       </div>
 
       <div className="section__head" style={{ marginTop: 30 }}>
+        <span className="silk">{t('Marke')}</span><span className="section__rule" />
+      </div>
+      <div style={{ maxWidth: 620 }}>
+        <MarkeAendern onToast={onToast} />
+      </div>
+
+      <div className="section__head" style={{ marginTop: 30 }}>
         <span className="silk">{t('Verzeichnis (LDAP / Active Directory)')}</span>
         <span className="section__rule" />
       </div>
       <div style={{ maxWidth: 620 }}>
         <Directory onToast={onToast} />
       </div>
+    </div>
+  )
+}
+
+/**
+ * Name, Farbe und Zeichen der Anlage.
+ *
+ * Bewusst der letzte Abschnitt und bewusst klein gehalten: Das hier ist kein
+ * Baukasten für Gestaltung. Drei Dinge entscheiden, ob sich eine Anlage nach
+ * „unser Werkzeug" anfühlt — wie sie heisst, welche Farbe sie hat und welches
+ * Zeichen oben steht. Alles darüber hinaus wäre ein zweites Stylesheet mit
+ * einer Oberfläche davor.
+ *
+ * Der Name wird beim Verlassen des Feldes gespeichert, die Farbe beim
+ * Loslassen des Wählers. Ein „Speichern"-Knopf für zwei Felder wäre eine
+ * Schaltfläche, die nur daran erinnert, dass man sie noch drücken muss.
+ */
+function MarkeAendern({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad') => void }) {
+  const marke = useMarke()
+  const [busy, setBusy] = useState(false)
+  const [name, setName] = useState(marke.name)
+  const dateiwahl = useRef<HTMLInputElement>(null)
+
+  async function tun(was: () => Promise<typeof marke>, note: string) {
+    setBusy(true)
+    try {
+      setzeMarke(await was())
+      onToast(note)
+    } catch (err) {
+      onToast(err instanceof ApiError ? err.message : t('Speichern fehlgeschlagen'), 'bad')
+      setName(marke.name)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="panel" style={{ padding: '18px 20px' }}>
+      <Field
+        label={t('Name der Anlage')}
+        hint={t('Steht im Reiter des Browsers, auf der Anmeldemaske und in der Verknüpfung auf dem Desktop.')}>
+        <input type="text" maxLength={48} value={name} disabled={busy}
+          aria-label={t('Name der Anlage')}
+          onChange={(e) => setName(e.target.value)}
+          onBlur={() => {
+            const neu = name.trim()
+            if (!neu || neu === marke.name) { setName(marke.name); return }
+            void tun(() => api.saveBranding({ name: neu }),
+              t('Die Anlage heisst jetzt {name}', { name: neu }))
+          }} />
+      </Field>
+
+      <Field
+        label={t('Akzentfarbe')}
+        hint={t('Die eine Farbe, die aus der Fläche heraussticht: aktive Schaltflächen, Regler, Markierungen. Für das helle Gewand wird sie automatisch abgedunkelt.')}>
+        <div className="viewer__row">
+          <input type="color" value={marke.accent} disabled={busy}
+            aria-label={t('Akzentfarbe')}
+            style={{ width: 52, height: 34, padding: 2 }}
+            onChange={(e) => void tun(
+              () => api.saveBranding({ accent: e.target.value }),
+              t('Akzentfarbe gesetzt'))} />
+          <span className="data">{marke.accent}</span>
+          {marke.accent.toUpperCase() !== VORGABE.accent && (
+            <button className="btn btn--sm btn--ghost" disabled={busy}
+              onClick={() => void tun(
+                () => api.saveBranding({ accent: VORGABE.accent }),
+                t('Akzentfarbe zurückgesetzt'))}>
+              {t('Zurücksetzen')}
+            </button>
+          )}
+        </div>
+      </Field>
+
+      <Field
+        label={t('Zeichen')}
+        hint={t('SVG, PNG, WebP oder JPEG, höchstens 512 KB. Ein quadratisches Zeichen passt am besten — es steht auch klein in der Leiste und im Reiter des Browsers.')}>
+        <div className="viewer__row">
+          {marke.logo_url && (
+            <img src={marke.logo_url} alt=""
+              style={{ width: 44, height: 44, objectFit: 'contain' }} />
+          )}
+          <button className="btn btn--sm" disabled={busy}
+            onClick={() => dateiwahl.current?.click()}>
+            {marke.has_logo ? t('Anderes Zeichen') : t('Zeichen hochladen')}
+          </button>
+          {marke.has_logo && (
+            <button className="btn btn--sm btn--ghost" disabled={busy}
+              onClick={() => void tun(() => api.clearLogo(), t('Zeichen entfernt'))}>
+              {t('Entfernen')}
+            </button>
+          )}
+          <input ref={dateiwahl} type="file" hidden
+            accept="image/svg+xml,image/png,image/webp,image/jpeg"
+            aria-label={t('Zeichen hochladen')}
+            onChange={(e) => {
+              const datei = e.target.files?.[0]
+              // Das Feld zurücksetzen, sonst löst dieselbe Datei beim zweiten
+              // Mal kein `change` mehr aus — und es sieht aus, als täte der
+              // Knopf nichts.
+              e.target.value = ''
+              if (datei) void tun(() => api.uploadLogo(datei), t('Zeichen übernommen'))
+            }} />
+        </div>
+      </Field>
     </div>
   )
 }

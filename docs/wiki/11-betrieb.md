@@ -40,6 +40,13 @@ docker compose down                # Alles stoppen (Sessions laufen weiter!)
 > zu den Session-Containern; die Anwendung ist am Datenstrom nicht beteiligt. Das ist ein bewusster
 > Vorteil des Aufbaus und macht Updates im laufenden Betrieb unkritisch.
 
+## Was unter „Einstellungen" steht ✅
+
+Vier Dinge gelten für die ganze Anlage und nicht für eine Sitzung: die **Anmeldefrist** und der
+**Platz** (beide unten in diesem Kapitel), das **Verzeichnis**
+([Kapitel 8](08-nutzer-und-gruppen.md)) und die **Marke** — Name, Farbe und Zeichen der Anlage,
+[Kapitel 22](22-marke.md). Alles davon braucht das Recht `settings.manage`.
+
 ## Anmeldefrist ✅
 
 **Verwaltung → Einstellungen → Abmelden nach Untätigkeit.**

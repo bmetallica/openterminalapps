@@ -30,8 +30,11 @@
   /* Marke — das Cyan aus „Apps" im Schriftzug und aus dem Bildschirmrahmen
      des Symbols. Es tritt nur dort auf, wo es Zugehörigkeit oder Fokus
      anzeigt: Signet, Fokusring, Verweise, aktive Auswahl. Nie als Fläche. */
-  --accent:    #06B6D4;
-  --accent-dim:#0891B2;
+  /* Über eine Zwischenstufe, damit eine hinterlegte Marke sie übersteuern
+     kann, ohne dass hier etwas doppelt steht (`web/src/lib/branding.ts`).
+     Ohne Marke greift die Vorgabe dahinter — diese hier. */
+  --accent:    var(--brand-accent, #06B6D4);
+  --accent-dim:var(--brand-accent-dim, #0891B2);
 
   /* Zustände — die einzigen gesättigten Farben im Layout.
      Alle vier stehen so im Logo: als LEDs in der Fensterleiste und am Rack. */
@@ -106,8 +109,8 @@
   --key-bright:#334155;
   --key-shade: #0F172A;
 
-  --accent:    #0E7490;
-  --accent-dim:#155E75;
+  --accent:    var(--brand-accent-hell, #0E7490);
+  --accent-dim:var(--brand-accent-hell-dim, #155E75);
 
   --live:      #047857;
   --paused:    #1D4ED8;
@@ -211,6 +214,10 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .rail__mark {
   width: 38px; height: 38px; border-radius: 9px;
   display: block; margin-bottom: 14px;
+  /* Für ein hinterlegtes Zeichen: Was nicht quadratisch ist, wird kleiner —
+     aber nicht verzerrt. Ein gestauchtes Firmenlogo ist schlimmer als ein
+     kleines. */
+  object-fit: contain;
 }
 
 .rail__btn {
@@ -892,7 +899,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
   height: 100%; display: grid; place-items: center; align-content: center;
   gap: 16px; background: var(--ground);
 }
-.boot__mark { width: 56px; height: 56px; border-radius: 13px; }
+.boot__mark { width: 56px; height: 56px; border-radius: 13px; object-fit: contain; }
 
 .login {
   min-height: 100%; display: grid; place-items: center;
@@ -908,6 +915,14 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .login__logo {
   display: block; width: calc(100% + 56px); margin: -30px -28px 20px;
   border-radius: var(--r-panel) var(--r-panel) 0 0;
+}
+
+/* Ein hinterlegtes Zeichen randlos über die Karte zu ziehen, ginge nur gut,
+   wenn es genau dieses Seitenverhältnis hätte. Deshalb steht es hier ruhig in
+   der Karte: begrenzt, mittig, mit Luft. */
+.login__logo--eigen {
+  width: auto; max-width: 100%; max-height: 84px;
+  margin: 0 auto 20px; border-radius: 0; object-fit: contain;
 }
 
 .login__error {

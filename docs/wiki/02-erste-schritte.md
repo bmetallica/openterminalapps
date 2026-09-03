@@ -91,6 +91,7 @@ Der Nutzer landet in den Gruppen `admins` und `users`.
 | LDAP/AD | ✅ (über Keycloak) |
 | Netzlaufwerke, Kerberos | gestrichen — siehe [Kapitel 8](08-nutzer-und-gruppen.md#netzlaufwerke-im-arbeitsplatz--gestrichen) |
 | Kasm-Registries einbinden | ✅ |
+| Eigene Marke (Name, Farbe, Zeichen) | ✅ |
 
 Prüfen, ob alles läuft:
 

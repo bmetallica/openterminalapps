@@ -52,11 +52,26 @@ APP_ORIGINS = "apps.allowed_origins"
 # Notausgang wuerden viele (auth-roadmap.md §5.2).
 BREAKGLASS = "auth.breakglass"
 
+# Das Gesicht der Anlage: Name, Akzentfarbe, Zeichen. Es steht hier und nicht
+# in der Umgebung, weil ein Administrator es im Betrieb aendern koennen soll —
+# eine Marke waehlt niemand einmal beim Aufstellen und nie wieder. Das Zeichen
+# liegt als Base64 in derselben JSONB-Spalte; die Begruendung dafuer steht in
+# `routers/branding.py`.
+BRAND_NAME = "brand.name"
+BRAND_ACCENT = "brand.accent"
+BRAND_LOGO = "brand.logo"
+
 DEFAULTS: dict[str, Any] = {
     # Acht Stunden: ein Arbeitstag. Wer morgens kommt, meldet sich einmal an.
     AUTH_IDLE_MINUTES: 480,
     PROFILE_QUOTA_GB: 20,
     DISK_FLOOR_GB: 5,
+    BRAND_NAME: "OpenTerminalApps",
+    # Dieselbe Zahl wie `--accent` in `web/src/styles/app.css`. Sie steht
+    # zweimal, weil die Oberflaeche eine Farbe braucht, bevor sie den Server
+    # gefragt hat — und beim Zuruecksetzen soll genau diese herauskommen.
+    BRAND_ACCENT: "#06B6D4",
+    BRAND_LOGO: None,
 }
 
 _cache: dict[str, tuple[float, Any]] = {}

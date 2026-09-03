@@ -10,6 +10,7 @@ import { Settings } from './screens/Settings'
 import { Images } from './screens/Images'
 import { Storage } from './screens/Storage'
 import { Account } from './screens/Account'
+import { useMarke } from './lib/branding'
 import { Registries } from './screens/Registries'
 import { StandaloneViewer } from './screens/StandaloneViewer'
 import { anmeldePfad, openInTab, parseRoute, viewPath, type Route } from './lib/routes'
@@ -55,6 +56,7 @@ const NAV: { id: View; glyph: string; cap: string; adminOnly: boolean }[] = [
 
 export default function App() {
   useLang()
+  const marke = useMarke()
   // Die Adresse wird einmal gelesen und dann festgehalten. Innerhalb der
   // Anwendung wird nicht navigiert — sie hat genau drei Einstiege, und alle
   // drei stehen beim Laden fest.
@@ -123,8 +125,8 @@ export default function App() {
   if (checking) {
     return (
       <div className="boot">
-        <img className="boot__mark" src="/icon.svg" alt="" aria-hidden="true" />
-        <span className="silk">{t('OpenTerminalApps startet…')}</span>
+        <img className="boot__mark" src={marke.logo_url ?? '/icon.svg'} alt="" aria-hidden="true" />
+        <span className="silk">{t('{name} startet…', { name: marke.name })}</span>
       </div>
     )
   }
@@ -154,7 +156,7 @@ export default function App() {
     window.location.replace(anmeldePfad())
     return (
       <div className="boot">
-        <img className="boot__mark" src="/icon.svg" alt="" aria-hidden="true" />
+        <img className="boot__mark" src={marke.logo_url ?? '/icon.svg'} alt="" aria-hidden="true" />
         <span className="silk">{t('Anmeldung wird geöffnet…')}</span>
       </div>
     )
@@ -200,8 +202,11 @@ export default function App() {
     <div className="shell">
       <nav className="rail" aria-label={t('Hauptnavigation')}>
         {/* Das Symbol der Anwendung, nicht nachgezeichnet: Es bringt seine
-            eigene Fläche mit, deshalb sitzt es ohne Hintergrund hier. */}
-        <img className="rail__mark" src="/icon.svg" alt="" aria-hidden="true" />
+            eigene Fläche mit, deshalb sitzt es ohne Hintergrund hier. Ist ein
+            eigenes Zeichen hinterlegt, steht es hier statt dessen — auf
+            derselben Fläche, deshalb `object-fit: contain`: Ein breiter
+            Schriftzug wird dann klein, aber nicht verzerrt. */}
+        <img className="rail__mark" src={marke.logo_url ?? '/icon.svg'} alt="" aria-hidden="true" />
 
         {visible.map((n) => (
           <button key={n.id} className={`rail__btn${current === n.id ? ' is-on' : ''}`}

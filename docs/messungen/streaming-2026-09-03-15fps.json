@@ -1,0 +1,41 @@
+[
+ {
+  "slug": "messung-selkies",
+  "maschine": "selkies",
+  "kerneGrenze": 3,
+  "ohne": {
+   "leerlauf": {
+    "kerne": 0.012187577825372286,
+    "browserKerne": 0.14212138267669466,
+    "mbitS": 0.00028131692982019224
+   },
+   "text": {
+    "kerne": 0.08333353233830847,
+    "browserKerne": 0.002547611940298496,
+    "mbitS": 0.0002809950248756219
+   }
+  },
+  "mit": {
+   "leerlauf": {
+    "kerne": 0.351002289924333,
+    "browserKerne": 0.21862579649542013,
+    "mbitS": 0.21620549581839904
+   },
+   "text": {
+    "kerne": 0.6048133565044688,
+    "browserKerne": 0.3765278053624629,
+    "mbitS": 0.8042264150943397
+   }
+  },
+  "reaktion": {
+   "anzahl": 8,
+   "verloren": 0,
+   "median": 82.5,
+   "schnellste": 29.7998046875,
+   "langsamste": 2039.099853515625
+  },
+  "bild": "video 1280x720",
+  "fehler": null,
+  "bemerkung": "SELKIES_FRAMERATE=15 statt der Vorgabe 30 — zum Vergleich mit dem Hauptlauf."
+ }
+]
