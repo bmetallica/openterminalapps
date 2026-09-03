@@ -98,6 +98,51 @@ Nach der Anmeldung: **Workspaces → Anlegen**, ein Image eintragen (etwa
 starten und über **Software → Im Image nachsehen** die Anwendungen freigeben.
 Ausführlich in [Handbuch, Kapitel 2](docs/wiki/02-erste-schritte.md).
 
+## Aktualisieren
+
+Eine neue Fassung aus dem Repository holen:
+
+```bash
+cd openterminalapps
+sudo make backup          # erst sichern, dann ändern
+git pull
+sudo make update          # .env ergänzen, bauen, starten
+```
+
+`make update` macht drei Dinge in dieser Reihenfolge, und die Reihenfolge ist nicht beliebig:
+
+1. **Fehlende Einstellungen ergänzen.** Bringt eine Fassung neue Werte in `deploy/.env.example`
+   mit, trägt `make update` sie mit sinnvollen Vorgaben nach. **Vorhandene Werte bleiben
+   unangetastet** — auch die Geheimnisse. Passierte das erst nach dem Bauen, startete ein Dienst
+   gegen eine Variable, die es noch nicht gibt.
+2. **Bauen und starten.** Die Datenbank wandert dabei von selbst mit: Alembic beim Start der API,
+   und fehlende Spalten zieht OTA aus dem Modell nach. Es gibt keinen Migrationsschritt von Hand.
+3. **Sagen, was *nicht* von selbst passiert.** Siehe unten.
+
+### Was ein Update nicht anfasst
+
+| | Warum, und was zu tun ist |
+|---|---|
+| **Laufende Sitzungen** | Sie behalten ihr Abbild, bis sie beendet werden. Das ist Absicht: Niemand soll mitten in der Arbeit unterbrochen werden. Wer die Neuerungen sofort will, beendet seinen Arbeitsplatz und startet ihn neu. |
+| **Das Basisimage** | Wird nicht bei jedem Update neu gebaut — es dauert Minuten, und die meisten Fassungen fassen es nicht an. `make update` **prüft** aber, ob die Bauanleitung neuer ist als das gebaute Abbild, und sagt es dann. Bauen mit `scripts/build-desktop-image.sh --pruefen`. |
+| **Die Arbeitsplatz-Images** | Ein neues Basisimage wirkt erst, wenn die davon abgeleiteten Images neu gebaut werden — in der Verwaltung unter **Software**. |
+| **`deploy/.env`** | Wird nur ergänzt, nie überschrieben. Wer eine Einstellung ändern will, tut das selbst; die Vorlage daneben erklärt jede. |
+
+### Wenn etwas schiefgeht
+
+```bash
+sudo make ps              # welcher Dienst steht nicht?
+sudo make logs            # was sagt er?
+```
+
+Die Sicherung von oben spielt `scripts/restore-db.sh` zurück. Die **Profile der Nutzer** liegen
+unter `/srv/ota/profiles` und werden von einem Update nicht angefasst — sie überstehen auch ein
+vollständiges Neuaufsetzen des Stacks.
+
+Ein Rückschritt auf die vorige Fassung ist `git checkout <alter-stand> && sudo make update`. Was
+dabei **nicht** zurückwandert, ist die Datenbank: Neue Spalten bleiben stehen. Sie stören eine
+ältere Fassung nicht, aber Daten, die es vorher nicht gab, sind dann eben da.
+
 ## Was es kann
 
 **Der Arbeitsplatz**

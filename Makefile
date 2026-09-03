@@ -12,6 +12,7 @@ help:
 	@echo
 	@echo "  make setup     Zertifikat erzeugen und .env anlegen (einmalig)"
 	@echo "  make up        Stack bauen und starten"
+	@echo "  make update    Nach einem git pull: .env ergaenzen, neu bauen, starten"
 	@echo "  make down      Stack stoppen (Sessions laufen weiter)"
 	@echo "  make restart   Dienste neu starten, Sessions bleiben verbunden"
 	@echo "  make identity  Keycloak-Realm einrichten oder ergänzen"
@@ -61,6 +62,29 @@ up:
 	  echo "  (Realm nicht eingerichtet — später:  make identity)"
 	@echo
 	@$(COMPOSE) ps --format '  {{.Name}}\t{{.Status}}'
+
+.PHONY: update
+update:
+	@# Nach `git pull`. Die Reihenfolge ist nicht beliebig:
+	@#
+	@#   1. Neue Einstellungen ergaenzen, **bevor** gebaut wird — sonst startet
+	@#      ein Dienst gegen eine Variable, die es noch nicht gibt.
+	@#   2. Bauen und starten. Datenbank-Wanderungen laufen dabei von selbst,
+	@#      beim Start der API (Alembic, plus fehlende Spalten aus dem Modell).
+	@#   3. Erst danach sagen, was **nicht** von selbst passiert.
+	@#
+	@# Vorhandene Werte in der .env bleiben unangetastet; das Skript ergaenzt
+	@# nur, was fehlt.
+	@./scripts/setup-env.sh
+	@$(MAKE) --no-print-directory up
+	@echo
+	@# Das Basisimage wird hier bewusst **nicht** mitgebaut: Es dauert Minuten,
+	@# und die allermeisten Updates fassen es gar nicht an. Statt dessen wird
+	@# nachgesehen, ob es aelter ist als seine Bauanleitung — dann steht der
+	@# Hinweis da, und sonst nicht.
+	@NEUESTE=$$(find images/base-desktop -type f -printf '%T@\n' 2>/dev/null | sort -rn | head -1 | cut -d. -f1); 	 GEBAUT=$$(date -d "$$(docker image inspect ota/base-desktop:1 --format '{{.Created}}' 2>/dev/null)" +%s 2>/dev/null); 	 if [ -z "$$GEBAUT" ]; then 	   echo "  Das Basisimage fehlt noch:  scripts/build-desktop-image.sh --pruefen"; 	 elif [ -n "$$NEUESTE" ] && [ "$$NEUESTE" -gt "$$GEBAUT" ]; then 	   echo "  Das Basisimage hat sich geaendert:  scripts/build-desktop-image.sh --pruefen"; 	   echo "  Danach die Arbeitsplatz-Images neu bauen (Verwaltung -> Software)."; 	 else 	   echo "  Das Basisimage ist auf Stand."; 	 fi
+	@echo "  Laufende Sitzungen behalten ihr Abbild, bis sie beendet werden."
+	@echo
 
 .PHONY: down
 down:
