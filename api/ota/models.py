@@ -254,7 +254,7 @@ class Template(Base):
     # rechteckiger Bildausschnitte über RFB. Er steckt noch im Versuch und
     # bringt eine Einschränkung mit, die man kennen muss: **ein Bildschirm je
     # Sitzung**, keine Anwendung je Display.
-    stream_engine: Mapped[str] = mapped_column(String(16), default="kasmvnc",
+    stream_engine: Mapped[str] = mapped_column(String(16), default="selkies",
                                                server_default="kasmvnc")
 
     persistence_scope: Mapped[str] = mapped_column(String(16), default="user")

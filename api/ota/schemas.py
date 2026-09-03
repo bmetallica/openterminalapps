@@ -214,8 +214,8 @@ class TemplateOut(BaseModel):
     skeleton_enforce: list[str] = []
     user_shelf: bool = True
     group_shelf: bool = True
-    # "kasmvnc" (Vorgabe) oder "selkies". Siehe `Template.stream_engine`.
-    stream_engine: str = "kasmvnc"
+    # "selkies" (Vorgabe) oder "kasmvnc". Siehe `Template.stream_engine`.
+    stream_engine: str = "selkies"
     is_enabled: bool
     apps: list[AppOut] = []
     group_ids: list[uuid.UUID] = []
@@ -244,8 +244,13 @@ class TemplateIn(BaseModel):
     skeleton_enforce: list[str] = []
     user_shelf: bool = True
     group_shelf: bool = True
-    # "kasmvnc" (Vorgabe) oder "selkies". Siehe `Template.stream_engine`.
-    stream_engine: str = "kasmvnc"
+    # **Nicht angegeben heisst: aus dem Image ableiten.** OTAs eigenes
+    # Basisimage setzt `SELKIES_HOME`, Kasm-Images nicht — daran erkennt der
+    # Agent, welche Maschine drinsteckt. Ohne diese Ableitung bekaeme ein
+    # Arbeitsplatz auf einem Kasm-Image seit der Umstellung stillschweigend
+    # Selkies, der Agent wartete neunzig Sekunden auf einen Port, den niemand
+    # oeffnet, und die Sitzung kaeme nie hoch.
+    stream_engine: str | None = None
     is_enabled: bool = True
     # `None` heisst „nicht mitgeschickt" und laesst die Zuweisung stehen; eine
     # leere Liste heisst „niemand mehr". Ohne diese Unterscheidung nimmt ein

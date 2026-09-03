@@ -404,7 +404,7 @@ try {
       const inbound = `AUS-DER-SESSION-${Date.now()} äöü ß`
       if (cn) {
         execSync(`docker exec -u 1000 ${cn} bash -c ` +
-          `'export HOME=/home/kasm-user XAUTHORITY=/home/kasm-user/.Xauthority; ` +
+          `'export XAUTHORITY=$HOME/.Xauthority; ` +
           `printf %s ${JSON.stringify(inbound)} | timeout 3 xclip -d :1 -selection clipboard -i' &`,
           { shell: '/bin/bash' })
         await new Promise((r) => setTimeout(r, 3500))
@@ -616,7 +616,7 @@ try {
           const wandertext = `ZWISCHEN-SESSIONS-${Date.now()} äöü ß`
           const cn1 = `ota-s-${sid1.slice(0, 12)}`
           execSync(`docker exec -u 1000 ${cn1} bash -c `
-            + `'export HOME=/home/kasm-user XAUTHORITY=/home/kasm-user/.Xauthority; `
+            + `'export XAUTHORITY=$HOME/.Xauthority; `
             + `printf %s ${JSON.stringify(wandertext)} | timeout 3 xclip -d :1 -selection clipboard -i' &`,
             { shell: '/bin/bash' })
           await new Promise((r) => setTimeout(r, 3500))
@@ -646,7 +646,7 @@ try {
             await new Promise((r) => setTimeout(r, 1000))
             try {
               inB = execSync(`docker exec -u 1000 ${cn2} bash -c `
-                + `'export HOME=/home/kasm-user XAUTHORITY=/home/kasm-user/.Xauthority; `
+                + `'export XAUTHORITY=$HOME/.Xauthority; `
                 + `timeout 2 xclip -d :1 -selection clipboard -o'`,
                 { shell: '/bin/bash' }).toString()
             } catch { inB = '' }
@@ -670,7 +670,7 @@ try {
         let zuhause = ''
         try {
           zuhause = execSync(`docker inspect ${cn2} --format `
-            + `'{{range .Mounts}}{{if eq .Destination "/home/kasm-user"}}{{.Source}}{{end}}{{end}}'`,
+            + `'{{range .Mounts}}{{if or (eq .Destination "/home/kasm-user") (eq .Destination "/home/ota")}}{{.Source}}{{end}}{{end}}'`,
             { shell: '/bin/bash' }).toString().trim()
         } catch { /* Container schon weg */ }
 
@@ -1110,7 +1110,7 @@ try {
       .toString().trim().split('\n')[0]
     if (cnWs) {
       const windows = execSync(
-        `docker exec ${cnWs} bash -lc 'export HOME=/home/kasm-user ` +
+        `docker exec ${cnWs} bash -lc 'export ` +
         `XAUTHORITY=$HOME/.Xauthority; DISPLAY=:1 wmctrl -l 2>/dev/null | awk "\\$2 != -1"'`,
         { shell: '/bin/bash' }).toString().trim()
       const count = windows ? windows.split('\n').length : 0
@@ -1335,7 +1335,7 @@ try {
       'Die Ablage ist im Arbeitsplatz schreibgeschützt')
 
     const link = execSync(
-      `docker exec ${cnShared} bash -lc 'readlink /home/kasm-user/Gemeinsam || echo -'`,
+      `docker exec ${cnShared} bash -lc 'readlink "$HOME"/Gemeinsam || echo -'`,
       { shell: '/bin/bash' }).toString().trim()
     check(link === '/mnt/ota', `Verweis im Home zeigt auf die Ablage (${link})`)
   }

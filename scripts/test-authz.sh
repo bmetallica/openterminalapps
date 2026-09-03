@@ -947,7 +947,7 @@ next((s['id'] for s in d if s['template_id'] == '$WS_E' and s['status'] == 'runn
   # einen Fehler, den es nicht gibt) oder unnoetig lang.
   DA=""
   for versuch in $(seq 1 20); do
-    DA=$(docker exec "$CN_E" sh -c 'cat /home/kasm-user/einmal.txt 2>/dev/null' | tr -d '\r\n')
+    DA=$(docker exec "$CN_E" sh -c 'cat "$HOME"/einmal.txt 2>/dev/null' | tr -d '\r\n')
     [ -n "$DA" ] && break
     sleep 2
   done
@@ -958,7 +958,7 @@ str(next((x['ran_count'] for x in d if x['id'] == '$SC'), 0))")
   expect "1" "$GEZAEHLT" "OTA hat den Lauf verbucht"
 
   # Und jetzt der Kern: beim zweiten Start passiert nichts mehr.
-  docker exec "$CN_E" sh -c 'echo VON-HAND > /home/kasm-user/einmal.txt'
+  docker exec "$CN_E" sh -c 'echo VON-HAND > "$HOME"/einmal.txt'
   api "$TMP/admin.jar" -X DELETE "$BASE/api/sessions/$NEU" >/dev/null
   sleep 4
   NEU2=$(api "$TMP/admin.jar" -X POST "$BASE/api/sessions" -H 'Content-Type: application/json' \
@@ -966,7 +966,7 @@ str(next((x['ran_count'] for x in d if x['id'] == '$SC'), 0))")
   CN_E2="ota-s-$(echo "$NEU2" | cut -c1-12)"
   NOCHMAL=""
   for versuch in $(seq 1 20); do
-    NOCHMAL=$(docker exec "$CN_E2" sh -c 'cat /home/kasm-user/einmal.txt 2>/dev/null' | tr -d '\r\n')
+    NOCHMAL=$(docker exec "$CN_E2" sh -c 'cat "$HOME"/einmal.txt 2>/dev/null' | tr -d '\r\n')
     [ -n "$NOCHMAL" ] && break
     sleep 2
   done
@@ -981,7 +981,7 @@ str(next((x['ran_count'] for x in d if x['id'] == '$SC'), 0))")
   WEG=$(api "$TMP/admin.jar" "$BASE/api/templates/$WS_E/once" | jqp "
 str(len([x for x in d if x['id'] == '$SC']))")
   expect "0" "$WEG" "Gelöscht ist gelöscht"
-  docker exec "$CN_E2" sh -c 'rm -f /home/kasm-user/einmal.txt' 2>/dev/null || true
+  docker exec "$CN_E2" sh -c 'rm -f "$HOME"/einmal.txt' 2>/dev/null || true
 fi
 
 # ---------------------------------------------------- Die beiden Ablagen
@@ -1251,7 +1251,7 @@ next((t['id'] for t in d if t['mode'] == 'workspace'), '')")
     expect "$RUECK_G" "$RAUS_G" "Was der Container schreibt, sieht der Browser"
 
     VERWEIS_G=$(docker exec "$CN_G" sh -c \
-      'readlink /home/kasm-user/Gruppen 2>/dev/null || echo -')
+      'readlink "$HOME"/Gruppen 2>/dev/null || echo -')
     expect "/mnt/gruppen" "$(echo "$VERWEIS_G" | tr -d '\r\n')" \
       "Im Zuhause steht ein Verweis darauf"
 
@@ -1567,10 +1567,10 @@ next((s['id'] for s in d if s['template_id'] == '$WS_S'), '')")
     sleep 3
   done
   if [ -n "$CN_S" ]; then
-    docker exec "$CN_S" test -f "/home/kasm-user/$MARKE" \
+    docker exec "$CN_S" sh -c "test -f \"\$HOME/$MARKE\"" \
       && ok "Der durchgesetzte Pfad ist beim Start im Zuhause" \
       || bad "Der durchgesetzte Pfad kam nicht an"
-    OWNER=$(docker exec "$CN_S" stat -c '%u:%g' "/home/kasm-user/$MARKE" 2>/dev/null)
+    OWNER=$(docker exec "$CN_S" sh -c "stat -c '%u:%g' \"\$HOME/$MARKE\"" 2>/dev/null)
     expect "1000:1000" "$OWNER" "Und gehört dem Nutzer, nicht root"
   else
     bad "Keine Session zum Prüfen des Skeletons"
@@ -1638,33 +1638,33 @@ next((a['slug'] for a in d.get('apps') or [] if a.get('is_enabled')), '')")
     if [ -z "${CN_S:-}" ] || ! docker inspect "$CN_S" >/dev/null 2>&1; then
       bad "Keine laufende Session für den Teilbaum"
     else
-      docker exec "$CN_S" rm -f "/home/kasm-user/$MARKE_T" \
-        "/home/kasm-user/.ota/app-skeleton/$APP_T" 2>/dev/null || true
+      docker exec "$CN_S" sh -c "rm -f \"\$HOME/$MARKE_T\" \
+        \"\$HOME/.ota/app-skeleton/$APP_T\"" 2>/dev/null || true
 
-      docker exec "$CN_S" test -e "/home/kasm-user/$MARKE_T" \
+      docker exec "$CN_S" sh -c "test -e \"\$HOME/$MARKE_T\"" \
         && bad "Der Teilbaum lag schon vor dem Start der Anwendung im Zuhause" \
         || ok "Vor dem Start der Anwendung liegt er nicht im Zuhause"
 
       api "$TMP/admin.jar" -X POST "$BASE/api/sessions/$SID_S/apps/$APP_T" >/dev/null
       DA_T=""
       for _ in $(seq 1 20); do
-        DA_T=$(docker exec "$CN_S" sh -c "cat /home/kasm-user/$MARKE_T 2>/dev/null" | tr -d '\r\n')
+        DA_T=$(docker exec "$CN_S" sh -c "cat \"\$HOME/$MARKE_T\" 2>/dev/null" | tr -d '\r\n')
         [ -n "$DA_T" ] && break
         sleep 1
       done
       expect "vom-teilbaum" "$DA_T" "Beim Start der Anwendung kommt er an"
 
-      OWNER_T=$(docker exec "$CN_S" stat -c '%u:%g' "/home/kasm-user/$MARKE_T" 2>/dev/null)
+      OWNER_T=$(docker exec "$CN_S" sh -c "stat -c '%u:%g' \"\$HOME/$MARKE_T\"" 2>/dev/null)
       expect "1000:1000" "$OWNER_T" "Und gehört dem Nutzer, nicht root"
 
-      docker exec "$CN_S" test -e "/home/kasm-user/.ota/app-skeleton/$APP_T" \
+      docker exec "$CN_S" sh -c "test -e \"\$HOME/.ota/app-skeleton/$APP_T\"" \
         && ok "Die Merkdatei steht im Zuhause" \
         || bad "Die Merkdatei fehlt — er käme bei jedem Start erneut"
 
       # Der Kern: beim zweiten Start bleibt liegen, was der Mensch geändert
       # hat. Ein Teilbaum, der jedes Mal überschreibt, wäre etwas anderes —
       # dafür gibt es „durchsetzen" am Workspace.
-      docker exec -u 1000 "$CN_S" sh -c "echo VON-HAND > /home/kasm-user/$MARKE_T"
+      docker exec -u 1000 "$CN_S" sh -c "echo VON-HAND > \"\$HOME/$MARKE_T\""
       D_NUM_T=$(api "$TMP/admin.jar" "$BASE/api/sessions/$SID_S" | jqp "
 next((str(s['display_num']) for s in d.get('streams') or [] if s['app_slug'] == '$APP_T'), '')")
       [ -n "$D_NUM_T" ] && api "$TMP/admin.jar" -X DELETE \
@@ -1672,10 +1672,10 @@ next((str(s['display_num']) for s in d.get('streams') or [] if s['app_slug'] == 
       sleep 3
       api "$TMP/admin.jar" -X POST "$BASE/api/sessions/$SID_S/apps/$APP_T" >/dev/null
       sleep 6
-      NOCH_T=$(docker exec "$CN_S" sh -c "cat /home/kasm-user/$MARKE_T 2>/dev/null" | tr -d '\r\n')
+      NOCH_T=$(docker exec "$CN_S" sh -c "cat \"\$HOME/$MARKE_T\" 2>/dev/null" | tr -d '\r\n')
       expect "VON-HAND" "$NOCH_T" "Beim zweiten Start bleibt das Zuhause, wie es ist"
 
-      docker exec "$CN_S" rm -f "/home/kasm-user/$MARKE_T" 2>/dev/null || true
+      docker exec "$CN_S" sh -c "rm -f \"\$HOME/$MARKE_T\"" 2>/dev/null || true
     fi
 
     api "$TMP/admin.jar" -X DELETE "$SKEL?path=$MARKE_T&app=$APP_T" >/dev/null
@@ -1729,7 +1729,7 @@ else
     || bad "Die sudo-Ausnahme fehlt in der Vorschau"
 
   # Das Zuhause ist ein Bind-Mount und darf gar nicht erst auftauchen.
-  grep -q "/home/kasm-user" <<<"$VOR" \
+  grep -qE "/home/(kasm-user|ota)" <<<"$VOR" \
     && bad "Das Zuhause steht in der Vorschau — es gehört nicht ins Image" \
     || ok "Das Zuhause taucht in der Vorschau nicht auf"
 

@@ -1,7 +1,8 @@
-# 20 · Selkies — der zweite Streaming-Weg
+# 20 · Selkies — der Streaming-Weg
 
-*Für Administratoren.* 🔨 **Versuch.** Der bisherige Weg über KasmVNC läuft
-vollständig weiter und ist unverändert die Vorgabe.
+*Für Administratoren.* **Vorgabe seit dem Wechsel auf `ota/base-desktop`.** Der
+ältere Weg über KasmVNC bleibt bestehen und ist für Images von Kasm weiterhin
+nötig; umschalten lässt es sich je Arbeitsplatz.
 
 ## Worum es geht
 
@@ -14,7 +15,7 @@ zerfallen in nachziehende Kacheln.
 **Selkies** kodiert statt dessen einen H.264-Strom und schickt ihn über
 WebRTC. Das ist die Technik, mit der Spiele-Streaming arbeitet.
 
-## Was der Versuch kostet
+## Die beiden Wege im Vergleich
 
 Ehrlich vorweg, denn es sind keine Kleinigkeiten:
 
@@ -27,12 +28,12 @@ Ehrlich vorweg, denn es sind keine Kleinigkeiten:
 | Zwischenablage | OTAs Brücke zwischen den Displays | Selkies' eigene, im Bild eingebaut |
 | Ton | über KasmVNC | über WebRTC |
 
-Der erste Punkt ist der schwerwiegendste: **Das Arbeitsplatzmodell ist ein
-anderes.** Bei KasmVNC läuft jede Anwendung auf einem eigenen X-Display, und
-die Leiste schaltet um. Selkies überträgt genau einen Bildschirm; die
-Anwendungen liegen darauf nebeneinander, wie auf einem Schreibtisch. Für
-manche ist das besser, für andere schlechter — es ist jedenfalls nicht
-dasselbe.
+**Das Arbeitsplatzmodell bleibt dasselbe.** Das war zwischenzeitlich anders
+gedacht — eine Selkies-Instanz überträgt genau einen Bildschirm, und daraus
+wurde erst der Schluss gezogen, alle Anwendungen müssten sich einen teilen.
+Das ist eine Eigenschaft *einer Instanz*, nicht des Modells: Es läuft eine
+Instanz **je Anwendung**, jede auf ihrem eigenen Bildschirm, formatfüllend und
+umschaltbar in der Leiste. Siehe unten.
 
 ## Einrichten
 
@@ -461,4 +462,12 @@ beantwortet, und was vor einer Entscheidung gemessen gehört:
   Vorgabebereich von hundert Ports reicht für rund zwanzig gleichzeitige
   Sitzungen; wer mehr braucht, macht ihn grösser.
 
-Solange das nicht gemessen ist, bleibt KasmVNC die Vorgabe.
+Diese drei Fragen sind weiterhin offen — sie entscheiden nicht mehr **ob**,
+sondern **wie gut**. Umgestellt wurde, weil der Weg trägt: Er läuft durch
+Traefik, mit OTAs Anmeldung davor, hinter einem VPN mit MTU 1000, mit mehreren
+Anwendungen gleichzeitig, und das Basisimage kommt ohne fremde Streaming-
+Software aus.
+
+Wer zurück will, stellt einen Arbeitsplatz in der Oberfläche unter
+**Streaming** auf KasmVNC. Für Images von Kasm ist das ohnehin nötig — die
+bringen kein Selkies mit.

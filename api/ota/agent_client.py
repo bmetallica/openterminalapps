@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import urllib.parse
 from typing import Any
 
 import httpx
@@ -117,6 +118,16 @@ def orphans() -> list[dict[str, Any]]:
 
 def start_app(cid: str, payload: dict[str, Any]) -> dict[str, Any]:
     return _call("POST", f"/containers/{cid}/apps", json=payload)
+
+
+def image_engine(ref: str) -> str:
+    """Welche Streaming-Maschine das Image mitbringt — leer, wenn unbekannt."""
+    try:
+        return _call("GET", f"/images/engine?ref={urllib.parse.quote(ref)}").get("engine", "")
+    except HTTPException:
+        # Der Agent ist nicht erreichbar. Dann entscheidet die Vorgabe; eine
+        # Vorlage anzulegen soll daran nicht scheitern.
+        return ""
 
 
 def list_displays(cid: str) -> list[int]:

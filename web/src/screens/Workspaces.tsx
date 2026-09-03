@@ -44,6 +44,7 @@ function toPayload(d: Draft) {
     icon: d.icon,
     categories: d.categories,
     mode: d.mode,
+    stream_engine: d.stream_engine,
     image_ref: d.image_ref,
     cores: d.cores,
     memory_bytes: Math.round(d.memory_bytes),
@@ -234,6 +235,18 @@ function Editor({ tpl, host, groups, images, onSaved, onClose, onToast }: {
                 { value: 'single_app' as const, label: tr('Einzelne App') },
               ]}
               onChange={(v) => set('mode', v)} />
+          </Field>
+
+          <Field label={tr('Streaming')}
+            hint={draft.stream_engine === 'selkies'
+              ? tr('H.264 über WebRTC. Die Vorgabe, und der Weg des eigenen Basisimages.')
+              : tr('RFB über KasmVNC. Nötig für Images von Kasm — die bringen kein Selkies mit.')}>
+            <Segmented label={tr('Streaming')} value={draft.stream_engine ?? 'selkies'}
+              options={[
+                { value: 'selkies' as const, label: tr('Selkies (WebRTC)') },
+                { value: 'kasmvnc' as const, label: tr('KasmVNC (RFB)') },
+              ]}
+              onChange={(v) => set('stream_engine', v)} />
           </Field>
 
           <Field label={tr('Kategorien')} hint={tr('Bestimmt, unter welchem Filter der Workspace erscheint.')}>
@@ -607,8 +620,9 @@ export function Workspaces({ onToast }: { onToast: (m: string, tone?: 'ok' | 'ba
       const t = await api.createTemplate({
         friendly_name: 'Neuer Arbeitsplatz',
         description: '',
-        image_ref: images[0]?.ref ?? 'ubuntu:latest',
+        image_ref: images[0]?.ref ?? 'ota/base-desktop:1',
         mode: 'workspace',
+        stream_engine: 'selkies',
         cores: 2, memory_bytes: 2 * GB,
         rights: { clipboardUp: true, clipboardDown: true, clipboardImages: true },
         group_ids: [],

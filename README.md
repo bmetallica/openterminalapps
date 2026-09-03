@@ -159,10 +159,13 @@ Ausführlich in [Handbuch, Kapitel 2](docs/wiki/02-erste-schritte.md).
   die das Skeleton nicht mehr erreicht und die das Startskript sonst bei jedem Start wiederholte
 
 **Betrieb**
-- **Eigenes Basisimage** `ota/base-xfce`: Ubuntu 24.04 + XFCE + KasmVNC, **965 MB statt 20 GB** —
-  ohne Anwendung, ohne das Kasm-Label und ohne das geerbte Startskript, das eine Anwendung im
-  Drei-Sekunden-Takt neu startete. Steht als `:test` bereit und löst noch nichts ab;
-  `scripts/build-base-image.sh --pruefen` misst 27 Punkte gegen den Vertrag mit dem Agent
+- **Eigenes Basisimage** `ota/base-desktop`: Debian 13 + XFCE + **Selkies**, ohne Anwendung und
+  **ohne fremde Streaming-Software** — H.264 über WebRTC statt rechteckiger Ausschnitte über RFB.
+  Das Konto heisst `ota` und wohnt unter `/home/ota`; kein Bestandteil trägt „Kasm" im Namen.
+  `scripts/build-desktop-image.sh --pruefen` misst 19 Punkte gegen den Vertrag mit dem Agent
+- **Der ältere Weg bleibt** — `ota/base-xfce` (Ubuntu + KasmVNC) für Images von Kasm, die kein
+  Selkies mitbringen. Umschaltbar je Arbeitsplatz unter **Streaming**;
+  `scripts/build-base-image.sh --pruefen` prüft ihn weiterhin
 - **Stückliste je Image** (`make sbom`) in SPDX und CycloneDX — gebraucht, sobald ein Image das
   Haus verlässt
 - Eigene Registry im Stack; fehlt ein Image lokal, wird es beim Start von dort geholt
@@ -180,7 +183,9 @@ Browser ──HTTPS──▶ Traefik ──┬──▶ web       Oberfläche (n
                                      │
                     api ──HTTP──▶ agent ──▶ Docker-Socket
                                      │
-                            Session-Container (KasmVNC)
+                          Session-Container (Selkies)
+                                     │
+                          turn ◀─WebRTC─ Browser
 ```
 
 **Nur `agent` fasst Docker an.** Die API verarbeitet Nutzereingaben und bekommt den Socket deshalb
@@ -194,7 +199,7 @@ nicht — dieselbe Trennung gilt für das Dateisystem des Hosts.
 | `deploy/` | Compose-Stack, Traefik, Registry, Zertifikate |
 | `extension/` | Firefox-Erweiterung für die Zwischenablage |
 | `docs/wiki/` | Handbuch — wird im Programm als Hilfe ausgeliefert |
-| `images/` | Eigenes Basisimage `ota/base-xfce` (Ubuntu + XFCE + KasmVNC) |
+| `images/` | Eigene Basisimages: `base-desktop` (Debian + XFCE + Selkies, Vorgabe) und `base-xfce` (Ubuntu + KasmVNC) |
 | `tests/`, `scripts/` | Prüfungen, Zertifikat, Migration aus Kasm, Stückliste |
 
 ## Dokumentation
@@ -241,8 +246,14 @@ Laufzeit als Container-Images bezogen. **Sie behalten ihre eigenen Lizenzen und 
 neu lizenziert** — aufgeschlüsselt in drei Ebenen in
 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md), knapp in [NOTICE](NOTICE).
 
-Ein Arbeitsplatz-**Image** ist ein zusammengesetztes Werk: OTA-Konfiguration, KasmVNC (GPL-2.0),
-XFCE, hunderte Distributionspakete, die installierten Anwendungen. Es ist **nicht** „Apache-2.0".
+Ein Arbeitsplatz-**Image** ist ein zusammengesetztes Werk: OTA-Konfiguration, Selkies (MPL-2.0,
+**von OTA verändert**), libx264 (GPL-2.0+), XFCE, hunderte Distributionspakete, die installierten
+Anwendungen. Es ist **nicht** „Apache-2.0".
+
+Das Basisimage **darf weitergegeben werden** — mit vier Pflichten: Quellen für die GPL-Teile
+anbieten, die vier Selkies-Patches beilegen (MPL-2.0 wirkt dateiweise), Lizenztexte im Image
+lassen und eine Stückliste mitliefern. Fertige Arbeitsplätze mit Microsoft VS Code oder Google
+Chrome dagegen **nicht** — dieselben mit VSCodium und Firefox schon.
 
 **Für die Anwendungen in einem Golden Image gilt deren eigene Lizenz.** Bei Microsoft VS Code ist
 der Betrieb im eigenen Unternehmensnetz ausdrücklich erlaubt, die Weitergabe an Dritte nicht.

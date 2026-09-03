@@ -12,13 +12,13 @@
   * **Agent:** Python 3.12, FastAPI, `docker` SDK — **der einzige Dienst mit Docker-Socket**
   * **Web:** React 18 + TypeScript + Vite, **handgeschriebenes CSS, keine UI-Bibliothek**
   * **Infrastruktur:** Docker Compose — Traefik v3.7 (Ingress, TLS), Keycloak 26.7 (IdP), eigene Registry, PostgreSQL
-  * **Session-Container:** KasmVNC 1.4.x (Vorgabe) bzw. Selkies 1.6.2 (Versuch)
+  * **Session-Container:** Selkies 1.6.2 auf Debian 13 (**Vorgabe**) bzw. KasmVNC 1.4.x (für Images von Kasm)
   * **Tests:** Bash-Prüfreihen (`scripts/test-*.sh`) + Puppeteer/Chromium (`tests/e2e.mjs`) — **keine Unit-Test-Frameworks**, alles gegen die laufende Anlage
 * **Letzter Branch / Commit:**
-  * `main` → `06018cb` „Die Symbole der Anwendungen aus ihren Paketen" (gepusht)
-  * **aktuell ausgecheckt:** `webrtc-viewer` → `d2ad3ae` „Selkies als zweiter Streaming-Weg — Versuch, nicht Vorgabe" (gepusht)
+  * `main` → der Selkies-Weg ist **zusammengeführt und Vorgabe**; `webrtc-viewer` ist damit erledigt
+  * Das Vorgabe-Basisimage ist `ota/base-desktop:1` (Debian 13 + XFCE + Selkies, **kein KasmVNC**)
   * Repository: `github.com/bmetallica/openterminalapps` — **privat, muss privat bleiben**
-* **Datum der Übergabe:** 2026-09-02
+* **Datum der Übergabe:** 2026-09-03
 * **Ziel des Projekts:** Jeder Nutzer bekommt **seinen eigenen Linux-Arbeitsplatz im Browser** — ein Container je Person, die Anwendungen darin installiert, jede formatfüllend gestreamt, alle mit **einem gemeinsamen Zuhause** (dieselben Projekte, derselbe SSH-Schlüssel, dieselbe Zwischenablage). Daneben Einzelanwendungen als Wegwerf-Container, fremde Web-Anwendungen im Katalog und zentrale Anmeldung über Keycloak.
 
 ---
@@ -189,9 +189,41 @@ zusammengefassten Teil der Sitzung.)
 | 33 | „bist du noch dran?" | Ja — Zwischenstand gemeldet, dann committet. |
 | 34 | „Erstelle eine ausführliche HANDOVER.md" | Diese Datei. |
 
+### ⚠️ Eine Fehlersuche, die lange gedauert hat — und warum
+
+Nach der Umstellung auf Selkies als Vorgabe fielen **18 Prüfungen** aus. Die Meldung lautete
+„Der Container-Dienst ist nicht erreichbar. Läuft ota-agent?" — und zeigte damit auf den
+falschen Dienst. Der Agent war gesund.
+
+Die Ursache stand auf dem Etikett eines sterbenden Containers: `ota.engine=selkies` auf einem
+Image, das kein Selkies enthält. Die Prüfreihe legt Arbeitsplätze auf Kasm-Images an, ohne die
+Maschine zu nennen; seit der Umstellung bekamen sie alle Selkies, und der Agent wartete
+neunzig Sekunden auf einen Port, den dort niemand öffnet.
+
+**Zwei Lehren, beide eingebaut:**
+
+* Wer beim Anlegen nichts angibt, bekommt die Maschine, **die das Image mitbringt**
+  (`SELKIES_HOME` in der Image-Konfiguration). Kein Raten, kein stiller Fehlgriff.
+* Die Prüfreihen schrieben `/home/kasm-user` an 29 Stellen fest — genau den Pfad, den wir zur
+  Eigenschaft des Images gemacht haben. Sie erfragen ihn jetzt aus dem Container (`$HOME`) und
+  prüfen damit **beide** Wege statt einen davon vorauszusetzen.
+
+Auf dem Weg dorthin habe ich zweimal die falsche Fährte verfolgt (volle Platte, Speichermangel)
+und mir dreimal selbst Fehlschläge erzeugt: Dienste mitten im Lauf neu gestartet, Session-Container
+aufgeräumt, deren Datenbankzeile noch `running` war, und mit `pkill -f` die eigene Shell erwischt.
+**Während eines Laufs nichts anfassen.**
+
 ### ⚠️ Bekannte Bugs & Test-Status
 
-* **Testergebnis (letzter vollständiger `make test`, vor der Härtung):**
+* **Testergebnis:** `scripts/test-authz.sh` **216/216**,
+  `scripts/build-desktop-image.sh --pruefen` **19/19**, `scripts/pruef-selkies.mjs` liefert ein
+  Bild (1252 Einzelbilder, 1440×900), `scripts/pruef-turn.py` grün. Ein vollständiger `make test` steht weiterhin aus — `scripts/test-backup.sh` beendet
+  Sitzungen, und auf dieser Maschine lief durchgehend ein Arbeitsplatz des Nutzers.
+* **Zwei Fallen beim Prüfen, beide selbst gestellt:** Wer während eines Laufs Dienste neu startet,
+  bekommt „Der Container-Dienst ist nicht erreichbar" und 16 Fehlschläge, die keine sind. Und wer
+  Session-Container aufräumt, deren Datenbankzeile noch `running` ist, lässt den e2e auf einen
+  toten Stream warten. **Während eines Laufs nichts anfassen.**
+* **Älteres Ergebnis (vor der Umstellung):**
   `216 authz · 18 Zwischenablage · 107 e2e · 42 ldap · 36 Sicherung (2 Fehler)` = **419 von 421**
 * **Fehlermeldung:** `✗ Pfad im Archiv stimmt nicht` und `✗ Markierung fehlt nach dem Zurückspielen` in `scripts/test-backup.sh`
 * **Vermutete Ursache — und was daraus wurde:** Kein Produktfehler, sondern ein **Testartefakt**. `/api/backups/run` sichert **jede** laufende Sitzung; die Prüfung griff sich „die erste Container-Sicherung". Während des Laufs lief unter demselben Konto zusätzlich meine Selkies-Sitzung, also war es die falsche. Mit zwei Streaming-Maschinen sind zwei Sitzungen je Konto der Normalfall, deshalb wählt die Prüfung die Sicherung jetzt über die Vorlage aus.

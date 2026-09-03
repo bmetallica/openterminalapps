@@ -73,10 +73,15 @@ Nichts davon wird durch OTA neu lizenziert.
 
 | Bestandteil | Lizenz | Anmerkung |
 |---|---|---|
-| **KasmVNC** | GPL-2.0 | Die Streaming-Engine |
+| **Selkies** | **MPL-2.0** | Die Streaming-Engine des Vorgabe-Images. **OTA ändert sie** — siehe unten |
+| **libx264** | **GPL-2.0+** | Der Kodierer, über `gstreamer1.0-plugins-ugly` |
+| GStreamer (base/good/bad/ugly) | LGPL-2.0+ (die Pakete) | Einzelne Plugins binden GPL-Bibliotheken ein |
+| **KasmVNC** | GPL-2.0 | Nur noch im alten Image `base-xfce` |
 | **Kasm-Workspaces-Images** | MIT **nur für die Baurezepte** | Siehe unten |
-| XFCE | GPL-2.0 / LGPL-2.1 | Desktop |
-| Ubuntu / Debian | Paketweise verschieden | Basis |
+| XFCE | GPL | Desktop |
+| Debian 13 / Ubuntu | Paketweise verschieden | Basis |
+| Adwaita-Symbole | CC-BY-SA-3.0 oder LGPL-3, und CC-BY-SA-4.0 | Zeiger und Symbole |
+| DejaVu-Schriften | Bitstream Vera | |
 | **Microsoft Visual Studio Code** | Microsoft-EULA | Siehe unten |
 | VSCodium | MIT | Erweiterungen über Open VSX |
 | JetBrains Community | Apache-2.0 | Nur die Community-Ausgaben |
@@ -84,7 +89,61 @@ Nichts davon wird durch OTA neu lizenziert.
 | Google Chrome | Google-Nutzungsbedingungen | Proprietär |
 | Sonstige Anwendungen | jeweils eigene | Was im Image installiert wurde |
 
-### KasmVNC — GPL-2.0
+Alle Angaben oben sind am 2026-09-03 aus dem gebauten Image abgelesen
+(`/usr/share/doc/<paket>/copyright` bzw. die Metadaten des Python-Pakets),
+nicht aus dem Gedächtnis.
+
+### Selkies — MPL-2.0, und OTA ändert es
+
+Das ist der Punkt, der beim Wechsel auf das eigene Basisimage **neu
+hinzugekommen** ist und der leicht übersehen wird.
+
+OTA startet Selkies nicht nur, sondern **verändert es beim Bauen des Images**.
+Vier Eingriffe, alle in `images/base-desktop/patches/`:
+
+| Patch | Was er ändert |
+|---|---|
+| `gst-web-pfad.py` | zwei Adressen im Client, die sonst an der Wurzel des Hosts hängen |
+| `kein-fremd-stun.py` | nimmt `stun.l.google.com` aus der Konfiguration |
+| `ice-nur-vermittelt.py` | macht `iceTransportPolicy` einstellbar |
+| `keine-fremde-leiste.py` | entfernt den Knopf für Selkies' eigene Seitenleiste |
+
+Die MPL-2.0 verlangt (§3.1/3.2): Wer die Software weitergibt, muss die
+**geänderten Dateien im Quelltext** unter derselben Lizenz verfügbar machen.
+Für OTA heisst das bei Weitergabe eines Images:
+
+* Die vier Patch-Dateien mitliefern — sie beschreiben die Änderung
+  vollständig und sind selbst lesbar.
+* Auf das verwendete Release verweisen
+  (`github.com/selkies-project/selkies-gstreamer`, Tag `v<SELKIES_VERSION>`).
+* Den Lizenztext der MPL-2.0 beilegen.
+
+Was die MPL **nicht** verlangt: dass OTAs eigener Code unter MPL steht. Sie
+wirkt dateiweise, nicht auf das ganze Werk.
+
+### libx264 — GPL-2.0+, und damit die eigentliche Pflicht
+
+Die GStreamer-Pakete selbst sind LGPL. Der Kodierer dahinter ist es nicht:
+`gstreamer1.0-plugins-ugly` bringt `libgstx264.so`, und das bindet **libx264
+(GPL-2.0+)** ein. Wer ein Image weitergibt, in dem der H.264-Kodierer steckt —
+und das ist jedes Selkies-Image —, übernimmt damit die Pflichten der GPL:
+Lizenztext beilegen, auf die Quellen verweisen oder sie anbieten.
+
+Praktisch ist das dasselbe wie bei KasmVNC vorher, nur mit einem anderen
+Programm. Das Debian-Paket verweist auf `deb-src`; das ist ein gangbarer Weg,
+den Bezug der Quellen zu belegen.
+
+### KasmVNC — GPL-2.0 (nur noch im alten Image)
+
+Seit `ota/base-desktop` die Vorgabe ist, steckt KasmVNC **nur noch in
+`images/base-xfce`** — dem Image des bisherigen Weges, das weiter
+gepflegt wird, solange Arbeitsplätze darauf laufen. Für das neue Image
+gilt nichts davon; es enthält keine Zeile KasmVNC.
+
+Der folgende Abschnitt bleibt trotzdem stehen: Er begründet, warum das
+eigene Image überhaupt gebaut wurde, und gilt unverändert für jeden,
+der den KasmVNC-Weg weiter benutzt.
+
 
 OTA **startet** KasmVNC als eigenständiges Programm (`/usr/bin/Xvnc`) und
 spricht mit ihm über Netz und Prozessgrenze. Es wird kein KasmVNC-Quellcode
@@ -179,6 +238,36 @@ jedem Build nach, wohin die gefundenen Editoren zeigen, und warnt, wenn ein
 Nicht-Microsoft-Editor auf Microsofts Marktplatz zeigt.
 
 Mit Originalzitaten geprüft in [Handbuch, Kapitel 13](docs/wiki/13-lizenzen.md).
+
+### Darf das Basisimage weitergegeben werden? — Ja, mit vier Pflichten
+
+Gemeint ist `ota/base-desktop`: Debian 13 + XFCE + Selkies, **ohne KasmVNC und
+ohne Anwendungen**. Es besteht ausschliesslich aus Bestandteilen mit
+einzeln nachlesbaren Lizenzen, und keine davon verbietet die Weitergabe.
+
+Wer es weitergibt, hat vier Dinge zu tun:
+
+1. **Quellen für die GPL-Teile** anbieten oder auf sie verweisen — allen voran
+   libx264, dazu XFCE und ein grosser Teil von Debian.
+2. **Die Selkies-Patches mitliefern** (`images/base-desktop/patches/`) und auf
+   das verwendete Release verweisen. MPL-2.0, siehe oben.
+3. **Lizenztexte drinlassen.** Sie liegen ohnehin unter
+   `/usr/share/doc/<paket>/copyright`; ein `rm -rf /usr/share/doc` im
+   Dockerfile wäre bequem und wäre ein Lizenzverstoss.
+4. **Eine Stückliste beilegen** (`scripts/sbom.sh`). Ein Image aus hunderten
+   Paketen lässt sich nicht von Hand auflisten, und diese Datei versucht es
+   auch nicht.
+
+**Was nicht weitergegeben werden darf**, sind fertige Arbeitsplatz-Images mit
+Microsoft Visual Studio Code oder Google Chrome darin. Beides ist proprietär
+und für das eigene Unternehmensnetz lizenziert, nicht für die Verteilung.
+Dieselben Arbeitsplätze mit **VSCodium** (MIT) und **Firefox** (MPL-2.0) sind
+dagegen unbedenklich — die Rezepte dafür liegen bei.
+
+Kein Bestandteil von OTA trägt „Kasm" im Namen, und `ota/base-desktop` enthält
+keine Zeile davon. Das ist keine Lizenzfrage, sondern eine Markenfrage: Der
+Name gehört jemand anderem, und eine Verbindung, die es nicht gibt, soll auch
+nicht suggeriert werden.
 
 ### Eingebundene Registries
 

@@ -1,5 +1,12 @@
 # 19 · Das eigene Basisimage
 
+> **Hinweis.** Dieses Kapitel beschreibt `ota/base-xfce` — Ubuntu + XFCE +
+> KasmVNC. Es ist **nicht mehr die Vorgabe**: Die ist seit dem Wechsel auf
+> Selkies `ota/base-desktop` (Debian 13, ohne KasmVNC), beschrieben in
+> [Kapitel 20](20-selkies-versuch.md). `base-xfce` bleibt bestehen und wird
+> gepflegt, solange Arbeitsplätze darauf laufen — für Images von Kasm ist es
+> weiterhin der richtige Weg.
+
 *Für Administratoren.* ✅ `ota/base-xfce` — Ubuntu 24.04 + XFCE + KasmVNC, ohne Anwendung.
 **Steht als Testimage bereit** und löst noch nichts ab.
 

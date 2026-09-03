@@ -435,6 +435,30 @@ def image_packages(ref: str, names: str = "") -> list[dict[str, Any]]:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
 
 
+@app.get("/images/engine", dependencies=[Depends(require_token)])
+def image_engine(ref: str) -> dict[str, str]:
+    """Welche Streaming-Maschine bringt dieses Image mit?
+
+    **Das Image sagt es selbst.** OTAs eigenes Basisimage setzt
+    `SELKIES_HOME`; Images von Kasm tun das nicht. Gefragt wird nur die
+    Konfiguration — kein Container, keine Sekunde Wartezeit.
+
+    Warum ueberhaupt: Seit Selkies die Vorgabe ist, bekaeme ein Arbeitsplatz
+    auf einem Kasm-Image sonst stillschweigend die falsche Maschine. Der
+    Agent wartet dann neunzig Sekunden auf einen Port, den niemand oeffnet,
+    und der Anwender sieht eine Sitzung, die nicht hochkommt — ohne einen
+    Satz, der sagt warum.
+    """
+    try:
+        angaben = dc().images.get(ref).attrs
+    except APIError:
+        # Unbekanntes Image: Die Vorgabe entscheidet die API, nicht der Agent.
+        return {"engine": ""}
+    env = angaben.get("Config", {}).get("Env") or []
+    hat_selkies = any(e.split("=", 1)[0] == "SELKIES_HOME" for e in env)
+    return {"engine": "selkies" if hat_selkies else "kasmvnc"}
+
+
 @app.get("/images", dependencies=[Depends(require_token)])
 def list_images() -> list[dict[str, Any]]:
     out = []

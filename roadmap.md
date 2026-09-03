@@ -787,11 +787,10 @@ Dafür braucht es ein KDC und einen Dateiserver; ohne beides lässt sich nichts 
 prüfen. **Die Passwort-Durchreichung bleibt draussen** (§17.9), auch wenn sie der kürzeste Weg
 wäre — und mit Keycloak dazwischen ist sie noch weniger zu rechtfertigen als vorher.
 
-**Die Streaming-Maschine** 🔨 **im Versuch, auf dem Zweig `webrtc-viewer`.** Ein zweiter Weg steht
-und läuft: `ota/base-desktop:test` überträgt einen H.264-Strom über WebRTC statt rechteckiger
-Ausschnitte über RFB. Eine Vorlage wählt ihn über `stream_engine: selkies`; die Vorgabe bleibt
-`kasmvnc`, und der bisherige Weg ist unverändert. Ausführlich in
-[Kapitel 20](docs/wiki/20-selkies-versuch.md).
+**Die Streaming-Maschine** ✅ **umgestellt.** `ota/base-desktop` überträgt einen H.264-Strom über
+WebRTC statt rechteckiger Ausschnitte über RFB und ist die **Vorgabe**. Der Weg über KasmVNC bleibt
+bestehen und ist für Images von Kasm weiterhin nötig; umschaltbar je Arbeitsplatz unter
+**Streaming**. Ausführlich in [Kapitel 20](docs/wiki/20-selkies-versuch.md).
 
 Was der Versuch schon beantwortet: **Es geht** — durch Traefik, mit OTAs Anmeldung davor, die
 Auflösung folgt dem Browserfenster, und er läuft beim Nutzer. Fünf Fallen lagen auf dem Weg, alle
@@ -802,7 +801,7 @@ nicht vermitteln** (er meldet die Adresse des Hosts und verschickt mit der des C
 deshalb als Dienst im Stack); und **Chrome verschickt DTLS mit fest 1200 Byte je Paket**, was hinter
 einem VPN mit MTU 1000 nie ankommt (`OTA_TURN_PROTOCOL=tcp` mit `OTA_TURN_ICE_POLICY=relay`).
 
-Seither ist der Weg zweimal weitergegangen. `ota/base-desktop:test` ist der Nachfolger: **Debian 13,
+Seither ist der Weg zweimal weitergegangen. `ota/base-desktop` ist der Nachfolger und die Vorgabe: **Debian 13,
 XFCE, Selkies, ohne KasmVNC**, Konto `ota` unter `/home/ota`, GStreamer 1.26 aus der Distribution
 statt aus dem Bündel. Und die Betriebsart **„Einzelne App"** überträgt jetzt wirklich nur die
 Anwendung — nur ein Fenstermanager, formatfüllend, mit einem Startbefehl aus dem Bildbauer.

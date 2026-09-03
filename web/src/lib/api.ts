@@ -49,6 +49,15 @@ export type Template = {
   description: string
   icon: string
   categories: string[]
+  /**
+   * Welche Streaming-Maschine dieser Arbeitsplatz benutzt.
+   *
+   * `selkies` ist die Vorgabe — H.264 über WebRTC, der Weg von OTAs eigenem
+   * Basisimage. `kasmvnc` bleibt für Images von Kasm nötig: Die bringen kein
+   * Selkies mit, und ein Arbeitsplatz auf einem solchen Image bliebe sonst
+   * schwarz.
+   */
+  stream_engine: 'kasmvnc' | 'selkies'
   mode: 'workspace' | 'single_app'
   image_ref: string
   cores: number
