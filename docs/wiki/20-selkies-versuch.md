@@ -224,17 +224,28 @@ Namen enthält.
 
 ### Die Anwendung bleibt, wo sie hingehört
 
-In einer Einzelanwendungs-Sitzung gibt es keine Leiste, über die man ein
-Fenster zurückholt. Deshalb sieht eine Aufsicht alle zwei Sekunden nach:
+Auf einem Bildschirm, der genau einer Anwendung gehört, gibt es keine Leiste,
+über die man ein Fenster zurückholt — weder in einer Einzelanwendungs-Sitzung
+noch auf den Anwendungs-Bildschirmen eines Arbeitsplatzes. Deshalb sieht an
+**beiden** Stellen eine Aufsicht alle zwei Sekunden nach:
 
 * **Minimiert** — kommt wieder hoch (`_NET_WM_STATE_HIDDEN` → `wmctrl -a`).
   Gemessen: `IsUnMapped` direkt nach dem Einklappen, nach fünf Sekunden
   wieder `IsViewable`.
 * **Nicht formatfüllend** — wird wieder formatfüllend gesetzt.
-* **Geschlossen** — das erledigt die Aufsicht des Startskripts, die
-  `custom_startup.sh` neu ausführt, sobald es sich beendet. Gemessen: Prozess
-  beendet, nach drei Sekunden läuft ein neuer, das Fenster wieder
-  formatfüllend.
+* **Geschlossen** — die Anwendung wird neu gestartet. In der
+  Einzelanwendungs-Sitzung erledigt das die Aufsicht des Startskripts, die
+  `custom_startup.sh` neu ausführt; auf einem Anwendungs-Bildschirm die
+  Aufsicht in `apps.py`, die den Startbefehl selbst wieder ausführt. Gemessen:
+  Prozess beendet, nach drei Sekunden läuft ein neuer, Fenster wieder da.
+
+Die Aufsicht läuft, solange der X-Socket existiert. Wer die Anwendung über OTA
+beendet, baut damit ihren Bildschirm ab — und die Aufsicht startet sie nicht
+wieder. Das ist der Unterschied zwischen „ich schliesse das Fenster" und „ich
+beende diese Anwendung", und er muss erhalten bleiben.
+
+Gemessen auf einem Anwendungs-Bildschirm: minimiert `IsUnMapped` bis 1,2 s,
+ab 1,5 s wieder `IsViewable`; entmaximiert nach 600 ms wieder maximiert.
 
 ### Nur eine Leiste
 

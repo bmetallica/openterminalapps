@@ -189,6 +189,7 @@ fi
 # Senken braeuchte CAP_SYS_RESOURCE, und genau deshalb wird nur erhoeht.
 nohup bash -c 'echo 500 > /proc/self/oom_score_adj 2>/dev/null; exec @COMMAND@' \
   > /tmp/ota-app-@SLUG@.log 2>&1 &
+echo $! > /tmp/ota-app-@SLUG@.pid
 
 for i in $(seq 1 60); do
   if DISPLAY=:@DISPLAY@ wmctrl -l 2>/dev/null | awk '$2 != -1' | grep -q .; then
@@ -203,6 +204,61 @@ WIN=$(DISPLAY=:@DISPLAY@ wmctrl -l 2>/dev/null | awk '$2 != -1' | head -1 | cut 
 if [ -n "$WIN" ]; then
   DISPLAY=:@DISPLAY@ wmctrl -i -r "$WIN" -b add,maximized_vert,maximized_horz 2>/dev/null || true
 fi
+
+# --- Die Aufsicht ueber diese Anwendung ---------------------------------
+#
+# Sie haelt drei Dinge gerade, solange es das Display gibt:
+#
+#   * **geschlossen** — die Anwendung wird neu gestartet. Wer sie ueber ihr
+#     eigenes Fensterkreuz schliesst, saehe sonst fuer den Rest der Sitzung
+#     eine leere Flaeche: Auf diesem Display laeuft nichts als sie, und es
+#     gibt keine Leiste, ueber die man sie zurueckholt.
+#   * **minimiert** — sie kommt wieder hoch. Aus demselben Grund.
+#   * **nicht mehr formatfuellend** — sie wird es wieder.
+#
+# Beendet wird die Aufsicht nicht eigens: Sie laeuft, solange der X-Socket
+# existiert, und der verschwindet beim Abbau des Displays (stop_script bzw.
+# stop_selkies_script). Wer die Anwendung ueber OTA beendet, beendet damit
+# auch ihren Bildschirm — und die Aufsicht startet sie nicht wieder.
+#
+# Das Skript wird in eine Datei geschrieben statt in ein `bash -c`: Der
+# Startbefehl ist bereits fuer die Shell gequotet, und ihn ein zweites Mal
+# durch eine Zeichenkette zu schleusen ginge bei jedem Anfuehrungszeichen
+# schief. Im Heredoc mit gequotetem Begrenzer bleibt er unangetastet, bis die
+# Aufsicht ihn ausfuehrt.
+cat > /tmp/ota-aufsicht-@SLUG@.sh <<'AUFSICHT'
+export XAUTHORITY=$HOME/.Xauthority
+while [ -e /tmp/.X11-unix/X@DISPLAY@ ]; do
+  sleep 2
+
+  PID=$(cat /tmp/ota-app-@SLUG@.pid 2>/dev/null)
+  if [ -z "$PID" ] || ! kill -0 "$PID" 2>/dev/null; then
+    nohup bash -c 'echo 500 > /proc/self/oom_score_adj 2>/dev/null; exec @COMMAND@' \
+      > /tmp/ota-app-@SLUG@.log 2>&1 &
+    echo $! > /tmp/ota-app-@SLUG@.pid
+    sleep 3
+    continue
+  fi
+
+  FENSTER=$(wmctrl -l 2>/dev/null | awk '$2 != -1' | head -1 | cut -d' ' -f1)
+  [ -z "$FENSTER" ] && continue
+
+  # Ohne `xprop` liesse sich der Zustand nicht lesen, und die Aufsicht wuerde
+  # alle zwei Sekunden blind maximieren. Dann lieber nichts tun.
+  command -v xprop > /dev/null 2>&1 || continue
+  ZUSTAND=$(xprop -id "$FENSTER" _NET_WM_STATE 2>/dev/null || true)
+  case "$ZUSTAND" in
+    *_NET_WM_STATE_HIDDEN*) wmctrl -i -a "$FENSTER" 2>/dev/null || true ;;
+  esac
+  case "$ZUSTAND" in
+    *_NET_WM_STATE_MAXIMIZED_VERT*) : ;;
+    *) wmctrl -i -r "$FENSTER" -b add,maximized_vert,maximized_horz 2>/dev/null || true ;;
+  esac
+done
+AUFSICHT
+chmod +x /tmp/ota-aufsicht-@SLUG@.sh
+DISPLAY=:@DISPLAY@ nohup bash /tmp/ota-aufsicht-@SLUG@.sh \
+  > /tmp/ota-aufsicht-@DISPLAY@.log 2>&1 &
 
 echo "app-started"
 """
