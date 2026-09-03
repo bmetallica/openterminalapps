@@ -127,6 +127,13 @@ def _wait_for_route(sess_id: uuid.UUID, timeout: float = ROUTE_TIMEOUT) -> bool:
 
 def _stream_out(s: SessionModel, st: AppStream) -> StreamOut:
     data = StreamOut.model_validate(st)
+    # Selkies liefert seine eigene Oberfläche unter der Wurzel der Route aus
+    # und findet seinen Signalisierungsweg selbst. Die KasmVNC-Parameter
+    # dorthin zu hängen wäre nicht nur nutzlos, sondern irreführend.
+    if s.template.stream_engine == "selkies":
+        data.url = (f"/s/{s.id}/" if st.display_num <= 1
+                    else f"/s/{s.id}/a/{st.display_num}/")
+        return data
     if st.display_num <= 1:
         # Display 1 ist der Hauptbildschirm des Containers und hat bereits
         # eine eigene Route.
@@ -268,15 +275,18 @@ def _traefik_labels(sess_id: uuid.UUID, user_id: uuid.UUID, vnc_user: str,
         "ota.engine": engine,
     }
 
-    # Selkies überträgt genau **einen** Bildschirm. Die Routen für weitere
-    # Displays gäbe es dort ins Leere — und mit ihnen die Erwartung, es liefe
-    # dasselbe Arbeitsplatzmodell.
-    if engine == "selkies":
-        return labels
-
     # Routen für die App-Displays gleich mitgeben. Labels lassen sich an einem
     # laufenden Container nicht mehr ändern, deshalb werden sie hier auf Vorrat
     # angelegt — sie kosten nichts, solange kein Display dahinter läuft.
+    #
+    # **Auch bei Selkies.** Hier stand einmal, Selkies übertrage genau einen
+    # Bildschirm und weitere Routen zeigten ins Leere. Das stimmt für *eine*
+    # Selkies-Instanz — aber das Arbeitsplatzmodell von OTA ist ein Bildschirm
+    # je Anwendung, formatfüllend und mehrere gleichzeitig. Also läuft je
+    # Anwendung eine eigene Instanz auf einem eigenen Port, und die Route
+    # dahin wird hier angelegt wie bei KasmVNC auch.
+    app_port, app_schema = ((8080, "http") if engine == "selkies"
+                            else (6900, "https"))
     for display in range(2, 2 + MAX_APP_DISPLAYS):
         an = f"{name}-a{display}"
         labels.update({
@@ -289,8 +299,8 @@ def _traefik_labels(sess_id: uuid.UUID, user_id: uuid.UUID, vnc_user: str,
             f"traefik.http.routers.{an}.middlewares":
                 f"ota-authz@file,{an}-strip@docker,{name}-basic@docker",
             f"traefik.http.middlewares.{an}-strip.stripprefix.prefixes": f"/s/{sid}/a/{display}",
-            f"traefik.http.services.{an}.loadbalancer.server.port": str(6900 + display),
-            f"traefik.http.services.{an}.loadbalancer.server.scheme": "https",
+            f"traefik.http.services.{an}.loadbalancer.server.port": str(app_port + display),
+            f"traefik.http.services.{an}.loadbalancer.server.scheme": app_schema,
             f"traefik.http.services.{an}.loadbalancer.serverstransport": "ota-insecure@file",
         })
 
@@ -801,6 +811,7 @@ def start_app(
                      f"x{app.y_res or sess.template.y_res}"),
         "title": app.name,
         "send_primary": bool(rights.get("clipboardPrimary")),
+        "engine": sess.template.stream_engine,
     })
 
     if existing:
@@ -837,7 +848,8 @@ def stop_app(
     # Den Hauptbildschirm des Containers niemals abbauen — dort haengt die
     # Anwendung, die das Image selbst gestartet hat.
     if sess.container_id and stream.display_num > 1:
-        agent_client.stop_app(sess.container_id, stream.display_num)
+        agent_client.stop_app(sess.container_id, stream.display_num,
+                              sess.template.stream_engine)
     db.delete(stream)
     audit.record(db, "app.stopped", actor=user, object_type="session",
                  object_id=str(sess.id), request=request, app=slug)

@@ -123,8 +123,8 @@ def list_displays(cid: str) -> list[int]:
     return _call("GET", f"/containers/{cid}/apps")
 
 
-def stop_app(cid: str, display: int) -> dict[str, Any]:
-    return _call("DELETE", f"/containers/{cid}/apps/{display}")
+def stop_app(cid: str, display: int, engine: str = "kasmvnc") -> dict[str, Any]:
+    return _call("DELETE", f"/containers/{cid}/apps/{display}?engine={engine}")
 
 
 def clipboard_bridge(cid: str, enabled: bool, interval: float = 0.5) -> dict[str, Any]:

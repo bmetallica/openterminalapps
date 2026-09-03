@@ -20,7 +20,7 @@ Ehrlich vorweg, denn es sind keine Kleinigkeiten:
 
 | | KasmVNC | Selkies |
 |---|---|---|
-| Anwendungen | **je Anwendung ein Bildschirm**, umschaltbar in der Leiste | **ein Bildschirm je Sitzung** — alle Anwendungen darauf, wie an einem echten Rechner |
+| Anwendungen | **je Anwendung ein Bildschirm**, umschaltbar in der Leiste | dasselbe — je Anwendung ein `Xvfb` mit eigener Selkies-Instanz |
 | Weg des Bildes | durch Traefik, ein Port | **an Traefik vorbei**, WebRTC über UDP |
 | Zusätzliche Ports | keine | 3478 und 49160–49260 auf dem Host (UDP), einmal für alle |
 | Sitzungen gleichzeitig | beliebig viele | beliebig viele (ein TURN für den ganzen Host) |
@@ -194,6 +194,56 @@ Zwei Stolperstellen, beide gemessen:
 * **`fullscreen`, nicht `maximized`.** Maximiert bliebe die Titelleiste
   stehen, und bei einer einzelnen Anwendung gibt es nichts, wozu man sie
   brauchte.
+
+### Mehrere Anwendungen gleichzeitig — auch mit Selkies
+
+Hier stand einmal, Selkies übertrage genau einen Bildschirm, mehrere
+Anwendungen lägen deshalb nebeneinander auf demselben. Das war ein
+Missverständnis: Es gilt für **eine** Selkies-Instanz, nicht für das
+Arbeitsplatzmodell von OTA. Dort bekommt jede Anwendung ihren eigenen
+Bildschirm, formatfüllend, umschaltbar in der Leiste — und mehrere laufen
+gleichzeitig aus einem Container.
+
+Genau so läuft es jetzt auch mit Selkies, nur mit anderer Technik dahinter:
+
+| | KasmVNC | Selkies |
+|---|---|---|
+| X-Server je Anwendung | `Xvnc :N` | `Xvfb :N` |
+| Strom je Anwendung | derselbe `Xvnc`, Port `6900+N` | eigene Selkies-Instanz, Port `8080+N` |
+| Fenstermanager | `xfwm4`, kein Schreibtisch | dito, dazu `--compositor=off` |
+| Traefik-Route | `/s/<kennung>/a/N`, HTTPS | dito, HTTP |
+
+Gemessen an einer Sitzung mit zwei Anwendungen: drei Displays (`X1 X2 X3`),
+drei `Xvfb`, drei Selkies-Instanzen auf 8080, 8082 und 8083, auf `:2` das
+Terminal und auf `:3` Thunar — und beide Ströme liefern 1440×900 im Browser.
+
+Die Prozesskennungen von `Xvfb` und Selkies werden je Bildschirm abgelegt.
+Ein Abgleich über den Namen scheitert hier: `pkill -f` durchsucht ganze
+Kommandozeilen und fände das Abbau-Skript selbst, dessen Text die gesuchten
+Namen enthält.
+
+### Die Anwendung bleibt, wo sie hingehört
+
+In einer Einzelanwendungs-Sitzung gibt es keine Leiste, über die man ein
+Fenster zurückholt. Deshalb sieht eine Aufsicht alle zwei Sekunden nach:
+
+* **Minimiert** — kommt wieder hoch (`_NET_WM_STATE_HIDDEN` → `wmctrl -a`).
+  Gemessen: `IsUnMapped` direkt nach dem Einklappen, nach fünf Sekunden
+  wieder `IsViewable`.
+* **Nicht formatfüllend** — wird wieder formatfüllend gesetzt.
+* **Geschlossen** — das erledigt die Aufsicht des Startskripts, die
+  `custom_startup.sh` neu ausführt, sobald es sich beendet. Gemessen: Prozess
+  beendet, nach drei Sekunden läuft ein neuer, das Fenster wieder
+  formatfüllend.
+
+### Nur eine Leiste
+
+Der Selkies-Client bringt eine eigene Seitenleiste mit, deren runder Knopf am
+rechten Rand **genau unter OTAs Griff** lag. Der von Selkies weicht: Was darin
+steht, ist hier fast durchweg überflüssig (Zwischenablage und Skalierung macht
+OTA), serverseitig festgelegt (Relay-Zwang) oder falsch — *Return to launcher*
+führt aus OTA heraus. Siehe `patches/keine-fremde-leiste.py`; der Build bricht
+ab, wenn der Knopf nicht mehr genau einmal vorkommt.
 
 ### Drei Fallen beim Wechsel auf Debian
 

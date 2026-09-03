@@ -161,19 +161,33 @@ if [ "${OTA_MODE:-workspace}" = "single_app" ]; then
   # den Rändern die leere Fläche. Dieselbe Erkennung wie im Agent (apps.py):
   # `wmctrl -l` listet auch Fenster, die "überall kleben" (-1 in der zweiten
   # Spalte) und keine Anwendung sind.
+  # **Die Aufsicht über das Fenster.** Sie läuft dauerhaft, nicht einmalig:
+  #
+  # * `fullscreen` und nicht `maximized` — maximiert bliebe die Titelleiste
+  #   stehen, und bei einer einzelnen Anwendung gibt es nichts, wozu man sie
+  #   brauchte. Formatfüllend ist ausserdem das, was „nur diese Anwendung"
+  #   verspricht.
+  # * **Minimiert kommt wieder hoch.** Wer die Anwendung über ihren eigenen
+  #   Fensterknopf einklappt, sähe sonst für den Rest der Sitzung eine leere
+  #   Fläche und käme mit den Mitteln von OTA nicht mehr heran — es gibt ja
+  #   keine Leiste, über die man sie zurückholt.
+  # * **Geschlossen kommt sie wieder.** Das erledigt die Aufsicht weiter
+  #   unten, die `custom_startup.sh` neu startet, sobald es sich beendet.
+  #   Diese Schleife setzt das neue Fenster dann wieder formatfüllend.
   (
-    for _ in $(seq 1 120); do
+    while true; do
       FENSTER=$(wmctrl -l 2>/dev/null | awk '$2 != -1' | head -1 | cut -d' ' -f1)
       if [ -n "$FENSTER" ]; then
-        # `fullscreen` und nicht `maximized`: Maximiert bliebe die
-        # Titelleiste stehen, und bei einer einzelnen Anwendung gibt es
-        # nichts, wozu man sie brauchte — verschoben oder geschlossen wird
-        # hier nichts, die Sitzung beendet man in OTA. Formatfüllend ist
-        # ausserdem das, was „nur diese Anwendung" verspricht.
-        wmctrl -i -r "$FENSTER" -b add,fullscreen 2>/dev/null || true
-        break
+        ZUSTAND=$(xprop -id "$FENSTER" _NET_WM_STATE 2>/dev/null || true)
+        case "$ZUSTAND" in
+          *_NET_WM_STATE_HIDDEN*) wmctrl -i -a "$FENSTER" 2>/dev/null || true ;;
+        esac
+        case "$ZUSTAND" in
+          *_NET_WM_STATE_FULLSCREEN*) : ;;
+          *) wmctrl -i -r "$FENSTER" -b add,fullscreen 2>/dev/null || true ;;
+        esac
       fi
-      sleep 0.5
+      sleep 2
     done
   ) &
 else

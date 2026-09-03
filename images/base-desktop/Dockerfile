@@ -183,6 +183,15 @@ RUN curl -fsSL -o /tmp/web.tgz \
 COPY patches/gst-web-pfad.py /tmp/gst-web-pfad.py
 RUN python3 /tmp/gst-web-pfad.py /opt/gst-web/app.js && rm -f /tmp/gst-web-pfad.py
 
+# Der Client bringt eine eigene Seitenleiste mit, deren runder Knopf am
+# rechten Rand genau unter OTAs Griff liegt. Was darin steht, ist hier fast
+# durchweg ueberfluessig (Zwischenablage, Skalierung) oder falsch ("Return to
+# launcher" fuehrt aus OTA heraus). Der Kopf der Datei begruendet es; sie
+# bricht ab, wenn der Knopf nicht mehr genau einmal vorkommt.
+COPY patches/keine-fremde-leiste.py /tmp/keine-fremde-leiste.py
+RUN python3 /tmp/keine-fremde-leiste.py /opt/gst-web/index.html \
+ && rm -f /tmp/keine-fremde-leiste.py
+
 # Und die Anwendung selbst, in ein eigenes Verzeichnis: Debian verwaltet sein
 # Python selbst (PEP 668), und ein `--break-system-packages` wäre genau das,
 # was der Name sagt.

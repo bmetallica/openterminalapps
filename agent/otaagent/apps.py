@@ -60,6 +60,99 @@ sleep 1
 echo "display-ready"
 """
 
+# Dasselbe fuer Selkies: ein eigener Bildschirm je Anwendung, aber mit Xvfb
+# und einer eigenen Selkies-Instanz statt eines Xvnc.
+#
+# **Warum ueberhaupt eine zweite Instanz.** Selkies uebertraegt genau ein
+# Display. Mehrere Anwendungen nebeneinander auf einem Bildschirm waeren ein
+# anderes Arbeitsplatzmodell als das, was OTA bietet — hier bekommt jede
+# Anwendung ihren eigenen Bildschirm, formatfuellend, umschaltbar in der
+# Leiste. Also laeuft je Anwendung ein eigener Strom auf einem eigenen Port,
+# und Traefik hat dafuer schon eine Route.
+#
+# Die Kennungen der Prozesse werden abgelegt. Ein Abgleich ueber den Namen
+# scheitert hier: "pkill -f" durchsucht ganze Kommandozeilen und faende dieses
+# Skript, dessen Text die gesuchten Namen enthaelt.
+START_SELKIES_DISPLAY = r"""
+set -e
+export HOME=${HOME:-/home/ota}
+export XAUTHORITY=$HOME/.Xauthority
+DISPLAY_NUM=@DISPLAY@
+PORT=@PORT@
+GEOMETRY=@GEOMETRY@
+BREITE=${GEOMETRY%%x*}
+HOEHE=${GEOMETRY##*x}
+
+if [ -e /tmp/.X11-unix/X$DISPLAY_NUM ]; then
+  echo "display-exists"
+  exit 0
+fi
+
+xauth add :$DISPLAY_NUM MIT-MAGIC-COOKIE-1 "$(mcookie)"
+
+# Grosszuegiger Rahmen und nicht die Startgroesse: Selkies passt die Aufloesung
+# an das Browserfenster an, und ein Xvfb laesst sich nur innerhalb dessen
+# vergroessern, was er beim Start bekommen hat.
+nohup Xvfb :$DISPLAY_NUM -screen 0 3840x2160x24   -dpms -s 0 -ac -noreset -nolisten tcp   +extension COMPOSITE +extension DAMAGE +extension RANDR +extension RENDER   +extension MIT-SHM +extension XFIXES +extension XTEST   > /tmp/ota-xvfb-$DISPLAY_NUM.log 2>&1 &
+echo $! > /tmp/ota-xvfb-$DISPLAY_NUM.pid
+
+for i in $(seq 1 60); do
+  [ -e /tmp/.X11-unix/X$DISPLAY_NUM ] && break
+  sleep 0.5
+done
+if [ ! -e /tmp/.X11-unix/X$DISPLAY_NUM ]; then
+  echo "display-failed"
+  tail -20 /tmp/ota-xvfb-$DISPLAY_NUM.log >&2 || true
+  exit 1
+fi
+
+DISPLAY=:$DISPLAY_NUM xrandr --output screen --mode "${BREITE}x${HOEHE}" 2>/dev/null || true
+
+# Ein Fenstermanager, aber kein Schreibtisch: Eine formatfuellende Anwendung
+# braucht Rahmen und Groessenverwaltung, keine Leiste. `--compositor=off`,
+# weil ohne GPU jeder Bildaufbau in Software passiert und diese Rechenzeit dem
+# Kodierer gehoert.
+DISPLAY=:$DISPLAY_NUM nohup xfwm4 --compositor=off   > /tmp/ota-wm-$DISPLAY_NUM.log 2>&1 &
+sleep 1
+
+# Die Anmeldung ist dieselbe wie beim Hauptbildschirm — Traefik setzt denselben
+# Header vor jede Route dieser Sitzung.
+export SELKIES_ENABLE_BASIC_AUTH=true
+export SELKIES_BASIC_AUTH_USER="${VNC_USER:-ota}"
+export SELKIES_BASIC_AUTH_PASSWORD="$VNC_PW"
+
+DISPLAY=:$DISPLAY_NUM nohup selkies-gstreamer   --addr=0.0.0.0 --port="$PORT" --enable_https=false   --web_root=/opt/gst-web --enable_resize=true   --turn_host="${SELKIES_TURN_HOST:-}"   --turn_port="${SELKIES_TURN_PORT:-3478}"   --turn_protocol="${SELKIES_TURN_PROTOCOL:-udp}"   --turn_shared_secret="${SELKIES_TURN_SHARED_SECRET:-}"   --stun_host="${SELKIES_STUN_HOST:-${SELKIES_TURN_HOST:-}}"   --stun_port="${SELKIES_STUN_PORT:-${SELKIES_TURN_PORT:-3478}}"   --encoder="${SELKIES_ENCODER:-x264enc}"   --framerate="${SELKIES_FRAMERATE:-30}"   > /tmp/ota-selkies-$DISPLAY_NUM.log 2>&1 &
+echo $! > /tmp/ota-selkies-$DISPLAY_NUM.pid
+
+for i in $(seq 1 90); do
+  (echo > /dev/tcp/127.0.0.1/$PORT) 2>/dev/null && break
+  sleep 0.5
+done
+if ! (echo > /dev/tcp/127.0.0.1/$PORT) 2>/dev/null; then
+  echo "display-failed"
+  tail -20 /tmp/ota-selkies-$DISPLAY_NUM.log >&2 || true
+  exit 1
+fi
+
+echo "display-ready"
+"""
+
+STOP_SELKIES_DISPLAY = r"""
+export HOME=${HOME:-/home/ota}
+export XAUTHORITY=$HOME/.Xauthority
+for was in selkies xvfb; do
+  DATEI=/tmp/ota-$was-@DISPLAY@.pid
+  if [ -f "$DATEI" ]; then
+    PID=$(cat "$DATEI" 2>/dev/null)
+    [ -n "$PID" ] && kill "$PID" 2>/dev/null || true
+    rm -f "$DATEI"
+  fi
+done
+pkill -f "xfwm4.*:@DISPLAY@" 2>/dev/null || true
+rm -f /tmp/.X11-unix/X@DISPLAY@ 2>/dev/null || true
+echo "display-stopped"
+"""
+
 START_APP = r"""
 set -e
 export HOME=${HOME:-/home/kasm-user}
@@ -137,7 +230,17 @@ def _fill(template: str, **values: str | int) -> str:
 
 
 def display_script(display: int, port: int, geometry: str, title: str,
-                   send_primary: bool) -> list[str]:
+                   send_primary: bool, engine: str = "kasmvnc") -> list[str]:
+    """Macht einen Bildschirm auf — je nach Maschine mit Xvnc oder mit Xvfb.
+
+    Beide Wege sind gleich gebaut: ein Bildschirm je Anwendung, ein eigener
+    Port, formatfuellend. Nur was darauf lauscht, ist ein anderes Programm.
+    """
+    if engine == "selkies":
+        return ["bash", "-lc", _fill(
+            START_SELKIES_DISPLAY,
+            display=display, port=port, geometry=geometry,
+        )]
     return ["bash", "-lc", _fill(
         START_DISPLAY,
         display=display, port=port, geometry=geometry, title=title,
@@ -156,6 +259,11 @@ def app_script(display: int, slug: str, command: str) -> list[str]:
         display=display, slug=shlex.quote(slug).strip("'"),
         command=safe,
     )]
+
+
+def stop_selkies_script(display: int) -> list[str]:
+    """Baut einen Selkies-Bildschirm ab: erst der Strom, dann der X-Server."""
+    return ["bash", "-lc", _fill(STOP_SELKIES_DISPLAY, display=display)]
 
 
 def stop_script(display: int) -> list[str]:

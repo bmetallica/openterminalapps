@@ -120,6 +120,20 @@ Browser ──HTTPS──▶ Traefik ──┬──▶ web       Oberfläche (n
 
 ### 🛠️ In Arbeit / Unvollständig
 
+**Eigenes Basisimage ohne Kasm** — Zweig `webrtc-viewer`:
+- ✅ `ota/base-desktop:test` — **Debian 13 + XFCE + Selkies, kein KasmVNC**. Konto `ota` unter `/home/ota`, daneben ein Verweis unter dem OTA-Anmeldenamen. Geprüft durch OTA hindurch: 1404 Bilder, 1440×900, über TURN/TCP.
+- ✅ **Der Heimatpfad kommt aus dem Image.** Der Agent liest `HOME` aus der Image-Konfiguration (`_heimat_aus_env`) und prüft den Wert, bevor er ihn als Mount-Ziel benutzt; ohne Angabe bleibt es bei `/home/kasm-user`, damit `kasmweb/*` unverändert läuft.
+- ✅ **GStreamer aus der Distribution** (1.26.2) statt aus dem Selkies-Bündel. Das war erzwungen, nicht gewählt: Das Bündel bringt `gi/overrides` für **Python 3.12** mit, Debian 13 hat 3.13. Distribution und GStreamer hängen über Python zusammen.
+- ✅ Das Dockerfile prüft sich selbst — `gst-inspect-1.0 webrtcbin`, `x264enc`, der Python-Import von `Gst/GstWebRTC/GstSdp` und die drei Selkies-Module. Alle drei Abstürze auf dem Weg waren grüne Builds mit Fehlern erst in der ersten Sitzung.
+- ⚠️ **1,78 GB, kein Gewinn gegenüber `base-selkies`.** Das Bündel spart 366 MB, Debians `plugins-bad` kostet dasselbe. Die dicksten Brocken sind `libllvm19` (124 MB) und `mesa-libgallium` (41 MB) — Software-OpenGL, ohne GPU nötig. Echter Ballast: `libonnxruntime`/`libdnnl` und `libflite`, ~70 MB, nur mit `--force-depends` zu entfernen.
+
+**Einzelanwendungs-Modus** — überträgt jetzt wirklich nur die Anwendung:
+- ✅ Der Agent schickt `OTA_MODE`; das Startskript startet bei `single_app` nur `xfwm4 --compositor=off` statt der ganzen Arbeitsumgebung und setzt das erste Fenster auf `fullscreen`.
+- ✅ Feld **Startbefehl** im Bildbauer (`ImageBuild.start_command`, über base64 ins Dockerfile). Nötig, weil der Bildbauer für Einzelanwendungen das Startskript des Basisimages behält — bei Kasm-Images richtig, bei OTAs eigenem ein leerer Bildschirm.
+- ✅ Gemessen: nur `Xvfb`, `xfwm4`, die Anwendung, Selkies, PulseAudio; Fenster `0 0 1440x900` mit `_NET_WM_STATE_FULLSCREEN`.
+
+**Ein Fehler, der lange dalag:** Aus `Session.vnc_user` baut die API den Basic-Auth-Header für Traefik — in den Container kam der Name nie. Dort stand `kasm_user` fest im Startskript, und solange beide zufällig übereinstimmten, fiel es nicht auf. Ein Image mit anderem Namen antwortet mit 401 und zeigt eine leere Seite. Beide Seiten lesen jetzt denselben Wert; er hängt an der Maschine (`ota` für Selkies, `kasm_user` für KasmVNC — dort ist der Name Pflicht).
+
 **Selkies als zweiter Streaming-Weg** — Zweig `webrtc-viewer`, Commit `d2ad3ae`:
 - ✅ `ota/base-selkies:test` gebaut, streamt H.264 über WebRTC **durch OTA hindurch**, mit OTAs Anmeldung davor, Auflösung folgt dem Browserfenster
 - ✅ `Template.stream_engine` (`kasmvnc` Vorgabe | `selkies`), engine-abhängige Traefik-Labels (Port 8080/HTTP statt 6901/HTTPS)

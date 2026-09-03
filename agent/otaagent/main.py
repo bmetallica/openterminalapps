@@ -1050,6 +1050,10 @@ class AppStartRequest(BaseModel):
     geometry: str = "1280x720"
     title: str = "OTA"
     send_primary: bool = False
+    # Welche Streaming-Maschine den Bildschirm bedient. Sie entscheidet, ob
+    # ein `Xvnc` aufgemacht wird oder ein `Xvfb` mit eigener Selkies-Instanz —
+    # und ueber den Port, auf dem der Strom liegt.
+    engine: str = "kasmvnc"
 
 
 def _run(container, cmd: list[str]) -> tuple[int, str]:
@@ -1069,7 +1073,9 @@ def start_app(cid: str, req: AppStartRequest) -> dict[str, Any]:
     except NotFound:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Container nicht gefunden")
 
-    port = 6900 + req.display
+    # Ein Port je Bildschirm, getrennt nach Maschine. Traefik legt die Routen
+    # dafuer beim Start des Containers auf Vorrat an (siehe _traefik_labels).
+    port = (8080 + req.display) if req.engine == "selkies" else (6900 + req.display)
 
     # Der Teilbaum dieser Anwendung, bevor sie startet — sonst legt sie ihre
     # Voreinstellungen an und der Teilbaum kaeme zu spaet. Er wird nur beim
@@ -1087,6 +1093,7 @@ def start_app(cid: str, req: AppStartRequest) -> dict[str, Any]:
 
     code, out = _run(container, app_scripts.display_script(
         req.display, port, req.geometry, req.title, req.send_primary,
+        engine=req.engine,
     ))
     if code != 0 or "display-failed" in out:
         raise HTTPException(
@@ -1105,12 +1112,15 @@ def start_app(cid: str, req: AppStartRequest) -> dict[str, Any]:
 
 
 @app.delete("/containers/{cid}/apps/{display}", dependencies=[Depends(require_token)])
-def stop_app(cid: str, display: int) -> dict[str, str]:
+def stop_app(cid: str, display: int, engine: str = "kasmvnc") -> dict[str, str]:
     try:
         container = dc().containers.get(cid)
     except NotFound:
         return {"status": "gone"}
-    _run(container, app_scripts.stop_script(display))
+    if engine == "selkies":
+        _run(container, app_scripts.stop_selkies_script(display))
+    else:
+        _run(container, app_scripts.stop_script(display))
     return {"status": "stopped"}
 
 

@@ -788,22 +788,36 @@ prüfen. **Die Passwort-Durchreichung bleibt draussen** (§17.9), auch wenn sie 
 wäre — und mit Keycloak dazwischen ist sie noch weniger zu rechtfertigen als vorher.
 
 **Die Streaming-Maschine** 🔨 **im Versuch, auf dem Zweig `webrtc-viewer`.** Ein zweiter Weg steht
-und läuft: `ota/base-selkies:test` überträgt einen H.264-Strom über WebRTC statt rechteckiger
+und läuft: `ota/base-desktop:test` überträgt einen H.264-Strom über WebRTC statt rechteckiger
 Ausschnitte über RFB. Eine Vorlage wählt ihn über `stream_engine: selkies`; die Vorgabe bleibt
 `kasmvnc`, und der bisherige Weg ist unverändert. Ausführlich in
 [Kapitel 20](docs/wiki/20-selkies-versuch.md).
 
-Was der Versuch schon beantwortet: **Es geht** — durch Traefik, mit OTAs Anmeldung davor, und die
-Auflösung folgt dem Browserfenster. Drei Fallen lagen auf dem Weg, alle gemessen und behoben: Der
-Client baut zwei Adressen aus der Wurzel statt aus dem Pfad (derselbe Fehler wie damals bei
-KasmVNC), `cvt` gibt es in Ubuntu 24.04 nicht mehr, und coturn darf als Nutzer 1000 nicht nach
-`/var/run` schreiben.
+Was der Versuch schon beantwortet: **Es geht** — durch Traefik, mit OTAs Anmeldung davor, die
+Auflösung folgt dem Browserfenster, und er läuft beim Nutzer. Fünf Fallen lagen auf dem Weg, alle
+gemessen und behoben: Der Client baut zwei Adressen aus der Wurzel statt aus dem Pfad (derselbe
+Fehler wie damals bei KasmVNC); `cvt` gibt es weder in Ubuntu 24.04 noch in Debian 13; coturn darf
+als Nutzer 1000 nicht nach `/var/run` schreiben; **ein TURN-Server hinter einer Docker-Bridge kann
+nicht vermitteln** (er meldet die Adresse des Hosts und verschickt mit der des Containers — er läuft
+deshalb als Dienst im Stack); und **Chrome verschickt DTLS mit fest 1200 Byte je Paket**, was hinter
+einem VPN mit MTU 1000 nie ankommt (`OTA_TURN_PROTOCOL=tcp` mit `OTA_TURN_ICE_POLICY=relay`).
+
+Seither ist der Weg zweimal weitergegangen. `ota/base-desktop:test` ist der Nachfolger: **Debian 13,
+XFCE, Selkies, ohne KasmVNC**, Konto `ota` unter `/home/ota`, GStreamer 1.26 aus der Distribution
+statt aus dem Bündel. Und die Betriebsart **„Einzelne App"** überträgt jetzt wirklich nur die
+Anwendung — nur ein Fenstermanager, formatfüllend, mit einem Startbefehl aus dem Bildbauer.
+
+Zwei Prüfwerkzeuge sind dabei entstanden, die dem Weg vorher fehlten: `scripts/pruef-turn.py`
+schickt ein Paket durch den TURN und vergleicht Absender mit Relay-Adresse, und
+`scripts/pruef-selkies.mjs` fährt einen Browser, der den Session-Container **nicht** direkt
+erreichen kann, durch Anmeldung und Sitzung und liest aus, ob ein Bild ankommt.
 
 Was er **nicht** beantwortet und was vor einer Entscheidung gemessen gehört: wie viel besser es
 wirklich ist (Latenz und Bild nebeneinander), was es an CPU kostet (x264 in Software, ohne GPU
-zahlt das jede Sitzung), und ob das Modell „ein Bildschirm je Sitzung" den Alltag trägt — der
-Anwendungsumschalter je Display gibt es dort nicht. Offen ausserdem: **eine Sitzung je Host**,
-weil die TURN-Ports fest stehen.
+zahlt das jede Sitzung), und ob das Modell „ein Bildschirm je Sitzung" den Alltag trägt — den
+Anwendungsumschalter je Display gibt es dort nicht. Offen ausserdem: das Image ist mit 1,78 GB
+nicht kleiner geworden, und `OTA_TURN_ICE_POLICY=relay` schickt **jede** Sitzung über den
+TURN-Server, auch die im selben Netz.
 
 Die alte Notiz dazu, unverändert gültig als Begründung, warum es Selkies ist und nichts
 Selbstgebautes:
