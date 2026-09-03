@@ -38,8 +38,7 @@ umschaltbar in der Leiste. Siehe unten.
 ## Einrichten
 
 ```bash
-scripts/build-base-image.sh              # ota/base-xfce:test, die Grundlage
-docker build -t ota/base-selkies:test images/base-selkies
+scripts/build-desktop-image.sh --pruefen   # baut ota/base-desktop:1 und misst 19 Punkte
 ```
 
 In `deploy/.env` muss stehen, unter welcher Adresse die **Browser** diesen
@@ -65,8 +64,9 @@ Die letzte Zeile muss `TURN vermittelt.` lauten. Tut sie es nicht, hat es
 keinen Zweck, eine Sitzung zu starten — sie zeigt dann „Waiting for stream"
 und sagt nicht warum.
 
-Dann eine Vorlage anlegen mit `image_ref: ota/base-selkies:test` und
-`stream_engine: selkies`. Alles andere bleibt wie bei jedem Arbeitsplatz:
+Dann eine Vorlage anlegen mit `image_ref: ota/base-desktop:1`. Die
+Streaming-Maschine muss dabei **nicht** angegeben werden — OTA liest sie aus
+dem Image. Alles andere bleibt wie bei jedem Arbeitsplatz:
 Zuhause, Ablagen, Skeleton, Startskript, Rechte.
 
 ## Warum der TURN-Server im Stack läuft und nicht in der Sitzung
@@ -108,21 +108,20 @@ Medienstrom geht daran vorbei.**
 
 ## Das Nachfolge-Image: Debian 13, ohne KasmVNC
 
-`ota/base-selkies:test` leitet von `base-xfce` ab und schleppt damit KasmVNC
-mit — `Xvnc`, `kasmvncserver`, `kasmvncpasswd` und 3,4 MB Weboberfläche, von
-denen dort **nichts läuft**. Das war richtig, solange Selkies ein Versuch auf
-einer funktionierenden Grundlage war, und ist verkehrt herum, seit es streamt.
-
-`images/base-desktop/` beginnt deshalb bei `debian:13`:
+Der erste Anlauf hiess `base-selkies` und leitete von `base-xfce` ab — er
+schleppte damit KasmVNC mit, das dort nie lief: `Xvnc`, `kasmvncserver`,
+`kasmvncpasswd` und 3,4 MB Weboberfläche. Das war richtig, solange Selkies ein
+Versuch auf einer funktionierenden Grundlage war, und verkehrt herum, sobald
+es trug. `images/base-desktop/` beginnt deshalb bei `debian:13`:
 
 ```bash
-docker build -t ota/base-desktop:test images/base-desktop
+scripts/build-desktop-image.sh --pruefen
 ```
 
-| | base-selkies | base-desktop |
+| | Vorgänger `base-selkies` | `base-desktop` |
 |---|---|---|
 | Grundlage | Ubuntu 24.04 über `base-xfce` | Debian 13 direkt |
-| KasmVNC | mit drin, läuft nie | nicht vorhanden |
+| KasmVNC | mit drin, lief nie | nicht vorhanden |
 | Konto / Zuhause | `kasm-user` / `/home/kasm-user` | `ota` / `/home/ota` |
 | GStreamer | Bündel, 1.24.6, 366 MB unter `/opt` | aus der Distribution, 1.26.2 |
 | Grösse | 1,73 GB | 1,78 GB |
@@ -412,7 +411,7 @@ gezielt nachstellen — er verschwindet mit den beiden Zeilen oben.
    baut sich die Seite vollständig auf, das Bild bleibt schwarz, und in der
    Konsole steht ein einzelnes `401` von OTAs eigener Schnittstelle. Beide
    Stellen werden beim Bauen des Images ersetzt
-   (`images/base-selkies/patches/gst-web-pfad.py`) — und wenn die Zeilen sich
+   (`images/base-desktop/patches/gst-web-pfad.py`) — und wenn die Zeilen sich
    in einer neuen Fassung ändern, **bricht der Build ab**, statt still das
    Falsche zu tun.
 

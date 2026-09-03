@@ -125,7 +125,7 @@ Browser ──HTTPS──▶ Traefik ──┬──▶ web       Oberfläche (n
 - ✅ **Der Heimatpfad kommt aus dem Image.** Der Agent liest `HOME` aus der Image-Konfiguration (`_heimat_aus_env`) und prüft den Wert, bevor er ihn als Mount-Ziel benutzt; ohne Angabe bleibt es bei `/home/kasm-user`, damit `kasmweb/*` unverändert läuft.
 - ✅ **GStreamer aus der Distribution** (1.26.2) statt aus dem Selkies-Bündel. Das war erzwungen, nicht gewählt: Das Bündel bringt `gi/overrides` für **Python 3.12** mit, Debian 13 hat 3.13. Distribution und GStreamer hängen über Python zusammen.
 - ✅ Das Dockerfile prüft sich selbst — `gst-inspect-1.0 webrtcbin`, `x264enc`, der Python-Import von `Gst/GstWebRTC/GstSdp` und die drei Selkies-Module. Alle drei Abstürze auf dem Weg waren grüne Builds mit Fehlern erst in der ersten Sitzung.
-- ⚠️ **1,78 GB, kein Gewinn gegenüber `base-selkies`.** Das Bündel spart 366 MB, Debians `plugins-bad` kostet dasselbe. Die dicksten Brocken sind `libllvm19` (124 MB) und `mesa-libgallium` (41 MB) — Software-OpenGL, ohne GPU nötig. Echter Ballast: `libonnxruntime`/`libdnnl` und `libflite`, ~70 MB, nur mit `--force-depends` zu entfernen.
+- ⚠️ **1,78 GB, kein Gewinn gegenüber dem Vorgänger.** Das Bündel spart 366 MB, Debians `plugins-bad` kostet dasselbe. Die dicksten Brocken sind `libllvm19` (124 MB) und `mesa-libgallium` (41 MB) — Software-OpenGL, ohne GPU nötig. Echter Ballast: `libonnxruntime`/`libdnnl` und `libflite`, ~70 MB, nur mit `--force-depends` zu entfernen.
 
 **Einzelanwendungs-Modus** — überträgt jetzt wirklich nur die Anwendung:
 - ✅ Der Agent schickt `OTA_MODE`; das Startskript startet bei `single_app` nur `xfwm4 --compositor=off` statt der ganzen Arbeitsumgebung und setzt das erste Fenster auf `fullscreen`.
@@ -135,7 +135,7 @@ Browser ──HTTPS──▶ Traefik ──┬──▶ web       Oberfläche (n
 **Ein Fehler, der lange dalag:** Aus `Session.vnc_user` baut die API den Basic-Auth-Header für Traefik — in den Container kam der Name nie. Dort stand `kasm_user` fest im Startskript, und solange beide zufällig übereinstimmten, fiel es nicht auf. Ein Image mit anderem Namen antwortet mit 401 und zeigt eine leere Seite. Beide Seiten lesen jetzt denselben Wert; er hängt an der Maschine (`ota` für Selkies, `kasm_user` für KasmVNC — dort ist der Name Pflicht).
 
 **Selkies als zweiter Streaming-Weg** — Zweig `webrtc-viewer`, Commit `d2ad3ae`:
-- ✅ `ota/base-selkies:test` gebaut, streamt H.264 über WebRTC **durch OTA hindurch**, mit OTAs Anmeldung davor, Auflösung folgt dem Browserfenster
+- ✅ Der erste Anlauf (`base-selkies`, inzwischen entfernt) streamte H.264 über WebRTC **durch OTA hindurch**, mit OTAs Anmeldung davor, Auflösung folgt dem Browserfenster
 - ✅ `Template.stream_engine` (`kasmvnc` Vorgabe | `selkies`), engine-abhängige Traefik-Labels (Port 8080/HTTP statt 6901/HTTPS)
 - ✅ **TURN als eigener Dienst im Stack** (`turn`, `network_mode: host`, kurzlebige HMAC-Zugänge aus `OTA_TURN_SECRET`); der Session-Container veröffentlicht keinen Port mehr, beliebig viele Selkies-Sitzungen je Host
 - ✅ Testarbeitsplatz **„Arbeitsplatz (Selkies-Versuch)"**, sichtbar nur für Gruppe `selkies-versuch` (Mitglied: `bmetallica`)
@@ -143,7 +143,7 @@ Browser ──HTTPS──▶ Traefik ──┬──▶ web       Oberfläche (n
 - ✅ **Läuft beim Nutzer**, Bild und Zwischenablage, am 2026-09-02 bestätigt
 - ✅ **MTU-Falle gefunden und behoben.** Chrome verschickt seinen DTLS-Handschlag mit fest 1200 Byte je Paket und passt sich einer kleineren Pfadgrösse *nicht* an. Hinter WireGuard mit MTU 1000 kam nur das kleine Paket der Flucht an (`263, 263, 263, …` statt `1200, 263, 1200, 263`), OpenSSL wartete auf den Rest und antwortete nie — im Browser „Waiting for stream", im Container **kein Fehler**. Abhilfe: `OTA_TURN_PROTOCOL=tcp` zusammen mit `OTA_TURN_ICE_POLICY=relay`; ein dritter Image-Patch macht `iceTransportPolicy` überhaupt erst einstellbar.
 - ✅ Zwei Prüfwerkzeuge, die dem Weg vorher fehlten: `scripts/pruef-turn.py` (schickt ein Paket durch den TURN und vergleicht Absender mit Relay-Adresse) und `scripts/pruef-selkies.mjs` (fährt einen Browser in einem Container, der den Session-Container **nicht** direkt erreichen kann, durch Anmeldung und Sitzung und liest aus der WebRTC-Statistik, ob ein Bild ankommt)
-- ❌ `base-selkies` erbt von `base-xfce` und schleppt damit **KasmVNC mit, das dort nie läuft** — Nachfolger `images/base-desktop` (Debian 13, ohne KasmVNC, Konto `ota`) ist in Arbeit
+- ✅ Abgelöst durch `images/base-desktop` (Debian 13, ohne KasmVNC, Konto `ota`); der Vorgänger ist entfernt
 - ❌ Keine eigene Prüfreihe für den Selkies-Weg; die vorhandenen Reihen prüfen nur, dass der **bisherige** Weg unberührt ist
 - ❌ Kein Umschalter in der Oberfläche — `stream_engine` lässt sich nur über die API setzen
 
@@ -314,7 +314,7 @@ cd tests && node e2e.mjs       # nur der Browsertest (107 Prüfungen)
 # --- Images --------------------------------------------------------------
 ./scripts/build-base-image.sh --pruefen        # ota/base-xfce:test, 29 Punkte
 OTA_PRUEFE_JAVA=1 ./scripts/build-base-image.sh --nur-pruefen   # + Abnahmefall 7
-docker build -t ota/base-selkies:test images/base-selkies       # der Versuch
+scripts/build-desktop-image.sh --pruefen                        # Basisimage bauen und messen
 make sbom                                       # Stückliste je Image
 
 # --- Nützlich ------------------------------------------------------------
