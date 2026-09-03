@@ -254,12 +254,15 @@ aufgeräumt, deren Datenbankzeile noch `running` war, und mit `pkill -f` die eig
    Ohne diese Zahlen keine Entscheidung für oder gegen den Weg.
 3. **Wenn Selkies bleibt:** eine eigene Prüfreihe für den Selkies-Weg und ein Umschalter in der Oberfläche für `stream_engine`. (Die Portvergabe je Sitzung stand hier und hat sich erledigt: Der TURN ist ein gemeinsamer Dienst geworden.)
 4. **Branding** (eigenes Logo/Farben je Anlage) — klein, gut machbar, rein Frontend.
-5. **code-server** als leichte Engine für reine Editor-Sessions (Extensions über Open VSX) — überschneidet sich stark mit dem, was der Arbeitsplatz kann; erst bauen, wenn jemand es braucht.
-6. **Guacamole-Engine** für RDP/VNC-Ziele — eigener Meilenstein mit eigener Abnahme.
-7. **Netzlaufwerke / Kerberos (M6)** — braucht ein KDC und einen Dateiserver, hier nicht ehrlich prüfbar. **Passwort-Durchreichung bleibt draussen.**
-8. **Mehrere Hosts (M10)** — braucht eine zweite Maschine.
+5. **Mehrere Hosts (M10)** — braucht eine zweite Maschine.
 
 **Ausdrücklich nicht anfassen:** Firefox-Erweiterung signieren (vom Nutzer ausgenommen), GPU-Durchreichung (keine GPU vorhanden).
+
+**Gestrichen am 2026-09-03** (Entscheidung des Betreibers) — nicht wieder aufnehmen, ohne dass er es sagt:
+
+* **code-server** als Engine für Editor-Sessions — überschneidet sich fast vollständig mit dem, was der Arbeitsplatz kann.
+* **Guacamole-Engine** für RDP-Ziele — eigener Meilenstein mit eigener Abnahme für zwei Direktverbindungen; `HauptPC` und `VNC-HauptPC` laufen weiter als Kasm-Images.
+* **Netzlaufwerke / Kerberos (M6)** — braucht ein KDC, hier nicht ehrlich prüfbar. **Die Passwort-Durchreichung bleibt trotzdem draussen** — das war nie eine Frage des Aufwands.
 
 ---
 

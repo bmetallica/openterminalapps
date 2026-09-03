@@ -22,10 +22,10 @@ früh. Die Einbindung vorhandener **Kasm-Images und -Registries** ist ein Featur
 | **M3** | Oberfläche | Entwurf an echte Daten angeschlossen | ✅ **erledigt** |
 | **M4** | **Der Arbeitsplatz** | Ein Linux je Nutzer, Apps einzeln gestreamt | ✅ **Grundfunktion steht** |
 | **M5** | Golden Images | Build-Pipeline, Versionen, App-Katalog, Skeleton | 2–3 Wochen |
-| **M6** | Identität & Netzlaufwerke | AD/LDAP ✅ — mit M11 abgelöst; Kerberos und Shares offen | 1–2 Wochen |
+| **M6** | Identität ~~& Netzlaufwerke~~ | AD/LDAP ✅ — mit M11 abgelöst; Kerberos und Shares **gestrichen** | ✅ **erledigt** |
 | **M7** | Migration & Härtung | Profil umgezogen ✅, Härtung, Monitoring | 1–2 Wochen |
 | **M8** | Kasm-Kompatibilität | Einzelimages und ganze Registries einbinden | ✅ **erledigt** |
-| **M9** | Optionale Erweiterungen | Guacamole, WebAuthn, code-server, Gruppenlaufwerke | 2–3 Wochen |
+| **M9** | Optionale Erweiterungen | WebAuthn ✅, Gruppenlaufwerke ✅; ~~Guacamole~~, ~~code-server~~ **gestrichen** | ✅ **erledigt** |
 | **M10** | Skalierung | Mehrere Hosts, Pools | offen |
 | **M11** | **Zentrale Identität** | Keycloak als Anmeldung, OTA als sein Verwalter und Portal | ✅ **erledigt** |
 
@@ -473,16 +473,20 @@ Session-Prozesse, und die ereignisgesteuerte statt abfragende Brücke (braucht e
 
 ---
 
-## M6 — Identität & Netzlaufwerke · teilweise abgelöst
+## M6 — Identität ~~& Netzlaufwerke~~ · abgelöst und gestrichen
 
 Erst mit dem Arbeitsplatz sinnvoll (`plan.md` §9.4).
 
 > **Die Identitäts-Hälfte ist mit M11 erledigt und ersetzt.** Die eigene LDAP-Anbindung
 > (`directory.py`) war ab 2026-08-28 eingefroren und ist mit der Übernahme weggefallen; ein
 > Verzeichnis bindet man jetzt in Keycloak an, eingerichtet über OTAs Oberfläche
-> ([`auth-roadmap.md`](auth-roadmap.md), Etappe C). Was hier offen bleibt, sind die
-> **Netzlaufwerke** — Kerberos, Tickets, UID/GID. Dafür braucht es ein KDC und einen Dateiserver,
-> und ohne die lässt sich nichts davon ehrlich prüfen.
+> ([`auth-roadmap.md`](auth-roadmap.md), Etappe C).
+>
+> **Die andere Hälfte — Kerberos und Netzlaufwerke — ist am 2026-09-03 gestrichen** (Entscheidung
+> des Betreibers). Sie bräuchte ein KDC und einen Dateiserver; ohne beides liesse sich nichts davon
+> ehrlich prüfen, und ungeprüft gebaut ist genau der Teil, den man nicht ungeprüft bauen darf. Die
+> Analyse der vier Wege bleibt unten stehen — sie erklärt, warum die Passwort-Durchreichung
+> draussen bleibt, und die gilt weiter. **M6 ist damit abgeschlossen.**
 
 - [x] **Eine Session ohne Container stand für immer im Weg.** Sie zählte als „live", der nächste
       Startversuch bekam sie zurück statt einer neuen — und der Arbeitsplatz liess sich nicht mehr
@@ -506,19 +510,22 @@ Erst mit dem Arbeitsplatz sinnvoll (`plan.md` §9.4).
       Sicherungen und Protokollspur bleiben; Löschen entscheidet ein Mensch
 - [x] `identity_configs`; Standard ist **abgeschaltet** — die einzige Einstellung, bei der ein
       Fehler Menschen aussperrt
-**Kerberos und Netzlaufwerke bleiben offen.** Dafür reicht ein LDAP-Server nicht — es braucht ein
-echtes AD mit KDC und Dateiservern, und ohne eines lässt sich nichts davon ehrlich prüfen.
+**Kerberos und Netzlaufwerke — gestrichen (2026-09-03).** Dafür reicht ein LDAP-Server nicht: es
+bräuchte ein echtes AD mit KDC und Dateiservern, und ohne eines liesse sich nichts davon ehrlich
+prüfen. Wer Laufwerke im Arbeitsplatz braucht, verbindet sie dort selbst (Weg 3) oder hängt sie
+über den Container-Start ein.
 
-- [ ] **Weg 2 (Kerberos-Ticket-Injektion)** als Standard, Mount per `sec=krb5`
-- [ ] Ticket-Erneuerung im Container per `k5start`
-- [ ] UID/GID aus dem Verzeichnis (`uidNumber`/`gidNumber`) beim Start setzen
-- [ ] Weg 3 (Nutzer verbindet selbst) immer verfügbar
+- ~~Weg 2 (Kerberos-Ticket-Injektion) als Standard, Mount per `sec=krb5`~~ — **gestrichen**
+- ~~Ticket-Erneuerung im Container per `k5start`~~ — **gestrichen**
+- ~~UID/GID aus dem Verzeichnis (`uidNumber`/`gidNumber`) beim Start setzen~~ — **gestrichen**
+- Weg 3 (Nutzer verbindet selbst) bleibt der Weg — er braucht nichts von OTA
 - ~~Weg 4 (Passwort-Durchreichung)~~ — **wird nicht gebaut.** Ausdrücklich verworfen; mit Keycloak
       dazwischen ist sie noch weniger zu rechtfertigen als vorher. Ein Punkt, den man „später mal"
       offenhält, wird irgendwann gebaut — deshalb steht er hier als Nein und nicht als Kästchen
-- [ ] Zugangsdaten nur über `tmpfs` mit `0600` — **nie** als Umgebungsvariable, nie ins Profil,
-      nie ins Image
-- [ ] Weg 1 (S4U2Proxy) evaluieren, falls die AD-Konfiguration es hergibt
+- Zugangsdaten nur über `tmpfs` mit `0600` — **nie** als Umgebungsvariable, nie ins Profil, nie
+      ins Image. Die Regel bleibt stehen, auch ohne Kerberos: sie gilt für jedes Geheimnis, das
+      jemals in einen Container gerät
+- ~~Weg 1 (S4U2Proxy) evaluieren~~ — **gestrichen** mit dem Rest
 
 ---
 
@@ -687,7 +694,7 @@ sondern daraus, dass jemand es benutzt hat:
 
 ---
 
-## M9 — Optionale Erweiterungen · 2–3 Wochen
+## M9 — Optionale Erweiterungen · abgeschlossen
 
 - [x] ~~**OIDC** mit PKCE, Claim→Gruppen-Mapping~~ — mit M11 erledigt (`auth-roadmap.md`)
 - [x] **WebAuthn/Passkeys** (2026-09-02) — als zweiter Faktor neben dem Einmalkennwort, nicht
@@ -705,8 +712,12 @@ sondern daraus, dass jemand es benutzt hat:
 - [x] **Nebenbefund**: Die Idempotenzprüfung der Rollenbedingung griff nie — sie suchte nach
       `authenticationConfig`, der einzelne Schritt heisst das Feld aber `authenticatorConfig`. Bei
       jedem `make identity` entstand eine neue Konfiguration, die alte blieb verwaist liegen
-- [ ] **Guacamole-Engine** für RDP/VNC-Ziele — löst `HauptPC` und `VNC-HauptPC` ab
-- [ ] **code-server** als leichte Engine für reine Editor-Sessions (Extensions dann über Open VSX)
+- ~~**Guacamole-Engine** für RDP/VNC-Ziele~~ — **gestrichen (2026-09-03).** Ein eigener
+      Meilenstein mit eigener Abnahme für zwei Direktverbindungen; `HauptPC` und `VNC-HauptPC`
+      laufen weiter als Kasm-Images
+- ~~**code-server** als leichte Engine für reine Editor-Sessions~~ — **gestrichen (2026-09-03).**
+      Überschneidet sich fast vollständig mit dem, was der Arbeitsplatz ohnehin kann; die
+      Erweiterungen müssten zudem über Open VSX gehen (`plan.md` §3.1)
 - [x] **Gemeinsame Gruppenlaufwerke** (2026-09-02) — die dritte Ablage neben der gemeinsamen und
       der eigenen. Je Gruppe ein Verzeichnis, in jedem Arbeitsplatz seiner Mitglieder unter
       `/mnt/gruppen/<name>` beschreibbar eingehängt, im Zuhause als „Gruppen". **Die
@@ -782,10 +793,10 @@ dort. Entschieden war, sie nach der unveränderlichen Kennung zu benennen und ei
 dem Namen danebenzulegen ([`auth-roadmap.md`](auth-roadmap.md) §4, Entscheidung 5); umgesetzt ist
 das nicht. Bis dahin gilt: **kein Konto in Keycloak umbenennen.**
 
-**Netzlaufwerke** (der Rest von M6). Kerberos-Tickets, `sec=krb5`, UID/GID aus dem Verzeichnis.
-Dafür braucht es ein KDC und einen Dateiserver; ohne beides lässt sich nichts davon ehrlich
-prüfen. **Die Passwort-Durchreichung bleibt draussen** (§17.9), auch wenn sie der kürzeste Weg
-wäre — und mit Keycloak dazwischen ist sie noch weniger zu rechtfertigen als vorher.
+~~**Netzlaufwerke** (der Rest von M6)~~ — **gestrichen (2026-09-03)**, zusammen mit der
+Guacamole-Engine und code-server. Kerberos bräuchte ein KDC und einen Dateiserver; ohne beides
+liesse sich nichts davon ehrlich prüfen. **Die Passwort-Durchreichung bleibt draussen** (§17.9) —
+das war nie eine Frage des Aufwands und bleibt auch nach dem Streichen die Antwort.
 
 **Die Streaming-Maschine** ✅ **umgestellt.** `ota/base-desktop` überträgt einen H.264-Strom über
 WebRTC statt rechteckiger Ausschnitte über RFB und ist die **Vorgabe**. Der Weg über KasmVNC bleibt
@@ -837,6 +848,6 @@ Praxis entschieden: Die Anlage läuft hinter einem Reverse Proxy mit einem Zerti
 Firmen-CA, und OTAs eigene CA bleibt für den direkten Weg und für angebundene Anwendungen
 (`/ca.crt`). Beide Wege funktionieren nebeneinander und sind geprüft.
 
-**Nicht als Nächstes**: M9 und M10. Sie sind sauber beschrieben und warten, bis jemand sie
-wirklich braucht — eine zweite Maschine, eine RDP-Quelle, ein helles Theme. Nichts davon fehlt
-heute jemandem.
+**Nicht als Nächstes**: M10. Er ist sauber beschrieben und wartet auf eine zweite Maschine. M9 ist
+zu; was dort noch offen stand — die Guacamole-Engine und code-server — ist am 2026-09-03
+gestrichen. Nichts davon fehlt heute jemandem.

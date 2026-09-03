@@ -31,7 +31,7 @@ Daraus folgt:
 | | |
 |---|---|
 | **Vorkonfiguration** | Admins bauen den Arbeitsplatz als Golden Image — gesetzte Extensions, fertige Einstellungen, Firmen-Zertifikate. Versioniert, mit Rollback |
-| **Identität** | Ein Nutzer, ein Container, eine Identität. Erst damit lohnen sich AD-Anmeldung und Netzlaufwerke |
+| **Identität** | Ein Nutzer, ein Container, eine Identität — eine Anmeldung für alles, was er startet |
 | **Ressourcen** | Das Kontingent gehört zum Menschen, nicht zum Werkzeug. Nutzer A bekommt 4 Kerne, Nutzer B einen |
 
 ## Einzelne Anwendungen als Feature

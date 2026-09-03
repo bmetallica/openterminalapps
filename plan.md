@@ -27,8 +27,8 @@ Daraus folgt der Rest fast von selbst:
 - **Vorkonfiguration ist zentral.** Admins bauen den Arbeitsplatz als Golden Image: gesetzte
   Extensions, fertige Einstellungen, Firmen-Zertifikate, Proxy-Konfiguration. Ausgerollt in Versionen,
   mit Rollback.
-- **Identität wird sinnvoll.** Ein Nutzer, ein Container, eine Identität — erst damit lohnt es sich,
-  AD-Anmeldedaten hineinzureichen und Netzlaufwerke zu mounten (§9.4).
+- **Identität wird sinnvoll.** Ein Nutzer, ein Container, eine Identität — eine Anmeldung für alles,
+  was er startet. (Das Weiterreichen an Netzlaufwerke ist gestrichen, §9.4.)
 - **Ressourcen sind pro Mensch begrenzbar**, nicht pro Werkzeug: Nutzer A bekommt 4 Kerne, Nutzer B
   einen (§5).
 
@@ -577,8 +577,8 @@ für beide Betriebsarten. Ein Template trägt das Feld `mode`:
 - **Ein Zuhause statt vieler Inseln.** Alle Werkzeuge teilen sich `/home`, SSH-Keys, Git-Konfiguration,
   Projektverzeichnisse und die Zwischenablage der Sitzung. Heute liegt derselbe Klon dreimal herum,
   wenn jemand VS Code, JetBrains und ein Terminal nutzt.
-- **AD-Anmeldung wird sinnvoll.** Ein Nutzer, ein Container, eine Identität — erst damit lohnt es sich,
-  Kerberos-Tickets hineinzureichen und Netzlaufwerke zu mounten (§9.4).
+- **AD-Anmeldung wird sinnvoll.** Ein Nutzer, ein Container, eine Identität — eine Anmeldung für
+  alles, was darin läuft. (Kerberos und Netzlaufwerke sind gestrichen, §9.4.)
 - **Golden Images werden mächtiger.** Ein Blueprint stattet mehrere Anwendungen gleichzeitig aus.
 - **Weniger Grundlast.** Die Ersparnis ist real, aber kleiner als sie wirkt — siehe §9.3.
 - **Ressourcen gehören zum Menschen, nicht zum Werkzeug.** Ein Kontingent pro Nutzer ist das, was
@@ -747,13 +747,19 @@ jeden hereinlässt.
 **Wer im Verzeichnis verschwindet, wird deaktiviert — nicht gelöscht.** Zuhause, Sicherungen und
 Protokollspur bleiben. Löschen ist eine Entscheidung, die ein Mensch trifft.
 
-### 9.4 AD-Anmeldedaten in den Container reichen — offen
+### 9.4 AD-Anmeldedaten in den Container reichen — gestrichen
 
 Das ist der sicherheitskritischste Teil des ganzen Projekts, deshalb ausführlich.
-Ziel: Der Nutzer erreicht im Container seine gewohnten Netzlaufwerke.
+Ziel war: Der Nutzer erreicht im Container seine gewohnten Netzlaufwerke.
 
-**Nichts davon ist gebaut.** Dafür reicht ein LDAP-Server nicht: Es braucht ein echtes AD mit KDC
-und Dateiservern, und ohne eines lässt sich keiner der vier Wege ehrlich prüfen.
+**Gestrichen am 2026-09-03.** Nichts davon ist gebaut, und es wird nichts davon gebaut. Dafür
+reicht ein LDAP-Server nicht: Es bräuchte ein echtes AD mit KDC und Dateiservern, und ohne eines
+liesse sich keiner der vier Wege ehrlich prüfen — ungeprüft bauen ist bei genau diesem Teil keine
+Option. Es bleibt **Weg 3**: Der Nutzer verbindet das Laufwerk im Container selbst; dafür braucht
+OTA nichts zu wissen und nichts aufzubewahren.
+
+Die Abwägung steht weiterhin hier, weil sie die eine Regel begründet, die unabhängig davon gilt:
+**Die Passwort-Durchreichung (Weg 4) bleibt draußen** (§17.9).
 
 **Vier Wege, absteigend nach Sauberkeit:**
 
@@ -764,11 +770,12 @@ und Dateiservern, und ohne eines lässt sich keiner der vier Wege ehrlich prüfe
 | **3 · Nutzer verbindet selbst** | Im Container ein Knopf „Laufwerk verbinden", Passworteingabe dort | **Immer verfügbarer Rückfall.** Null Risiko für die Plattform, minimal unbequem |
 | **4 · Passwort-Durchreichung** | OTA hält das Passwort für die Sitzungsdauer und mountet damit | **Nur als ausdrückliches Opt-in.** Macht OTA zum Passwortspeicher — eine erhebliche Vergrößerung des Schadensradius |
 
-**Empfehlung**: Weg 2 als Standard, Weg 1 wo die AD-Konfiguration es hergibt, Weg 3 immer verfügbar.
-Weg 4 bleibt abschaltbar und ist **standardmäßig aus**, mit einem unmissverständlichen Warntext im
-Admin-UI. Ich baue ihn nicht heimlich ein, weil er bequem ist.
+**Empfehlung war**: Weg 2 als Standard, Weg 1 wo die AD-Konfiguration es hergibt, Weg 3 immer
+verfügbar, Weg 4 abschaltbar und standardmäßig aus. **Übrig bleibt Weg 3** — die Wege 1, 2 und 4
+sind gestrichen. Weg 4 wäre auch ohne das Streichen nicht gekommen: Ich baue ihn nicht heimlich
+ein, weil er bequem ist.
 
-**Harte Regeln, unabhängig vom gewählten Weg:**
+**Harte Regeln, falls jemals wieder ein Geheimnis in einen Container soll:**
 - **Niemals als Umgebungsvariable.** `-e SMBPASS=…` ist über `docker inspect` für jeden mit Docker-Zugriff
   lesbar und landet in Logs. Zugangsdaten gehören in eine `tmpfs`-Datei mit `0600`, die nie auf Platte geht.
 - **Niemals ins Golden Image.** Der Secret-Filter aus §8.3 greift auch hier, erweitert um `krb5cc_*`,
@@ -1929,14 +1936,14 @@ Nicht ein Zusatz neben Ein-App-Containern, sondern das Modell, für das OTA geba
 Beide Betriebsarten nutzen damit dieselbe Strecke. Der eine Nachteil — jedes Display hat
 seine eigene Zwischenablage — ist durch die Brücke aus §10.4 ausgeglichen.
 
-### 17.9 AD-Anmeldedaten — Kerberos, keine Passwort-Durchreichung
+### 17.9 AD-Anmeldedaten — keine Passwort-Durchreichung
 
-Standardweg wird die **Kerberos-Ticket-Injektion** (§9.4, Weg 2). Der Weg „Nutzer verbindet
-selbst" bleibt immer verfügbar.
+Kerberos und die Netzlaufwerke sind gestrichen (§9.4, 2026-09-03). Übrig bleibt der Weg „Nutzer
+verbindet selbst" — er braucht von OTA nichts.
 
-**Die Passwort-Durchreichung wird vorerst gar nicht gebaut** — nicht nur abgeschaltet. Sie
-würde OTA zum Passwortspeicher machen; wenn sie später gebraucht wird, ist das eine eigene
-Entscheidung mit eigener Prüfung.
+**Die Passwort-Durchreichung wird gar nicht gebaut** — nicht nur abgeschaltet. Sie würde OTA zum
+Passwortspeicher machen. Dass der bequeme Kerberos-Weg jetzt wegfällt, ändert daran nichts: Der
+kürzeste verbleibende Weg zu eingehängten Laufwerken ist nicht deshalb der richtige.
 
 ### 17.10 Cursor — bleibt draussen
 

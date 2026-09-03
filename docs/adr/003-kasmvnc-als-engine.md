@@ -20,7 +20,8 @@ eigenem WebSocket-Port. Die Displayvergabe macht OTA selbst.
 **Apache Guacamole.** Ausgereift, mit RDP und SSH obendrein, und lizenzlich unproblematisch.
 Es braucht aber einen eigenen Dienst (`guacd`) neben den Sessions und spricht klassisches VNC — die
 Zwischenablage läuft über den Guacamole-Client, nicht über den Browser, und die
-Auflösungsanpassung ist gröber. Für RDP-Ziele bleibt Guacamole vorgemerkt; als Fundament für den
+Auflösungsanpassung ist gröber. Für RDP-Ziele war Guacamole vorgemerkt — **am 2026-09-03
+gestrichen**, `HauptPC` und `VNC-HauptPC` laufen als Kasm-Images weiter. Als Fundament für den
 Arbeitsplatz ist es der Umweg.
 
 **code-server / openvscode-server.** Der bequemste Weg zu einem Editor im Browser — und nur zu

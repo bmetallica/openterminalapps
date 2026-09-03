@@ -11,7 +11,7 @@
 > und setzt dort keine Internet-Regeln durch. Zwei Konten mit derselben Adresse gehen nicht:
 > Angebundene Anwendungen erkennen Menschen daran wieder, und zwei wären dort ein Mensch.
 
-*Für Administratoren.* AD-Anbindung ✅, Kerberos 🔨 M6
+*Für Administratoren.* AD-Anbindung ✅, Kerberos gestrichen
 
 ## Grundsatz
 
@@ -170,7 +170,8 @@ Im Gruppen-Editor steht **„Zweiter Faktor ist Pflicht"**. Ist er an, gilt für
 Der Zwang lässt sich auch für die Systemgruppen setzen — gerade für sie: *„admins muss
 Zwei-Faktor haben"* ist der häufigste Wunsch.
 
-WebAuthn und Passkeys sind weiterhin 🔨 offen (M9).
+WebAuthn und Passkeys stehen ✅ zur Verfügung — als zweiter Faktor neben dem Einmalkennwort,
+nicht als Ersatz für das Passwort.
 
 ## Active Directory und LDAP ✅
 
@@ -257,20 +258,26 @@ scripts/ldap-test-server.sh stop
 Der Testserver gehört **nicht** zum Stack: Ein Verzeichnisdienst, der beim `make up` mitstartet,
 wäre eine Einladung, gegen ihn zu produzieren.
 
-### Was noch fehlt 🔨
+### Was nicht kommt
 
-**Kerberos und Netzlaufwerke** (`sec=krb5`, `k5start`, UID/GID aus dem Verzeichnis) sind nicht
-gebaut. Dafür reicht ein LDAP-Server nicht — es braucht ein echtes AD mit KDC und Dateiservern,
-und ohne eines lässt sich nichts davon ehrlich prüfen.
+**Kerberos und Netzlaufwerke** (`sec=krb5`, `k5start`, UID/GID aus dem Verzeichnis) sind **am
+2026-09-03 gestrichen**. Dafür reicht ein LDAP-Server nicht — es bräuchte ein echtes AD mit KDC
+und Dateiservern, und ohne eines liesse sich nichts davon ehrlich prüfen. Wer im Arbeitsplatz ein
+Netzlaufwerk braucht, verbindet es dort selbst (Weg 3 unten).
 
 **Die Passwort-Durchreichung bleibt draußen.** Sie wäre der kürzeste Weg zu eingehängten
 Laufwerken und der einzige, bei dem OTA das Anmeldepasswort eines Menschen aufbewahren müsste
 (`plan.md` §17.9).
 
-## Netzlaufwerke im Arbeitsplatz 🔨 M6
+## Netzlaufwerke im Arbeitsplatz — gestrichen
 
-Erst mit dem Arbeitsplatz sinnvoll: ein Nutzer, ein Container, eine Identität. Vier Wege, geordnet
-nach Sauberkeit:
+**Gestrichen am 2026-09-03.** OTA reicht keine Anmeldedaten an Dateiserver weiter und wird das
+nicht tun. Wer im Arbeitsplatz ein Netzlaufwerk braucht, verbindet es dort selbst — das ist Weg 3
+in der folgenden Tabelle, und er braucht von OTA nichts.
+
+Die Abwägung bleibt hier stehen, weil sie erklärt, **warum** Weg 4 draußen bleibt — diese
+Entscheidung gilt unabhängig davon, ob Kerberos je gebaut wird. Vier Wege, geordnet nach
+Sauberkeit:
 
 | Weg | Was passiert | Bewertung |
 |---|---|---|
@@ -283,7 +290,7 @@ nach Sauberkeit:
 erheblich: Wer OTA kompromittiert, bekommt Passwörter statt nur Sitzungen. Wer ihn einschalten will,
 sieht im Admin-UI einen unmissverständlichen Hinweis.
 
-**Unabhängig vom Weg gilt:**
+**Wenn jemals wieder jemand daran denkt, gilt unabhängig vom Weg:**
 - Zugangsdaten niemals als Umgebungsvariable — über `docker inspect` lesbar und in Logs sichtbar
 - Niemals ins Golden Image und nie ins persistente Profil
 - Ablage in einer `tmpfs`-Datei mit `0600`, die nie auf Platte geht

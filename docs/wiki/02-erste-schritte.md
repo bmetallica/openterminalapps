@@ -88,7 +88,8 @@ Der Nutzer landet in den Gruppen `admins` und `users`.
 | **Zwischenablage-Brücke zwischen den Apps** | ✅ |
 | Leerlauf-Aufräumer, Waisen-Aufräumer | ✅ |
 | Golden Images mit Build-Pipeline, Rezepte, App-Erkennung | ✅ |
-| LDAP/AD und Netzlaufwerke | 🔨 M6 |
+| LDAP/AD | ✅ (über Keycloak) |
+| Netzlaufwerke, Kerberos | gestrichen — siehe [Kapitel 8](08-nutzer-und-gruppen.md#netzlaufwerke-im-arbeitsplatz--gestrichen) |
 | Kasm-Registries einbinden | ✅ |
 
 Prüfen, ob alles läuft:
