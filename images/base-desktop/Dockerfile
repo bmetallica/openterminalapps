@@ -56,6 +56,22 @@ ENV HOME=/home/ota \
     STARTUPDIR=/dockerstartup \
     DISPLAY=:1 \
     VNC_RESOLUTION=1280x720 \
+    # **Die Größe des Mauszeigers festnageln.** Ohne `XCURSOR_SIZE` leitet
+    # libXcursor sie aus der Bildschirmgrösse ab — `min(Breite, Höhe) / 48`.
+    # Gemessen in diesem Image: 1280x720 ergibt 15 Pixel, 3840x2160 ergibt 45.
+    #
+    # Das ist hier fatal, weil der Rahmen des Xvfb 3840x2160 gross ist und
+    # `--enable_resize` den Bildschirm mit dem Browserfenster wachsen lässt:
+    # Ein Zeiger, der **danach** zum ersten Mal geladen wird, kommt dreimal so
+    # gross heraus wie einer davor. Der Client legt ihn unter seiner Kennung
+    # ab und behält ihn — sichtbar als ein Zeiger, der sporadisch riesig wird
+    # und es dann bleibt.
+    #
+    # Auf einem Arbeitsplatz mit vollständiger XFCE-Sitzung setzt `xfsettingsd`
+    # die Grösse über XSETTINGS. Auf den Bildschirmen einzelner Anwendungen
+    # läuft der nicht — dort ist nur ein Fenstermanager, und niemand sagt es.
+    XCURSOR_THEME=Adwaita \
+    XCURSOR_SIZE=24 \
     LANG=de_DE.UTF-8 \
     LANGUAGE=de_DE:de \
     LC_ALL=de_DE.UTF-8 \

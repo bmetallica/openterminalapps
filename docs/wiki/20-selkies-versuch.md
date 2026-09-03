@@ -247,6 +247,43 @@ beende diese Anwendung", und er muss erhalten bleiben.
 Gemessen auf einem Anwendungs-Bildschirm: minimiert `IsUnMapped` bis 1,2 s,
 ab 1,5 s wieder `IsViewable`; entmaximiert nach 600 ms wieder maximiert.
 
+### Der Mauszeiger, der sporadisch riesig wird
+
+Symptom: Der Zeiger wird plötzlich deutlich grösser und bleibt es für den Rest
+der Sitzung.
+
+**Warum.** Selkies überträgt den Zeiger als Bild und der Browser zeichnet ihn
+per CSS — seine Grösse ist also die, die der X-Server liefert. Wie gross die
+ist, entscheidet libXcursor, und ohne `XCURSOR_SIZE` leitet es sie aus der
+Bildschirmgrösse ab: `min(Breite, Höhe) / 48`. In diesem Image gemessen:
+
+```
+Bildschirm 1280x720   ->  Zeigergroesse 15
+Bildschirm 3840x2160  ->  Zeigergroesse 45
+```
+
+Der Rahmen des Xvfb ist 3840×2160 gross, und `--enable_resize` lässt den
+Bildschirm mit dem Browserfenster wachsen. Ein Zeiger, der **danach** zum
+ersten Mal geladen wird, kommt dreimal so gross heraus wie einer davor — und
+der Client legt ihn unter seiner Kennung ab und behält ihn. Daher „sporadisch"
+(es hängt davon ab, wann eine Zeigerform zum ersten Mal gebraucht wird) und
+daher „bleibt dann so".
+
+Auf einem Arbeitsplatz mit vollständiger XFCE-Sitzung fällt es kaum auf:
+`xfsettingsd` setzt die Grösse über XSETTINGS. Auf den Bildschirmen einzelner
+Anwendungen läuft der nicht — dort ist nur ein Fenstermanager, und niemand
+sagt die Grösse an.
+
+**Abhilfe** sind zwei Zeilen im Image:
+
+```dockerfile
+XCURSOR_THEME=Adwaita \
+XCURSOR_SIZE=24 \
+```
+
+Gegengeprüft mit demselben Aufruf, der den Fehler zeigte: 24 bei 1280×720 und
+24 bei 3840×2160.
+
 ### Nur eine Leiste
 
 Der Selkies-Client bringt eine eigene Seitenleiste mit, deren runder Knopf am
