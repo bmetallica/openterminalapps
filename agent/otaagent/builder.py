@@ -30,6 +30,28 @@ import docker
 # nur im Docker-Store dieses Hosts.
 REGISTRY = os.environ.get("OTA_REGISTRY", "").strip()
 
+def _proxy_argumente() -> list[str]:
+    """Den Firmenproxy an den Build durchreichen.
+
+    Docker kennt die sechs Namen vorab: Sie wirken in jedem `RUN`, ohne dass im
+    Dockerfile ein `ARG` steht, und landen **nicht** im fertigen Image. Genau
+    deshalb muss der Proxy in Session-Containern getrennt gesetzt werden — was
+    beim Bauen galt, gilt zur Laufzeit nicht mehr.
+
+    Ohne diese Argumente scheitert jedes `apt-get install` im Bildbauer hinter
+    einem Firmenproxy, und im Protokoll steht ein Zeitablauf statt eines
+    Grundes. Leer heisst: kein Proxy, und dann wird auch nichts uebergeben.
+    """
+    aus: list[str] = []
+    for name, wert in (("http_proxy", os.environ.get("HTTP_PROXY") or os.environ.get("http_proxy")),
+                       ("https_proxy", os.environ.get("HTTPS_PROXY") or os.environ.get("https_proxy")),
+                       ("no_proxy", os.environ.get("NO_PROXY") or os.environ.get("no_proxy"))):
+        if wert:
+            aus += ["--build-arg", f"{name}={wert}",
+                    "--build-arg", f"{name.upper()}={wert}"]
+    return aus
+
+
 _lock = threading.Lock()
 _builds: dict[str, dict[str, Any]] = {}
 _MAX_LOG = 200_000
@@ -242,6 +264,7 @@ def _run_build(build_id: str, tag: str, dockerfile: str, setup_script: str,
                      "--load",                 # ins Image-Store uebernehmen
                      "--progress", "plain",    # zeilenweise statt Fortschrittsbalken
                      "--pull=false",
+                     *_proxy_argumente(),
                      "-t", tag, "."],
                     cwd=ctx,
                     stdout=subprocess.PIPE,

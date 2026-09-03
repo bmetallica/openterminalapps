@@ -120,6 +120,16 @@ services:
     build:
       context: ../web
       dockerfile: Dockerfile
+      args:
+        # Docker kennt diese sechs vorab: Sie wirken in jedem RUN, ohne dass im
+        # Dockerfile ein ARG steht, und landen **nicht** im fertigen Image.
+        # Leer heisst: kein Proxy, und alles verhaelt sich wie ohne diese Zeilen.
+        http_proxy: "${OTA_HTTP_PROXY:-}"
+        https_proxy: "${OTA_HTTPS_PROXY:-}"
+        no_proxy: "${OTA_NO_PROXY:-}"
+        HTTP_PROXY: "${OTA_HTTP_PROXY:-}"
+        HTTPS_PROXY: "${OTA_HTTPS_PROXY:-}"
+        NO_PROXY: "${OTA_NO_PROXY:-}"
     image: ota/web:${OTA_VERSION:-dev}
     container_name: ota-web
     restart: unless-stopped
@@ -150,6 +160,16 @@ services:
     build:
       context: ../api
       dockerfile: Dockerfile
+      args:
+        # Docker kennt diese sechs vorab: Sie wirken in jedem RUN, ohne dass im
+        # Dockerfile ein ARG steht, und landen **nicht** im fertigen Image.
+        # Leer heisst: kein Proxy, und alles verhaelt sich wie ohne diese Zeilen.
+        http_proxy: "${OTA_HTTP_PROXY:-}"
+        https_proxy: "${OTA_HTTPS_PROXY:-}"
+        no_proxy: "${OTA_NO_PROXY:-}"
+        HTTP_PROXY: "${OTA_HTTP_PROXY:-}"
+        HTTPS_PROXY: "${OTA_HTTPS_PROXY:-}"
+        NO_PROXY: "${OTA_NO_PROXY:-}"
     image: ota/api:${OTA_VERSION:-dev}
     container_name: ota-api
     restart: unless-stopped
@@ -159,6 +179,17 @@ services:
       agent:
         condition: service_healthy
     environment:
+      # Firmenproxy. Leer heisst: kein Proxy — die Vorgabe.
+      #
+      # `NO_PROXY` ist hier nicht Beiwerk: Ohne die Namen der eigenen Dienste
+      # liefe jeder Aufruf an Agent, Keycloak und Registry durch den Proxy,
+      # der sie nicht kennt. Siehe deploy/.env.example.
+      HTTP_PROXY: "${OTA_HTTP_PROXY:-}"
+      HTTPS_PROXY: "${OTA_HTTPS_PROXY:-}"
+      NO_PROXY: "${OTA_NO_PROXY:-}"
+      http_proxy: "${OTA_HTTP_PROXY:-}"
+      https_proxy: "${OTA_HTTPS_PROXY:-}"
+      no_proxy: "${OTA_NO_PROXY:-}"
       OTA_DATABASE_URL: "postgresql+psycopg://${POSTGRES_USER:-ota}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-ota}"
       OTA_JWT_SECRET: "${OTA_JWT_SECRET:?OTA_JWT_SECRET fehlt in deploy/.env}"
       OTA_AGENT_URL: "http://agent:8100"
@@ -205,10 +236,31 @@ services:
     build:
       context: ../agent
       dockerfile: Dockerfile
+      args:
+        # Docker kennt diese sechs vorab: Sie wirken in jedem RUN, ohne dass im
+        # Dockerfile ein ARG steht, und landen **nicht** im fertigen Image.
+        # Leer heisst: kein Proxy, und alles verhaelt sich wie ohne diese Zeilen.
+        http_proxy: "${OTA_HTTP_PROXY:-}"
+        https_proxy: "${OTA_HTTPS_PROXY:-}"
+        no_proxy: "${OTA_NO_PROXY:-}"
+        HTTP_PROXY: "${OTA_HTTP_PROXY:-}"
+        HTTPS_PROXY: "${OTA_HTTPS_PROXY:-}"
+        NO_PROXY: "${OTA_NO_PROXY:-}"
     image: ota/agent:${OTA_VERSION:-dev}
     container_name: ota-agent
     restart: unless-stopped
     environment:
+      # Firmenproxy. Leer heisst: kein Proxy — die Vorgabe.
+      #
+      # `NO_PROXY` ist hier nicht Beiwerk: Ohne die Namen der eigenen Dienste
+      # liefe jeder Aufruf an Agent, Keycloak und Registry durch den Proxy,
+      # der sie nicht kennt. Siehe deploy/.env.example.
+      HTTP_PROXY: "${OTA_HTTP_PROXY:-}"
+      HTTPS_PROXY: "${OTA_HTTPS_PROXY:-}"
+      NO_PROXY: "${OTA_NO_PROXY:-}"
+      http_proxy: "${OTA_HTTP_PROXY:-}"
+      https_proxy: "${OTA_HTTPS_PROXY:-}"
+      no_proxy: "${OTA_NO_PROXY:-}"
       OTA_AGENT_TOKEN: "${OTA_AGENT_TOKEN:?OTA_AGENT_TOKEN fehlt in deploy/.env}"
       OTA_PROFILES_ROOT: "${OTA_PROFILES_ROOT:-/srv/ota/profiles}"
       OTA_RUNTIME_ROOT: "${OTA_RUNTIME_ROOT:-/srv/ota/runtime}"
@@ -370,6 +422,17 @@ services:
         condition: service_completed_successfully
     command: ["start", "--optimized=false"]
     environment:
+      # Firmenproxy. Leer heisst: kein Proxy — die Vorgabe.
+      #
+      # `NO_PROXY` ist hier nicht Beiwerk: Ohne die Namen der eigenen Dienste
+      # liefe jeder Aufruf an Agent, Keycloak und Registry durch den Proxy,
+      # der sie nicht kennt. Siehe deploy/.env.example.
+      HTTP_PROXY: "${OTA_HTTP_PROXY:-}"
+      HTTPS_PROXY: "${OTA_HTTPS_PROXY:-}"
+      NO_PROXY: "${OTA_NO_PROXY:-}"
+      http_proxy: "${OTA_HTTP_PROXY:-}"
+      https_proxy: "${OTA_HTTPS_PROXY:-}"
+      no_proxy: "${OTA_NO_PROXY:-}"
       KC_DB: postgres
       KC_DB_URL: "jdbc:postgresql://db:5432/keycloak"
       KC_DB_USERNAME: "${POSTGRES_USER:-ota}"

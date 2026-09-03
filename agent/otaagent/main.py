@@ -129,6 +129,13 @@ def require_token(x_agent_token: str = Header(default="")) -> None:
 # Kasm-Images und alles, was von ihnen abstammt, legen es hierhin.
 HEIMAT_VORGABE = "/home/kasm-user"
 
+# Der Firmenproxy. Leer ist die Vorgabe — dann verhaelt sich alles wie ohne.
+# Er wird an drei Stellen gebraucht: in Session-Containern (dort installieren
+# Anwender nach), beim Bauen von Images (apt, pip, curl) und im Agent selbst.
+PROXY_HTTP = os.environ.get("HTTP_PROXY") or os.environ.get("http_proxy") or ""
+PROXY_HTTPS = os.environ.get("HTTPS_PROXY") or os.environ.get("https_proxy") or ""
+PROXY_OHNE = os.environ.get("NO_PROXY") or os.environ.get("no_proxy") or ""
+
 
 def _heimat_aus_env(eintraege: list[str] | None) -> str:
     """Liest HOME aus einer Docker-Umgebungsliste.
@@ -501,6 +508,20 @@ def start_container(req: StartRequest) -> dict[str, Any]:
             )
 
     env = dict(req.env)
+    # Der Firmenproxy, falls es einen gibt. Leer heisst: keiner, und dann steht
+    # auch nichts im Container.
+    #
+    # **Warum ueberhaupt in der Sitzung:** Dort installieren Anwender Software
+    # nach — `apt`, `pip`, ein Browser, der eine Erweiterung holt. Ohne diese
+    # Variablen scheitert das mit einem Zeitablauf, und der Grund steht
+    # nirgends. Klein und gross geschrieben, weil sich die Werkzeuge nicht
+    # einig sind: `curl` liest `http_proxy`, viele Java-Programme `HTTP_PROXY`.
+    for name, wert in (("HTTP_PROXY", PROXY_HTTP), ("HTTPS_PROXY", PROXY_HTTPS),
+                       ("NO_PROXY", PROXY_OHNE)):
+        if wert:
+            env.setdefault(name, wert)
+            env.setdefault(name.lower(), wert)
+
     env.setdefault("VNC_PW", req.vnc_secret)
     # **Auch der Name, nicht nur das Passwort.** Aus `Template.vnc_user` baut
     # die API den Basic-Auth-Header, den Traefik der Sitzung voranstellt — im
@@ -712,6 +733,9 @@ def start_container(req: StartRequest) -> dict[str, Any]:
 
     if req.elevated:
         _elevate(container)
+
+    # Der Proxy an die Stellen, die kein Programm aus der Umgebung liest.
+    _proxy_einrichten(container)
 
     # Selkies hoert auf 8080, KasmVNC auf 6901.
     _wait_for_vnc(container, port=8080 if req.engine == "selkies" else 6901)
@@ -947,6 +971,69 @@ def _wait_for_vnc(container, seconds: int = VNC_BEREIT_SEKUNDEN,
             pass
         log.warning("Bereitschaft nicht pruefbar: %s", exc)
         return False
+
+
+def _proxy_einrichten(container) -> None:
+    """Den Firmenproxy auch dort hinterlegen, wo keine Umgebungsvariable hinreicht.
+
+    Die Variablen stehen bereits im Container — das deckt alles ab, was sie
+    liest: `curl`, `wget`, `pip`, `git`, und ueber GLibs Aufloeser auch Firefox
+    und Chrome. Zwei verbreitete Faelle liest sie aber **nicht**:
+
+    * **`apt`** kennt keine Umgebungsvariablen, sondern nur seine eigene
+      Konfiguration. Ohne diese Datei scheitert jedes `apt install` in der
+      Sitzung an einem Zeitablauf — und genau das tun Anwender staendig.
+    * **Anmeldungen, die nicht vom Startskript abstammen.** Wer sich per
+      `docker exec` oder ueber einen Terminal-Emulator eine Login-Shell holt,
+      bekommt die Umgebung des Containers nicht zwingend mit.
+      `/etc/environment` und `/etc/profile.d` schliessen die Luecke.
+
+    **Absichtlich blind.** Gesetzt wird in jedem Session-Container, gleich aus
+    welchem Image er stammt — auch in fremden. Eine Datei, die dort niemand
+    liest, schadet nicht; eine fehlende Einstellung kostet den Anwender eine
+    Stunde. Fehlschlaege sind deshalb kein Grund, den Start abzubrechen: Der
+    Arbeitsplatz laeuft, nur eben ohne diese Bequemlichkeit.
+
+    Ohne konfigurierten Proxy passiert nichts.
+    """
+    if not (PROXY_HTTP or PROXY_HTTPS):
+        return
+
+    zeilen = []
+    for name, wert in (("HTTP_PROXY", PROXY_HTTP), ("HTTPS_PROXY", PROXY_HTTPS),
+                       ("NO_PROXY", PROXY_OHNE)):
+        if wert:
+            zeilen += [f"{name}={wert}", f"{name.lower()}={wert}"]
+    umgebung = "\n".join(zeilen)
+
+    apt = ""
+    if PROXY_HTTP:
+        apt += f'Acquire::http::Proxy "{PROXY_HTTP}";\n'
+    if PROXY_HTTPS:
+        apt += f'Acquire::https::Proxy "{PROXY_HTTPS}";\n'
+    # Was ohne Proxy erreichbar ist, soll auch ohne ihn geholt werden — die
+    # eigene Registry etwa. apt will das je Rechner einzeln wissen und kennt
+    # keine Bereiche.
+    for ziel in (PROXY_OHNE or "").split(","):
+        ziel = ziel.strip()
+        if ziel and "/" not in ziel and ":" not in ziel:
+            apt += f'Acquire::http::Proxy::{ziel} "DIRECT";\n'
+
+    payload = base64.b64encode(
+        (umgebung + "\n").encode("utf-8")).decode("ascii")
+    apt_payload = base64.b64encode(apt.encode("utf-8")).decode("ascii")
+    skript = (
+        f"echo {payload} | base64 -d >> /etc/environment && "
+        f"echo {payload} | base64 -d | sed 's/^/export /' "
+        "> /etc/profile.d/ota-proxy.sh && "
+        f"echo {apt_payload} | base64 -d > /etc/apt/apt.conf.d/99ota-proxy"
+    )
+    try:
+        code, out = _run_as_root(container, ["bash", "-lc", skript])
+        if code != 0:
+            log.warning("Proxy nicht im Container hinterlegt: %s", out[:200])
+    except APIError as exc:
+        log.warning("Proxy nicht im Container hinterlegt: %s", exc)
 
 
 def _elevate(container) -> None:

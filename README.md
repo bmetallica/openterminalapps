@@ -36,6 +36,12 @@ sudo make up                     # Stack bauen und starten (beim ersten Mal eini
 sudo make admin NAME=deinname    # erstes Administratorkonto
 ```
 
+**Hinter einem Firmenproxy** kommen drei Zeilen in `deploy/.env` dazu — `OTA_HTTP_PROXY`,
+`OTA_HTTPS_PROXY` und vor allem `OTA_NO_PROXY`, damit die Dienste untereinander **nicht** über den
+Proxy reden. Ohne Proxy ist nichts zu tun; das ist die Vorgabe.
+[Handbuch, Kapitel 21](docs/wiki/21-firmenproxy.md) beschreibt auch, was OTA dabei *nicht* lösen
+kann: `docker pull` macht der Docker-Daemon und braucht seine eigene Konfiguration.
+
 `make setup` **erzeugt die Geheimnisse und trägt sie selbst ein** — nachträglich ist nichts von Hand
 zu ergänzen. Ein zweiter Aufruf lässt vorhandene Werte unangetastet.
 
@@ -249,7 +255,7 @@ nicht — dieselbe Trennung gilt für das Dateisystem des Hosts.
 
 ## Dokumentation
 
-- **[Handbuch](docs/wiki/README.md)** — Bedienung, Verwaltung, Betrieb, Fehlersuche (19 Kapitel)
+- **[Handbuch](docs/wiki/README.md)** — Bedienung, Verwaltung, Betrieb, Fehlersuche (21 Kapitel)
 - **[plan.md](plan.md)** — Architektur **und die Begründungen dahinter**, samt der Sackgassen
 - **[docs/adr/](docs/adr/README.md)** — Entscheidungen, die teuer rückgängig zu machen sind, mit den
   Alternativen, die nicht getragen hätten

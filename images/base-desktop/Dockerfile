@@ -77,6 +77,29 @@ ENV HOME=/home/ota \
     LC_ALL=de_DE.UTF-8 \
     SHELL=/bin/bash
 
+# --- Eigene Zertifizierungsstellen ---------------------------------------
+#
+# Für Firmennetze, deren Proxy TLS aufbricht. Liegt in `ca/` eine `*.crt`,
+# wird sie in den Systemspeicher übernommen; ist das Verzeichnis leer — der
+# Normalfall —, passiert nichts.
+#
+# **Vor** dem Grundsystem, weil sonst schon das erste `apt-get update` an
+# einem unbekannten Aussteller scheitert. `ca-certificates` kommt dafür
+# vorgezogen; der Rest folgt unten.
+COPY ca/ /tmp/ota-ca/
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+ && if ls /tmp/ota-ca/*.crt > /dev/null 2>&1; then \
+      install -d /usr/local/share/ca-certificates/ota \
+      && cp /tmp/ota-ca/*.crt /usr/local/share/ca-certificates/ota/ \
+      && update-ca-certificates \
+      && echo "Eigene Zertifizierungsstellen übernommen:" \
+      && ls -1 /tmp/ota-ca/*.crt; \
+    else \
+      echo "Keine eigene Zertifizierungsstelle — Normalfall."; \
+    fi \
+ && rm -rf /tmp/ota-ca \
+ && apt-get clean && rm -rf /var/lib/apt/lists/*
+
 # --- Grundsystem ---------------------------------------------------------
 #
 # Bewusst --no-install-recommends: Die Empfehlungen ziehen an XFCE einen

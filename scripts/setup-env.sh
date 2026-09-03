@@ -50,6 +50,48 @@ PY
   echo "  $name — erzeugt ($was)"
 }
 
+# `OTA_NO_PROXY` beim ersten Mal selbst zusammenstellen.
+#
+# Warum nicht einfach fest in der Vorlage: Die Liste muss den **eigenen** Host
+# nennen, und wie der heisst, weiss die Vorlage nicht. Fehlt er, laeuft ein
+# Aufruf an die eigene Adresse durch den Firmenproxy — und der kennt sie nicht.
+#
+# Ergaenzt wird nur, wenn nichts dasteht. Wer die Zeile von Hand gepflegt hat,
+# behaelt sie.
+no_proxy_vorschlagen() {
+  local hn fqdn liste
+  hn="$(hostname 2>/dev/null || true)"
+  fqdn="$(hostname -f 2>/dev/null || true)"
+  # Die eigenen Dienste, der Rueckkanal, die privaten Netze — und der Host
+  # unter jedem Namen, unter dem er sich selbst kennt. Die privaten Bereiche
+  # decken jede Docker-Bruecke ab, ohne sie einzeln aufzuzaehlen: Die legt
+  # Docker erst beim Start an, lange nach diesem Skript.
+  liste="localhost,127.0.0.1,::1"
+  liste="$liste,ota-api,ota-agent,ota-db,ota-keycloak,ota-web,ota-traefik,ota-turn,ota-registry"
+  [ -n "$hn" ]   && liste="$liste,$hn"
+  [ -n "$fqdn" ] && [ "$fqdn" != "$hn" ] && liste="$liste,$fqdn"
+  liste="$liste,.local,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+  printf '%s' "$liste"
+}
+
+if grep -qE "^OTA_NO_PROXY=.+" "$ENV"; then
+  echo "  OTA_NO_PROXY — bleibt, wie es ist"
+else
+  WERT="$(no_proxy_vorschlagen)"
+  python3 - "$ENV" "$WERT" <<'PY2'
+import io, re, sys
+pfad, wert = sys.argv[1], sys.argv[2]
+s = io.open(pfad, encoding="utf8").read()
+if re.search(r"^OTA_NO_PROXY=", s, flags=re.M):
+    s = re.sub(r"^OTA_NO_PROXY=.*$", f"OTA_NO_PROXY={wert}", s, count=1, flags=re.M)
+else:
+    s += f"\nOTA_NO_PROXY={wert}\n"
+io.open(pfad, "w", encoding="utf8").write(s)
+PY2
+  echo "  OTA_NO_PROXY — zusammengestellt (eigene Dienste, dieser Host, private Netze)"
+fi
+echo
+
 echo "Geheimnisse in deploy/.env:"
 fuellen POSTGRES_PASSWORD 32 "Datenbank"
 fuellen OTA_JWT_SECRET    64 "Anmeldemerkmale"

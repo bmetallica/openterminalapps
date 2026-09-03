@@ -27,9 +27,31 @@ bad() { printf '  \033[31m✗\033[0m %s\n' "$1" >&2; fail=$((fail+1)); }
 # es auch so tun.
 imc() { docker exec "$CN" bash -lc "$1" 2>/dev/null; }
 
+# Den Firmenproxy an den Build durchreichen, falls einer gesetzt ist.
+#
+# Docker kennt diese Namen vorab: Sie wirken in jedem `RUN`, ohne dass im
+# Dockerfile ein `ARG` steht, und landen **nicht** im fertigen Image. Ohne sie
+# scheitert hinter einem Firmenproxy schon das erste `apt-get update`, und im
+# Protokoll steht ein Zeitablauf statt eines Grundes.
+#
+# Gelesen wird aus der Umgebung — wer `deploy/.env` einliest, hat sie:
+#
+#     set -a; . deploy/.env; set +a
+#     scripts/build-desktop-image.sh --pruefen
+proxy_argumente() {
+  for paar in "http_proxy:${OTA_HTTP_PROXY:-${http_proxy:-}}" \
+              "https_proxy:${OTA_HTTPS_PROXY:-${https_proxy:-}}" \
+              "no_proxy:${OTA_NO_PROXY:-${no_proxy:-}}"; do
+    name="${paar%%:*}"; wert="${paar#*:}"
+    [ -z "$wert" ] && continue
+    printf -- '--build-arg %s=%s --build-arg %s=%s ' \
+      "$name" "$wert" "$(echo "$name" | tr a-z A-Z)" "$wert"
+  done
+}
+
 bauen() {
   echo "Baue $TAG …"
-  docker build -t "$TAG" "$ROOT/images/base-desktop" || return 1
+  docker build $(proxy_argumente) -t "$TAG" "$ROOT/images/base-desktop" || return 1
   # `:test` bleibt als Zweitname, damit die Testvorlagen weiterlaufen.
   docker tag "$TAG" ota/base-desktop:test
   echo
