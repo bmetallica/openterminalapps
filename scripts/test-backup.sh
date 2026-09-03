@@ -219,9 +219,23 @@ if [ "$SESSIONS" -gt 0 ]; then
   MSG=$(api -X POST "$BASE/api/backups/$BID/restore" | jqp "d.get('detail','')")
   grep -qi "session" <<<"$MSG" && ok "Wiederherstellung bei laufender Session abgelehnt" \
                                    || bad "Laufende Session wurde nicht erkannt: $MSG"
-  for s in $(api "$BASE/api/sessions" | jqp "' '.join(x['id'] for x in d)"); do
-    api -X DELETE "$BASE/api/sessions/$s" >/dev/null
-  done
+  # **Nur die eigenen.** `/api/sessions` liefert ohne `all_users` ausschliesslich
+  # die Sitzungen des anfragenden Kontos — diese Reihe laeuft als Testadmin und
+  # kann deshalb keinem Anwender den Arbeitsplatz abschiessen.
+  #
+  # Nachgeprueft wird es trotzdem, und zwar hier: Wuerde die Vorgabe des
+  # Endpunkts jemals kippen, beendete diese Schleife stillschweigend fremde
+  # Sitzungen. Das faellt dann beim Testlauf auf und nicht im Betrieb.
+  FREMD=$(api "$BASE/api/sessions" | jqp "
+sum(1 for x in d if x.get('username') not in (None, '$USER_NAME'))")
+  [ "${FREMD:-0}" = "0" ] \
+    && ok "Die Liste enthält nur eigene Sitzungen" \
+    || bad "Die Liste enthält $FREMD fremde Sitzungen — hier wird nichts beendet"
+  if [ "${FREMD:-0}" = "0" ]; then
+    for s in $(api "$BASE/api/sessions" | jqp "' '.join(x['id'] for x in d)"); do
+      api -X DELETE "$BASE/api/sessions/$s" >/dev/null
+    done
+  fi
   sleep 3
   ok "Sessions für den Test beendet"
 else

@@ -83,6 +83,9 @@ STRIP = (
     "/etc/sudoers.d/ota-admin",
     "/etc/apt/apt.conf.d/99ota-proxy",
     "/etc/profile.d/ota-proxy.sh",
+    "/etc/firefox/policies/policies.json",
+    "/etc/opt/chrome/policies/managed/ota-proxy.json",
+    "/etc/chromium/policies/managed/ota-proxy.json",
 )
 
 

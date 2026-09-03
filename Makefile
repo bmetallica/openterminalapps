@@ -19,7 +19,8 @@ help:
 	@echo "  make logs      Logs aller Dienste mitlesen"
 	@echo "  make ps        Zustand aller Dienste"
 	@echo "  make admin     Ersten Administrator anlegen (NAME=... setzen)"
-	@echo "  make test      Autorisierungs- und Oberflächentests"
+	@echo "  make test      Alle Prüfreihen (Rechte, Zwischenablage, Oberfläche,"
+	@echo "                 Verzeichnis, Medienweg, Sicherung)"
 	@echo "  make backup    Datenbank und Profile von Hand sichern"
 	@echo "  make cert      Serverzertifikat erneuern (CA bleibt)"
 	@echo
@@ -138,8 +139,16 @@ test:
 	@# angelegten Verzeichniskonten nicht in einem Sicherungsstand landen.
 	@./scripts/test-ldap.sh
 	@echo
+	@# Der Medienweg. Eigene Reihe, weil die teuersten Fehler dieses Projekts
+	@# genau dort lagen und keine andere sie gefunden haette — sie sahen im
+	@# Browser alle gleich aus ("Waiting for stream") und standen in keinem
+	@# Protokoll. Ohne konfigurierten TURN wird uebersprungen statt rot.
+	@./scripts/test-streaming.sh
+	@echo
 	@# Zuletzt, weil dieser Test Sessions beendet, um die Wiederherstellung
-	@# überhaupt prüfen zu können.
+	@# überhaupt prüfen zu können — **nur die eigenen**: `/api/sessions`
+	@# liefert ohne `all_users` ausschliesslich die des anfragenden Kontos,
+	@# und die Reihe prueft das ausdruecklich nach.
 	@./scripts/test-backup.sh
 
 .PHONY: sbom

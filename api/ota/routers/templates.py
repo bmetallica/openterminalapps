@@ -77,6 +77,29 @@ def _maschine(body: TemplateIn, vorher: str = "selkies") -> str:
     18 Fehlschläge, alle mit derselben Wurzel.
     """
     if body.stream_engine:
+        # Ausdrücklich gewählt — aber nicht blind übernommen.
+        #
+        # Wer eine Vorlage von Hand auf Selkies stellt und ein Kasm-Image
+        # behält, bekäme sonst eine Sitzung, die nie hochkommt: Der Agent
+        # wartet neunzig Sekunden auf einen Port, den dort niemand öffnet, und
+        # in der Oberfläche steht „Der Container-Dienst ist nicht erreichbar" —
+        # ein Satz, der auf etwas ganz anderes zeigt. Genau das hat einmal
+        # 18 Prüfungen gekostet.
+        #
+        # Abgelehnt wird nur bei einer **eindeutigen** Auskunft des Images.
+        # Liegt es nicht lokal, antwortet der Agent mit nichts, und dann
+        # entscheidet der Mensch.
+        erkannt = agent_client.image_engine(body.image_ref)
+        if erkannt and erkannt != body.stream_engine:
+            womit = ("Selkies" if erkannt == "selkies" else "KasmVNC")
+            gewollt = ("Selkies" if body.stream_engine == "selkies" else "KasmVNC")
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                f"Das Abbild {body.image_ref} bringt {womit} mit, nicht "
+                f"{gewollt}. Eine Sitzung damit käme nicht hoch. Stelle "
+                f"Streaming auf {womit} — oder nimm ein Abbild, das "
+                f"{gewollt} enthält.",
+            )
         return body.stream_engine
     erkannt = agent_client.image_engine(body.image_ref)
     return erkannt or vorher

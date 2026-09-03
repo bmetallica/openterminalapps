@@ -215,6 +215,15 @@ aufgeräumt, deren Datenbankzeile noch `running` war, und mit `pkill -f` die eig
 
 ### ⚠️ Bekannte Bugs & Test-Status
 
+* **Testergebnis: `make test` vollständig grün — 424/424.**
+  `216 authz · 18 Zwischenablage · 107 e2e · 42 ldap · 2 Medienweg · 39 Sicherung`,
+  dazu `scripts/build-desktop-image.sh --pruefen` **19/19**.
+* **Die Sicherungsprüfung war nie gefährlich.** Ich hatte sie zwei Tage lang gemieden, weil sie
+  „Sitzungen beendet" — sie beendet aber nur die **eigenen**: `/api/sessions` liefert ohne
+  `all_users` ausschliesslich die des anfragenden Kontos, und die Wiederherstellung fasst allein
+  das Profil des Testkontos an. Die Reihe prüft das jetzt ausdrücklich nach. Übertriebene Vorsicht
+  hat den weissen Fleck erst erzeugt.
+
 * **Testergebnis:** `scripts/test-authz.sh` **216/216**,
   `scripts/build-desktop-image.sh --pruefen` **19/19**, `scripts/pruef-selkies.mjs` liefert ein
   Bild (1252 Einzelbilder, 1440×900), `scripts/pruef-turn.py` grün. Ein vollständiger `make test` steht weiterhin aus — `scripts/test-backup.sh` beendet

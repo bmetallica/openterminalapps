@@ -53,6 +53,34 @@ durch und schreibt sie **nicht** ins fertige Image. Nachgeprüft am 2026-09-03.
 Genau deshalb muss der Proxy für Session-Container getrennt gesetzt werden —
 was beim Bauen galt, gilt zur Laufzeit nicht mehr.
 
+### Warum ICE den tragfähigen Weg nicht selbst findet
+
+Naheliegend wäre: dem Browser beide Wege anbieten und ihn wählen lassen. OTA
+tut das auch — der TURN-Server steht in der Auskunft zweimal, über UDP und
+über TCP. **Es löst dieses Problem trotzdem nicht.**
+
+Gemessen unter nachgestellten Tunnelbedingungen (MTU 1000, grosse UDP-Pakete
+verworfen), mit `udp` als Vorgabe und beiden Wegen im Angebot:
+
+```
+Gewaehlte Kandidatenpaare:
+  host/:44991 -> relay/192.168.66.224:49185  empfangen=0B gesendet=14630B
+KEIN BILD.
+```
+
+Der Grund liegt in ICE selbst: Es prüft Wege mit **kleinen** Paketen. Der
+UDP-Weg wirkt damit tragfähig und gewinnt wegen seiner höheren Priorität —
+dass er beim 1200 Byte grossen DTLS-Handschlag bricht, erfährt ICE nie. Eine
+MTU-Begrenzung ist für ICE unsichtbar.
+
+Deshalb bleiben die beiden Zeilen oben nötig. Dass zusätzlich beide Transporte
+angeboten werden, hilft in einem *anderen* Fall: wenn UDP **vollständig**
+blockiert ist. Gegen einen Weg, der nur teilweise funktioniert, hilft es
+nicht.
+
+Derselbe Versuch mit `OTA_TURN_PROTOCOL=tcp` und `OTA_TURN_ICE_POLICY=relay`
+liefert **1250 Bilder** — der eingestellte Transport steht zuerst und gewinnt.
+
 ## Später umstellen — ohne Neuaufsetzen
 
 Der übliche Fall: OTA läuft schon ohne Proxy, und das Netz ändert sich. Das

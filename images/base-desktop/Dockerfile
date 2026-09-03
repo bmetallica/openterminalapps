@@ -275,12 +275,14 @@ RUN python3 -m venv --system-site-packages "$SELKIES_HOME" \
 #
 # Beide brechen den Build ab, wenn eine neue Selkies-Fassung die Stelle
 # verschoben hat. Die Köpfe der Dateien erklären die Messungen.
-COPY patches/kein-fremd-stun.py patches/ice-nur-vermittelt.py /tmp/
+COPY patches/kein-fremd-stun.py patches/ice-nur-vermittelt.py \
+     patches/beide-turn-wege.py /tmp/
 RUN set -eu; \
     ORT="$(ls -d "$SELKIES_HOME"/lib/python3*/site-packages)"; \
     python3 /tmp/kein-fremd-stun.py "$ORT"; \
     python3 /tmp/ice-nur-vermittelt.py "$ORT"; \
-    rm -f /tmp/kein-fremd-stun.py /tmp/ice-nur-vermittelt.py
+    python3 /tmp/beide-turn-wege.py "$ORT"; \
+    rm -f /tmp/kein-fremd-stun.py /tmp/ice-nur-vermittelt.py /tmp/beide-turn-wege.py
 
 # `cvt` rechnet eine Modeline aus. Selkies braucht es, um die Auflösung an das
 # Browserfenster anzupassen — und **auch Debian 13 liefert es nicht** mehr

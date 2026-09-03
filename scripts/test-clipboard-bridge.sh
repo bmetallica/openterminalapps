@@ -143,12 +143,12 @@ SECOND=$(echo "$DISPLAYS" | awk '{print $2}')
 check_direction() {  # check_direction <von> <nach> <text> <beschreibung>
   local from="$1" to="$2" text="$3" label="$4"
   docker exec -u 1000 "$CN" bash -c "
-    export XAUTHORITY=$HOME/.Xauthority
+    export XAUTHORITY=\$HOME/.Xauthority
     printf '%s' \"$text\" | timeout 3 xclip -d :$from -selection clipboard -i" 2>/dev/null
   sleep 2.5
   local got
   got=$(docker exec -u 1000 "$CN" bash -c "
-    export XAUTHORITY=$HOME/.Xauthority
+    export XAUTHORITY=\$HOME/.Xauthority
     timeout 3 xclip -d :$to -selection clipboard -o 2>/dev/null")
   if [ "$got" = "$text" ]; then ok "$label"; else bad "$label — bekam: [$got]"; fi
 }
@@ -166,11 +166,11 @@ check_direction "$FIRST" "$SECOND" "Umlaute äöü ÄÖÜ ß und Zeichen: {}[]()
 MULTI='def gruss(name):
 	return f"Hallo {name}"'
 docker exec -u 1000 "$CN" bash -c "
-  export XAUTHORITY=$HOME/.Xauthority
+  export XAUTHORITY=\$HOME/.Xauthority
   printf '%s' '$MULTI' | timeout 3 xclip -d :$FIRST -selection clipboard -i" 2>/dev/null
 sleep 2.5
 GOT=$(docker exec -u 1000 "$CN" bash -c "
-  export XAUTHORITY=$HOME/.Xauthority
+  export XAUTHORITY=\$HOME/.Xauthority
   timeout 3 xclip -d :$SECOND -selection clipboard -o 2>/dev/null")
 [ "$GOT" = "$MULTI" ] && ok "Mehrzeiliger Code mit Tabulator bleibt erhalten" \
                       || bad "Mehrzeiliger Code verändert — bekam: [$GOT]"
@@ -254,7 +254,7 @@ fi
 echo
 echo "Abnahmefall 6 — Bild zwischen zwei Anwendungen"
 MADE=$(docker exec -u 1000 "$CN" bash -c "
-  export XAUTHORITY=$HOME/.Xauthority
+  export XAUTHORITY=\$HOME/.Xauthority
   command -v import >/dev/null 2>&1 && \
     timeout 10 import -display :$FIRST -window root -resize 40x40 /tmp/ota-bild.png \
       >/dev/null 2>&1 && echo import && exit 0
@@ -267,12 +267,12 @@ MADE=$(docker exec -u 1000 "$CN" bash -c "
 if [ -n "$MADE" ]; then
   echo "  Bildquelle: $MADE"
   docker exec -u 1000 "$CN" bash -c "
-    export XAUTHORITY=$HOME/.Xauthority
+    export XAUTHORITY=\$HOME/.Xauthority
     timeout 5 xclip -d :$FIRST -selection clipboard -t image/png -i < /tmp/ota-bild.png" 2>/dev/null
   sleep 3
   SIZE_IN=$(docker exec "$CN" bash -c 'wc -c < /tmp/ota-bild.png')
   SIZE_OUT=$(docker exec -u 1000 "$CN" bash -c "
-    export XAUTHORITY=$HOME/.Xauthority
+    export XAUTHORITY=\$HOME/.Xauthority
     timeout 5 xclip -d :$SECOND -selection clipboard -t image/png -o 2>/dev/null | wc -c")
   if [ "${SIZE_OUT:-0}" = "${SIZE_IN:-1}" ]; then
     ok "Ein Bild kommt unverändert auf dem anderen Display an ($SIZE_OUT Bytes)"
@@ -297,12 +297,12 @@ fi
 echo
 echo "Abnahmefall 5 — sehr grosser Inhalt"
 docker exec -u 1000 "$CN" bash -c "
-  export XAUTHORITY=$HOME/.Xauthority
+  export XAUTHORITY=\$HOME/.Xauthority
   head -c 1000000 /dev/urandom | base64 | head -c 1000000 > /tmp/ota-gross.txt
   timeout 5 xclip -d :$FIRST -selection clipboard -i < /tmp/ota-gross.txt" 2>/dev/null
 sleep 4
 CMP=$(docker exec -u 1000 "$CN" bash -c "
-  export XAUTHORITY=$HOME/.Xauthority
+  export XAUTHORITY=\$HOME/.Xauthority
   timeout 5 xclip -d :$SECOND -selection clipboard -o 2>/dev/null | wc -c")
 SRC=$(docker exec "$CN" bash -c 'wc -c < /tmp/ota-gross.txt')
 if [ "${CMP:-0}" = "${SRC:-1}" ]; then
@@ -322,11 +322,11 @@ docker exec "$CN" rm -f /tmp/ota-gross.txt 2>/dev/null
 echo
 echo "Abnahmefall 9 — PRIMARY"
 docker exec -u 1000 "$CN" bash -c "
-  export XAUTHORITY=$HOME/.Xauthority
+  export XAUTHORITY=\$HOME/.Xauthority
   printf '%s' 'markiert-mit-der-maus' | timeout 3 xclip -d :$FIRST -selection primary -i" 2>/dev/null
 sleep 1
 PRIM=$(docker exec -u 1000 "$CN" bash -c "
-  export XAUTHORITY=$HOME/.Xauthority
+  export XAUTHORITY=\$HOME/.Xauthority
   timeout 3 xclip -d :$FIRST -selection primary -o 2>/dev/null")
 [ "$PRIM" = "markiert-mit-der-maus" ] \
   && ok "PRIMARY funktioniert auf demselben Display" \
@@ -334,7 +334,7 @@ PRIM=$(docker exec -u 1000 "$CN" bash -c "
 
 sleep 2
 OTHER=$(docker exec -u 1000 "$CN" bash -c "
-  export XAUTHORITY=$HOME/.Xauthority
+  export XAUTHORITY=\$HOME/.Xauthority
   timeout 3 xclip -d :$SECOND -selection primary -o 2>/dev/null")
 [ "$OTHER" != "markiert-mit-der-maus" ] \
   && ok "PRIMARY wird bewusst nicht über Displays gespiegelt" \

@@ -397,7 +397,9 @@ solches VPN kommt, ist das ein Kompromiss zu Lasten aller. Die saubere Lösung
 wäre, dem Browser beide Wege anzubieten und ihn wählen zu lassen — dafür müsste
 Selkies zwei TURN-Einträge ausliefern, heute liefert es einen.
 
-Nachweisen lässt sich beides mit `scripts/pruef-selkies.mjs`: Der Prüfstand
+Beides fährt `make test` mit — die Reihe `scripts/test-streaming.sh` startet
+den Prüfbrowser selbst, misst TURN und Strom und räumt wieder ab. Einzeln
+nachweisen lässt es sich mit `scripts/pruef-selkies.mjs`: Der Prüfstand
 fährt einen Browser, der den Session-Container **nicht** direkt erreichen kann,
 und sagt, ob ein Bild ankommt. Mit einer Sperre für grosse UDP-Pakete
 (`iptables … -m length --length 1029:65535 -j DROP`) lässt sich der Fehler

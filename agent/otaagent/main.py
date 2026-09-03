@@ -987,6 +987,10 @@ def _proxy_einrichten(container) -> None:
       `docker exec` oder ueber einen Terminal-Emulator eine Login-Shell holt,
       bekommt die Umgebung des Containers nicht zwingend mit.
       `/etc/profile.d/ota-proxy.sh` schliesst die Luecke.
+    * **Browser mit eigener Einstellung.** Firefox und Chrome fragen ab Werk
+      das System, aber wer das einmal umgestellt hat, behaelt es — im Zuhause,
+      ueber jeden Neustart hinweg. Eine Unternehmensrichtlinie stellt es
+      zurueck, ohne das Profil des Anwenders anzufassen.
 
     **Bewusst nicht `/etc/environment`.** Dorthin liesse sich nur anhaengen,
     und beim Einfrieren eines Containers waere die Zeile nicht mehr sauber
@@ -1028,11 +1032,31 @@ def _proxy_einrichten(container) -> None:
     payload = base64.b64encode(
         (umgebung + "\n").encode("utf-8")).decode("ascii")
     apt_payload = base64.b64encode(apt.encode("utf-8")).decode("ascii")
+    # Firefox und Chrome haben eine **eigene** Proxy-Einstellung in ihrer
+    # Oberflaeche. Ab Werk steht sie auf "Systemeinstellungen" und ist damit
+    # versorgt — wer sie einmal von Hand umgestellt hat, nicht mehr, und das
+    # ueberdauert im Zuhause jeden Neustart. Eine Unternehmensrichtlinie stellt
+    # sie zurueck, und zwar ohne das Profil des Anwenders anzufassen: Beide
+    # Programme lesen diese Dateien vor ihren eigenen Einstellungen.
+    richtlinie_ff = '{"policies":{"Proxy":{"Mode":"system","Locked":false}}}'
+    richtlinie_cr = '{"ProxyMode":"system"}'
+    ff = base64.b64encode(richtlinie_ff.encode("utf-8")).decode("ascii")
+    cr = base64.b64encode(richtlinie_cr.encode("utf-8")).decode("ascii")
+
     skript = (
         f"echo {payload} | base64 -d | sed 's/^/export /' "
         "> /etc/profile.d/ota-proxy.sh && "
         "chmod 0644 /etc/profile.d/ota-proxy.sh && "
-        f"echo {apt_payload} | base64 -d > /etc/apt/apt.conf.d/99ota-proxy"
+        f"echo {apt_payload} | base64 -d > /etc/apt/apt.conf.d/99ota-proxy && "
+        # Die Verzeichnisse gibt es nur, wenn das Programm da ist — angelegt
+        # werden sie trotzdem. Eine Richtlinie fuer einen Browser, der fehlt,
+        # kostet nichts; eine fehlende Richtlinie kostet eine Stunde.
+        "install -d /etc/firefox/policies "
+        "/etc/opt/chrome/policies/managed "
+        "/etc/chromium/policies/managed && "
+        f"echo {ff} | base64 -d > /etc/firefox/policies/policies.json && "
+        f"echo {cr} | base64 -d > /etc/opt/chrome/policies/managed/ota-proxy.json && "
+        f"echo {cr} | base64 -d > /etc/chromium/policies/managed/ota-proxy.json"
     )
     try:
         code, out = _run_as_root(container, ["bash", "-lc", skript])

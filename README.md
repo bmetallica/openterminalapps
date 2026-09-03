@@ -284,7 +284,7 @@ aussahen, als sie waren.
 make test
 ```
 
-**251 Prüfungen in fünf Suiten**, jede stellt ihren Vorzustand selbst her:
+**424 Prüfungen in sechs Suiten**, jede stellt ihren Vorzustand selbst her:
 
 | Suite | Prüft |
 |---|---|
@@ -292,12 +292,18 @@ make test
 | `test-clipboard-bridge.sh` | Kopieren zwischen zwei Anwendungen im selben Arbeitsplatz: beide Richtungen, Umlaute, ein Bild, ein Megabyte, nach Pause, und abgeschaltet |
 | `tests/e2e.mjs` | Die Oberfläche in einem echten Browser — bis zur Frage, ob der Stream wirklich verbindet |
 | `test-ldap.sh` | Verzeichnis-Anmeldung gegen ein echtes OpenLDAP im Container — vor allem, dass ein lokales Konto unantastbar bleibt und ein Ausfall es nicht mitreisst |
-| `test-backup.sh` | Sicherung und Wiederherstellung von Profil, Container und Datenbank |
+| `test-streaming.sh` | Der Medienweg: Vermittelt der TURN-Server wirklich, und kommt im Browser ein Bild an? Der Prüfbrowser läuft in einem Netz, aus dem der Session-Container **nicht** direkt erreichbar ist — wie ein Arbeitsplatz im Firmennetz |
+| `test-backup.sh` | Sicherung und Wiederherstellung von Profil, Container und Datenbank. Beendet dafür Sitzungen — **nur die eigenen**, und prüft das ausdrücklich nach |
 
 Die Zugangsdaten der Prüfung stehen in `deploy/.env` als `OTA_TEST_ADMIN_PW`, nicht im Quelltext.
 
 Ein voller Lauf dauert **rund eine halbe Stunde**: Er startet Container, friert ein Image ein und
 misst im Browser nach. Jede Suite lässt sich einzeln starten (`bash scripts/test-authz.sh`).
+
+Die Reihe für den Medienweg gibt es, weil die teuersten Fehler dieses Projekts genau dort lagen und
+keine andere sie gefunden hätte: ein TURN-Server hinter einer Docker-Bridge, der die falsche
+Absenderadresse verschickt; ein DTLS-Paket, das an einer kleinen MTU zerschellt. Beide sahen im
+Browser gleich aus — „Waiting for stream" — und standen in keinem Protokoll.
 
 ## Lizenz
 
