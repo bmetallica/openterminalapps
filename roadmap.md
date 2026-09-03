@@ -751,7 +751,7 @@ sondern daraus, dass jemand es benutzt hat:
 
 Erst mit Hardware für die Zielgröße (`plan.md` §17.1).
 
-- [ ] Mehrere Hosts; `sessions.host_id` ist vorgesehen
+- [ ] Mehrere Hosts; `sessions.host_id` ist vorgesehen — **vom Betreiber auf später gelegt (2026-09-03)**
 - [ ] Agent je Host, Scheduler mit Platzierungsstrategie
 - [ ] Geteilte Registry, geteilter Profil-Storage oder Host-Pinning
 - [ ] Vorgewärmte Pools

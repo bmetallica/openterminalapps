@@ -226,8 +226,8 @@ aufgeräumt, deren Datenbankzeile noch `running` war, und mit `pkill -f` die eig
 
 * **Testergebnis:** `scripts/test-authz.sh` **216/216**,
   `scripts/build-desktop-image.sh --pruefen` **19/19**, `scripts/pruef-selkies.mjs` liefert ein
-  Bild (1252 Einzelbilder, 1440×900), `scripts/pruef-turn.py` grün. Ein vollständiger `make test` steht weiterhin aus — `scripts/test-backup.sh` beendet
-  Sitzungen, und auf dieser Maschine lief durchgehend ein Arbeitsplatz des Nutzers.
+  Bild (1252 Einzelbilder, 1440×900), `scripts/pruef-turn.py` grün. **Der vollständige `make test` ist am 2026-09-02 gelaufen: 424/424**
+  (216 authz · 18 Zwischenablage · 107 e2e · 42 ldap · 2 Streaming · 39 Sicherung).
 * **Zwei Fallen beim Prüfen, beide selbst gestellt:** Wer während eines Laufs Dienste neu startet,
   bekommt „Der Container-Dienst ist nicht erreichbar" und 16 Fehlschläge, die keine sind. Und wer
   Session-Container aufräumt, deren Datenbankzeile noch `running` ist, lässt den e2e auf einen
@@ -236,25 +236,22 @@ aufgeräumt, deren Datenbankzeile noch `running` war, und mit `pkill -f` die eig
   `216 authz · 18 Zwischenablage · 107 e2e · 42 ldap · 36 Sicherung (2 Fehler)` = **419 von 421**
 * **Fehlermeldung:** `✗ Pfad im Archiv stimmt nicht` und `✗ Markierung fehlt nach dem Zurückspielen` in `scripts/test-backup.sh`
 * **Vermutete Ursache — und was daraus wurde:** Kein Produktfehler, sondern ein **Testartefakt**. `/api/backups/run` sichert **jede** laufende Sitzung; die Prüfung griff sich „die erste Container-Sicherung". Während des Laufs lief unter demselben Konto zusätzlich meine Selkies-Sitzung, also war es die falsche. Mit zwei Streaming-Maschinen sind zwei Sitzungen je Konto der Normalfall, deshalb wählt die Prüfung die Sicherung jetzt über die Vorlage aus.
-  **Nach der Korrektur: `test-backup.sh` allein → 38/38 grün.** Ein vollständiger `make test` **nach** dieser Korrektur steht noch aus — das ist der erste Schritt unten.
-* **Weitere offene Kleinigkeiten:**
-  * `kasmweb/gimp:1.18.0-rolling-daily` (Vorlage `gimp`) liegt nicht mehr lokal — beim Start würde OTA versuchen, es zu holen.
-  * Die Vorlage `neuer-arbeitsplatz` zeigt auf eine fremde Registry (`192.168.66.12:5000`), die nicht erreichbar sein muss.
-  * Selkies: der Medienweg ist gemessen, aber noch nicht im Browser bestätigt.
+  **Nach der Korrektur: `test-backup.sh` → 39/39 grün, auch im vollständigen Lauf.** Erledigt; die Prüfung schont fremde Sitzungen jetzt ausdrücklich. Der erste Schritt unten.
+* **Weitere offene Kleinigkeiten** (Stand 2026-09-03):
+  * `kasmweb/gimp:1.18.0-rolling-daily` (Vorlage `gimp`) liegt nicht lokal — beim Start würde OTA versuchen, es zu holen. **Entschärft**: Die Vorlage ist abgeschaltet, ebenso `signal`. Wer sie einschaltet, braucht zuerst das Image.
+  * Die Vorlage `neuer-arbeitsplatz` zeigt auf eine fremde Registry (`192.168.66.12:5000`, Abbild `websshadmin`) — das Abbild liegt lokal vor, die Vorlage startet also, aber der Verweis ist falsch und die Vorlage sieht nach einem Versehen aus. Ebenso liegen die Versuchsvorlagen `arbeitsplatz-debian-versuch`, `terminal-einzel-app-versuch` und die Doppelung `neuer-arbeitsplatz-619928` noch herum.
+  * Selkies: der Medienweg ist **im Browser bestätigt** (Bild und Zwischenablage, über WireGuard mit MTU 1000, TURN über TCP mit `relay`).
+  * `ota/base-desktop:1` trägt rund 70 MB Ballast, den kein Weg benutzt: `libdnnl3.6` (43 MB) und `libflite1` (27 MB) hängen als Abhängigkeiten an GStreamer. Herauszubekommen nur mit `--force-depends`, was das Paketsystem beschädigt zurücklässt — deshalb bewusst drin.
+  * Unbestätigte Beobachtung: Selkies scheint den TURN-Server alle 60 Sekunden an der laufenden Strecke auszutauschen. Im Betrieb bisher ohne Wirkung; nie nachgemessen.
 
 ---
 
 ## 🚀 NÄCHSTE ARBEITSSCHRITTE (BACKLOG FÜR DEN AGENTEN)
 
-1. **Vollständigen `make test` fahren** und bestätigen, dass alle fünf Reihen grün sind (die Sicherungsprüfung wurde gehärtet, aber nur allein gegengeprüft). Erwartung: 421/421.
-2. **Selkies messen, bevor irgendetwas daran entschieden wird.** Konkret:
-   * Latenz und Bildqualität gegen KasmVNC, auf denselben Inhalten, im selben Netz
-   * CPU-Last je Sitzung (x264 in Software, die Maschine hat keine GPU)
-   * Trägt „ein Bildschirm je Sitzung" den Alltag, oder fehlt der Anwendungsumschalter?
-   Ohne diese Zahlen keine Entscheidung für oder gegen den Weg.
-3. **Wenn Selkies bleibt:** eine eigene Prüfreihe für den Selkies-Weg und ein Umschalter in der Oberfläche für `stream_engine`. (Die Portvergabe je Sitzung stand hier und hat sich erledigt: Der TURN ist ein gemeinsamer Dienst geworden.)
-4. **Branding** (eigenes Logo/Farben je Anlage) — klein, gut machbar, rein Frontend.
-5. **Mehrere Hosts (M10)** — braucht eine zweite Maschine.
+1. **Branding** (eigenes Logo/Farben je Anlage) — klein, gut machbar, rein Frontend.
+2. **Selkies nachmessen.** Die Entscheidung für Selkies fiel funktional (Bild, Zwischenablage, Einzelanwendung), nicht auf Zahlen. Was fehlt: Latenz und Bildqualität gegen KasmVNC auf denselben Inhalten im selben Netz, und **CPU-Last je Sitzung** — x264 läuft in Software, die Maschine hat keine GPU. Das ist die Zahl, die entscheidet, wie viele Sitzungen der Rechner trägt.
+3. **Mehrere Hosts (M10)** — braucht eine zweite Maschine. Vom Betreiber auf später gelegt (2026-09-03).
+4. **Aufräumen in den Vorlagen** — siehe „offene Kleinigkeiten" oben: falscher Registry-Verweis, Versuchsvorlagen, eine Doppelung.
 
 **Ausdrücklich nicht anfassen:** Firefox-Erweiterung signieren (vom Nutzer ausgenommen), GPU-Durchreichung (keine GPU vorhanden).
 
