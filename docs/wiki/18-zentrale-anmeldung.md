@@ -216,6 +216,30 @@ Anmeldeseite nie auslösen.
 > beim dunklen Gewand. Das ist kein Fehler, sondern die Grenze von `localStorage`; es fällt nur
 > auf, wenn jemand hell eingestellt hat.
 
+## Die Keycloak-Konsole ist erreichbar — mit Absicht
+
+Der mitgelieferte Keycloak liegt hinter Traefik unter `/auth`, und dazu gehört auch seine
+**Verwaltungsoberfläche** unter `/auth/admin/`. Wer OTA erreicht, erreicht also auch sie.
+
+**Das ist eine Entscheidung, keine Nachlässigkeit.** OTA verwaltet Keycloak von innen — für den
+Alltag muss dort niemand hinein. Aber wenn doch einmal etwas klemmt, das OTAs Oberfläche nicht
+abdeckt (ein Anmeldefluss, ein Zertifikat der Föderation, ein Blick in die Sitzungen eines Kontos),
+ist die Konsole der einzige Weg. Sie zuzumauern hiesse, sich im Fehlerfall selbst auszusperren.
+
+Was daran hängt, und was der Betrieb dafür schuldet:
+
+* **Das Passwort des Keycloak-Administrators ist damit so wichtig wie das des Wirts.** Es steht in
+  `deploy/.env` (`KEYCLOAK_ADMIN_PW`), wird von `make setup` erzeugt und sollte nie ein zweites Mal
+  irgendwo auftauchen.
+* **Der zweite Faktor gehört auf dieses Konto**, nicht nur auf die der Anwender.
+* **Die Bremse gegen Durchprobieren steht** — Keycloak sperrt nach fünf Fehlversuchen für 15
+  Minuten, das gilt auch an der Konsole.
+* **Diese Rechnung gilt für ein Intranet.** Sobald OTA aus dem Internet erreichbar wird, kippt sie:
+  Dann gehört vor `/auth/admin` eine Einschränkung auf bekannte Adressen (`ipAllowList` in Traefik,
+  `deploy/traefik/dynamic/middlewares.yml`). Der Anmeldeweg der Nutzer ist davon nicht betroffen —
+  der läuft über `/auth/realms/…`, und OTAs eigener Zugriff geht ohnehin durch das interne Netz und
+  nicht über Traefik.
+
 ## Ein vorhandenes Keycloak benutzen
 
 Wer schon eines betreibt, setzt in `deploy/.env`:

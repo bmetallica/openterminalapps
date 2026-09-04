@@ -56,3 +56,49 @@ if [ -n "$PROXIES" ]; then
 else
   echo "  traefik.yml erzeugt (kein vorgelagerter Proxy)"
 fi
+
+# --------------------------------------------------------------------------
+# Die Bremse vor der lokalen Anmeldung
+# --------------------------------------------------------------------------
+#
+# Sie steht hier und nicht in `dynamic/middlewares.yml`, weil sie dasselbe
+# wissen muss wie der Block oben: **welcher Absender der echte ist.** Steht ein
+# Reverse Proxy davor, kommt jede Anfrage von dessen Adresse — eine Bremse je
+# Absender wuerde dann alle in denselben Topf werfen und die ganze Firma auf
+# fuenf Anmeldungen je Minute setzen. `excludedIPs` sagt Traefik, welche
+# Adressen es aus `X-Forwarded-For` herausrechnen soll, um den echten Absender
+# zu finden. Beides aus derselben Quelle zu erzeugen ist die einzige Art, die
+# nicht irgendwann auseinanderlaeuft.
+#
+# **Warum ausgerechnet dieser eine Pfad:** `/api/auth/login` ist die Nottuer,
+# nicht die Haupttuer. Konten aus Keycloak werden dort abgewiesen und zur
+# zentralen Anmeldung geschickt; hier herein kommt praktisch nur `notfall`.
+# Fuenf Versuche je Minute kosten deshalb niemanden etwas — und decken die
+# Rechenzeit, die jeder Versuch an Argon2 verbrennt.
+BREMSE="$ROOT/deploy/traefik/dynamic/anmeldebremse.yml"
+{
+  echo "# ERZEUGT von scripts/traefik-config.sh — Aenderungen gehen beim"
+  echo "# naechsten \`make up\` verloren. Bitte das Skript aendern."
+  echo "http:"
+  echo "  middlewares:"
+  echo "    ota-anmeldebremse:"
+  echo "      rateLimit:"
+  echo "        average: ${OTA_ANMELDUNG_PRO_MINUTE:-10}"
+  echo "        period: 1m"
+  echo "        burst: ${OTA_ANMELDUNG_STOSS:-30}"
+  if [ -n "$PROXIES" ]; then
+    echo "        sourceCriterion:"
+    echo "          ipStrategy:"
+    echo "            excludedIPs:"
+    IFS=',' read -ra LISTE2 <<< "$PROXIES"
+    for eintrag in "${LISTE2[@]}"; do
+      eintrag="$(echo "$eintrag" | tr -d '[:space:]')"
+      [ -z "$eintrag" ] && continue
+      echo "              - \"$eintrag\""
+    done
+  else
+    echo "        # Kein vorgelagerter Proxy: Die Adresse der Verbindung ist"
+    echo "        # die des Absenders, und Traefik nimmt sie von selbst."
+  fi
+} > "$BREMSE"
+echo "  anmeldebremse.yml erzeugt (${OTA_ANMELDUNG_PRO_MINUTE:-10}/min, Stoss ${OTA_ANMELDUNG_STOSS:-30})"

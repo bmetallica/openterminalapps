@@ -5,11 +5,35 @@
 
 name: ota
 
+# Wie viel Protokoll ein Dienst behalten darf.
+#
+# Dockers Vorgabe ist **keine Grenze**: `json-file` schreibt, bis die Platte
+# voll ist. Gemessen am 2026-09-04 auf dieser Anlage: Traefiks Protokoll stand
+# nach vier Tagen bei 23 MB, weil dort jede abgelehnte Anfrage mit
+# Absenderadresse landet — rund zwei Gigabyte im Jahr, fuer einen Dienst, und
+# niemand raeumt es je auf. Wenn die Platte volllaeuft, steht **alles**
+# gleichzeitig — die Datenbank zuerst.
+#
+# 10 MB mal drei Dateien je Dienst: genug, um einen Fehler von gestern noch zu
+# finden, und gedeckelt bei rund 300 MB fuer den ganzen Stack. Wer laenger
+# zurueckschauen will, schickt die Protokolle an einen Sammler; dafuer ist
+# dieser Treiber nicht gedacht.
+#
+# Das ist zugleich die Antwort auf die Aufbewahrungsfrist: In den Protokollen
+# stehen IP-Adressen, und ohne Grenze bewahrt eine Anlage sie ewig auf
+# (`dsgvo.md`, Abschnitt 4).
+x-protokoll: &protokoll
+  driver: json-file
+  options:
+    max-size: "${OTA_LOG_MAX_SIZE:-10m}"
+    max-file: "${OTA_LOG_MAX_FILE:-3}"
+
 services:
 
   traefik:
     image: traefik:v3.7
     container_name: ota-traefik
+    logging: *protokoll
     restart: unless-stopped
     ports:
       - "${OTA_HTTP_PORT:-8081}:8080"     # leitet auf HTTPS um
@@ -71,6 +95,7 @@ services:
   turn:
     image: coturn/coturn:4.6-alpine
     container_name: ota-turn
+    logging: *protokoll
     restart: unless-stopped
     network_mode: host
     command:
@@ -138,6 +163,7 @@ services:
         NO_PROXY: "${OTA_NO_PROXY:-}"
     image: ota/web:${OTA_VERSION:-dev}
     container_name: ota-web
+    logging: *protokoll
     restart: unless-stopped
     volumes:
       # Nur die Konfiguration wird gemountet — der gebaute Inhalt steckt im Image.
@@ -178,6 +204,7 @@ services:
         NO_PROXY: "${OTA_NO_PROXY:-}"
     image: ota/api:${OTA_VERSION:-dev}
     container_name: ota-api
+    logging: *protokoll
     restart: unless-stopped
     depends_on:
       db:
@@ -237,6 +264,23 @@ services:
       - "traefik.http.routers.ota-api.priority=50"
       - "traefik.http.routers.ota-api.middlewares=ota-headers@file"
       - "traefik.http.services.ota-api.loadbalancer.server.port=8000"
+      # Die lokale Anmeldung bekommt einen eigenen Router, nur damit eine
+      # Bremse davorpasst. Hoehere Prioritaet als `ota-api`, sonst greift die
+      # allgemeine Regel zuerst und die Bremse nie.
+      #
+      # **Nur dieser eine Pfad.** Unter `/api/auth` liegen auch `/me` (bei
+      # jedem Seitenaufruf), die ganze OIDC-Anmeldung und der Rueckkanal, ueber
+      # den Keycloak Abmeldungen meldet — eine Bremse darauf wuerde den
+      # normalen Betrieb treffen. `/api/auth/login` dagegen ist die Nottuer:
+      # Konten aus Keycloak werden dort abgewiesen, herein kommt praktisch nur
+      # `notfall`. Der Bremsklotz selbst wird von scripts/traefik-config.sh
+      # erzeugt, weil er wissen muss, welche Adressen vorgelagerte Proxys sind.
+      - "traefik.http.routers.ota-anmeldung.rule=Path(`/api/auth/login`)"
+      - "traefik.http.routers.ota-anmeldung.entrypoints=websecure"
+      - "traefik.http.routers.ota-anmeldung.tls=true"
+      - "traefik.http.routers.ota-anmeldung.priority=100"
+      - "traefik.http.routers.ota-anmeldung.middlewares=ota-headers@file,ota-anmeldebremse@file"
+      - "traefik.http.routers.ota-anmeldung.service=ota-api"
 
   agent:
     build:
@@ -254,6 +298,7 @@ services:
         NO_PROXY: "${OTA_NO_PROXY:-}"
     image: ota/agent:${OTA_VERSION:-dev}
     container_name: ota-agent
+    logging: *protokoll
     restart: unless-stopped
     environment:
       # Firmenproxy. Leer heisst: kein Proxy — die Vorgabe.
@@ -313,6 +358,11 @@ services:
       OTA_HTTPS_PORT: "${OTA_HTTPS_PORT:-8443}"
       OTA_TURN_MIN: "${OTA_TURN_MIN:-49160}"
       OTA_TURN_MAX: "${OTA_TURN_MAX:-49260}"
+      # Dieselbe Grenze fuer die Protokolle der Sitzungscontainer wie fuer die
+      # Dienste oben (`x-protokoll`). Der Agent legt sie an, nicht Compose —
+      # ohne diese beiden Zeilen schriebe jeder Arbeitsplatz ohne Grenze.
+      OTA_LOG_MAX_SIZE: "${OTA_LOG_MAX_SIZE:-10m}"
+      OTA_LOG_MAX_FILE: "${OTA_LOG_MAX_FILE:-3}"
       # Der Zeitserver, falls einer gesetzt ist. Er steht in der Grundregel des
       # Routers: Eine falsche Uhr bricht TLS, und der Fehler sieht nach allem
       # aus ausser nach der Uhr. Leer heisst: keine Zeile dafuer.
@@ -386,6 +436,7 @@ services:
         NO_PROXY: "${OTA_NO_PROXY:-}"
     image: ota/firewall:${OTA_VERSION:-dev}
     container_name: ota-firewall
+    logging: *protokoll
     restart: unless-stopped
     networks:
       # Der Uplink — der einzige Weg nach draussen, für alle Arbeitsplätze.
@@ -433,6 +484,7 @@ services:
   registry:
     image: registry:2
     container_name: ota-registry
+    logging: *protokoll
     restart: unless-stopped
     environment:
       # Loeschen erlauben. Ohne das laesst sich eine alte Fassung nur
@@ -454,6 +506,7 @@ services:
   db:
     image: postgres:16-alpine
     container_name: ota-db
+    logging: *protokoll
     restart: unless-stopped
     environment:
       POSTGRES_DB: "${POSTGRES_DB:-ota}"
@@ -488,6 +541,7 @@ services:
   keycloak-db-init:
     image: postgres:16-alpine
     container_name: ota-keycloak-db-init
+    logging: *protokoll
     profiles: ["", "default"]
     depends_on:
       db:
@@ -507,6 +561,7 @@ services:
   keycloak:
     image: quay.io/keycloak/keycloak:26.7
     container_name: ota-keycloak
+    logging: *protokoll
     restart: unless-stopped
     depends_on:
       keycloak-db-init:

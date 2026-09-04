@@ -109,6 +109,24 @@ jedem Start über das Image gelegt. Neue Software im Image ändert nichts an dei
 `/etc`. Wer dauerhaft ein Systempaket braucht, wendet sich an den Administrator — es gehört ins
 Golden Image ([Kapitel 7](07-golden-images.md)).
 
+## Wer sonst noch auf deinen Bildschirm sehen kann
+
+**Ein Administrator kann sich auf eine laufende Sitzung schalten** und sieht dann dasselbe wie du —
+dein offenes Terminal, deinen entsperrten Passwortspeicher, deine Mail. Technisch lässt sich das
+kaum verhindern: Wer die Maschine verwaltet, auf der dein Arbeitsplatz läuft, erreicht dasselbe
+ohnehin über andere Wege.
+
+Was OTA daraus macht:
+
+* **Ein Supporter kann es nicht.** Das Recht *Alle Sessions sehen und beenden* reicht dafür
+  ausdrücklich **nicht** aus — sehen, dass etwas läuft, und daran sitzen sind zwei verschiedene
+  Dinge. Nur ein voller Administrator kommt heran.
+* **Es steht im Protokoll.** Jedes Aufschalten erzeugt einen Eintrag mit Zeitpunkt, mit dem Namen
+  dessen, der zusieht, und deinem. Nachlesbar unter **Protokoll** — und damit überprüfbar, etwa
+  gegen eine Betriebsvereinbarung.
+* **Du merkst es heute nicht.** Ein Hinweis im Bild, solange jemand Fremdes zusieht, ist geplant
+  und noch nicht gebaut. Bis dahin ist das Protokoll der Weg, es nachzusehen.
+
 ## Automatisches Abmelden ✅
 
 Bleibt OTA eine Weile unbenutzt, wirst du abgemeldet und musst dich neu anmelden. Wie lange das

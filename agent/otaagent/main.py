@@ -63,6 +63,12 @@ USERFILES_MOUNT = "/mnt/austausch"
 GROUPFILES_MOUNT = "/mnt/gruppen"
 PUBLIC_NETWORK = os.environ.get("OTA_PUBLIC_NETWORK", "ota_public")
 
+# Wie viel Protokoll ein Sitzungscontainer behalten darf. Dieselben Werte wie
+# fuer die Dienste im Stack; geaendert wird beides an einer Stelle, in der
+# `.env`.
+LOG_MAX_SIZE = os.environ.get("OTA_LOG_MAX_SIZE", "10m")
+LOG_MAX_FILE = os.environ.get("OTA_LOG_MAX_FILE", "3")
+
 # Was jede Sitzung erreichen darf, damit OTA ueberhaupt funktioniert — auch in
 # der Stufe „abgeschottet". Mehr steht hier nicht: Jede Zeile, die hier
 # grosszuegig ist, ist in **jedem** Arbeitsplatz grosszuegig.
@@ -1065,6 +1071,19 @@ def start_container(req: StartRequest) -> dict[str, Any]:
             cap_drop=[] if req.elevated else ["ALL"],
             pids_limit=4096,
             restart_policy={"Name": "no"},
+            # Wie viel Protokoll dieser Container behalten darf.
+            #
+            # Ohne diese Zeilen schreibt Docker ohne jede Grenze. Ein
+            # Arbeitsplatz ist dabei der gespraechigste Container ueberhaupt:
+            # X-Server, Fenstermanager und jede Anwendung schreiben nach
+            # stdout, eine einzige Anwendung in einer Absturzschleife fuellt
+            # die Platte des Wirts — und trifft damit **alle** Arbeitsplaetze,
+            # nicht nur den eigenen.
+            #
+            # Dieselben Werte wie im Stack (docker-compose.yml, `x-protokoll`).
+            log_config={"Type": "json-file",
+                        "Config": {"max-size": LOG_MAX_SIZE,
+                                   "max-file": LOG_MAX_FILE}},
         )
     except APIError as exc:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Docker meldet: {exc}") from exc

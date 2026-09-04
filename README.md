@@ -18,7 +18,7 @@ sowie ganze Registries einbinden — als Zusatz, nicht als Fundament.
 **Jeder Arbeitsplatz hängt in einem eigenen Netz** hinter einem Router: kein Firmennetz, keine
 Nachbarsitzung, kein Wirt — bis jemand es ausdrücklich freigibt ([firewall.md](firewall.md)).
 
-> **Stand:** läuft und wird benutzt. 434 automatische Prüfungen, davon 107 in einem echten Browser.
+> **Stand:** läuft und wird benutzt. 439 automatische Prüfungen, davon 107 in einem echten Browser.
 > Was noch fehlt, steht offen in [roadmap.md](roadmap.md) — nichts davon ist beschönigt.
 
 ---
@@ -189,9 +189,13 @@ dabei **nicht** zurückwandert, ist die Datenbank: Neue Spalten bleiben stehen. 
 - Nutzer, Gruppen und Rechte; Administratoren sind in ihrem eigenen Container `root`
 - **Zentrale Anmeldung über Keycloak**, mitgeliefert im Stack — oder ein vorhandenes anbinden. OTA
   ist dessen Verwalter: Konten, Gruppen und die **AD-Anbindung** richtet man in OTAs Oberfläche
-  ein, die Keycloak-Konsole bleibt für den Alltag zu
+  ein, die Keycloak-Konsole bleibt für den Alltag zu — **erreichbar ist sie trotzdem**
+  (`/auth/admin/`), und das mit Absicht: Wer sie zumauert, sperrt sich im Fehlerfall selbst aus.
+  Was der Betrieb dafür schuldet, steht in [Kapitel 18](docs/wiki/18-zentrale-anmeldung.md)
 - **Notzugang** unter `/notfall`: ein lokales Konto, das ohne Keycloak funktioniert. Ohne ihn wäre
-  eine Anlage nach einer kaputten Anmeldekonfiguration nicht mehr zu betreten
+  eine Anlage nach einer kaputten Anmeldekonfiguration nicht mehr zu betreten. Davor eine Bremse
+  (zehn Versuche je Minute und Absender), und die Sperre nach Fehlversuchen gilt je **(Konto,
+  Absender)** — sie lässt sich damit nicht gegen einen Kollegen richten
 - Ein Verzeichniseintrag kann **kein bestehendes Konto übernehmen** — auch nicht mit demselben Namen
 - **Fremde Web-Anwendungen** im Katalog (Open WebUI, Grafana, …): OTA legt den OIDC-Zugang an und
   entscheidet, wer die Kachel sieht. Was jemand darin darf, entscheidet die Anwendung — OTA baut
@@ -321,7 +325,7 @@ aussahen, als sie waren.
 make test
 ```
 
-**434 Prüfungen in sieben Suiten**, jede stellt ihren Vorzustand selbst her:
+**439 Prüfungen in sieben Suiten**, jede stellt ihren Vorzustand selbst her:
 
 | Suite | Prüft |
 |---|---|

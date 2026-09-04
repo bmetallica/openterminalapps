@@ -18,7 +18,7 @@ whole registries can be attached — as an addition, not as the foundation.
 **Every workspace sits in a network of its own** behind a router: no corporate network, no
 neighbouring session, no host — until someone explicitly opens it ([firewall.md](firewall.md)).
 
-> **Status:** running and in use. 434 automated checks, 107 of them in a real browser. What is still
+> **Status:** running and in use. 439 automated checks, 107 of them in a real browser. What is still
 > missing is listed openly in [roadmap.md](roadmap.md) — nothing there is dressed up.
 >
 > The documentation is written in German. This file is the exception.
@@ -132,6 +132,11 @@ In detail in [handbook chapter 2](docs/wiki/02-erste-schritte.md) (German).
 - **An overview with throughput and dropped packets** per workspace. A port scan looks exactly like
   what it is in that number
 
+> The local sign-in at `/api/auth/login` is the emergency door, not the main one — Keycloak
+> accounts are turned away there. It is rate-limited to ten attempts per minute and sender, and the
+> lockout after failed attempts applies per **(account, sender)**: it cannot be aimed at a
+> colleague.
+
 **Getting software into the workspaces**
 - Pick packages, build the image, activate the version — with a log and a way back
 - **Packages are checked first**: does the image know the name, and is it any good?
@@ -172,6 +177,12 @@ In detail in [handbook chapter 2](docs/wiki/02-erste-schritte.md) (German).
   the internet — it looks the same offline and behind a corporate proxy, and no user's IP address
   leaves the building
 - **Runs next to an existing Kasm installation** on the same host, without changing anything there
+
+> **Keycloak's admin console is reachable** at `/auth/admin/`, and that is deliberate: OTA manages
+> Keycloak from the inside, but when something breaks that OTA's interface does not cover, the
+> console is the only way in — walling it off means locking yourself out. That trade holds for an
+> intranet; the moment OTA is reachable from the internet, put an `ipAllowList` in front of it.
+> Details in [handbook chapter 18](docs/wiki/18-zentrale-anmeldung.md).
 
 ## How it is built
 
@@ -218,7 +229,7 @@ were.
 make test
 ```
 
-**434 checks in seven suites**, each one setting up its own preconditions:
+**439 checks in seven suites**, each one setting up its own preconditions:
 
 | Suite | Checks |
 |---|---|

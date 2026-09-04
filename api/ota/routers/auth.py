@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 
 import secrets
+import time
 from datetime import datetime, timedelta, timezone
 
 import jwt
@@ -36,6 +37,74 @@ LOCK_MINUTES = 15
 _DUMMY_HASH = hash_password(secrets.token_urlsafe(32))
 
 
+# --------------------------------------------------------------------------
+# Die Bremse je Absender
+# --------------------------------------------------------------------------
+#
+# Der Dummy-Hash oben ist richtig und hat einen Preis: Ein Versuch mit einem
+# **unbekannten** Namen kostet genauso viel Rechenzeit wie einer mit einem
+# bekannten — und gezaehlt wurde er nirgends. Eine Sperre gibt es nur am Konto,
+# und ein Name ohne Konto hat keines. Damit war das hier ein ungedeckelter
+# Argon2-Verbrauch auf genau der Maschine, auf der auch die Arbeitsplaetze
+# rechnen.
+#
+# **Gezaehlt wird jeder Fehlversuch, nicht nur der mit erfundenem Namen.** Das
+# ist keine Kleinigkeit, sondern der Kern: Eine Bremse, die nur bei unbekannten
+# Namen greift, beantwortet einen erfundenen Namen mit 429 und einen echten mit
+# 401 — und ist damit genau die Nutzerliste, die der Dummy-Hash oben verhindern
+# soll. Ist der Zaehler voll, bekommt **jeder** Versuch von dieser Adresse
+# dieselbe Antwort, gleich ob es das Konto gibt.
+#
+# Der Zaehler steht im Speicher und nicht in der Datenbank: Das ist fluechtiger
+# Zustand, kein Datum. Ein Neustart vergisst ihn, und das ist richtig so — er
+# soll keinen Angriff ueberdauern, den es dann nicht mehr gibt.
+#
+# Zwanzig Fehlversuche in einer Minute sind Maschinengeschwindigkeit, kein
+# Vertippen. Davor steht ohnehin die Bremse an Traefik (zehn je Minute im
+# Schnitt, Stoss dreissig); dieser Zaehler ist das zweite Netz fuer den Fall,
+# dass jemand die API auf einem anderen Weg erreicht.
+BREMSE_NACH = 20
+BREMSE_SEKUNDEN = 60
+# Obergrenze fuer die Tabelle selbst. Ohne sie waere die Bremse ihr eigener
+# Angriffspunkt: Wer aus vielen Adressen anfragt, liesse den Speicher wachsen.
+BREMSE_MAX = 4096
+_bremse: dict[str, tuple[int, float]] = {}
+
+
+def _gebremst(quelle: str | None) -> bool:
+    """Hat dieser Absender sein Kontingent verbraucht?"""
+    if not quelle:
+        return False
+    zahl, bis = _bremse.get(quelle, (0, 0.0))
+    return bis > time.monotonic() and zahl > BREMSE_NACH
+
+
+def _fehlversuch(quelle: str | None) -> None:
+    """Zaehlt einen Fehlversuch von dieser Adresse."""
+    if not quelle:
+        return
+    jetzt = time.monotonic()
+    # Abgelaufene wegraeumen, bevor gezaehlt wird — sonst waechst die Tabelle
+    # mit jeder Adresse, die je angefragt hat.
+    if len(_bremse) >= BREMSE_MAX:
+        for k, (_, bis) in list(_bremse.items()):
+            if bis <= jetzt:
+                del _bremse[k]
+        if len(_bremse) >= BREMSE_MAX:
+            return  # Voll und nichts abgelaufen: nicht auch noch wachsen.
+    zahl, bis = _bremse.get(quelle, (0, 0.0))
+    if bis <= jetzt:
+        zahl = 0
+    _bremse[quelle] = (zahl + 1, jetzt + BREMSE_SEKUNDEN)
+
+
+def _zu_viele() -> HTTPException:
+    return HTTPException(
+        status.HTTP_429_TOO_MANY_REQUESTS,
+        "Zu viele Fehlversuche von dieser Adresse. Bitte kurz warten.",
+    )
+
+
 
 
 @router.post("/login")
@@ -58,7 +127,19 @@ def login(
     # sie beim Anmelden auf. Dieser Weg ist am 2026-09-04 entfallen — ein
     # Verzeichnis bindet man in Keycloak an, und Keycloak macht die Anmeldung
     # (auth-roadmap.md, Entscheidung 4). Was hier bleibt, ist der Notzugang.
+    quelle = audit.absender(request)
+
+    # Vor allem anderen: Hat diese Adresse ihr Kontingent verbraucht?
+    #
+    # **Vor** der Suche nach dem Konto und vor jedem Hash — sonst kostet jeder
+    # Versuch trotzdem seinen Argon2-Durchlauf. Und fuer jeden Namen gleich,
+    # ob es ihn gibt oder nicht: Eine unterschiedliche Antwort waere die
+    # Nutzerliste.
+    if _gebremst(quelle):
+        raise _zu_viele()
+
     if user is None:
+        _fehlversuch(quelle)
         # Die Meldung ist gleich, die Dauer muss es auch sein: Ohne diesen
         # Leerlauf antwortet ein unbekannter Name in Mikrosekunden und ein
         # bekannter erst nach einem Argon2-Durchlauf. Damit liesse sich die
@@ -67,12 +148,32 @@ def login(
         raise invalid
 
     now = datetime.now(timezone.utc)
-    if user.locked_until and user.locked_until > now:
+
+    # Die Sperre gilt je (Konto, Absender), nicht je Konto.
+    #
+    # Vorher war sie eine Waffe: Acht falsche Passwoerter, und ein Kollege kam
+    # eine Viertelstunde nicht herein — beim Notzugang ausgerechnet der Weg,
+    # den man braucht, wenn die zentrale Anmeldung ausfaellt. Wer jetzt
+    # zusperrt, sperrt **sich selbst** aus; der Kollege kommt von seinem Platz
+    # unbehelligt herein.
+    #
+    # Was das kostet: Wer aus zwei Adressen abwechselnd probiert, wird nicht
+    # gesperrt. Das ist verkraftbar — davor stehen die Bremse an Traefik (zehn
+    # Versuche je Minute und Absender) und der Zaehler oben, das Passwort hat
+    # mindestens zwoelf Zeichen, und jeder Fehlversuch steht im Protokoll.
+    if (user.locked_until and user.locked_until > now
+            and (user.failed_from or "") == (quelle or "")):
         rest = int((user.locked_until - now).total_seconds() // 60) + 1
         raise HTTPException(
             status.HTTP_429_TOO_MANY_REQUESTS,
             f"Zu viele Fehlversuche. Bitte in {rest} Minuten erneut versuchen.",
         )
+
+    # Ein anderer Absender faengt bei null an.
+    if (user.failed_from or "") != (quelle or ""):
+        user.failed_from = quelle
+        user.failed_logins = 0
+        user.locked_until = None
 
     if not user.is_active or user.is_locked:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Dieses Konto ist deaktiviert.")
@@ -87,6 +188,7 @@ def login(
         )
 
     if not verify_password(body.password, user.password_hash):
+        _fehlversuch(quelle)
         user.failed_logins += 1
         if user.failed_logins >= LOCK_AFTER:
             user.locked_until = now + timedelta(minutes=LOCK_MINUTES)
@@ -105,6 +207,7 @@ def login(
         # (`valid_window=1`) — mit genug Versuchen eine Frage von Minuten,
         # nicht von Jahren. Dieselbe Luecke galt fuer die Rueckfallcodes.
         def _totp_failed(kind: str):
+            _fehlversuch(quelle)
             user.failed_logins += 1
             if user.failed_logins >= LOCK_AFTER:
                 user.locked_until = now + timedelta(minutes=LOCK_MINUTES)
@@ -129,6 +232,7 @@ def login(
 
     user.failed_logins = 0
     user.locked_until = None
+    user.failed_from = None
     user.last_login_at = now
     audit.record(db, "login.ok", actor=user, request=request)
     db.commit()

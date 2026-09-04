@@ -659,6 +659,36 @@ Steht dort eine Session, zu der kein Container gehört, ist es das.
 existiert, und schliesst die Session, wenn nicht. Und der Aufräumer räumt solche Leichen bei jedem
 Durchlauf weg — auch ohne dass jemand einen Start versucht.
 
+## „Zu viele Fehlversuche", obwohl niemand sich vertippt hat
+
+**Symptom.** Die lokale Anmeldung antwortet mit **429**, auch mit dem richtigen Passwort.
+
+Zwei verschiedene Bremsen können das sein, und sie stehen an verschiedenen Stellen:
+
+| Antwort | Wer bremst | Was hilft |
+|---|---|---|
+| `Zu viele Fehlversuche. Bitte in N Minuten erneut versuchen.` | OTA: acht Fehlversuche von **dieser** Adresse | Warten, oder von einem anderen Platz anmelden — die Sperre gilt je Absender |
+| Leere Antwort mit 429, ohne Meldung | Traefik: mehr als zehn Versuche je Minute von dieser Adresse | Eine Minute warten |
+
+**Der zweite Fall trifft eine ganze Firma auf einmal**, wenn ein Reverse Proxy davorsteht und seine
+Adresse **nicht** in `OTA_TRUSTED_PROXIES` steht: Dann kommt für Traefik jede Anfrage von derselben
+Adresse, und alle teilen sich zehn Versuche je Minute. Nachsehen:
+
+```bash
+grep OTA_TRUSTED_PROXIES deploy/.env
+cat deploy/traefik/dynamic/anmeldebremse.yml     # steht der Proxy unter excludedIPs?
+```
+
+Steht er dort nicht: eintragen, `sudo make up`. Die Datei wird dabei neu erzeugt.
+
+Eine Sperre von Hand aufheben:
+
+```bash
+docker compose exec db psql -U ota -d ota \
+  -c "UPDATE users SET locked_until = NULL, failed_logins = 0, failed_from = NULL
+      WHERE username = 'notfall';"
+```
+
 ## Im Arbeitsplatz geht plötzlich nichts mehr ins Netz
 
 **Symptom.** Der Arbeitsplatz läuft, das Bild kommt an, aber im Browser darin lädt keine Seite —

@@ -12,6 +12,8 @@ __pycache__/
 *.pyc
 backups/
 deploy/traefik/traefik.yml
+# Erzeugt von scripts/traefik-config.sh, wie traefik.yml daneben.
+deploy/traefik/dynamic/anmeldebremse.yml
 
 # Auslagerungsdateien von Editoren (nano, vim)
 *.swp

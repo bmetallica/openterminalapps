@@ -49,7 +49,7 @@ Und sein Arbeitsplatz kommt dabei **weder ins Firmennetz noch an die Sitzung ein
 nicht, weil eine Regel es verbietet, sondern weil er in einem eigenen Netz hängt, dessen einziger
 Ausgang ein Router ist (M12).
 
-Geprüft durch **434 automatische Prüfungen in sieben Reihen**, davon 107 in einem echten Browser
+Geprüft durch **439 automatische Prüfungen in sieben Reihen**, davon 107 in einem echten Browser
 (`make test`). Ein voller Lauf dauert rund eine halbe Stunde — er baut Container, friert ein
 Image ein, zieht ein Wegwerf-Verzeichnis hoch und misst im Browser nach.
 

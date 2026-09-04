@@ -77,6 +77,14 @@ class User(Base):
 
     failed_logins: Mapped[int] = mapped_column(Integer, default=0)
     locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Zu welchem Absender die beiden Zeilen darueber gehoeren.
+    #
+    # Ohne diese Spalte galt die Sperre fuer das **Konto**, gleich von wo die
+    # Fehlversuche kamen — und war damit eine Waffe: Wer den Namen kennt,
+    # sperrt einen Kollegen aus, und beim Notzugang ausgerechnet den Weg
+    # herein, den man braucht, wenn die zentrale Anmeldung ausfaellt. Jetzt
+    # gilt sie je (Konto, Absender): Wer zusperrt, sperrt sich selbst aus.
+    failed_from: Mapped[str | None] = mapped_column(String(64))
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 

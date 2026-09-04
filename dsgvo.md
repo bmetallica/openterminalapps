@@ -150,8 +150,10 @@ eine Einwilligung stützt, hat sie beim ersten Widerruf nicht mehr.
 
 ## 4 · Aufbewahrung und Löschung — die grösste Lücke
 
-**Art. 5 Abs. 1 lit. e verlangt, dass Daten nicht länger als nötig aufbewahrt werden. OTA hat
-dafür heute nur einen einzigen Mechanismus** — die Aufbewahrungsregel der Sicherungen.
+**Art. 5 Abs. 1 lit. e verlangt, dass Daten nicht länger als nötig aufbewahrt werden.** OTA hat
+dafür zwei Mechanismen: die Aufbewahrungsregel der Sicherungen und — seit dem 2026-09-04 — die
+Grenze für die Container-Protokolle. **Für `audit_log` gibt es weiterhin keine Frist**, und das ist
+die verbliebene Lücke in diesem Abschnitt.
 
 | Datum | Löscht sich heute | Was fehlt |
 |---|---|---|
@@ -159,7 +161,7 @@ dafür heute nur einen einzigen Mechanismus** — die Aufbewahrungsregel der Sic
 | `sessions`, `app_streams` | mit dem Konto (Kaskade) | eine Frist unabhängig vom Konto. |
 | Zuhause auf der Platte | **nie**, auch nicht beim Löschen des Kontos | siehe unten. |
 | Sicherungen | ✅ `keep_daily` / `keep_weekly` | — |
-| Container-Protokolle (Docker) | **nie** (`json-file` ohne Grenze) | Rotation, `N3`. |
+| Container-Protokolle (Docker) | ✅ **seit 2026-09-04**: 10 MB × 3 je Container, dann überschrieben | — |
 | Konto in Keycloak | wird beim Löschen in OTA **nicht** entfernt | siehe unten. |
 
 ### 4.1 Was beim Löschen eines Kontos wirklich passiert
@@ -283,12 +285,12 @@ Was vorhanden ist — die Nachweise stehen in `security.md`:
 | **Verschlüsselung der Übertragung** | ✅ TLS 1.2 als Untergrenze, gemessen; TLS 1.1 wird abgelehnt |
 | **Verschlüsselung im Ruhezustand** | ❌ Weder Datenbank noch Zuhause noch Sicherungen sind verschlüsselt. Bei einer gestohlenen Platte ist alles lesbar. |
 | **Zugangskontrolle** | ✅ Keycloak, zweiter Faktor möglich, Kontosperre nach 8 Fehlversuchen, Argon2 |
-| **Zugriffskontrolle** | ✅ Rechte je Gruppe, serverseitig an jedem Endpunkt geprüft; 229 automatische Prüfungen genau dazu |
+| **Zugriffskontrolle** | ✅ Rechte je Gruppe, serverseitig an jedem Endpunkt geprüft; 234 automatische Prüfungen genau dazu |
 | **Trennungskontrolle** | ⚠️ Im Netz seit dem 2026-09-04 vollständig: jeder Arbeitsplatz in einem eigenen Netz, untereinander nicht erreichbar (`H2`). Im Dateisystem durch getrennte Einhängungen und `0700` — aber **alle Container laufen als dieselbe UID 1000** |
 | **Eingabekontrolle** | ✅ Protokoll über Verwaltungsvorgänge, seit dem 2026-09-04 **einschliesslich des Aufschaltens** |
 | **Verfügbarkeit und Wiederherstellbarkeit** | ✅ Sicherung und Rückspielung sind gebaut **und geprüft** (39 automatische Prüfungen) |
 | **Belastbarkeit** | ✅ Kontingente je Nutzer, Untergrenze für freien Plattenplatz, Leerlauf-Aufräumer |
-| **Regelmässige Überprüfung** | ⚠️ 434 automatische Prüfungen bei jeder Änderung — aber kein Abgleich gegen Schwachstellenlisten |
+| **Regelmässige Überprüfung** | ⚠️ 439 automatische Prüfungen bei jeder Änderung — aber kein Abgleich gegen Schwachstellenlisten |
 
 **Die grösste Lücke in dieser Tabelle ist die zweite Zeile** — und sie ist jetzt die einzige
 grosse. Ein Datenbankabzug enthält weiterhin Passwort-Hashes und TOTP-Startwerte (das AD-Kennwort
@@ -337,18 +339,22 @@ Nach Wirkung geordnet, nicht nach Aufwand.
 | ~~1~~ | ~~**Zeichensatz mitliefern**, Google aus der CSP streichen~~ | ✅ 2026-09-04 | Die einzige Drittlandübermittlung ist beseitigt (Abschnitt 7) |
 | ~~2~~ | ~~**Aufschalten protokollieren**~~ | ✅ 2026-09-04 | `session.attached`, gedrosselt auf einen Eintrag je Viertelstunde und Paar (Abschnitt 6) |
 | ~~3~~ | ~~**Dateirechte** auf Sicherungen und Profile (`0700`/`0600`)~~ | ✅ 2026-09-04 | Datenbankabzüge stehen jetzt auf `0600`, die Verzeichnisse auf `0700` (Abschnitt 8) |
-| 4 | **Aufbewahrungsfristen** für `audit_log` und Container-Protokolle | ½ Tag | Art. 5 Abs. 1 lit. e (Abschnitt 4) |
+| 4 | **Aufbewahrungsfrist** für `audit_log` — die Container-Protokolle sind seit 2026-09-04 begrenzt | ½ Tag | Art. 5 Abs. 1 lit. e (Abschnitt 4) |
 | 5 | **Datenschutzhinweis** als Kapitel im Handbuch | 1 Stunde | Art. 13 (Abschnitt 5) |
-| 6 | **„Konto endgültig entfernen"** — Zuhause, Ablagen, Keycloak, Protokollnamen | 1 Tag | Art. 17 (Abschnitt 4.1) |
+| ~~6~~ | **„Konto endgültig entfernen"** — Zuhause, Ablagen, Keycloak, Protokollnamen | **abgewählt 2026-09-04** | Art. 17 (Abschnitt 4.1). Der Betreiber räumt im Zweifel von Hand ab; die Lücke bleibt bestehen und ist damit eine bewusste. Wer eine Löschung bearbeitet, findet die Pfade in Abschnitt 4.1 |
 | 7 | **Auskunftsfunktion** je Konto | 1 Tag | Art. 15 (Abschnitt 5) |
 | 8 | **Betriebsvereinbarung** anstossen | organisatorisch | § 87 Abs. 1 Nr. 6 BetrVG (Abschnitt 6) |
 | 9 | **Schwellwertanalyse** dokumentieren | 1 Seite | Art. 35 (Abschnitt 9) |
 | 10 | **Verschlüsselung im Ruhezustand** prüfen | Konzept | Abschnitt 8, zweite Zeile |
 
-Die Punkte 1 bis 3 sind am 2026-09-04 erledigt. Der nächste Punkt mit dem besten Verhältnis von
-Aufwand zu Wirkung ist Nummer 4: **Aufbewahrungsfristen**. Solange `audit_log` unbegrenzt wächst,
-sammelt die Anlage Verhaltensdaten ohne Ende — und seit dem 2026-09-04 auch die Einträge darüber,
-wer wem zugesehen hat.
+Die Punkte 1 bis 3 sind am 2026-09-04 erledigt, ebenso die Hälfte von Punkt 4: Die
+Container-Protokolle behalten seit dem 10 MB in drei Dateien je Container und überschreiben sich
+danach selbst — damit verschwinden auch die IP-Adressen darin, ohne dass jemand aufräumen muss.
+
+**Was von Punkt 4 offen bleibt, ist `audit_log`.** Es wächst weiter ohne Frist, und seit dem
+2026-09-04 sammelt es auch die Einträge darüber, wer wem beim Arbeiten zugesehen hat. Das ist der
+nächste Punkt mit dem besten Verhältnis von Aufwand zu Wirkung — und der einzige, bei dem sich die
+Datenmenge *ohne* Zutun weiter vergrössert.
 
 ---
 

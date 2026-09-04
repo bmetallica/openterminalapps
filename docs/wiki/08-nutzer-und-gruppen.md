@@ -101,8 +101,54 @@ Grundlage: Ohne ihn ist eine Regel über das Aufschalten nicht überprüfbar.
 
 - **Argon2id**, Mindestlänge 12, Abgleich gegen bekannt kompromittierte Passwörter
 - Sitzung über `HttpOnly`/`Secure`/`SameSite`-Cookie, kurze Gültigkeit, Erneuerung mit Rotation
-- Bei Fehlversuchen exponentiell steigende Wartezeit je Konto und IP, Sperre nach N Versuchen
+- **Sperre nach acht Fehlversuchen für 15 Minuten — je Konto *und Absenderadresse*.** Wer zusperrt,
+  sperrt sich selbst aus
+- **Zehn Anmeldeversuche je Minute und Absender** an der lokalen Anmeldung, davor an Traefik
 - Alles im Audit-Log
+
+### Warum die Sperre am Absender hängt ✅
+
+Bis zum 2026-09-04 galt sie für das **Konto**, gleich woher die Fehlversuche kamen. Damit war sie
+eine Waffe: Wer den Anmeldenamen eines Kollegen kannte, sperrte ihn mit acht falschen Passwörtern
+aus — und beim Notzugang ausgerechnet den Weg herein, den man braucht, wenn die zentrale Anmeldung
+ausfällt.
+
+Jetzt zählt OTA je **(Konto, Absenderadresse)**. Ein anderer Absender fängt bei null an; der
+Kollege kommt von seinem Platz unbehelligt herein. Was das kostet: Wer aus zwei Adressen
+abwechselnd probiert, wird nicht gesperrt. Das ist verkraftbar — davor steht die Bremse, das
+Passwort hat mindestens zwölf Zeichen, und jeder Fehlversuch steht im Protokoll.
+
+### Und die Bremse davor ✅
+
+**Jeder Anmeldeversuch kostet einen Argon2-Durchlauf** — absichtlich teuer, damit Passwörter nicht
+durchprobierbar sind. Das gilt auch für einen Namen, den es gar nicht gibt: OTA lässt ihn genauso
+lange dauern, sonst wäre über die Antwortzeit die Nutzerliste abfragbar. **Gezählt wurde er
+nirgends** — eine Sperre gibt es nur am Konto, und ein Name ohne Konto hat keines. Damit war das
+ein ungedeckelter Rechenzeitfresser auf genau der Maschine, auf der auch die Arbeitsplätze rechnen.
+
+Zwei Bremsen dagegen:
+
+| Wo | Was | Einstellbar |
+|---|---|---|
+| Traefik, vor `/api/auth/login` | 10 Versuche je Minute und Absender, Stoss 30 | `OTA_ANMELDUNG_PRO_MINUTE`, `OTA_ANMELDUNG_STOSS` |
+| In der API, vor dem Hash | 20 **Fehlversuche** je Absender in einer Minute | im Quelltext (`auth.py`) |
+
+**Die zweite Bremse zählt jeden Fehlversuch, nicht nur den mit erfundenem Namen** — und das ist
+keine Kleinigkeit. Eine Bremse, die nur bei unbekannten Namen greift, beantwortet einen erfundenen
+Namen mit 429 und einen echten mit 401. Damit wäre sie genau die Nutzerliste, die der Dummy-Hash
+oben verhindern soll. Beim Bauen ist das passiert, und die vorhandene Zeitmessung in
+`scripts/test-authz.sh` hat es gefunden: 113 Millisekunden für ein echtes Konto, 14 für ein
+erfundenes. Ist der Zähler voll, bekommt **jeder** Versuch von dieser Adresse dieselbe Antwort.
+
+**Gebremst wird nur `/api/auth/login`**, nicht `/api/auth/*`: Darunter liegen auch `/me` (bei jedem
+Seitenaufruf), die ganze OIDC-Anmeldung und der Rückkanal, über den Keycloak Abmeldungen meldet.
+Und dieser eine Pfad ist die **Nottür**, nicht die Haupttür — Konten aus Keycloak werden dort
+abgewiesen und zur zentralen Anmeldung geschickt. Zehn Versuche je Minute kosten deshalb niemanden
+etwas.
+
+> **Steht ein Reverse Proxy davor**, muss seine Adresse in `OTA_TRUSTED_PROXIES` stehen. Sonst
+> kommt jede Anfrage von derselben Adresse, und die Bremse wirft die ganze Firma in einen Topf.
+> `scripts/traefik-config.sh` erzeugt beides aus dieser einen Angabe, damit es nicht auseinanderläuft.
 
 ## Mein Konto ✅
 

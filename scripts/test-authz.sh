@@ -2230,6 +2230,92 @@ api "$TMP/admin.jar" -X PUT "$BASE/api/branding" -H 'Content-Type: application/j
 expect "$VORHER" "$(api "$TMP/admin.jar" "$BASE/api/branding" | jqp "d['name']")" \
   "Und wieder zurueck"
 
+# ------------------------------------------------------- Bremse vor der Tuer
+#
+# Diese Gruppe steht **am Ende**, und das mit Absicht: Sie verbraucht das
+# Kontingent der Bremse an Traefik. Danach wartet sie eine Minute, damit die
+# naechste Reihe wieder mit vollem Eimer anfaengt.
+echo
+echo "Anmeldebremse"
+
+# 1. Die Sperre gilt je (Konto, Absender) — nicht je Konto.
+#
+# Vorher war sie eine Waffe: Wer den Namen eines Kollegen kannte, sperrte ihn
+# mit acht falschen Passwoertern aus. Gemessen wird das ohne acht Versuche:
+# Die Sperre wird in der Datenbank gesetzt, einmal fuer einen **fremden**
+# Absender und einmal fuer den eigenen — und dann zaehlt, ob die Anmeldung
+# durchgeht.
+db_sql() {  # db_sql <anweisung>
+  docker compose -f "$ROOT/deploy/docker-compose.yml" exec -T db \
+    psql -U ota -d ota -c "$1" >/dev/null 2>&1
+}
+
+# Der Absender, als den die API diese Reihe sieht — aus dem Protokoll, statt
+# ihn zu raten. Er haengt daran, ob ein Reverse Proxy davorsteht.
+MEINE_IP=$(docker compose -f "$ROOT/deploy/docker-compose.yml" exec -T db \
+  psql -U ota -d ota -tAc \
+  "SELECT ip FROM audit_log WHERE action = 'login.ok' AND ip IS NOT NULL \
+   ORDER BY ts DESC LIMIT 1;" 2>/dev/null | tr -d '[:space:]')
+
+db_sql "UPDATE users SET locked_until = now() + interval '15 minutes', \
+        failed_logins = 8, failed_from = '203.0.113.7' WHERE username = '$ADMIN_USER';"
+CODE=$(curl -s --cacert "$CA" -o /dev/null -w '%{http_code}' -X POST "$BASE/api/auth/login" \
+  -H 'Content-Type: application/json' \
+  -d "{\"username\":\"$ADMIN_USER\",\"password\":\"$ADMIN_PW\"}")
+expect "200" "$CODE" "Eine Sperre von fremder Adresse hält den Eigentümer nicht auf"
+
+if [ -n "$MEINE_IP" ]; then
+  db_sql "UPDATE users SET locked_until = now() + interval '15 minutes', \
+          failed_logins = 8, failed_from = '$MEINE_IP' WHERE username = '$ADMIN_USER';"
+  CODE=$(curl -s --cacert "$CA" -o /dev/null -w '%{http_code}' -X POST "$BASE/api/auth/login" \
+    -H 'Content-Type: application/json' \
+    -d "{\"username\":\"$ADMIN_USER\",\"password\":\"$ADMIN_PW\"}")
+  expect "429" "$CODE" "Für denselben Absender greift die Sperre weiterhin"
+  db_sql "UPDATE users SET locked_until = NULL, failed_logins = 0, failed_from = NULL \
+          WHERE username = '$ADMIN_USER';"
+else
+  bad "Die eigene Absenderadresse liess sich nicht aus dem Protokoll lesen"
+fi
+
+# Aufraeumen in jedem Fall — auch wenn oben etwas schiefging. Eine
+# stehengebliebene Sperre wuerde jede folgende Pruefung mitreissen.
+db_sql "UPDATE users SET locked_until = NULL, failed_logins = 0, failed_from = NULL \
+        WHERE username = '$ADMIN_USER';"
+
+# 2. Ein Fehlversuch kostet Rechenzeit — und wird jetzt gezaehlt.
+#
+# Der Dummy-Hash laesst einen erfundenen Namen genauso lange dauern wie einen
+# echten (weiter oben geprueft). Gezaehlt wurde er nirgends: Eine Sperre gibt
+# es nur am Konto, und ein Name ohne Konto hat keines. Damit war das ein
+# ungedeckelter Argon2-Verbrauch auf der Maschine, auf der die Arbeitsplaetze
+# rechnen.
+GEBREMST=""
+for i in $(seq 1 25); do
+  CODE=$(curl -s --cacert "$CA" -o /dev/null -w '%{http_code}' -X POST "$BASE/api/auth/login" \
+    -H 'Content-Type: application/json' \
+    -d "{\"username\":\"gibtesnicht-bremse-$i\",\"password\":\"egal-9911\"}")
+  [ "$CODE" = "429" ] && { GEBREMST="$i"; break; }
+done
+[ -n "$GEBREMST" ] \
+  && ok "Fehlversuche werden je Absender gebremst (nach $GEBREMST)" \
+  || bad "25 Anmeldeversuche mit erfundenen Namen liefen ungebremst durch"
+
+# **Und zwar fuer jeden Namen gleich.** Eine Bremse, die nur bei erfundenen
+# Namen greift, beantwortet einen erfundenen mit 429 und einen echten mit 401
+# — und ist damit genau die Nutzerliste, die der Dummy-Hash verhindern soll.
+CODE=$(curl -s --cacert "$CA" -o /dev/null -w '%{http_code}' -X POST "$BASE/api/auth/login" \
+  -H 'Content-Type: application/json' \
+  -d "{\"username\":\"$ADMIN_USER\",\"password\":\"$ADMIN_PW\"}")
+expect "429" "$CODE" "Die Bremse antwortet für ein echtes Konto genauso"
+
+# Nach dem Fenster ist der Weg wieder frei — und der Eimer an Traefik voll,
+# sonst finge die naechste Reihe gebremst an.
+sleep 65
+
+login "$TMP/admin.jar" "$ADMIN_USER" "$ADMIN_PW"
+expect "True" "$(api "$TMP/admin.jar" "$BASE/api/auth/me" | jqp "d['is_admin']")" \
+  "Nach dem Fenster kommt der Verwalter wieder herein"
+
 echo
 echo "─────────────────────────────────────"
 printf '  bestanden: %d   fehlgeschlagen: %d\n' "$pass" "$fail"

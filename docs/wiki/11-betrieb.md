@@ -70,6 +70,38 @@ docker compose down                # Alles stoppen (Sessions laufen weiter!)
 > zu den Session-Containern; die Anwendung ist am Datenstrom nicht beteiligt. Das ist ein bewusster
 > Vorteil des Aufbaus und macht Updates im laufenden Betrieb unkritisch.
 
+## Protokolle ✅
+
+Jeder Container behält **10 MB in drei Dateien**, dann wirft Docker die älteste weg. Einstellbar
+über `OTA_LOG_MAX_SIZE` und `OTA_LOG_MAX_FILE` in `deploy/.env` — für die Dienste **und** für jeden
+Arbeitsplatz.
+
+```bash
+docker compose logs -f ota-api          # mitlesen
+docker inspect ota-traefik --format '{{.HostConfig.LogConfig.Config}}'
+du -sh $(docker inspect ota-traefik --format '{{.LogPath}}')
+```
+
+**Ohne diese Grenze schreibt Docker, bis die Platte voll ist**, und das ist keine graue Theorie:
+Auf dieser Anlage stand Traefiks Protokoll nach vier Tagen bei 23 MB, weil dort jede abgelehnte
+Anfrage mit Absenderadresse landet — rund zwei Gigabyte im Jahr, für einen einzigen Dienst. Läuft
+die Platte voll, steht alles gleichzeitig, und die Datenbank zuerst.
+
+Ein Arbeitsplatz ist dabei der gesprächigste Container überhaupt: X-Server, Fenstermanager und
+jede Anwendung schreiben nach stdout. Eine Anwendung in einer Absturzschleife füllte damit die
+Platte des **Wirts** — und träfe alle Arbeitsplätze, nicht nur den eigenen.
+
+> **Die Einstellung wirkt erst, wenn ein Container neu erzeugt wird** (`make update`), nicht beim
+> blossen Neustart. Laufende Arbeitsplätze behalten ihre bis zum nächsten Start.
+
+**Das ist zugleich die Aufbewahrungsfrist.** In den Protokollen stehen IP-Adressen; ohne Grenze
+bewahrt eine Anlage sie ewig auf. Sie verschwinden jetzt, wenn die Datei überschrieben wird, und
+nicht erst, wenn jemand aufräumt ([`dsgvo.md`](../../dsgvo.md), Abschnitt 4). Wer länger
+zurückschauen will, schickt die Protokolle an einen Sammler — dafür ist dieser Treiber nicht
+gedacht.
+
+**Was das nicht abdeckt:** `audit_log` in der Datenbank. Es wächst weiter ohne Frist.
+
 ## Was unter „Einstellungen" steht ✅
 
 Vier Dinge gelten für die ganze Anlage und nicht für eine Sitzung: die **Anmeldefrist** und der
