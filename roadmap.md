@@ -29,11 +29,12 @@ früh. Die Einbindung vorhandener **Kasm-Images und -Registries** ist ein Featur
 | **M10** | Skalierung | Mehrere Hosts, Pools | offen |
 | **M11** | **Zentrale Identität** | Keycloak als Anmeldung, OTA als sein Verwalter und Portal | ✅ **erledigt** |
 | **M12** | **Das Netz der Arbeitsplätze** | Ein Netz je Sitzung, ein Router davor, Firewall in der Oberfläche | ✅ **erledigt** |
+| **M13** | **Härtung für den Betrieb** | Schriften, Protokollgrenzen und -fristen, Anmeldebremse, Dateirechte | ✅ **erledigt** |
 
 Bis zum produktiven Einsatz (M5–M7): **realistisch 4–6 Wochen** in Teilzeit.
 
-**Stand 2026-09-04**: M0 bis M4, M8, M11 und M12 laufen, dazu die Build-Pipeline aus M5 und die
-Sicherung aus M7.
+**Stand 2026-09-05**: M0 bis M4, M8, M11, M12 und M13 laufen, dazu die Build-Pipeline aus M5 und
+die Sicherung aus M7.
 
 Ein Nutzer meldet sich über die **zentrale Anmeldung** an, startet seinen Arbeitsplatz und öffnet
 darin VS Code, ein Terminal und den Dateimanager — jedes formatfüllend auf eigenem Display, alle
@@ -803,6 +804,33 @@ Der Entwurf mit allen Messungen steht in [`firewall.md`](firewall.md), die Bedie
 sind alle Arbeitsplätze kurz ohne Netz. Das ist der Preis dafür, dass es keinen Weg an ihm vorbei
 gibt, und mit `restart: unless-stopped` plus Selbstheilung im Abgleich der beste Kompromiss, den
 dieser Aufbau hergibt.
+
+---
+
+## M13 — Härtung für den Betrieb · ✅ erledigt am 2026-09-05
+
+Aus der Sicherheits- und Datenschutzbetrachtung, nach Wirkung geordnet abgearbeitet. Die Befunde
+selbst führt der Betreiber; hier steht, was daraus gebaut wurde.
+
+- [x] **Zeichensatz mitgeliefert** statt von Google geladen — die einzige Drittlandübermittlung,
+      die es je gab. Nachgemessen: keine Anfrage an einen fremden Host mehr
+- [x] **Aufschalten wird protokolliert** (`session.attached`, ein Eintrag je Viertelstunde und
+      Paar). Ohne das ist eine Betriebsvereinbarung über Fernhilfe nicht überprüfbar
+- [x] **Dateirechte**: 0700 auf den Wurzeln, 0600 auf Archiven und Datenbankabzügen. Zwei
+      Zuhause standen auf 777
+- [x] **Passwortregel in Keycloak** — der Hauptweg war schwächer als der Notzugang
+- [x] **Protokolle begrenzt**: 10 MB × 3 je Container, Dienste **und** Arbeitsplätze. Ohne Grenze
+      schreibt Docker, bis die Platte voll ist — und dann steht alles gleichzeitig
+- [x] **Bremse vor der lokalen Anmeldung**: zehn Versuche je Minute und Absender an Traefik, die
+      Kontosperre je (Konto, Absender) statt je Konto, und ein Zähler **vor** dem Argon2-Durchlauf
+- [x] **Aufbewahrungsfristen im Protokoll**: 90 Tage Verhalten, 365 Tage Verwaltung, täglich
+      angewendet. Damit wächst in der Anlage nichts mehr ohne Frist
+- [x] **Ungenutzten Endpunkt gelöscht**, der beliebige Befehle in beliebigen Containern ausführte
+
+**Ausdrücklich nicht gebaut**, jeweils als Entscheidung festgehalten: Verschlüsselung im
+Ruhezustand samt der TOTP-Startwerte, ein Streifen im Bild während des Aufschaltens (ein
+Administrator sieht auch ohne OTA zu — ein Signal, dessen Fehlen nichts bedeutet, wäre eine falsche
+Entwarnung), „Konto endgültig entfernen", und das Zumauern von Keycloaks Konsole.
 
 ---
 

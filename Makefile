@@ -23,6 +23,7 @@ help:
 	@echo "                 Verzeichnis, Medienweg, Netz, Sicherung)"
 	@echo "  make messung   Die beiden Streaming-Maschinen vergleichen (~12 min,"
 	@echo "                 braucht eine ruhige Maschine)"
+	@echo "  make bilder    Bilder der Oberfläche für die README erzeugen"
 	@echo "  make backup    Datenbank und Profile von Hand sichern"
 	@echo "  make cert      Serverzertifikat erneuern (CA bleibt)"
 	@echo
@@ -88,6 +89,12 @@ update:
 	@NEUESTE=$$(find images/base-desktop -type f -printf '%T@\n' 2>/dev/null | sort -rn | head -1 | cut -d. -f1); 	 GEBAUT=$$(date -d "$$(docker image inspect ota/base-desktop:1 --format '{{.Created}}' 2>/dev/null)" +%s 2>/dev/null); 	 if [ -z "$$GEBAUT" ]; then 	   echo "  Das Basisimage fehlt noch:  scripts/build-desktop-image.sh --pruefen"; 	 elif [ -n "$$NEUESTE" ] && [ "$$NEUESTE" -gt "$$GEBAUT" ]; then 	   echo "  Das Basisimage hat sich geaendert:  scripts/build-desktop-image.sh --pruefen"; 	   echo "  Danach die Arbeitsplatz-Images neu bauen (Verwaltung -> Software)."; 	 else 	   echo "  Das Basisimage ist auf Stand."; 	 fi
 	@echo "  Laufende Sitzungen behalten ihr Abbild, bis sie beendet werden."
 	@echo
+
+.PHONY: bilder
+bilder:
+	@# Bilder der Oberflaeche fuer die README. Keine Pruefung — ein Werkzeug.
+	@# Es liegt bei den Tests, weil es denselben Browser braucht.
+	@set -a; . ./deploy/.env; set +a; cd tests && node screenshots.mjs
 
 .PHONY: down
 down:

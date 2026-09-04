@@ -122,8 +122,9 @@ Was OTA daraus macht:
   ausdrücklich **nicht** aus — sehen, dass etwas läuft, und daran sitzen sind zwei verschiedene
   Dinge. Nur ein voller Administrator kommt heran.
 * **Es steht im Protokoll.** Jedes Aufschalten erzeugt einen Eintrag mit Zeitpunkt, mit dem Namen
-  dessen, der zusieht, und deinem. Nachlesbar unter **Protokoll** — und damit überprüfbar, etwa
-  gegen eine Betriebsvereinbarung.
+  dessen, der zusieht, und deinem. Nachlesbar unter **Betrieb → Protokoll**, dort als „Auf fremden
+  Bildschirm geschaltet" — und damit überprüfbar, etwa gegen eine Betriebsvereinbarung. Der Eintrag
+  bleibt ein Jahr stehen; die täglichen Anmelde- und Sitzungsdaten verfallen nach 90 Tagen.
 * **Du merkst es heute nicht.** Ein Hinweis im Bild, solange jemand Fremdes zusieht, ist geplant
   und noch nicht gebaut. Bis dahin ist das Protokoll der Weg, es nachzusehen.
 

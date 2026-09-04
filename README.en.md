@@ -23,6 +23,11 @@ neighbouring session, no host — until someone explicitly opens it ([firewall.m
 >
 > The documentation is written in German. This file is the exception.
 
+![The dashboard: a running session with nine applications, and the tiles of the other workspaces below](docs/bilder/01-dashboard.png)
+
+*The start screen: your own running session with its applications, what it was given in cores and
+memory — and what it is allowed to reach on the network.*
+
 ---
 
 ## Quick start
@@ -176,6 +181,9 @@ In detail in [handbook chapter 2](docs/wiki/02-erste-schritte.md) (German).
 - **Nothing is fetched from foreign hosts.** Fonts ship with the interface; it requests nothing from
   the internet — it looks the same offline and behind a corporate proxy, and no user's IP address
   leaves the building
+- **Nothing grows without a limit.** Container logs are capped at 10 MB × 3 — for the services **and**
+  for every workspace. In the database log, behavioural entries (sign-ins, sessions, app starts)
+  expire after 90 days and administrative ones after 365; the sweep runs daily and is itself logged
 - **Runs next to an existing Kasm installation** on the same host, without changing anything there
 
 > **Keycloak's admin console is reachable** at `/auth/admin/`, and that is deliberate: OTA manages
@@ -183,6 +191,17 @@ In detail in [handbook chapter 2](docs/wiki/02-erste-schritte.md) (German).
 > console is the only way in — walling it off means locking yourself out. That trade holds for an
 > intranet; the moment OTA is reachable from the internet, put an `ipAllowList` in front of it.
 > Details in [handbook chapter 18](docs/wiki/18-zentrale-anmeldung.md).
+
+## A look at administration
+
+| | |
+|---|---|
+| ![The template editor with display name, image, mode, streaming and network](docs/bilder/03-workspace-editor.png) | ![The network screen with base rules, who is working where, and published ports](docs/bilder/04-netz.png) |
+| **The template.** One screen per workspace — image, mode, streaming path, and what it may reach on the network. | **The network.** What applies without being asked, with reason and origin per line; who is working where, throughput and dropped packets. |
+
+Images are produced by `make bilder` ([`tests/screenshots.mjs`](tests/screenshots.mjs)), which signs
+in, walks the screens and cleans up after itself. Two things it deliberately does not do: attach to
+someone else's session (it starts its own), and capture screens listing people.
 
 ## How it is built
 
@@ -195,6 +214,8 @@ Browser ──HTTPS──▶ Traefik ──┬──▶ web       interface (ngi
                                      │
                             session container (KasmVNC)
 ```
+
+![The architecture: browser through Traefik to interface and API, the agent as the only service with the Docker socket, one network per session, all ending at the router](docs/bilder/aufbau.svg)
 
 **Only `agent` touches Docker.** The API processes user input and therefore does not get the socket —
 the same separation applies to the host filesystem.

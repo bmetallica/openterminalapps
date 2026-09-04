@@ -1,0 +1,148 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1160 880" width="1160" height="880" role="img" aria-labelledby="titel beschreibung">
+  <title id="titel">Der Aufbau von OpenTerminalApps</title>
+  <desc id="beschreibung">Der Browser spricht über Traefik mit Oberfläche und API. Nur der Agent fasst Docker an und legt je Sitzung ein eigenes Netz an. Die Arbeitsplätze erreichen einander nicht; alle Sitzungsnetze enden im Router, und der ist der einzige Weg nach draussen. Der Bildstrom läuft über Traefik, der Medienstrom über den TURN-Dienst.</desc>
+
+  <style>
+    .flaeche { fill: #0F172A; stroke: #1E293B; stroke-width: 1.5; }
+    .flaeche-hoch { fill: #1B2436; stroke: #334155; stroke-width: 1.5; }
+    .zone { fill: none; stroke: #1E293B; stroke-width: 1.5; stroke-dasharray: 6 5; }
+    .titel { fill: #F1F5F9; font: 600 15px system-ui, -apple-system, "Segoe UI", sans-serif; }
+    .unter { fill: #94A3B8; font: 400 11.5px ui-monospace, "IBM Plex Mono", monospace; }
+    .zonentitel { fill: #64748B; font: 600 11px system-ui, sans-serif; letter-spacing: 1.4px; }
+    .kante { stroke: #334155; stroke-width: 1.8; fill: none; }
+    .kante-akzent { stroke: #06B6D4; stroke-width: 2.2; fill: none; }
+    .kante-strich { stroke: #64748B; stroke-width: 1.6; fill: none; stroke-dasharray: 5 4; }
+    .kantentext { fill: #94A3B8; font: 400 11px ui-monospace, monospace; }
+    .kantentext-akzent { fill: #06B6D4; font: 600 11px ui-monospace, monospace; }
+    .merk { fill: #F59E0B; font: 600 12px system-ui, sans-serif; }
+    .sperre { stroke: #EF4444; stroke-width: 2; fill: none; }
+    .sperrtext { fill: #EF4444; font: 600 11px system-ui, sans-serif; }
+  </style>
+
+  <rect width="1160" height="880" fill="#090D16"/>
+
+  <!-- ================================================== Aussen -->
+  <rect class="flaeche-hoch" x="40" y="34" width="230" height="62" rx="8"/>
+  <text class="titel" x="60" y="60">Browser</text>
+  <text class="unter" x="60" y="80">der Mensch am Platz</text>
+
+  <path class="kante-akzent" d="M155 96 L155 150" marker-end="url(#pfeil-akzent)"/>
+  <text class="kantentext-akzent" x="167" y="128">HTTPS 8443</text>
+
+  <path class="kante-strich" d="M270 65 L905 65 L905 196" marker-end="url(#pfeil-grau)"/>
+  <text class="kantentext" x="470" y="56">WebRTC — der Medienstrom geht nicht durch Traefik</text>
+
+  <!-- ================================================== Der Stack -->
+  <rect class="zone" x="40" y="150" width="1080" height="230" rx="10"/>
+  <text class="zonentitel" x="58" y="172">DER STACK — EIN COMPOSE-PROJEKT AUF EINEM WIRT</text>
+
+  <rect class="flaeche" x="70" y="186" width="170" height="64" rx="8"/>
+  <text class="titel" x="88" y="212">Traefik</text>
+  <text class="unter" x="88" y="232">TLS, Routen</text>
+
+  <rect class="flaeche" x="272" y="186" width="150" height="64" rx="8"/>
+  <text class="titel" x="290" y="212">web</text>
+  <text class="unter" x="290" y="232">Oberfläche</text>
+
+  <rect class="flaeche" x="454" y="186" width="150" height="64" rx="8"/>
+  <text class="titel" x="472" y="212">api</text>
+  <text class="unter" x="472" y="232">Rechte, Sessions</text>
+
+  <rect class="flaeche" x="636" y="186" width="160" height="64" rx="8"/>
+  <text class="titel" x="654" y="212">keycloak</text>
+  <text class="unter" x="654" y="232">Anmeldung</text>
+
+  <rect class="flaeche" x="828" y="186" width="150" height="64" rx="8"/>
+  <text class="titel" x="846" y="212">turn</text>
+  <text class="unter" x="846" y="232">Medienweg</text>
+
+  <rect class="flaeche" x="1010" y="186" width="88" height="64" rx="8"/>
+  <text class="titel" x="1028" y="212">db</text>
+  <text class="unter" x="1028" y="232">Postgres</text>
+
+  <rect class="flaeche-hoch" x="454" y="290" width="230" height="66" rx="8" stroke="#06B6D4"/>
+  <text class="titel" x="472" y="316">agent</text>
+  <text class="unter" x="472" y="336">der einzige mit Docker-Socket</text>
+
+  <rect class="flaeche" x="1010" y="290" width="88" height="66" rx="8"/>
+  <text class="titel" x="1028" y="316">registry</text>
+  <text class="unter" x="1028" y="336">Images</text>
+
+  <path class="kante" d="M240 218 L272 218" marker-end="url(#pfeil-grau)"/>
+  <path class="kante" d="M422 218 L454 218" marker-end="url(#pfeil-grau)"/>
+
+  <path class="kante-akzent" d="M529 250 L529 290" marker-end="url(#pfeil-akzent)"/>
+  <text class="kantentext" x="541" y="275">HTTP, internes Netz</text>
+
+  <text class="merk" x="704" y="322">Die API verarbeitet fremde Eingaben —</text>
+  <text class="merk" x="704" y="342">und bekommt den Socket deshalb nicht.</text>
+
+  <!-- ================================================== Arbeitsplätze -->
+  <rect class="zone" x="40" y="416" width="1080" height="288" rx="10"/>
+  <text class="zonentitel" x="58" y="438">DIE ARBEITSPLÄTZE — JE SITZUNG EIN EIGENES NETZ</text>
+
+  <rect class="flaeche" x="70" y="452" width="264" height="62" rx="8"/>
+  <text class="titel" x="88" y="476">Arbeitsplatz A</text>
+  <text class="unter" x="88" y="497">ota-n-a · internal · 10.99.7.0/24</text>
+
+  <rect class="flaeche" x="70" y="530" width="264" height="62" rx="8"/>
+  <text class="titel" x="88" y="554">Arbeitsplatz B</text>
+  <text class="unter" x="88" y="575">ota-n-b · internal · 10.99.3.0/24</text>
+
+  <rect class="flaeche" x="70" y="608" width="264" height="62" rx="8"/>
+  <text class="titel" x="88" y="632">Arbeitsplatz C</text>
+  <text class="unter" x="88" y="653">ota-n-c · internal · 10.99.1.0/24</text>
+
+  <!-- Untereinander: kein Weg. Das ist die Aussage, nicht die Ausnahme. -->
+  <g>
+    <path class="sperre" d="M202 514 L202 530"/>
+    <path class="sperre" d="M194 514 L210 530"/>
+    <path class="sperre" d="M210 514 L194 530"/>
+    <path class="sperre" d="M202 592 L202 608"/>
+    <path class="sperre" d="M194 592 L210 608"/>
+    <path class="sperre" d="M210 592 L194 608"/>
+    <text class="sperrtext" x="228" y="527">kein Weg zum Nachbarn</text>
+    <text class="sperrtext" x="228" y="605">kein Weg zum Nachbarn</text>
+  </g>
+
+  <!-- Router -->
+  <rect class="flaeche-hoch" x="820" y="502" width="278" height="118" rx="8" stroke="#06B6D4"/>
+  <text class="titel" x="840" y="534">ota-firewall</text>
+  <text class="unter" x="840" y="556">nftables · NAT · Namensdienst</text>
+  <text class="unter" x="840" y="576">Profile, Freigaben, Zähler</text>
+  <text class="unter" x="840" y="600">der einzige Weg nach draussen</text>
+
+  <!-- Jeder Arbeitsplatz für sich an den Router -->
+  <path class="kante-akzent" d="M334 483 L600 483 L600 540 L820 540" marker-end="url(#pfeil-akzent)"/>
+  <path class="kante-akzent" d="M334 561 L820 561" marker-end="url(#pfeil-akzent)"/>
+  <path class="kante-akzent" d="M334 639 L600 639 L600 582 L820 582" marker-end="url(#pfeil-akzent)"/>
+
+  <!-- agent legt Netze an -->
+  <path class="kante-strich" d="M529 356 L529 452" marker-end="url(#pfeil-grau)"/>
+  <text class="kantentext" x="541" y="398">legt Container und Netz an</text>
+
+  <!-- Traefik → Bildstrom -->
+  <path class="kante" d="M120 250 L120 452" marker-end="url(#pfeil-grau)"/>
+  <text class="kantentext" x="70" y="360" transform="rotate(-90 70 360)">/s/&lt;id&gt; — der Bildstrom</text>
+
+  <!-- Router → draussen -->
+  <path class="kante-akzent" d="M959 620 L959 742" marker-end="url(#pfeil-akzent)"/>
+  <text class="kantentext-akzent" x="971" y="686">ota_uplink</text>
+
+  <rect class="flaeche-hoch" x="820" y="742" width="278" height="62" rx="8"/>
+  <text class="titel" x="840" y="768">Firmennetz · Internet</text>
+  <text class="unter" x="840" y="788">nur, was freigegeben ist</text>
+
+  <text class="merk" x="70" y="756">Kein Arbeitsplatz erreicht den Wirt, das Firmennetz oder die Sitzung eines</text>
+  <text class="merk" x="70" y="777">Kollegen — nicht, weil eine Regel es verbietet, sondern weil es keinen</text>
+  <text class="merk" x="70" y="798">anderen Weg gibt: Die Netze sind „internal" und haben keine Standardroute.</text>
+
+  <defs>
+    <marker id="pfeil-grau" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#64748B"/>
+    </marker>
+    <marker id="pfeil-akzent" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#06B6D4"/>
+    </marker>
+  </defs>
+</svg>

@@ -659,6 +659,30 @@ Steht dort eine Session, zu der kein Container gehört, ist es das.
 existiert, und schliesst die Session, wenn nicht. Und der Aufräumer räumt solche Leichen bei jedem
 Durchlauf weg — auch ohne dass jemand einen Start versucht.
 
+## Alte Protokolleinträge sind verschwunden
+
+**Symptom.** Im Protokoll steht nichts mehr von vor drei Monaten, und der Eintrag, den man sucht,
+ist weg.
+
+Das ist kein Verlust, sondern die Aufbewahrungsfrist: **90 Tage für Verhaltensdaten**
+(Anmeldungen, Sitzungen, App-Starts), **365 Tage für Verwaltungsvorgänge**. Nachsehen, ob und wann
+aufgeräumt wurde:
+
+```sql
+SELECT ts, detail FROM audit_log
+ WHERE action = 'protokoll.aufgeraeumt' ORDER BY ts DESC LIMIT 5;
+```
+
+Steht dort ein Eintrag mit den Zahlen, hat der Aufräumer gearbeitet — der Vorgang protokolliert
+sich selbst, damit eine Lücke in den Daten nicht wie ein Ausfall aussieht. Wer länger
+zurückschauen muss, stellt `OTA_PROTOKOLL_VERHALTEN_TAGE` in `deploy/.env` höher oder schickt die
+Einträge an einen Sammler; `0` schaltet das Löschen ab und ist dann eine Entscheidung
+([Kapitel 11](11-betrieb.md), [`dsgvo.md`](../../dsgvo.md)).
+
+**Was nie verschwindet, weil es in der langen Klasse steht:** wer wen angelegt hat, welche Rechte
+vergeben wurden, welche Freigabe eingetragen wurde — und wer sich auf einen fremden Bildschirm
+geschaltet hat.
+
 ## „Zu viele Fehlversuche", obwohl niemand sich vertippt hat
 
 **Symptom.** Die lokale Anmeldung antwortet mit **429**, auch mit dem richtigen Passwort.

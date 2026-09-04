@@ -8,31 +8,119 @@ import { getLang, t as tr, useLang } from '../lib/i18n'
 type Tab = 'Sessions' | 'Protokoll' | 'Sicherung'
 
 /* Technische Vorgangsnamen in Klartext. Wer ins Protokoll schaut, will
-   wissen was passiert ist — nicht, wie der Endpunkt heisst. */
+   wissen was passiert ist — nicht, wie der Endpunkt heisst.
+
+   **Vollständig zu halten ist hier keine Fleissarbeit, sondern der Zweck.**
+   Am 2026-09-05 standen hier 23 Einträge, während in der Datenbank 78
+   verschiedene Vorgänge vorkamen — der Rest erschien als roher Bezeichner.
+   Darunter ausgerechnet `session.attached`: der Eintrag, den ein Betroffener
+   oder ein Betriebsrat lesen können muss. Wer einen neuen Vorgang
+   protokolliert, trägt ihn hier ein. */
 const ACTION_TEXT: Record<string, string> = {
+  // Anmeldung
   'login.ok': 'Anmeldung',
+  'login.oidc_ok': 'Anmeldung über die zentrale Anmeldung',
   'login.failed': 'Anmeldung fehlgeschlagen',
+  'login.oidc_refused': 'Zentrale Anmeldung abgewiesen',
+  'login.oidc_rejected': 'Zentrale Anmeldung zurückgewiesen',
   'login.totp_failed': 'Zweiter Faktor falsch',
+  'login.recovery_used': 'Rückfallcode benutzt',
+  'login.recovery_failed': 'Rückfallcode falsch',
+  'login.directory_unreachable': 'Verzeichnis nicht erreichbar',
+  'logout.backchannel': 'Abmeldung über den Rückkanal',
   'password.changed': 'Passwort geändert',
+  'totp.enabled': 'Zweiter Faktor eingerichtet',
+  'totp.disabled': 'Zweiter Faktor abgeschaltet',
+  'user.totp_reset': 'Zweiter Faktor zurückgesetzt',
+
+  // Sitzungen
   'session.started': 'Session gestartet',
   'session.stop': 'Session gestoppt',
   'session.pause': 'Session pausiert',
   'session.unpause': 'Session fortgesetzt',
   'session.deleted': 'Session beendet',
+  // Der wichtigste Eintrag in dieser Liste.
+  'session.attached': 'Auf fremden Bildschirm geschaltet',
   'app.started': 'Anwendung geöffnet',
   'app.stopped': 'Anwendung geschlossen',
+
+  // Workspaces und Zuteilung
   'template.created': 'Workspace angelegt',
   'template.updated': 'Workspace geändert',
   'template.deleted': 'Workspace gelöscht',
   'template.apps_set': 'App-Katalog gesetzt',
   'override.set': 'Zuteilung gesetzt',
   'override.cleared': 'Zuteilung entfernt',
+  'once_script.created': 'Einmal-Skript angelegt',
+  'once_script.deleted': 'Einmal-Skript gelöscht',
+  'once_script.reset': 'Einmal-Skript zurückgesetzt',
+
+  // Nutzer und Gruppen
   'user.created': 'Nutzer angelegt',
+  'user.created_from_directory': 'Nutzer aus dem Verzeichnis übernommen',
   'user.updated': 'Nutzer geändert',
   'user.deleted': 'Nutzer gelöscht',
   'group.created': 'Gruppe angelegt',
   'group.updated': 'Gruppe geändert',
   'group.deleted': 'Gruppe gelöscht',
+  'uebernahme.gelaufen': 'Bestandskonten übernommen',
+  'uebernahme.zurueckgenommen': 'Übernahme zurückgenommen',
+
+  // Identität
+  'identity.updated': 'Anmeldung eingerichtet',
+  'identity.synced': 'Mit Keycloak abgeglichen',
+  'keycloak.verzeichnis_gesetzt': 'Verzeichnis in Keycloak eingerichtet',
+  'keycloak.verzeichnis_entfernt': 'Verzeichnis in Keycloak entfernt',
+  'keycloak.verzeichnis_abgleich': 'Verzeichnis abgeglichen',
+  'notfallkonto.gesetzt': 'Notfallkonto gesetzt',
+  'notfallkonto.entfernt': 'Notfallkonto entfernt',
+  'webapp.created': 'Anwendung angebunden',
+  'webapp.updated': 'Angebundene Anwendung geändert',
+  'webapp.deleted': 'Angebundene Anwendung entfernt',
+  'webapp.secret_rotated': 'Geheimnis der Anwendung erneuert',
+
+  // Netz
+  'netprofile.created': 'Netzprofil angelegt',
+  'netprofile.deleted': 'Netzprofil gelöscht',
+  'netprofile.opened': 'Netzprofil auf „aus“ gesetzt',
+  'firewall.global_updated': 'Globale Freigaben geändert',
+  'firewall.forward_created': 'Portfreigabe angelegt',
+  'firewall.forward_deleted': 'Portfreigabe entfernt',
+
+  // Images und Rezepte
+  'build.started': 'Image-Bau gestartet',
+  'build.activated': 'Image-Fassung aktiviert',
+  'build.deleted': 'Image-Fassung gelöscht',
+  'build.frozen': 'Session eingefroren',
+  'recipe.created': 'Rezept angelegt',
+  'recipe.updated': 'Rezept geändert',
+  'recipe.deleted': 'Rezept gelöscht',
+  'registry.added': 'Registry eingetragen',
+  'registry.refreshed': 'Registry aktualisiert',
+  'registry.imported': 'Aus Registry übernommen',
+
+  // Dateien und Ablagen
+  'files.uploaded': 'Datei in die eigene Ablage gelegt',
+  'files.deleted': 'Datei aus der eigenen Ablage gelöscht',
+  'shared.uploaded': 'Datei in die gemeinsame Ablage gelegt',
+  'shared.deleted': 'Datei aus der gemeinsamen Ablage gelöscht',
+  'shared.dir_created': 'Ordner in der gemeinsamen Ablage angelegt',
+  'groupfiles.uploaded': 'Datei ins Gruppenlaufwerk gelegt',
+  'groupfiles.deleted': 'Datei aus dem Gruppenlaufwerk gelöscht',
+  'skeleton.uploaded': 'Skeleton-Datei hinzugefügt',
+  'skeleton.removed': 'Skeleton-Datei entfernt',
+  'skeleton.dir_created': 'Skeleton-Ordner angelegt',
+
+  // Betrieb
+  'settings.updated': 'Einstellungen geändert',
+  'branding.updated': 'Marke geändert',
+  'branding.logo_set': 'Zeichen gesetzt',
+  'branding.logo_cleared': 'Zeichen entfernt',
+  'backup.started': 'Sicherung gestartet',
+  'backup.policy_changed': 'Sicherungsplan geändert',
+  'backup.restored': 'Profil wiederhergestellt',
+  'backup.restored_container': 'Container wiederhergestellt',
+  'protokoll.aufgeraeumt': 'Protokoll aufgeräumt (Aufbewahrungsfrist)',
 }
 
 const FAILURE = /failed/

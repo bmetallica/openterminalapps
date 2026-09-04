@@ -100,6 +100,29 @@ nicht erst, wenn jemand aufräumt ([`dsgvo.md`](../../dsgvo.md), Abschnitt 4). W
 zurückschauen will, schickt die Protokolle an einen Sammler — dafür ist dieser Treiber nicht
 gedacht.
 
+### Wo es steht: Betrieb → Protokoll ✅
+
+**Betrieb** hat drei Reiter: *Sessions* (wer arbeitet gerade), *Protokoll* und *Sicherung*. Das
+Protokoll zeigt die letzten 120 Vorgänge, neueste zuerst, in fünf Spalten:
+
+| Spalte | Was darin steht |
+|---|---|
+| **Zeit** | Tag und Uhrzeit auf die Sekunde |
+| **Wer** | Der Anmeldename des Handelnden — bei Vorgängen ohne Konto ein Strich |
+| **Was** | Der Vorgang **im Klartext**, nicht als technischer Name |
+| **Betrifft** | Woran, sofern sich das benennen lässt (Kennung des Objekts) |
+| **Von wo** | Die Absenderadresse |
+
+Fehlschläge stehen in der Warnfarbe — *Anmeldung fehlgeschlagen*, *Zweiter Faktor falsch*,
+*Rückfallcode falsch*. Wer eine Häufung an einer Adresse sieht, sieht einen Versuch.
+
+> **Der Klartext ist kein Beiwerk.** Bis zum 2026-09-05 hatten 23 von 78 vorkommenden Vorgängen
+> eine lesbare Beschriftung; der Rest stand als roher Bezeichner da — darunter ausgerechnet
+> `session.attached`, der Eintrag, den ein Betroffener oder ein Betriebsrat lesen können muss. Er
+> heisst jetzt **„Auf fremden Bildschirm geschaltet"**. Wer einen neuen Vorgang protokolliert,
+> trägt seinen Klartext in `web/src/screens/Monitor.tsx` ein — sonst steht er dort wieder als
+> Endpunktname.
+
 ### Und das Protokoll in der Datenbank ✅
 
 Das `audit_log` hat eine eigene Frist, und zwar zwei — weil darin zwei verschiedene Dinge stehen:

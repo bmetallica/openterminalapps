@@ -82,7 +82,8 @@ Docker-Host und erreicht dort dasselbe.
 
 Seit dem 2026-09-04 hinterlässt das eine Spur. Schaltet sich jemand auf den Bildschirm eines
 anderen, entsteht ein Eintrag `session.attached` mit dem Namen des Eigentümers — nachzulesen unter
-**Protokoll**.
+**Betrieb → Protokoll**, dort im Klartext als „Auf fremden Bildschirm geschaltet". Er gehört zur
+langen Aufbewahrungsklasse und bleibt ein Jahr stehen ([Kapitel 11](11-betrieb.md)).
 
 Zwei Feinheiten, damit die Zahlen niemanden in die Irre führen:
 

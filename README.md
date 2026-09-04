@@ -21,6 +21,11 @@ Nachbarsitzung, kein Wirt — bis jemand es ausdrücklich freigibt ([firewall.md
 > **Stand:** läuft und wird benutzt. 441 automatische Prüfungen, davon 107 in einem echten Browser.
 > Was noch fehlt, steht offen in [roadmap.md](roadmap.md) — nichts davon ist beschönigt.
 
+![Das Dashboard: eine laufende Sitzung mit neun Anwendungen, darunter die Kacheln der übrigen Arbeitsplätze](docs/bilder/01-dashboard.png)
+
+*Der Start: die eigene laufende Sitzung mit ihren Anwendungen, was sie an Kernen und Speicher
+bekommen hat — und was sie im Netz darf. Darunter, was sich sonst noch starten lässt.*
+
 ---
 
 ## Schnellstart
@@ -225,6 +230,11 @@ dabei **nicht** zurückwandert, ist die Datenbank: Neue Spalten bleiben stehen. 
 - **Übersicht mit Durchsatz und verworfenen Paketen** je Arbeitsplatz. Ein Portscan sieht in dieser
   Zahl genau so aus, wie er ist
 
+![Der Netz-Bildschirm: Grundregelsatz, wer gerade unter welcher Adresse arbeitet, Portfreigaben und globale Freigaben](docs/bilder/04-netz.png)
+
+*Was ohne Zutun gilt, steht ausgeklappt da — mit Grund und Herkunft je Zeile. Darunter, wer gerade
+wo arbeitet, mit Durchsatz und verworfenen Paketen, und der Knopf für eine befristete Portfreigabe.*
+
 **Software in die Arbeitsplätze bringen**
 - Pakete anklicken, Image bauen, Fassung aktivieren — mit Protokoll und Rückrollen
 - **Pakete werden vorher geprüft**: kennt das Image den Namen, und taugt er überhaupt?
@@ -270,22 +280,33 @@ dabei **nicht** zurückwandert, ist die Datenbank: Neue Spalten bleiben stehen. 
 - **Kein Nachladen von fremden Hosts.** Schriften liegen bei, die Oberfläche fordert nichts aus
   dem Internet an — sie sieht offline und hinter einem Firmenproxy gleich aus, und die IP-Adresse
   keines Nutzers verlässt das Haus
+- **Nichts wächst ohne Grenze.** Container-Protokolle sind auf 10 MB × 3 gedeckelt — für die
+  Dienste **und** für jeden Arbeitsplatz. Im Protokoll der Datenbank verfallen Verhaltensdaten
+  (Anmeldungen, Sitzungen, App-Starts) nach 90 Tagen, Verwaltungsvorgänge nach 365; aufgeräumt wird
+  täglich, und das Aufräumen steht selbst im Protokoll
 - **Läuft neben einer bestehenden Kasm-Installation** auf demselben Host, ohne dort etwas
   umzustellen
 
+## Ein Blick in die Verwaltung
+
+| | |
+|---|---|
+| ![Die Workspace-Liste mit Kapazitätsanzeige: freier Arbeitsspeicher, Zusage je Session, Kerne](docs/bilder/02-workspaces.png) | ![Der Editor einer Vorlage mit Anzeigename, Image, Betriebsart, Streaming und Netz](docs/bilder/03-workspace-editor.png) |
+| **Was der Host trägt.** Die zweite Anzeige steht rot: Liefen alle vier Vorlagen gleichzeitig, wäre die Maschine überbucht. Das sieht man vorher, nicht im OOM-Kill. | **Die Vorlage.** Ein Bildschirm je Arbeitsplatz — Image, Betriebsart, Streaming-Weg und was er im Netz darf. |
+| ![Der Software-Reiter: Pakete und Rezepte auswählen, Image bauen](docs/bilder/05-software.png) | ![Die Image-Liste des Hosts, gefiltert nach Herkunft](docs/bilder/06-images.png) |
+| **Software hinein.** Pakete anklicken oder ein Rezept wählen, dann bauen; das Protokoll läuft live mit. Darunter der kurze Weg: eine Session einfrieren. | **Die Images.** Was auf dem Host liegt, woher es kam, wer es benutzt — und was sich gefahrlos entfernen lässt. |
+| ![Die Sicherung: was gesichert wird, Zeitplan und Aufbewahrung](docs/bilder/07-sicherung.png) | ![Das Handbuch im Programm, gefiltert nach Rechten](docs/bilder/08-handbuch.png) |
+| **Die Sicherung.** Profile, Container, Datenbank und Inhalte — von Hand oder nach Plan, mit Aufbewahrungsregel. | **Das Handbuch liegt im Programm.** Welche Kapitel jemand sieht, entscheiden seine Rechte. |
+
+Die Bilder entstehen mit `make bilder` — [`tests/screenshots.mjs`](tests/screenshots.mjs) meldet sich
+an, fährt die Bildschirme ab und räumt hinterher auf. Zwei Dinge tut es dabei **nicht**: sich auf
+eine fremde Sitzung schalten (es startet eine eigene) und Bildschirme mit Personenlisten aufnehmen.
+
 ## Wie es gebaut ist
 
-```
-Browser ──HTTPS──▶ Traefik ──┬──▶ web       Oberfläche (nginx)
-                             ├──▶ api       REST, Anmeldung, Rechte, Sessions
-                             └──▶ /s/<id>   Stream einer Session (forwardAuth)
-                                     │
-                    api ──HTTP──▶ agent ──▶ Docker-Socket
-                                     │
-                          Session-Container (Selkies)
-                                     │
-                          turn ◀─WebRTC─ Browser
-```
+![Der Aufbau: Browser über Traefik zu Oberfläche und API, der Agent als einziger mit Docker-Socket, je Sitzung ein eigenes Netz, alle enden im Router](docs/bilder/aufbau.svg)
+
+Zwei Aussagen stecken in diesem Bild, und beide sind die Antwort auf einen Befund:
 
 **Nur `agent` fasst Docker an.** Die API verarbeitet Nutzereingaben und bekommt den Socket deshalb
 nicht — dieselbe Trennung gilt für das Dateisystem des Hosts.

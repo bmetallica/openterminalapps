@@ -17,6 +17,10 @@ wiederbekommt: Nach einem Rückspielen schiebt die API den ganzen Satz erneut hi
 nächste Abgleich stellt ihn her. Auch die festen Adressen der Arbeitsplätze bleiben damit
 erhalten — sie hängen an Mensch und Vorlage, nicht am Container.
 
+**Eine Rückspielung bringt altes Protokoll zurück** — und der nächste nächtliche Durchlauf räumt
+es nach denselben Fristen wieder weg (90 Tage Verhalten, 365 Tage Verwaltung). Das ist gewollt:
+Sonst hinge die Aufbewahrungsfrist davon ab, wann zuletzt zurückgespielt wurde.
+
 **Die Archive stehen auf `0600`, ihr Verzeichnis auf `0700`**, und das ist kein Beiwerk: Ein
 Datenbankabzug enthält Passwort-Hashes und die Startwerte des zweiten Faktors. Bis zum 2026-09-04
 lagen sie für jeden Benutzer des Wirts lesbar da. Verschlüsselt sind sie **nicht** — wer sie ausser
