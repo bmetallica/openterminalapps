@@ -100,7 +100,33 @@ nicht erst, wenn jemand aufräumt ([`dsgvo.md`](../../dsgvo.md), Abschnitt 4). W
 zurückschauen will, schickt die Protokolle an einen Sammler — dafür ist dieser Treiber nicht
 gedacht.
 
-**Was das nicht abdeckt:** `audit_log` in der Datenbank. Es wächst weiter ohne Frist.
+### Und das Protokoll in der Datenbank ✅
+
+Das `audit_log` hat eine eigene Frist, und zwar zwei — weil darin zwei verschiedene Dinge stehen:
+
+| Klasse | Frist | Einstellbar |
+|---|---|---|
+| **Verhalten** — Anmeldungen, Sitzungen, App-Starts | 90 Tage | `OTA_PROTOKOLL_VERHALTEN_TAGE` |
+| **Verwaltung** — wer was geändert hat, und wer sich aufgeschaltet hat | 365 Tage | `OTA_PROTOKOLL_VERWALTUNG_TAGE` |
+
+`0` heisst „nie löschen". Aufgeräumt wird einmal täglich, in Häppchen von 5.000 Zeilen — ein
+`DELETE` über Hunderttausende hielte die Tabelle fest, und in die schreibt jede Anmeldung. Der
+Vorgang steht selbst im Protokoll (`protokoll.aufgeraeumt`), sonst sähe eine Lücke in den Daten
+später aus wie ein Ausfall.
+
+Von Hand anstossen, ohne bis Mitternacht zu warten:
+
+```bash
+docker compose exec api python -c "
+from ota.db import SessionLocal
+from ota import audit
+with SessionLocal() as db: print(audit.aufraeumen(db))"
+```
+
+> **`session.attached` gehört in die lange Klasse**, obwohl der Name mit `session.` anfängt. Die
+> kurze Klasse ist deshalb eine ausdrückliche Liste in `api/ota/audit.py` und keine Regel über
+> Präfixe. Wer eine neue, häufige Aktion einführt, trägt sie dort ein — was nicht in der Liste
+> steht, wird im Zweifel behalten.
 
 ## Was unter „Einstellungen" steht ✅
 

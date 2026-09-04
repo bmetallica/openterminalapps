@@ -4,7 +4,7 @@ import asyncio
 import contextlib
 import logging
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -178,10 +178,22 @@ def _backup_due() -> bool:
         return True
 
 
+def _protokoll_aufraeumen() -> dict[str, int]:
+    """Die Aufbewahrungsfristen anwenden. Laeuft einmal taeglich."""
+    from . import audit
+
+    with SessionLocal() as db:
+        return audit.aufraeumen(db)
+
+
 # Wann der Verzeichnis-Abgleich laeuft: einmal taeglich, nachts.
 #
 async def _scheduler() -> None:
     from .routers.backups import run_scheduled
+
+    # Der Tag, an dem zuletzt aufgeraeumt wurde. Beim Start leer, damit ein
+    # Dienst, der lange stand, nicht bis zum naechsten Datumswechsel wartet.
+    zuletzt_aufgeraeumt: date | None = None
 
     while True:
         await asyncio.sleep(60)
@@ -192,6 +204,20 @@ async def _scheduler() -> None:
                 log.info("Geplante Sicherung fertig: %s", counts)
         except Exception as exc:  # noqa: BLE001 — der Zeitplaner darf nie sterben
             log.warning("Geplante Sicherung fehlgeschlagen: %s", exc)
+
+        # Einmal je Kalendertag, unabhaengig vom Sicherungsplan: Die Fristen
+        # gelten auch in einer Anlage, in der niemand eine Sicherung
+        # eingerichtet hat.
+        heute = date.today()
+        if zuletzt_aufgeraeumt != heute:
+            try:
+                weg = await asyncio.to_thread(_protokoll_aufraeumen)
+                zuletzt_aufgeraeumt = heute
+                if weg["verhalten"] or weg["verwaltung"]:
+                    log.info("Protokoll aufgeraeumt: %d Verhalten, %d Verwaltung",
+                             weg["verhalten"], weg["verwaltung"])
+            except Exception as exc:  # noqa: BLE001 — derselbe Grund wie oben
+                log.warning("Protokoll nicht aufgeraeumt: %s", exc)
 
 
 

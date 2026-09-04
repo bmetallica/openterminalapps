@@ -55,6 +55,24 @@ class Settings(BaseSettings):
     # CA unter /ca.crt — Schluessel liegen hier nie.
     certs_dir: str = "/app/certs"
 
+    # --- Aufbewahrung des Protokolls ------------------------------------
+    #
+    # Zwei Fristen, weil im `audit_log` zwei verschiedene Dinge stehen.
+    #
+    #   **Verhalten** — Anmeldungen, Sitzungen, App-Starts. Daraus laesst sich
+    #   lueckenlos ablesen, wann jemand gearbeitet hat, wie lange und woran.
+    #   Genau darauf zielt Art. 5 Abs. 1 lit. e; hier ist die kuerzere Frist
+    #   nicht Sparsamkeit, sondern der Zweck.
+    #
+    #   **Verwaltung** — wer wen angelegt, welche Rechte vergeben, welche
+    #   Freigabe eingetragen und wer sich auf einen fremden Bildschirm
+    #   geschaltet hat. Das muss eine Pruefung ein Jahr spaeter noch finden.
+    #
+    # 0 heisst: nie loeschen. Wer das setzt, hat es entschieden — und sollte
+    # wissen, dass die Anlage dann Verhaltensdaten ohne Ende sammelt.
+    protokoll_verhalten_tage: int = 90
+    protokoll_verwaltung_tage: int = 365
+
     idp_mode: str = "mitgeliefert"
     # Leer heisst: der mitgelieferte unter seinem Dienstnamen.
     keycloak_url: str = ""

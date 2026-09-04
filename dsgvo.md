@@ -56,7 +56,7 @@ Blick aussieht.
 
 | Datum | Wo | Umfang heute |
 |---|---|---|
-| Jede Anmeldung, auch jede fehlgeschlagene, **mit IP-Adresse** | `audit_log` | 9.608 Einträge seit 2026-08-26, davon 1.543 `login.ok`, 460 `login.failed` |
+| Jede Anmeldung, auch jede fehlgeschlagene, **mit IP-Adresse** | `audit_log` | Am 2026-09-05: 11.174 Einträge, davon 1.715 `login.ok` und 505 `login.failed`. **Jeder Eintrag trägt eine IP.** Seither mit Frist — siehe Abschnitt 4 |
 | Jeder Sitzungsstart und -stopp, mit Zeitpunkt und Vorlage | `audit_log`, `sessions` | 518 Sitzungen |
 | **Welche Anwendung wann gestartet wurde** | `audit_log` (`app.started`), `app_streams` | 449 Einträge, 275 Ströme |
 | Verwaltungsvorgänge (wer hat was geändert) | `audit_log` | |
@@ -151,13 +151,34 @@ eine Einwilligung stützt, hat sie beim ersten Widerruf nicht mehr.
 ## 4 · Aufbewahrung und Löschung — die grösste Lücke
 
 **Art. 5 Abs. 1 lit. e verlangt, dass Daten nicht länger als nötig aufbewahrt werden.** OTA hat
-dafür zwei Mechanismen: die Aufbewahrungsregel der Sicherungen und — seit dem 2026-09-04 — die
-Grenze für die Container-Protokolle. **Für `audit_log` gibt es weiterhin keine Frist**, und das ist
-die verbliebene Lücke in diesem Abschnitt.
+dafür drei Mechanismen: die Aufbewahrungsregel der Sicherungen, die Grenze für die
+Container-Protokolle (2026-09-04) und die Fristen im `audit_log` (2026-09-05).
+
+### Die zwei Fristen im Protokoll ✅
+
+Gemessen am 2026-09-05: **11.174 Einträge in zehn Tagen, jeder einzelne mit IP-Adresse.** Das ist
+kein Platzproblem — 270 Byte je Eintrag, hochgerechnet gut 350 MB im Jahr bei zwanzig
+Arbeitsplätzen. Es ist ein Datenschutzproblem: Aus `login.ok`, `session.started` und `app.started`
+eines Menschen lässt sich lückenlos ablesen, wann er gearbeitet hat, wie lange und woran.
+
+| Klasse | Frist | Was darin steht |
+|---|---|---|
+| **Verhalten** | 90 Tage | Anmeldungen, Sitzungen, App-Starts — das tägliche Bewegungsprofil |
+| **Verwaltung** | 365 Tage | Wer wen angelegt, welche Rechte vergeben, welche Freigabe eingetragen hat — **und wer sich auf einen fremden Bildschirm geschaltet hat** |
+
+Aufgeräumt wird einmal täglich, in Häppchen, und der Vorgang steht selbst im Protokoll
+(`protokoll.aufgeraeumt`) — sonst sähe eine Lücke in den Daten später aus wie ein Ausfall.
+Einstellbar über `OTA_PROTOKOLL_VERHALTEN_TAGE` und `OTA_PROTOKOLL_VERWALTUNG_TAGE`; `0` heisst
+„nie löschen" und ist dann eine Entscheidung.
+
+**Die kurze Klasse ist eine ausdrückliche Liste, keine Regel über Namen.** `session.attached`
+beginnt mit `session.`, gehört aber in die lange Klasse — es ist der Eintrag, den ein Betroffener
+oder ein Betriebsrat später nachlesen können muss. Eine Regel über Präfixe hätte ihn stillschweigend
+mitgelöscht; die Prüfreihe misst genau das nach.
 
 | Datum | Löscht sich heute | Was fehlt |
 |---|---|---|
-| `audit_log` | **nie** | eine Frist. 9.608 Einträge seit dem ersten Tag, mit IP-Adressen. |
+| `audit_log` | ✅ **seit 2026-09-05**: 90 Tage für Verhaltensdaten, 365 für Verwaltungsvorgänge | — |
 | `sessions`, `app_streams` | mit dem Konto (Kaskade) | eine Frist unabhängig vom Konto. |
 | Zuhause auf der Platte | **nie**, auch nicht beim Löschen des Kontos | siehe unten. |
 | Sicherungen | ✅ `keep_daily` / `keep_weekly` | — |
@@ -283,20 +304,25 @@ Was vorhanden ist — die Nachweise stehen in `security.md`:
 | Anforderung | Stand |
 |---|---|
 | **Verschlüsselung der Übertragung** | ✅ TLS 1.2 als Untergrenze, gemessen; TLS 1.1 wird abgelehnt |
-| **Verschlüsselung im Ruhezustand** | ❌ Weder Datenbank noch Zuhause noch Sicherungen sind verschlüsselt. Bei einer gestohlenen Platte ist alles lesbar. |
+| **Verschlüsselung im Ruhezustand** | ❌ **Bewusst nicht** (2026-09-05). Weder Datenbank noch Zuhause noch Sicherungen sind verschlüsselt; bei einer gestohlenen Platte ist alles lesbar. Ersatzweise Dateirechte 0600/0700, und ein Abzug, der ausser Haus geht, wird von Hand verschlüsselt |
 | **Zugangskontrolle** | ✅ Keycloak, zweiter Faktor möglich, Kontosperre nach 8 Fehlversuchen, Argon2 |
-| **Zugriffskontrolle** | ✅ Rechte je Gruppe, serverseitig an jedem Endpunkt geprüft; 234 automatische Prüfungen genau dazu |
+| **Zugriffskontrolle** | ✅ Rechte je Gruppe, serverseitig an jedem Endpunkt geprüft; 236 automatische Prüfungen genau dazu |
 | **Trennungskontrolle** | ⚠️ Im Netz seit dem 2026-09-04 vollständig: jeder Arbeitsplatz in einem eigenen Netz, untereinander nicht erreichbar (`H2`). Im Dateisystem durch getrennte Einhängungen und `0700` — aber **alle Container laufen als dieselbe UID 1000** |
 | **Eingabekontrolle** | ✅ Protokoll über Verwaltungsvorgänge, seit dem 2026-09-04 **einschliesslich des Aufschaltens** |
 | **Verfügbarkeit und Wiederherstellbarkeit** | ✅ Sicherung und Rückspielung sind gebaut **und geprüft** (39 automatische Prüfungen) |
 | **Belastbarkeit** | ✅ Kontingente je Nutzer, Untergrenze für freien Plattenplatz, Leerlauf-Aufräumer |
-| **Regelmässige Überprüfung** | ⚠️ 439 automatische Prüfungen bei jeder Änderung — aber kein Abgleich gegen Schwachstellenlisten |
+| **Regelmässige Überprüfung** | ⚠️ 441 automatische Prüfungen bei jeder Änderung — aber kein Abgleich gegen Schwachstellenlisten |
 
-**Die grösste Lücke in dieser Tabelle ist die zweite Zeile** — und sie ist jetzt die einzige
-grosse. Ein Datenbankabzug enthält weiterhin Passwort-Hashes und TOTP-Startwerte (das AD-Kennwort
-ist mit dem alten Verzeichnisweg entfallen). Seit dem 2026-09-04 liegt er wenigstens nicht mehr
-offen: `0600` für die Archive, `0700` für die Verzeichnisse (`M2`). Gegen eine
-gestohlene Platte hilft das nicht — dafür braucht es Verschlüsselung im Ruhezustand.
+**Die zweite Zeile ist die verbliebene Lücke — und sie ist eine bewusste.** Ein Datenbankabzug
+enthält weiterhin Passwort-Hashes und TOTP-Startwerte im Klartext (das AD-Kennwort ist mit dem
+alten Verzeichnisweg entfallen). Seit dem 2026-09-04 liegt er wenigstens nicht mehr offen: `0600`
+für die Archive, `0700` für die Verzeichnisse (`M2`).
+
+Gegen eine **gestohlene Platte** hilft das nicht, und dafür bräuchte es Verschlüsselung im
+Ruhezustand. Der Betreiber hat sie am 2026-09-05 ausdrücklich abgewählt: Die Anlage steht im
+eigenen Haus, gegen einen kompromittierten Wirt hilft sie ohnehin nicht, und ein Abzug, der ausser
+Haus geht, wird von Hand verschlüsselt. **Das gehört damit in die Risikobetrachtung und nicht in
+die Mängelliste** — dokumentiert gehört es trotzdem, und deshalb steht es hier.
 
 ---
 
@@ -339,22 +365,21 @@ Nach Wirkung geordnet, nicht nach Aufwand.
 | ~~1~~ | ~~**Zeichensatz mitliefern**, Google aus der CSP streichen~~ | ✅ 2026-09-04 | Die einzige Drittlandübermittlung ist beseitigt (Abschnitt 7) |
 | ~~2~~ | ~~**Aufschalten protokollieren**~~ | ✅ 2026-09-04 | `session.attached`, gedrosselt auf einen Eintrag je Viertelstunde und Paar (Abschnitt 6) |
 | ~~3~~ | ~~**Dateirechte** auf Sicherungen und Profile (`0700`/`0600`)~~ | ✅ 2026-09-04 | Datenbankabzüge stehen jetzt auf `0600`, die Verzeichnisse auf `0700` (Abschnitt 8) |
-| 4 | **Aufbewahrungsfrist** für `audit_log` — die Container-Protokolle sind seit 2026-09-04 begrenzt | ½ Tag | Art. 5 Abs. 1 lit. e (Abschnitt 4) |
+| ~~4~~ | ~~**Aufbewahrungsfristen** für `audit_log` und Container-Protokolle~~ | ✅ 2026-09-04/05 | Art. 5 Abs. 1 lit. e (Abschnitt 4) |
 | 5 | **Datenschutzhinweis** als Kapitel im Handbuch | 1 Stunde | Art. 13 (Abschnitt 5) |
 | ~~6~~ | **„Konto endgültig entfernen"** — Zuhause, Ablagen, Keycloak, Protokollnamen | **abgewählt 2026-09-04** | Art. 17 (Abschnitt 4.1). Der Betreiber räumt im Zweifel von Hand ab; die Lücke bleibt bestehen und ist damit eine bewusste. Wer eine Löschung bearbeitet, findet die Pfade in Abschnitt 4.1 |
 | 7 | **Auskunftsfunktion** je Konto | 1 Tag | Art. 15 (Abschnitt 5) |
 | 8 | **Betriebsvereinbarung** anstossen | organisatorisch | § 87 Abs. 1 Nr. 6 BetrVG (Abschnitt 6) |
 | 9 | **Schwellwertanalyse** dokumentieren | 1 Seite | Art. 35 (Abschnitt 9) |
-| 10 | **Verschlüsselung im Ruhezustand** prüfen | Konzept | Abschnitt 8, zweite Zeile |
+| ~~10~~ | **Verschlüsselung im Ruhezustand** — samt der TOTP-Startwerte in der Datenbank | **abgewählt 2026-09-05** | Abschnitt 8, zweite Zeile. Die Anlage steht im eigenen Haus; gegen einen kompromittierten Wirt hilft es nicht, und wer einen Abzug ausser Haus gibt, verschlüsselt ihn selbst. Die Dateirechte (0600/0700) tragen den Alltag |
 
-Die Punkte 1 bis 3 sind am 2026-09-04 erledigt, ebenso die Hälfte von Punkt 4: Die
-Container-Protokolle behalten seit dem 10 MB in drei Dateien je Container und überschreiben sich
-danach selbst — damit verschwinden auch die IP-Adressen darin, ohne dass jemand aufräumen muss.
+Die Punkte 1 bis 4 sind erledigt. **Damit wächst in dieser Anlage nichts mehr ohne Frist** — weder
+die Container-Protokolle noch das `audit_log`, und die Sicherungen hatten von Anfang an eine.
 
-**Was von Punkt 4 offen bleibt, ist `audit_log`.** Es wächst weiter ohne Frist, und seit dem
-2026-09-04 sammelt es auch die Einträge darüber, wer wem beim Arbeiten zugesehen hat. Das ist der
-nächste Punkt mit dem besten Verhältnis von Aufwand zu Wirkung — und der einzige, bei dem sich die
-Datenmenge *ohne* Zutun weiter vergrössert.
+Offen und unverändert wichtig sind die organisatorischen Punkte: der **Datenschutzhinweis** (5), die
+**Auskunftsfunktion** (7) und die **Betriebsvereinbarung** (8). Für die letzte ist die Grundlage
+seit dem 2026-09-04 da — ohne den Protokolleintrag über das Aufschalten wäre eine Regel dazu nicht
+überprüfbar gewesen.
 
 ---
 

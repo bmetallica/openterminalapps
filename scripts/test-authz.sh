@@ -43,6 +43,16 @@ expect() {  # expect <erwartet> <ist> <beschreibung>
   if [ "$2" = "$1" ]; then ok "$3 ($2)"; else bad "$3 — erwartet $1, bekommen $2"; fi
 }
 
+laeuft() {  # laeuft <containername> — wahr, wenn er wirklich laeuft
+  # **`docker inspect` genuegt nicht.** Ein gestoppter Container existiert
+  # weiterhin, `inspect` gelingt, und erst `docker exec` faellt mit
+  # „is not running" auf die Nase — mitten in einer Pruefung, die mit dem
+  # Geprueften nichts zu tun hat. Gemessen am 2026-09-05 an den
+  # Gruppenlaufwerken: Der Container war zwischendurch abgeraeumt worden, und
+  # drei Pruefungen meldeten einen Fehler, den es nicht gab.
+  [ -n "${1:-}" ] && [ "$(docker inspect "$1" --format '{{.State.Running}}' 2>/dev/null)" = "true" ]
+}
+
 laufende_session() {  # laufende_session <vorlagen-id> — gibt die Session-ID
   # Herstellen statt voraussetzen. Vorher hing das Ergebnis davon ab, was ein
   # vorheriger Lauf hinterlassen hatte: Lief zufällig keine Session, meldeten
@@ -1239,7 +1249,7 @@ if [ -n "$ADMIN_GID" ] && [ -n "$USER_GID" ]; then
   # Administrator nicht. Am Container eines Administrators liesse sich die
   # Grenze gar nicht messen.
   CN_G="${USER_CNAME:-}"
-  if [ -z "$CN_G" ] || ! docker inspect "$CN_G" >/dev/null 2>&1; then
+  if ! laeuft "$CN_G"; then
     SID_G=$(api "$TMP/user.jar" "$BASE/api/sessions" | jqp "
 next((s['id'] for s in d if s['status'] in ('running','starting')), '')")
     if [ -z "$SID_G" ]; then
@@ -1252,7 +1262,10 @@ next((t['id'] for t in d if t['mode'] == 'workspace'), '')")
     [ -n "$SID_G" ] && CN_G="ota-s-$(echo "$SID_G" | cut -c1-12)"
   fi
 
-  if [ -n "$CN_G" ] && docker inspect "$CN_G" >/dev/null 2>&1; then
+  # Nach dem Start noch einmal nachsehen — und warten, statt zu hoffen.
+  for _ in 1 2 3 4 5 6 7 8 9 10; do laeuft "$CN_G" && break; sleep 3; done
+
+  if laeuft "$CN_G"; then
     DRIN_G=$(docker exec "$CN_G" sh -c \
       'cat /mnt/gruppen/users/gruppe.txt 2>/dev/null' | tr -d '\r\n')
     expect "$MARKE_G" "$DRIN_G" "Und liegt im Container unter /mnt/gruppen/users"
@@ -1574,11 +1587,16 @@ next((s['id'] for s in d if s['template_id'] == '$WS_S'), '')")
   # Auf den Container warten statt auf gut Glück ein paar Sekunden zu
   # schlafen. Ein `sleep 4` hat hier einmal danebengegriffen — und der
   # Folgetest suchte dann einen Container, den es nie gab.
+  # Bis zu 90 Sekunden. Vorher waren es 45, und die haben am 2026-09-05 nicht
+  # gereicht: Auf einem Wirt, auf dem die Reihe gerade ein Dutzend Sitzungen
+  # startet und wieder abraeumt, braucht ein Container laenger als auf einem
+  # ruhigen. Ein Fehlschlag daraus sagt nichts ueber das Skeleton.
   CN_S=""
-  for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+  for _ in $(seq 1 30); do
     CN_S=$(docker ps --filter "label=ota.session_id" --format '{{.Names}}' \
       | grep "$(echo "$SID_S" | cut -c1-12)" | head -1)
-    [ -n "$CN_S" ] && break
+    laeuft "$CN_S" && break
+    CN_S=""
     sleep 3
   done
   if [ -n "$CN_S" ]; then
@@ -1650,7 +1668,7 @@ next((a['slug'] for a in d.get('apps') or [] if a.get('is_enabled')), '')")
 
     # Und jetzt der Weg ins Zuhause. Der Teilbaum kommt beim Start der
     # Anwendung, nicht beim Start des Arbeitsplatzes.
-    if [ -z "${CN_S:-}" ] || ! docker inspect "$CN_S" >/dev/null 2>&1; then
+    if ! laeuft "${CN_S:-}"; then
       bad "Keine laufende Session für den Teilbaum"
     else
       docker exec "$CN_S" sh -c "rm -f \"\$HOME/$MARKE_T\" \
@@ -1715,9 +1733,9 @@ CN_F=""
 if [ -n "$SID_F" ]; then
   CN_F="ota-s-$(echo "$SID_F" | cut -c1-12)"
   # Die Datenbank kann eine Session als laufend fuehren, deren Container es
-  # nicht mehr gibt — etwa nach einem abgebrochenen Lauf. Dann ist nicht das
-  # Einfrieren kaputt, sondern der Vorzustand.
-  docker inspect "$CN_F" >/dev/null 2>&1 || CN_F=""
+  # nicht mehr gibt oder der nur noch dasteht — etwa nach einem abgebrochenen
+  # Lauf. Dann ist nicht das Einfrieren kaputt, sondern der Vorzustand.
+  laeuft "$CN_F" || CN_F=""
 fi
 
 if [ -z "$CN_F" ]; then
@@ -2229,6 +2247,49 @@ api "$TMP/admin.jar" -X PUT "$BASE/api/branding" -H 'Content-Type: application/j
   -d "{\"name\":\"$VORHER\",\"accent\":\"#06B6D4\"}" >/dev/null
 expect "$VORHER" "$(api "$TMP/admin.jar" "$BASE/api/branding" | jqp "d['name']")" \
   "Und wieder zurueck"
+
+# --------------------------------------------------- Aufbewahrung des Protokolls
+echo
+echo "Aufbewahrung des Protokolls"
+
+# Zwei Fristen: Verhalten (90 Tage) und Verwaltung (365). Geprueft wird das
+# Interessante daran — dass `session.attached` **nicht** mit den Sitzungen
+# weggeraeumt wird, obwohl der Name mit `session.` anfaengt. Eine Regel ueber
+# Praefixe haette genau diesen Eintrag stillschweigend geloescht, und das ist
+# der, den ein Betroffener spaeter nachlesen koennen muss.
+psql_ota() {  # psql_ota <anweisung>
+  docker compose -f "$ROOT/deploy/docker-compose.yml" exec -T db \
+    psql -U ota -d ota -tAc "$1" 2>/dev/null | tr -d '\r'
+}
+
+MARKE="pruef-aufbewahrung-$$"
+psql_ota "INSERT INTO audit_log (id, ts, action, object_id, detail) VALUES
+  (gen_random_uuid(), now() - interval '100 days', 'login.ok',         '$MARKE', '{}'),
+  (gen_random_uuid(), now() - interval '100 days', 'session.started',  '$MARKE', '{}'),
+  (gen_random_uuid(), now() - interval '100 days', 'session.attached', '$MARKE', '{}'),
+  (gen_random_uuid(), now() - interval '100 days', 'user.created',     '$MARKE', '{}'),
+  (gen_random_uuid(), now() - interval '400 days', 'session.attached', '$MARKE', '{}'),
+  (gen_random_uuid(), now() - interval  '80 days', 'login.ok',         '$MARKE', '{}');" >/dev/null
+
+docker compose -f "$ROOT/deploy/docker-compose.yml" exec -T api python -c \
+  "from ota.db import SessionLocal
+from ota import audit
+with SessionLocal() as db: audit.aufraeumen(db)" >/dev/null 2>&1
+
+UEBRIG=$(psql_ota "SELECT string_agg(action, ',' ORDER BY ts DESC)
+                     FROM audit_log WHERE object_id = '$MARKE';")
+expect "login.ok,session.attached,user.created" "$UEBRIG" \
+  "Nach dem Aufräumen bleibt genau das Richtige übrig"
+
+# Und der Vorgang selbst steht im Protokoll — sonst sieht eine Luecke in den
+# Daten spaeter aus wie ein Ausfall.
+[ "$(psql_ota "SELECT count(*) FROM audit_log
+                WHERE action = 'protokoll.aufgeraeumt'
+                  AND ts > now() - interval '5 minutes';")" -gt 0 ] \
+  && ok "Das Aufräumen steht selbst im Protokoll" \
+  || bad "Es gibt keinen Eintrag darüber, dass aufgeräumt wurde"
+
+psql_ota "DELETE FROM audit_log WHERE object_id = '$MARKE';" >/dev/null
 
 # ------------------------------------------------------- Bremse vor der Tuer
 #
