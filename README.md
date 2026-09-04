@@ -268,11 +268,15 @@ nicht — dieselbe Trennung gilt für das Dateisystem des Hosts.
 
 ## Dokumentation
 
-- **[Handbuch](docs/wiki/README.md)** — Bedienung, Verwaltung, Betrieb, Fehlersuche (21 Kapitel)
+- **[Handbuch](docs/wiki/README.md)** — Bedienung, Verwaltung, Betrieb, Fehlersuche (22 Kapitel)
 - **[plan.md](plan.md)** — Architektur **und die Begründungen dahinter**, samt der Sackgassen
 - **[docs/adr/](docs/adr/README.md)** — Entscheidungen, die teuer rückgängig zu machen sind, mit den
   Alternativen, die nicht getragen hätten
 - **[roadmap.md](roadmap.md)** — Umsetzungsstand, ehrlich
+- **[security.md](security.md)** — Sicherheitsbetrachtung: sechzehn Befunde mit Nachweis, was gut
+  gelöst ist, und was diese Durchsicht ausdrücklich **nicht** war
+- **[dsgvo.md](dsgvo.md)** — welche personenbezogenen Daten wo liegen, wie lange, wer sie sieht —
+  und die vier Stellen, an denen heute etwas fehlt
 
 Ein Hinweis zur Fehlersuche: [Kapitel 12](docs/wiki/12-fehlersuche.md) beschreibt echte Fehler aus
 dem Betrieb mit Symptom, Ursache und Reparatur — darunter mehrere, die tagelang nach etwas anderem
