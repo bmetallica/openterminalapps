@@ -30,6 +30,12 @@ muss antworten), dazu `git`, `make` und `openssl`. Die Ports **8443** und **8081
 — 443 bleibt bewusst unbelegt, damit ein bestehendes Kasm daneben weiterlaufen kann. Beide sind über
 `OTA_HTTPS_PORT` und `OTA_HTTP_PORT` in `deploy/.env` änderbar.
 
+Dazu, sobald gestreamt wird: **3478** (TURN) und **49160–49260/UDP** für den Medienweg, sowie
+**30000–30019** als Vorrat für Portfreigaben. Und ein Adressbereich für die Arbeitsplatznetze, ab
+Werk `10.99.0.0/16` — er darf sich **nicht** mit dem Firmennetz überschneiden. Alles einstellbar,
+alles erklärt in [`deploy/.env.example`](deploy/.env.example) und
+[Kapitel 2](docs/wiki/02-erste-schritte.md).
+
 ```bash
 git clone https://github.com/bmetallica/openterminalapps.git
 cd openterminalapps
@@ -196,6 +202,25 @@ dabei **nicht** zurückwandert, ist die Datenbank: Neue Spalten bleiben stehen. 
 - Das Handbuch liegt **im Programm**, gefiltert nach Rechten
 - **Mein Konto** für jeden: Passwort selbst ändern, Zwei-Faktor mit Rückfallcodes einrichten
 
+**Das Netz der Arbeitsplätze**
+- **Ein eigenes Netz je Arbeitsplatz**, alle enden in einem Router. Kein Firmennetz, keine
+  Nachbarsitzung, kein Wirt — und das nicht, weil eine Regel es verbietet, sondern weil es keinen
+  anderen Weg gibt: Die Netze sind `internal`, Docker richtet dort weder NAT noch Standardroute ein
+- **Der Grundregelsatz steht sichtbar in der Oberfläche** — was OTA für sich selbst öffnet (TURN,
+  die eigene Adresse, Namensdienst, Proxy, Zeitserver), je Zeile mit Ziel, Ports, **Grund und
+  Herkunft**. Abgeleitet aus der `.env`, deshalb zu sehen und nicht zu ändern
+- **Profile je Vorlage** in drei Stufen: *abgeschottet* (nur was OTA braucht), *internet* (die
+  Vorgabe) und *aus* — letzteres hebt alles auf, verlangt eine Begründung und steht im Protokoll
+- **Freigaben nach Adresse, Bereich oder Name**, global für alle oder je Profil. Namen funktionieren,
+  weil der Router zugleich der Namensdienst ist: Was er beantwortet, trägt er selbst in die Regel
+  ein — Freigabe und Verbindung stammen aus derselben Auskunft
+- **„+ NAT"**: einen Port eines Arbeitsplatzes zeitlich begrenzt über den Wirt veröffentlichen, für
+  den, der seine eigene Anwendung vorführen will. Der Ablauf wird durchgesetzt, nicht nur angezeigt
+- **Feste Adressen** je Mensch und Vorlage — auch nach Feierabend und nach einem Neustart. Ohne das
+  liesse sich eine vorgelagerte Firewall nicht auf einen Arbeitsplatz einstellen
+- **Übersicht mit Durchsatz und verworfenen Paketen** je Arbeitsplatz. Ein Portscan sieht in dieser
+  Zahl genau so aus, wie er ist
+
 **Software in die Arbeitsplätze bringen**
 - Pakete anklicken, Image bauen, Fassung aktivieren — mit Protokoll und Rückrollen
 - **Pakete werden vorher geprüft**: kennt das Image den Namen, und taugt er überhaupt?
@@ -238,6 +263,9 @@ dabei **nicht** zurückwandert, ist die Datenbank: Neue Spalten bleiben stehen. 
 - Eigene Registry im Stack; fehlt ein Image lokal, wird es beim Start von dort geholt
 - Sicherung und Wiederherstellung von Profil, Container und Datenbank, manuell und nach Plan
 - HTTPS ab Werk, eigene kleine CA, austauschbar oder hinter einem Reverse Proxy
+- **Kein Nachladen von fremden Hosts.** Schriften liegen bei, die Oberfläche fordert nichts aus
+  dem Internet an — sie sieht offline und hinter einem Firmenproxy gleich aus, und die IP-Adresse
+  keines Nutzers verlässt das Haus
 - **Läuft neben einer bestehenden Kasm-Installation** auf demselben Host, ohne dort etwas
   umzustellen
 
@@ -272,15 +300,11 @@ nicht — dieselbe Trennung gilt für das Dateisystem des Hosts.
 
 ## Dokumentation
 
-- **[Handbuch](docs/wiki/README.md)** — Bedienung, Verwaltung, Betrieb, Fehlersuche (22 Kapitel)
+- **[Handbuch](docs/wiki/README.md)** — Bedienung, Verwaltung, Betrieb, Fehlersuche (23 Kapitel)
 - **[plan.md](plan.md)** — Architektur **und die Begründungen dahinter**, samt der Sackgassen
 - **[docs/adr/](docs/adr/README.md)** — Entscheidungen, die teuer rückgängig zu machen sind, mit den
   Alternativen, die nicht getragen hätten
 - **[roadmap.md](roadmap.md)** — Umsetzungsstand, ehrlich
-- **[todo.md](todo.md)** — was noch zu tun ist, nach Wirkung geordnet: vier Punkte an einem
-  Vormittag, dann Sicherheit, Datenschutz, Aufräumen
-- **[security.md](security.md)** — Sicherheitsbetrachtung: sechzehn Befunde mit Nachweis, was gut
-  gelöst ist, und was diese Durchsicht ausdrücklich **nicht** war
 - **[dsgvo.md](dsgvo.md)** — welche personenbezogenen Daten wo liegen, wie lange, wer sie sieht —
   und die vier Stellen, an denen heute etwas fehlt
 - **[firewall.md](firewall.md)** — die Netzabsicherung der Arbeitsplätze: ein Netz je Sitzung, ein
@@ -341,7 +365,7 @@ Ein Arbeitsplatz-**Image** ist ein zusammengesetztes Werk: OTA-Konfiguration, Se
 Anwendungen. Es ist **nicht** „Apache-2.0".
 
 Das Basisimage **darf weitergegeben werden** — mit vier Pflichten: Quellen für die GPL-Teile
-anbieten, die vier Selkies-Patches beilegen (MPL-2.0 wirkt dateiweise), Lizenztexte im Image
+anbieten, die fünf Selkies-Patches beilegen (MPL-2.0 wirkt dateiweise), Lizenztexte im Image
 lassen und eine Stückliste mitliefern. Fertige Arbeitsplätze mit Microsoft VS Code oder Google
 Chrome dagegen **nicht** — dieselben mit VSCodium und Firefox schon.
 

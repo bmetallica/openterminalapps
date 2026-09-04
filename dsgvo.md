@@ -8,8 +8,9 @@ sie sieht und was davon fehlt.** Die Bewertung, ob das im konkreten Unternehmen 
 Datenschutzbeauftragten — und die Punkte, bei denen ich mir sicher bin, dass sie ihn interessieren,
 sind ausdrücklich als solche gekennzeichnet.
 
-Die technische Seite steht daneben in [`security.md`](security.md); beide Dokumente verweisen
-aufeinander, statt sich zu wiederholen.
+Die technische Seite steht in `security.md`. Dieses Dokument verweist an mehreren Stellen auf
+deren Befunde (H1, M2, N3 …); **`security.md` liegt bewusst nicht im Repository** — es beschreibt
+die noch offenen Schwachstellen samt Weg dorthin und wird beim Betreiber geführt.
 
 ---
 
@@ -41,7 +42,7 @@ Das ist der Kern. Erhoben an der laufenden Anlage — die Zahlen sind der Stand 
 |---|---|---|
 | Anmeldename, Anzeigename, E-Mail | `users` (PostgreSQL) **und** Keycloak | E-Mail ist Pflicht, seit sie an angebundene Anwendungen weitergereicht wird |
 | Passwort-Hash (Argon2) | `users.password_hash` | nur für lokale Konten; der Regelweg läuft über Keycloak |
-| TOTP-Startwert, Rückfallcodes | `users.totp_secret` (**Klartext**), `users.totp_recovery` (gehasht) | siehe [`security.md` M2](security.md#m2) |
+| TOTP-Startwert, Rückfallcodes | `users.totp_secret` (**Klartext**), `users.totp_recovery` (gehasht) | siehe `security.md`, Befund M2 |
 | Sprache, Gewand | `users.locale`, `users.theme` | keine besondere Kategorie |
 | Gruppenzugehörigkeit | `group_members` | daraus folgen die Rechte |
 | Fehlversuche, Sperre bis, letzte Anmeldung | `users.failed_logins`, `locked_until`, `last_login_at` | |
@@ -59,7 +60,7 @@ Blick aussieht.
 | Jeder Sitzungsstart und -stopp, mit Zeitpunkt und Vorlage | `audit_log`, `sessions` | 518 Sitzungen |
 | **Welche Anwendung wann gestartet wurde** | `audit_log` (`app.started`), `app_streams` | 449 Einträge, 275 Ströme |
 | Verwaltungsvorgänge (wer hat was geändert) | `audit_log` | |
-| Fehlerantworten des Reverse Proxy, mit IP | Traefik-Zugriffsprotokoll (nur 4xx/5xx) | unbegrenzt, siehe [N3](security.md#n3) |
+| Fehlerantworten des Reverse Proxy, mit IP | Traefik-Zugriffsprotokoll (nur 4xx/5xx) | unbegrenzt, siehe `N3` |
 
 **Dazu seit dem 2026-09-04 die Netzzahlen.** Der Router zählt je Arbeitsplatz mit, wie viel durch
 die Leitung geht und wie viele Pakete verworfen werden (`firewall.md`). Diese Zahlen werden
@@ -111,7 +112,7 @@ Stelle in der ganzen Anlage, an der Daten automatisch verschwinden.**
 
 Wer einen Container einfriert, erzeugt ein Image. Das Zuhause ist dabei ausgenommen, aber alles
 ausserhalb wandert mit. Der Vorgang zeigt vorher an, was nach einem Geheimnis aussieht
-([N5](security.md#n5)) — **er verlässt sich darauf, dass jemand die Liste liest.** Ein Image, das
+(`N5`) — **er verlässt sich darauf, dass jemand die Liste liest.** Ein Image, das
 später weitergegeben wird, kann personenbezogene Daten enthalten.
 
 ### 2.6 Was **nicht** anfällt
@@ -158,7 +159,7 @@ dafür heute nur einen einzigen Mechanismus** — die Aufbewahrungsregel der Sic
 | `sessions`, `app_streams` | mit dem Konto (Kaskade) | eine Frist unabhängig vom Konto. |
 | Zuhause auf der Platte | **nie**, auch nicht beim Löschen des Kontos | siehe unten. |
 | Sicherungen | ✅ `keep_daily` / `keep_weekly` | — |
-| Container-Protokolle (Docker) | **nie** (`json-file` ohne Grenze) | Rotation, [N3](security.md#n3). |
+| Container-Protokolle (Docker) | **nie** (`json-file` ohne Grenze) | Rotation, `N3`. |
 | Konto in Keycloak | wird beim Löschen in OTA **nicht** entfernt | siehe unten. |
 
 ### 4.1 Was beim Löschen eines Kontos wirklich passiert
@@ -229,13 +230,13 @@ jemand sie dafür benutzen will:
 2. **Das Aufschalten auf einen laufenden Bildschirm.** Ein Administrator kann jede Sitzung öffnen.
    Seit dem 2026-09-04 **hinterlässt das eine Spur** (`session.attached`, mit dem Namen des
    Eigentümers); **dass jemand zusieht, merkt der Mensch davor weiterhin nicht**
-   ([H4](security.md#h4)).
+   (`H4`).
 3. **Die Kennzahlen.** `/metrics` nennt keine Namen, zeigt aber, wie viele Menschen wann arbeiten.
 
 👉 **Empfehlung:** Eine Betriebsvereinbarung, die drei Dinge festhält — welche Daten protokolliert
 werden, wie lange sie bleiben, und unter welchen Bedingungen sich jemand aufschalten darf. Für den
 dritten Punkt ist die technische Lösung in drei Stufen beschrieben: protokollieren, sichtbar
-machen, Zustimmung einholen ([H4](security.md#h4)). Die erste Stufe steht seit dem 2026-09-04 —
+machen, Zustimmung einholen (`H4`). Die erste Stufe steht seit dem 2026-09-04 —
 **damit ist eine Vereinbarung über das Aufschalten überhaupt erst überprüfbar.**
 
 ---
@@ -275,7 +276,7 @@ funktioniert offline und hinter einem Firmenproxy unverändert. Die Lizenzen der
 
 ## 8 · Technische und organisatorische Massnahmen (Art. 32)
 
-Was vorhanden ist — die Nachweise stehen in [`security.md`](security.md):
+Was vorhanden ist — die Nachweise stehen in `security.md`:
 
 | Anforderung | Stand |
 |---|---|
@@ -283,7 +284,7 @@ Was vorhanden ist — die Nachweise stehen in [`security.md`](security.md):
 | **Verschlüsselung im Ruhezustand** | ❌ Weder Datenbank noch Zuhause noch Sicherungen sind verschlüsselt. Bei einer gestohlenen Platte ist alles lesbar. |
 | **Zugangskontrolle** | ✅ Keycloak, zweiter Faktor möglich, Kontosperre nach 8 Fehlversuchen, Argon2 |
 | **Zugriffskontrolle** | ✅ Rechte je Gruppe, serverseitig an jedem Endpunkt geprüft; 229 automatische Prüfungen genau dazu |
-| **Trennungskontrolle** | ⚠️ Im Netz seit dem 2026-09-04 vollständig: jeder Arbeitsplatz in einem eigenen Netz, untereinander nicht erreichbar ([H2](security.md#h2)). Im Dateisystem durch getrennte Einhängungen und `0700` — aber **alle Container laufen als dieselbe UID 1000** |
+| **Trennungskontrolle** | ⚠️ Im Netz seit dem 2026-09-04 vollständig: jeder Arbeitsplatz in einem eigenen Netz, untereinander nicht erreichbar (`H2`). Im Dateisystem durch getrennte Einhängungen und `0700` — aber **alle Container laufen als dieselbe UID 1000** |
 | **Eingabekontrolle** | ✅ Protokoll über Verwaltungsvorgänge, seit dem 2026-09-04 **einschliesslich des Aufschaltens** |
 | **Verfügbarkeit und Wiederherstellbarkeit** | ✅ Sicherung und Rückspielung sind gebaut **und geprüft** (39 automatische Prüfungen) |
 | **Belastbarkeit** | ✅ Kontingente je Nutzer, Untergrenze für freien Plattenplatz, Leerlauf-Aufräumer |
@@ -292,7 +293,7 @@ Was vorhanden ist — die Nachweise stehen in [`security.md`](security.md):
 **Die grösste Lücke in dieser Tabelle ist die zweite Zeile** — und sie ist jetzt die einzige
 grosse. Ein Datenbankabzug enthält weiterhin Passwort-Hashes und TOTP-Startwerte (das AD-Kennwort
 ist mit dem alten Verzeichnisweg entfallen). Seit dem 2026-09-04 liegt er wenigstens nicht mehr
-offen: `0600` für die Archive, `0700` für die Verzeichnisse ([M2](security.md#m2)). Gegen eine
+offen: `0600` für die Archive, `0700` für die Verzeichnisse (`M2`). Gegen eine
 gestohlene Platte hilft das nicht — dafür braucht es Verschlüsselung im Ruhezustand.
 
 ---
@@ -322,7 +323,7 @@ die Aufsichtsbehörde.
 Was dabei hilft: Das `audit_log` sagt, wer wann was getan hat, und `sessions` sagt, welche
 Arbeitsplätze liefen. Was fehlt: **Es steht nirgends, wer sich auf welchen Bildschirm geschaltet
 hat** — ausgerechnet der Vorgang mit dem grössten Schadenspotenzial hinterlässt keine Spur
-([H4](security.md#h4)). Und die Container-Protokolle rotieren nicht, sind also nach langer Laufzeit
+(`H4`). Und die Container-Protokolle rotieren nicht, sind also nach langer Laufzeit
 unbrauchbar gross.
 
 ---

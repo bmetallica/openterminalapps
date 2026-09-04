@@ -155,6 +155,20 @@ In der apt-Konfiguration landen auch die Ausnahmen: Jeder Name aus
 eigene Registry durch den Firmenproxy. Bereiche wie `10.0.0.0/8` fallen dabei
 weg — apt kennt keine Netzbereiche, nur einzelne Rechnernamen.
 
+### Und der Proxy ist im Router freigegeben
+
+Ein Firmenproxy steht fast immer im Firmennetz — und genau das ist für einen Arbeitsplatz ab Werk
+zu ([Kapitel 23](23-netz.md)). Ohne eine Ausnahme hätte der Arbeitsplatz die Adresse des Proxys in
+seiner Umgebung stehen und käme nicht hin.
+
+**Es ist keine einzutragen.** OTA zerlegt `OTA_HTTP_PROXY` selbst und trägt Adresse und Port in den
+Grundregelsatz ein; unter **Netz → Was ohne Zutun gilt** steht die Zeile mit ihrer Herkunft. Steht
+kein Proxy in der `.env`, gibt es die Zeile nicht.
+
+Nur wenn der Proxy für die Arbeitsplätze unter einer **anderen** Adresse erreichbar ist als für die
+Dienste, gehören zwei zusätzliche Zeilen in die `.env`: `OTA_PROXY_HOST` und `OTA_PROXY_PORT`. Sie
+gehen dann vor.
+
 **Wo es trotzdem klemmen kann:** Programme mit einer eigenen Proxy-Einstellung
 in ihrer Oberfläche. Firefox steht ab Werk auf „Systemeinstellungen verwenden"
 und ist damit versorgt; wer es einmal von Hand umgestellt hat, muss es selbst

@@ -18,16 +18,47 @@ sondern bei der Weitergabe nach außen.
 | **IntelliJ Ultimate** | proprietär | **Named-User-Lizenz je Entwickler**, Aktivierung durch den Nutzer |
 | **opencode** | MIT | frei |
 | **Cursor** | proprietär | **vor Aufnahme prüfen** — siehe unten |
-| **KasmVNC** | GPL-2.0 | Eigenbetrieb uneingeschränkt frei; bei **Weitergabe** greifen die GPL-Pflichten |
+| **Selkies** | MPL-2.0 | Die Streaming-Engine des Vorgabe-Images. **OTA verändert sie** — siehe unten |
+| **libx264** | GPL-2.0+ | Der Kodierer dahinter. Die eigentliche Pflicht bei Weitergabe — siehe unten |
+| **KasmVNC** | GPL-2.0 | Der ältere Weg, für Images von Kasm. Eigenbetrieb frei; bei **Weitergabe** greifen die GPL-Pflichten |
+| **Archivo, IBM Plex Mono** | SIL OFL 1.1 | Die Schriften der Oberfläche. Liegen im Repository und werden mitgeliefert |
 | **Kasm-Workspace-Images** | MIT **nur für die Baurezepte** | Das fertige Image ist nicht MIT — siehe unten |
 | **Kasm Workspaces Server** | kommerzieller EULA | **wird durch OTA ersetzt** |
 | Docker, Traefik, PostgreSQL, XFCE | Apache-2.0 / MIT / PostgreSQL / GPL | frei |
 
 > **Ein Image ist ein zusammengesetztes Werk.** Die Zeilen dieser Tabelle beschreiben einzelne
-> Bestandteile, nicht das Ergebnis. Ein Arbeitsplatz-Image enthält OTA-Konfiguration, KasmVNC,
-> XFCE, hunderte Distributionspakete und die installierten Anwendungen — jedes mit seiner eigenen
-> Lizenz. **Nichts davon wird durch OTA neu lizenziert.** Die Aufstellung in drei Ebenen steht in
-> [THIRD-PARTY-NOTICES.md](../../THIRD-PARTY-NOTICES.md).
+> Bestandteile, nicht das Ergebnis. Ein Arbeitsplatz-Image enthält OTA-Konfiguration, Selkies,
+> libx264, XFCE, hunderte Distributionspakete und die installierten Anwendungen — jedes mit seiner
+> eigenen Lizenz. **Nichts davon wird durch OTA neu lizenziert.** Die Aufstellung in drei Ebenen
+> steht in [THIRD-PARTY-NOTICES.md](../../THIRD-PARTY-NOTICES.md).
+
+### Das Vorgabe-Basisimage weitergeben — vier Pflichten
+
+`ota/base-desktop` **darf** weitergegeben werden. Wer das tut, hat vier Dinge zu erledigen:
+
+1. **Quellen für die GPL-Teile anbieten** — libx264 und der Rest von Debian. Ein Verweis auf die
+   Distribution genügt nicht, wenn das Abbild verändert wurde; die Stückliste nennt die Fassungen.
+2. **Die Änderungen an Selkies beilegen.** Die MPL-2.0 wirkt **dateiweise**: Geändert werden
+   **fünf** Dateien, und genau die müssen offen mitgehen. Sie liegen als Patches im Repository
+   (`images/base-desktop/patches/`) und sind in
+   [THIRD-PARTY-NOTICES.md](../../THIRD-PARTY-NOTICES.md) einzeln aufgeführt.
+3. **Lizenztexte im Abbild lassen.** Sie stehen dort, wo die Pakete sie hinlegen.
+4. **Eine Stückliste mitliefern** — `make sbom`, SPDX und CycloneDX.
+
+**Fertige Arbeitsplätze mit Microsoft VS Code oder Google Chrome dagegen nicht** — dieselben mit
+VSCodium und Firefox schon. Die Linie verläuft bei der Anwendung, nicht beim Basisimage.
+
+### Die Schriften der Oberfläche
+
+Archivo und IBM Plex Mono liegen unter `web/public/fonts/` und werden mitgeliefert. Die OFL erlaubt
+das ausdrücklich, solange die Schriften nicht einzeln verkauft werden und die Lizenz mitgeht — sie
+liegt je Schrift daneben.
+
+**Bis zum 2026-09-04 wurden sie bei jedem Aufruf von Google geladen.** Dabei ging die IP-Adresse
+jedes Nutzers an Google LLC in den USA. Das ist keine Lizenzfrage, sondern eine des Datenschutzes,
+und es war der einzige Datenfluss aus dieser Anlage heraus. Es gibt ihn nicht mehr: Die Oberfläche
+lädt **von keinem fremden Host** etwas nach — auch offline und hinter einem Firmenproxy sieht sie
+gleich aus.
 
 ## Betrieb oder Weitergabe — die Linie, auf die es ankommt
 

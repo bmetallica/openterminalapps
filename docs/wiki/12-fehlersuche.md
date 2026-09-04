@@ -659,6 +659,32 @@ Steht dort eine Session, zu der kein Container gehört, ist es das.
 existiert, und schliesst die Session, wenn nicht. Und der Aufräumer räumt solche Leichen bei jedem
 Durchlauf weg — auch ohne dass jemand einen Start versucht.
 
+## Im Arbeitsplatz geht plötzlich nichts mehr ins Netz
+
+**Symptom.** Der Arbeitsplatz läuft, das Bild kommt an, aber im Browser darin lädt keine Seite —
+oder `apt` bleibt hängen.
+
+Das Bild geht **nicht** über den Router; dass es ankommt, sagt über das Netz des Arbeitsplatzes
+nichts aus. Der Reihe nach:
+
+```bash
+docker ps --filter name=ota-firewall            # läuft der Router überhaupt?
+docker logs --tail 50 ota-firewall              # was sagt er?
+docker exec ota-firewall nft list table inet ota | head -40
+```
+
+| Bild | Ursache |
+|---|---|
+| Der Router läuft nicht | Ohne ihn hat **kein** Arbeitsplatz Netz. `docker compose up -d firewall` |
+| Er läuft, aber die Sitzung steht in keinem seiner Netze | Passiert nach einem Neustart des Routers. Der Abgleich zieht es alle 30 Sekunden selbst nach — bleibt es dabei, steht der Grund im Protokoll des Agents |
+| Nur ein bestimmtes Ziel geht nicht | Vorgabe: Das Firmennetz ist zu. Freigabe eintragen, global oder im Profil ([Kapitel 23](23-netz.md)) |
+| Ein freigegebener **Name** geht nicht | Die Anwendung fragt über verschlüsseltes DNS (DoH) und damit nicht den Namensdienst des Routers. Adresse statt Name freigeben |
+| Gar nichts geht, auch nicht die Namensauflösung | Profil steht auf **abgeschottet**. Steht so auch im Dashboard des Nutzers |
+
+**Anpingen lässt sich ein Arbeitsplatz vom Host aus grundsätzlich nicht** — die Sitzungsnetze sind
+`internal`, die Brücke des Wirts hat dort keine Adresse. Das ist kein Fehler, sondern der Aufbau.
+Wer hineinsehen will, geht über `docker exec`.
+
 ## Nützliche Befehle
 
 ```bash

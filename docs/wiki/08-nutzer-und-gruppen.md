@@ -76,8 +76,26 @@ Menschen — mit seinem offenen Terminal und seinem entsperrten Passwortspeicher
 dass etwas läuft" und „daran sitzen" liegt der ganze Unterschied.
 
 Auf einen fremden Bildschirm kommt jetzt nur ein **voller Administrator**, und der sitzt ohnehin am
-Docker-Host und erreicht dort dasselbe. Eine Fernhilfe mit ausdrücklicher Einwilligung des Nutzers
-wäre der richtige Weg dafür; die gibt es noch nicht.
+Docker-Host und erreicht dort dasselbe.
+
+### Und es steht im Protokoll ✅
+
+Seit dem 2026-09-04 hinterlässt das eine Spur. Schaltet sich jemand auf den Bildschirm eines
+anderen, entsteht ein Eintrag `session.attached` mit dem Namen des Eigentümers — nachzulesen unter
+**Protokoll**.
+
+Zwei Feinheiten, damit die Zahlen niemanden in die Irre führen:
+
+* **Ein Eintrag je Viertelstunde und Paar**, nicht je Aufruf. Die Rechteprüfung läuft vor *jeder*
+  Anfrage einer Sitzung, auch vor jedem Bild — ein Eintrag je Anfrage wäre kein Protokoll, sondern
+  Rauschen, und die interessante Zeile ginge darin unter.
+* **Der Blick auf den eigenen Bildschirm erzeugt keinen Eintrag.** Sonst stünde das Protokoll
+  voll mit dem Normalfall.
+
+Was weiterhin fehlt: **Der Mensch am Bildschirm merkt nichts davon.** Ein Hinweis in der Sitzung,
+solange jemand Fremdes zusieht, und darüber hinaus eine Fernhilfe auf ausdrückliche Einwilligung
+wären die nächsten beiden Stufen. Für eine Betriebsvereinbarung ist der Protokolleintrag die
+Grundlage: Ohne ihn ist eine Regel über das Aufschalten nicht überprüfbar.
 
 ## Passwörter und Anmeldung
 

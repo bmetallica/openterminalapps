@@ -244,7 +244,7 @@ weil dort niemand weiss, welches Paket zu welcher Sitzung gehört.
 | **Summe über alle** | dieselben Zähler | Kapazitätsplanung: Was kostet ein Arbeitsplatz wirklich |
 
 Ausgegeben wird das über OTAs vorhandenen Weg: `/metrics` (mit Merkmal, siehe
-[`security.md`](security.md#n1)) und eine Spalte in der Netzübersicht. Die Zähler stehen je
+`security.md`) und eine Spalte in der Netzübersicht. Die Zähler stehen je
 **Sitzung**, nicht je Person — wer dahintersteht, löst erst die Oberfläche auf, und dafür braucht
 es Rechte.
 
@@ -321,8 +321,8 @@ niemand vorher geprüft hatte. Diesmal stehen sie vorn.
 
 **Gebaut, gemessen, in Betrieb** (2026-09-04). Der Aufbau steht so, wie er oben beschrieben ist:
 ein `internal`-Netz je Sitzung, alle enden im Router, der Router ist der einzige Weg nach draussen.
-`scripts/test-firewall.sh` prüft 19 Dinge **von innen** und läuft in `make test` mit; der
-Arbeitsplan mit allen Etappen steht in [`firewall-roadmap.md`](firewall-roadmap.md).
+`scripts/test-firewall.sh` prüft 19 Dinge **von innen** und läuft in `make test` mit. Bedienung und
+Alltag stehen im Handbuch, [Kapitel 23](docs/wiki/23-netz.md).
 
 Vier Dinge sind unterwegs anders gekommen als geplant. Sie stehen hier, weil sie beim nächsten Mal
 Zeit sparen:
@@ -341,8 +341,9 @@ Zeit sparen:
 * **`ping` ist als Probe unbrauchbar.** Ein Arbeitsplatz hat kein `NET_RAW`; `ping` scheitert dort
   immer. Eine Prüfung, die damit misst, meldet „abgeschottet", wo nichts abgeschottet ist.
 
-Die Befunde [H1, H2 und H3](security.md) sind damit geschlossen — nicht durch Regeln, die richtig
-greifen müssen, sondern durch den Aufbau: Ein Arbeitsplatz hat keinen Weg, der am Router vorbeiführt.
+Die drei schweren Befunde der Sicherheitsbetrachtung — Wirt und Firmennetz aus jedem Arbeitsplatz
+erreichbar, Arbeitsplätze untereinander erreichbar, der Agent aus jedem Arbeitsplatz erreichbar —
+sind damit geschlossen. Nicht durch Regeln, die richtig greifen müssen, sondern durch den Aufbau: Ein Arbeitsplatz hat keinen Weg, der am Router vorbeiführt.
 
 ### Feste Adressen
 

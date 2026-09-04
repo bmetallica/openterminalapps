@@ -24,3 +24,21 @@ deploy/index.html
 
 # Stücklisten werden erzeugt (scripts/sbom.sh) und gelten je Build.
 sbom/
+
+# Interne Arbeitsunterlagen. Sie bleiben auf dem Rechner, nicht im Repository:
+#
+#   security.md          nennt die **offenen** Befunde mit Nachweis und Weg
+#                        dorthin. Das ist ein Wegweiser für einen Angreifer,
+#                        und ein privates Repository ist kein Tresor.
+#   todo.md              dieselbe Liste als Arbeitsvorrat.
+#   HANDOVER.md          Übergabe zwischen Arbeitssitzungen, kein Handbuch.
+#   firewall-roadmap.md  abgearbeiteter Umbauplan; was davon gilt, steht in
+#                        firewall.md und Kapitel 23.
+#
+# Was **bleibt**: dsgvo.md (das Verarbeitungsverzeichnis braucht der Betrieb),
+# firewall.md und plan.md (Begründungen), roadmap.md und auth-roadmap.md
+# (Stand und Entscheidungen, aus dem Handbuch verlinkt).
+security.md
+todo.md
+HANDOVER.md
+firewall-roadmap.md

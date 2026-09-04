@@ -301,7 +301,8 @@ Vendor-Binaries (Chrome, JetBrains Ultimate, Docker Desktop, MS-Produkte) brauch
    - Image, `cpus`, `mem_limit`, `shm_size=1g`
    - `VNC_PW=<random>`, `VNC_RESOLUTION`, App-spezifische ENV
    - Mount: `/srv/ota/profiles/{user}/{profile_scope}` → `/home/kasm-user`
-   - Netzwerk `ota_sessions` (internes Bridge-Netz, kein Zugriff auf `ota-db`)
+   - Netzwerk: **ein eigenes `internal`-Netz je Sitzung** (`ota-n-<sid>`), angelegt vom Agent,
+     angebunden an den Router `ota-firewall`. Kein Sammelnetz mehr — siehe §12.
    - Labels:
      ```
      traefik.enable=true
@@ -1472,11 +1473,20 @@ Anmeldung und alle übrigen Daten unversehrt.
 - **TLS ist Pflicht**, nicht optional: Die Clipboard-API des Browsers (`navigator.clipboard`) funktioniert nur in Secure Contexts. Ohne HTTPS kein nahtloses Copy/Paste.
 - Parallelbetrieb mit Kasm: OTA auf **8443**, danach Umzug auf 443
 - Zertifikate: Für den internen Betrieb eine eigene CA oder Let's-Encrypt-DNS-01 (die Domain `home-bmetallica.de` ist offenbar vorhanden). Self-signed erzeugt bei jedem Nutzer Browserwarnungen — beim Rollout vermeiden.
-- Netzsegmentierung:
-  - `ota_public` — Traefik ↔ web/api
-  - `ota_internal` — api ↔ db ↔ agent (kein Internet)
-  - `ota_sessions` — nur Session-Container; **kein** Zugriff auf `ota-db`
-  - Pro Template optional `internet: yes/no` und Egress-Whitelist
+- Netzsegmentierung (Stand 2026-09-04, umgesetzt):
+  - `ota_public` — Traefik ↔ web/api/keycloak/turn
+  - `ota_internal` — api ↔ db ↔ agent ↔ registry (`internal`, kein Internet)
+  - `ota_uplink` — der Router `ota-firewall`; sein einziger Weg nach draussen
+  - `ota-n-<sid>` — **ein Netz je Sitzung**, `internal`, ohne Standardroute, nur der Router hängt
+    mit drin
+  - Je Vorlage ein **Netzprofil** mit Stufe (`abgeschottet` / `internet` / `aus`) und Freigaben nach
+    Adresse, Bereich oder Name; dazu globale Freigaben und zeitlich begrenzte Portfreigaben
+
+  > **Das Sammelnetz `ota_sessions` ist entfallen.** Es war die Ursache dafür, dass Arbeitsplätze
+  > einander und den Agent erreichen konnten: Auf **derselben** Brücke greift `iptables` gar nicht,
+  > solange `br_netfilter` nicht geladen ist — eine Regel dagegen hätte also nichts genützt. Der
+  > vollständige Entwurf mit Messungen steht in [`firewall.md`](firewall.md), die Bedienung in
+  > [Kapitel 23](docs/wiki/23-netz.md).
 - Security-Header zentral in Traefik: HSTS, `X-Frame-Options` für die App, aber **`frame-ancestors 'self'`** für die Session-Routen (der Viewer nutzt ein iframe), `Referrer-Policy`, CSP
 
 ---

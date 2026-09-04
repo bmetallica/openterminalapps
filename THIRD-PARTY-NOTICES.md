@@ -47,6 +47,24 @@ Werden zur Laufzeit als Images bezogen oder beim Bauen installiert. Sie sind
 | PostgreSQL | PostgreSQL-Lizenz | Datenbank |
 | Docker Distribution (Registry) | Apache-2.0 | Eigene Registry |
 | nginx | BSD-2-Clause | Auslieferung der Oberfläche |
+| coturn | BSD-3-Clause | Vermittelt den Medienstrom (TURN) |
+| Keycloak | Apache-2.0 | Identitätsanbieter, mitgeliefert |
+
+### Im Router der Arbeitsplätze (`ota-firewall`)
+
+Ein Debian-Grundabbild mit vier Werkzeugen. Keines davon wird verändert, alle
+werden nur ausgeführt:
+
+| Bestandteil | Lizenz | Wofür |
+|---|---|---|
+| nftables / libnftnl | GPL-2.0+ | Das Regelwerk selbst |
+| iptables (nft-Fassung) | GPL-2.0+ | Nur, damit Dockers eigene Regeln sichtbar bleiben |
+| dnsmasq | GPL-2.0 **oder** GPL-3.0 | Namensdienst der Arbeitsplätze; füllt zugleich die Adressmengen für Freigaben nach Namen |
+| iproute2, util-linux | GPL-2.0+ | Routen setzen, `nsenter` |
+
+Sie laufen als Dienste in einem Container und werden **nicht** mit OTA
+weitergegeben; die GPL-Pflichten treffen den, der das Abbild verteilt. Wer das
+tut, liefert die Stückliste mit (`make sbom`).
 
 ### In der API und im Agent (Python)
 
@@ -118,14 +136,21 @@ Das ist der Punkt, der beim Wechsel auf das eigene Basisimage **neu
 hinzugekommen** ist und der leicht übersehen wird.
 
 OTA startet Selkies nicht nur, sondern **verändert es beim Bauen des Images**.
-Vier Eingriffe, alle in `images/base-desktop/patches/`:
+**Fünf** Eingriffe, alle in `images/base-desktop/patches/`, alle im Dockerfile
+angewendet:
 
 | Patch | Was er ändert |
 |---|---|
 | `gst-web-pfad.py` | zwei Adressen im Client, die sonst an der Wurzel des Hosts hängen |
 | `kein-fremd-stun.py` | nimmt `stun.l.google.com` aus der Konfiguration |
 | `ice-nur-vermittelt.py` | macht `iceTransportPolicy` einstellbar |
+| `beide-turn-wege.py` | bietet denselben TURN-Server über UDP **und** TCP an statt nur über einen |
 | `keine-fremde-leiste.py` | entfernt den Knopf für Selkies' eigene Seitenleiste |
+
+> Diese Liste stand bis zum 2026-09-04 mit **vier** Einträgen hier, während das
+> Dockerfile fünf anwendete. Bei einer Weitergabe wäre eine geänderte Datei
+> nicht offengelegt worden — genau das, was die MPL verlangt. Wer einen Patch
+> hinzufügt, trägt ihn **hier** ein; das Dockerfile allein genügt nicht.
 
 Die MPL-2.0 verlangt (§3.1/3.2): Wer die Software weitergibt, muss die
 **geänderten Dateien im Quelltext** unter derselben Lizenz verfügbar machen.

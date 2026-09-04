@@ -11,6 +11,17 @@
 | **Datenbank** | Nutzer, Gruppen, Workspaces, Zuweisungen, Audit-Log | **an** |
 | **Inhalte** | Skeleton-Profile, gemeinsame Ablage, die eigenen Ablagen der Nutzer, die Gruppenlaufwerke | **an** (nur `make backup`) |
 
+**Das Netz ist dabei, ohne eigene Zeile.** Netzprofile, globale Freigaben und Portfreigaben stehen
+in der Datenbank und wandern mit ihrem Abzug. Der Router selbst hält nichts fest, was er nicht
+wiederbekommt: Nach einem Rückspielen schiebt die API den ganzen Satz erneut hinüber, und der
+nächste Abgleich stellt ihn her. Auch die festen Adressen der Arbeitsplätze bleiben damit
+erhalten — sie hängen an Mensch und Vorlage, nicht am Container.
+
+**Die Archive stehen auf `0600`, ihr Verzeichnis auf `0700`**, und das ist kein Beiwerk: Ein
+Datenbankabzug enthält Passwort-Hashes und die Startwerte des zweiten Faktors. Bis zum 2026-09-04
+lagen sie für jeden Benutzer des Wirts lesbar da. Verschlüsselt sind sie **nicht** — wer sie ausser
+Haus gibt, verschlüsselt sie selbst.
+
 Die letzte Zeile fehlte bis zum 2026-08-28, und das war eine echte Lücke: Gesichert wurden nur die
 Zuhause der Nutzer und die Datenbank. Skeleton-Profile, gemeinsame Ablage, die eigenen Ablagen und
 die Gruppenlaufwerke sind aber **von Hand angelegter Inhalt** — sie lassen sich weder aus dem Code

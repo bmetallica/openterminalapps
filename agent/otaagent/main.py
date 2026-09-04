@@ -20,6 +20,7 @@ import subprocess
 import threading
 import time
 from typing import Any
+from urllib.parse import urlparse
 
 import docker
 from docker.errors import APIError, ImageNotFound, NotFound
@@ -60,7 +61,6 @@ USERFILES_MOUNT = "/mnt/austausch"
 # nicht mehr zu erkennen, was zum Arbeitsplatz gehoert und was eine Ablage
 # ist.
 GROUPFILES_MOUNT = "/mnt/gruppen"
-SESSION_NETWORK = os.environ.get("OTA_SESSION_NETWORK", "ota_sessions")
 PUBLIC_NETWORK = os.environ.get("OTA_PUBLIC_NETWORK", "ota_public")
 
 # Was jede Sitzung erreichen darf, damit OTA ueberhaupt funktioniert — auch in
@@ -70,6 +70,40 @@ PUBLIC_NETWORK = os.environ.get("OTA_PUBLIC_NETWORK", "ota_public")
 # Die eigene Adresse ist dabei, weil der Browser im Arbeitsplatz OTA selbst
 # erreichen koennen muss — die Firefox-Erweiterung fuer die Zwischenablage wird
 # von dort geladen (`/api/help/extension/firefox`).
+def _proxy_ziel() -> tuple[str, str]:
+    """Adresse und Port des Firmenproxys — **abgeleitet aus `OTA_HTTP_PROXY`**.
+
+    Der Proxy wird an genau einer Stelle eingetragen (`deploy/.env`, drei
+    Zeilen, Kapitel 21). Verlangte diese Regel eine **vierte** Angabe, waere
+    sie in jeder Anlage genau einmal vergessen worden — und das Ergebnis waere
+    ein Arbeitsplatz ohne Internet, dessen Ursache nirgends steht. Deshalb
+    zerlegt OTA die Adresse selbst.
+
+    `OTA_PROXY_HOST` und `OTA_PROXY_PORT` gehen weiterhin vor, fuer den Fall,
+    dass der Proxy fuer die Dienste unter einem anderen Namen erreichbar ist
+    als fuer die Arbeitsplaetze.
+    """
+    host = os.environ.get("OTA_PROXY_HOST", "").strip()
+    if host:
+        return host, os.environ.get("OTA_PROXY_PORT", "3128").strip() or "3128"
+
+    roh = (os.environ.get("OTA_HTTP_PROXY")
+           or os.environ.get("HTTP_PROXY")
+           or os.environ.get("http_proxy") or "").strip()
+    if not roh:
+        return "", ""
+    # Ohne Schema liest urlparse den Namen als Pfad.
+    if "://" not in roh:
+        roh = "http://" + roh
+    try:
+        teil = urlparse(roh)
+    except ValueError:
+        return "", ""
+    if not teil.hostname:
+        return "", ""
+    return teil.hostname, str(teil.port or 3128)
+
+
 def _grundregeln() -> list[dict]:
     """Was jede Sitzung erreichen darf, damit OTA funktioniert — **mit Grund**.
 
@@ -108,11 +142,12 @@ def _grundregeln() -> list[dict]:
                               "dort die Erweiterung für die Zwischenablage."})
 
     # Der Firmenproxy, falls einer gesetzt ist. Ohne ihn kommt dahinter
-    # nichts durch.
-    proxy = os.environ.get("OTA_PROXY_HOST", "").strip()
-    if proxy:
-        raus.append({"ziel": proxy, "ports": os.environ.get("OTA_PROXY_PORT", "3128"),
-                     "protokoll": "tcp", "herkunft": "OTA_PROXY_HOST/PORT",
+    # nichts durch — und ein Firmenproxy steht fast immer im privaten Bereich,
+    # den die Stufe „internet" sonst sperrt.
+    proxy_host, proxy_port = _proxy_ziel()
+    if proxy_host:
+        raus.append({"ziel": proxy_host, "ports": proxy_port,
+                     "protokoll": "tcp", "herkunft": "OTA_HTTP_PROXY",
                      "grund": "Der Firmenproxy. Ohne ihn kommt dahinter nichts durch."})
 
     # Zeit. Eine falsche Uhr bricht TLS und macht Fehler, die nach allem
@@ -1480,22 +1515,15 @@ def orphans() -> list[dict[str, str]]:
     return out
 
 
-class ExecRequest(BaseModel):
-    cmd: list[str]
-
-
-@app.post("/containers/{cid}/exec", dependencies=[Depends(require_token)])
-def exec_in_container(cid: str, req: ExecRequest) -> dict[str, Any]:
-    """Fuehrt einen Befehl im Container aus — fuer App-Starts im Arbeitsplatz."""
-    try:
-        c = dc().containers.get(cid)
-        result = c.exec_run(req.cmd, detach=False, demux=False)
-    except NotFound:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Container nicht gefunden")
-    except APIError as exc:
-        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
-    output = result.output.decode("utf-8", "replace") if result.output else ""
-    return {"exit_code": result.exit_code, "output": output[-4000:]}
+# Hier stand bis zum 2026-09-04 ein Endpunkt `POST /containers/{cid}/exec`, der
+# einen **beliebigen Befehl in einem beliebigen Container** ausgefuehrt hat.
+# Aufgerufen hat ihn niemand: Anwendungen startet `app_start` weiter unten, und
+# das mit einem Befehl aus dem Katalog, nicht aus der Anfrage.
+#
+# Entfernt statt abgesichert. Ein Endpunkt, der alles kann und den niemand
+# braucht, ist die grosszuegigste Zeile im ganzen Dienst — und der Agent ist der
+# einzige mit schreibendem Docker-Socket. Wer ihn spaeter wirklich braucht,
+# schreibt ihn mit der Einschraenkung, die er dann braucht.
 
 
 # --------------------------------------------------------------------------

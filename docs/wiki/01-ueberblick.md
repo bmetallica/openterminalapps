@@ -33,6 +33,7 @@ Daraus folgt:
 | **Vorkonfiguration** | Admins bauen den Arbeitsplatz als Golden Image — gesetzte Extensions, fertige Einstellungen, Firmen-Zertifikate. Versioniert, mit Rollback |
 | **Identität** | Ein Nutzer, ein Container, eine Identität — eine Anmeldung für alles, was er startet |
 | **Ressourcen** | Das Kontingent gehört zum Menschen, nicht zum Werkzeug. Nutzer A bekommt 4 Kerne, Nutzer B einen |
+| **Netz** | Jeder Arbeitsplatz hängt in einem eigenen Netz. Ins Internet ja — ins Firmennetz, an die Sitzung eines Kollegen oder an den Wirt nur, wenn es jemand ausdrücklich freigibt → [Kapitel 23](23-netz.md) |
 
 ## Einzelne Anwendungen als Feature
 
@@ -58,5 +59,9 @@ Die Trennung wird serverseitig an jedem Endpunkt durchgesetzt, nicht nur im Men�
 - **Docker** auf Debian, kein Kubernetes nötig
 - **Traefik** als Ingress mit TLS — Pflicht, nicht Kür: Ohne HTTPS funktioniert die Zwischenablage
   im Browser nicht ([Kapitel 4](04-zwischenablage.md))
-- **KasmVNC** als Streaming-Engine, ein Display je Anwendung
+- **Selkies** als Streaming-Engine (H.264 über WebRTC), ein Display je Anwendung. **KasmVNC**
+  bleibt für Images von Kasm und ist je Arbeitsplatz wählbar
+  ([Kapitel 20](20-selkies-versuch.md))
+- **Ein eigenes Netz je Arbeitsplatz** hinter einem Router, der alles filtert
+  ([Kapitel 23](23-netz.md))
 - **PostgreSQL** für Nutzer, Templates, Sessions und Audit

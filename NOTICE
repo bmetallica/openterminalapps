@@ -16,8 +16,10 @@ in Kürze:
   Ebene 1 — dieses Repository            Apache-2.0
   Ebene 2 — mitbetriebene Dienste        eigene Lizenzen (Traefik, PostgreSQL,
                                          Docker Registry, Bibliotheken)
-  Ebene 3 — Inhalt der Workspace-Images  eigene Lizenzen (KasmVNC GPL-2.0,
-                                         XFCE GPL/LGPL, VS Code Microsoft-EULA,
+  Ebene 3 — Inhalt der Workspace-Images  eigene Lizenzen (Selkies MPL-2.0 und
+                                         von OTA verändert, libx264 GPL-2.0+,
+                                         KasmVNC GPL-2.0, XFCE GPL/LGPL,
+                                         VS Code Microsoft-EULA,
                                          Distributionspakete)
 
 Zwei Punkte, die erfahrungsgemäß falsch verstanden werden:

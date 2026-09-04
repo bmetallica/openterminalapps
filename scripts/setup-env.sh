@@ -23,6 +23,64 @@ if [ ! -f "$ENV" ]; then
   echo "deploy/.env aus der Vorlage angelegt."
 fi
 
+# Neue Einstellungen aus der Vorlage nachtragen.
+#
+# Das ist der Teil, der bei einem `git pull` zaehlt: Bringt eine Fassung eine
+# neue Variable mit, stand sie bis dahin **nur** in der Vorlage. Der Dienst
+# lief trotzdem — Compose hat fuer fast alles einen Vorgabewert —, aber der
+# Betreiber erfuhr nie, dass es den Schalter gibt. Genau so ist der ganze
+# Netzblock ein halbes Jahr unsichtbar geblieben.
+#
+# Nachgetragen wird **nur, was fehlt**, mitsamt dem Kommentar davor; er ist
+# der Grund, aus dem die Zeile ueberhaupt verstaendlich ist. Vorhandene Werte
+# bleiben unangetastet — auch leere: Wer eine Zeile absichtlich leer laesst,
+# hat entschieden.
+nachtragen() {
+  python3 - "$ENV" "$VORLAGE" <<'PY3'
+import io, re, sys
+
+ziel, vorlage = sys.argv[1], sys.argv[2]
+alt = io.open(ziel, encoding="utf8").read()
+da = set(re.findall(r"^([A-Za-z_][A-Za-z_0-9]*)=", alt, flags=re.M))
+
+# Die Vorlage in Bloecke zerlegen: die Kommentarzeilen unmittelbar vor einer
+# Zuweisung gehoeren zu ihr. Eine Leerzeile trennt.
+bloecke, puffer = [], []
+for zeile in io.open(vorlage, encoding="utf8").read().splitlines():
+    treffer = re.match(r"^([A-Za-z_][A-Za-z_0-9]*)=", zeile)
+    if treffer:
+        bloecke.append((treffer.group(1), puffer + [zeile]))
+        puffer = []
+    elif zeile.strip() == "":
+        puffer = []
+    else:
+        puffer.append(zeile)
+
+neu = [b for name, b in bloecke if name not in da]
+if not neu:
+    print("  keine neuen Einstellungen")
+    sys.exit(0)
+
+teile = ["", "# --- Nachgetragen aus deploy/.env.example -------------------------------",
+         "#", "# Vorgaben. Was hier steht, galt vorher auch schon — es stand nur",
+         "# nirgends. Anpassen nach Bedarf; die Vorlage erklaert jede Zeile.", ""]
+for block in neu:
+    teile.extend(block)
+    teile.append("")
+
+with io.open(ziel, "a", encoding="utf8") as fh:
+    fh.write("\n".join(teile).rstrip() + "\n")
+
+for name, _ in bloecke:
+    if name not in da:
+        print(f"  {name} — nachgetragen")
+PY3
+}
+
+echo "Einstellungen in deploy/.env:"
+nachtragen
+echo
+
 zufall() {  # zufall <länge>
   openssl rand -base64 64 | tr -d '\n=+/' | head -c "$1"
 }

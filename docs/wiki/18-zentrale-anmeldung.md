@@ -69,6 +69,23 @@ gibt es hier schon eines, wird der Import abgelehnt. Das ist der Angriff, gegen 
 steht: Wer im Verzeichnis etwas anlegen darf, legte sonst einen Eintrag mit dem Namen des
 Administrators an.
 
+## Die Passwortregel ✅
+
+Der Realm verlangt seit dem 2026-09-04 mindestens **zwölf Zeichen**, und dass das Passwort weder
+der Anmeldename noch die Mailadresse ist:
+
+```
+length(12) and notUsername(undefined) and notEmail(undefined)
+```
+
+Dieselbe Untergrenze gilt in OTAs eigener Anmeldung seit jeher. Ohne diese Zeile war der
+**Hauptweg** schwächer als der Notzugang — Keycloak nimmt ohne Regel jede Länge, auch ein Zeichen.
+
+Gesetzt wird sie von `scripts/keycloak-init.sh`, bei der Anlage **und** bei einem Realm, den es
+schon gibt. Verschärfen lässt sie sich über `OTA_KC_PASSWORTREGEL` in `deploy/.env`, danach
+`make identity`. Bestehende Passwörter bleiben gültig, bis sie das nächste Mal geändert werden —
+Keycloak prüft die Regel beim Setzen, nicht rückwirkend.
+
 ## Die zweite Stufe
 
 Sie liegt in Keycloak, nicht mehr in OTA. Was in OTA ein Feld an der Gruppe war (`require_totp`),

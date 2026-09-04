@@ -104,7 +104,13 @@ services:
       # Kein Weg in die eigenen Netze. Ohne diese Zeilen stuende im Firmennetz
       # ein Dienst, ueber den sich Datenbank und Keycloak erreichen liessen -
       # vorbei an Traefik und ohne Anmeldung an OTA. Die Bereiche sind die
-      # Subnetze von ota_public, ota_internal und ota_sessions.
+      # Subnetze von ota_public und ota_internal.
+      #
+      # Der Bereich der Arbeitsplatznetze (10.99.0.0/16) steht bewusst **nicht**
+      # hier: Er waere ohnehin unerreichbar — diese Netze sind `internal`, die
+      # Bruecke des Wirts hat dort keine Adresse, und nur der Router kommt
+      # hinein. Eine Zeile dafuer wuerde nichts sperren, aber jede Anlage
+      # brechen, deren Firmennetz zufaellig 10.99.x benutzt.
       - --denied-peer-ip=0.0.0.0-0.255.255.255
       - --denied-peer-ip=127.0.0.0-127.255.255.255
       - --denied-peer-ip=169.254.0.0-169.254.255.255
@@ -291,7 +297,6 @@ services:
       OTA_TURN_SECRET: "${OTA_TURN_SECRET:-}"
       OTA_TURN_PROTOCOL: "${OTA_TURN_PROTOCOL:-udp}"
       OTA_TURN_ICE_POLICY: "${OTA_TURN_ICE_POLICY:-all}"
-      OTA_SESSION_NETWORK: ota_sessions
       OTA_PUBLIC_NETWORK: ota_public
       OTA_BACKUP_ROOT: "${OTA_BACKUP_ROOT:-/srv/ota/backups}"
       # Ein Netz je Sitzung, aus einem eigenen Bereich. Nicht aus Dockers
@@ -308,6 +313,10 @@ services:
       OTA_HTTPS_PORT: "${OTA_HTTPS_PORT:-8443}"
       OTA_TURN_MIN: "${OTA_TURN_MIN:-49160}"
       OTA_TURN_MAX: "${OTA_TURN_MAX:-49260}"
+      # Der Zeitserver, falls einer gesetzt ist. Er steht in der Grundregel des
+      # Routers: Eine falsche Uhr bricht TLS, und der Fehler sieht nach allem
+      # aus ausser nach der Uhr. Leer heisst: keine Zeile dafuer.
+      OTA_NTP_HOST: "${OTA_NTP_HOST:-}"
     volumes:
       # Der einzige Dienst mit Schreibzugriff auf den Docker-Socket.
       # Die API bekommt ihn bewusst nicht — sie verarbeitet Nutzereingaben.
@@ -600,10 +609,3 @@ networks:
   uplink:
     name: ota_uplink
 
-  # Später: Session-Container. Erreichen ota-db bewusst nicht.
-  #
-  # **Wird nicht mehr benutzt** (2026-09-04): Jede Sitzung bekommt ihr eigenes
-  # `internal`-Netz, angelegt vom Agent. Der Eintrag bleibt, bis der letzte
-  # Container daraus verschwunden ist.
-  sessions:
-    name: ota_sessions

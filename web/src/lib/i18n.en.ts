@@ -1220,4 +1220,24 @@ export const EN: Record<string, string> = {
   'Das lokale Notfallkonto bleibt davon unberührt. Es wird immer lokal geprüft — auch wenn im Verzeichnis ein gleichnamiger Eintrag steht.': 'The local emergency account is unaffected. It is always checked locally \u2014 even if the directory holds an entry with the same name.',
   'Läuft in diesem Stack und macht die Anmeldung. OTA richtet ihn ein und verwaltet ihn von hier aus.': 'Runs in this stack and handles sign-in. OTA sets it up and manages it from here.',
   'Beginnt mit der Stufe „Internet" und ohne Freigaben — beides danach änderbar.': 'Starts at level \u201cInternet\u201d with no exceptions \u2014 both can be changed afterwards.',
+
+  // Nachgetragen 2026-09-04: Texte, die ohne Uebersetzung dastanden und in der
+  // englischen Oberflaeche deutsch erschienen sind.
+  'Notiz': 'Note',
+  'Profil angelegt': 'Profile created',
+  'Ohne E-Mail kommt dieses Konto in keine angebundene Anwendung.': 'Without an e-mail address this account cannot reach any attached application.',
+  'Pflicht. Angebundene Anwendungen erkennen Menschen daran wieder — ohne Adresse kommt niemand dort hinein.': 'Required. Attached applications recognise people by it \u2014 without an address nobody gets in.',
+  'Hochladen fehlgeschlagen': 'Upload failed',
+  'Startbefehl': 'Start command',
+  'Womit die Anwendung startet. Beendet sie sich, wird sie neu gestartet — bei einer einzelnen Anwendung ist das gewollt. Leer lassen, wenn das Basisimage seine Anwendung selbst startet (so machen es die Kasm-Images).': 'What starts the application. If it exits it is restarted \u2014 for a single application that is intended. Leave empty if the base image starts its application itself (that is what the Kasm images do).',
+  'Zugriff': 'Access',
+  'Sichtbar': 'Visible',
+  'Streaming': 'Streaming',
+  'H.264 über WebRTC. Die Vorgabe, und der Weg des eigenen Basisimages.': 'H.264 over WebRTC. The default, and the path of the own base image.',
+  'RFB über KasmVNC. Nötig für Images von Kasm — die bringen kein Selkies mit.': 'RFB over KasmVNC. Needed for images from Kasm \u2014 they do not ship Selkies.',
+  'Selkies (WebRTC)': 'Selkies (WebRTC)',
+  'KasmVNC (RFB)': 'KasmVNC (RFB)',
+  'Active Directory': 'Active Directory',
+  'LDAP': 'LDAP',
+  'ldaps://server:636 für eine verschlüsselte Verbindung, oder ldap://server:389.': 'ldaps://server:636 for an encrypted connection, or ldap://server:389.',
 }

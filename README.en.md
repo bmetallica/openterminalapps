@@ -15,6 +15,9 @@ key, the same clipboard.
 Alongside that, single applications can run as throwaway containers, and existing Kasm images and
 whole registries can be attached — as an addition, not as the foundation.
 
+**Every workspace sits in a network of its own** behind a router: no corporate network, no
+neighbouring session, no host — until someone explicitly opens it ([firewall.md](firewall.md)).
+
 > **Status:** running and in use. 434 automated checks, 107 of them in a real browser. What is still
 > missing is listed openly in [roadmap.md](roadmap.md) — nothing there is dressed up.
 >
@@ -28,6 +31,11 @@ whole registries can be attached — as an addition, not as the foundation.
 answer), plus `git`, `make` and `openssl`. Ports **8443** and **8081** must be free — 443 is left
 alone on purpose so an existing Kasm can keep running alongside. Both are changeable via
 `OTA_HTTPS_PORT` and `OTA_HTTP_PORT` in `deploy/.env`.
+
+Once streaming is in use, add **3478** (TURN) and **49160–49260/UDP** for the media path, plus
+**30000–30019** as the pool for published ports. And an address range for the workspace networks,
+`10.99.0.0/16` out of the box — it must **not** overlap with the corporate network. All of it is
+configurable and explained in [`deploy/.env.example`](deploy/.env.example).
 
 ```bash
 git clone https://github.com/bmetallica/openterminalapps.git
@@ -105,6 +113,25 @@ In detail in [handbook chapter 2](docs/wiki/02-erste-schritte.md) (German).
 - The handbook lives **inside the application**, filtered by permission
 - **My account** for everyone: change your own password, set up two-factor with recovery codes
 
+**The network of the workspaces**
+- **One network per workspace**, all of them terminating in a router. No corporate network, no
+  neighbouring session, no host — and not because a rule forbids it, but because there is no other
+  way out: the networks are `internal`, so Docker sets up neither NAT nor a default route
+- **The base rule set is visible in the interface** — what OTA opens for itself (TURN, its own
+  address, name service, proxy, time server), each line with target, ports, **reason and origin**.
+  Derived from `.env`, hence readable and not editable
+- **Profiles per template** in three levels: *isolated* (only what OTA needs), *internet* (the
+  default) and *off* — the last one lifts every restriction, requires a justification and is logged
+- **Exceptions by address, range or name**, globally or per profile. Names work because the router
+  is also the name service: whatever it answers, it writes into the rule itself — exception and
+  connection come from the same lookup
+- **"+ NAT"**: publish a port of one workspace through the host, time-limited, for someone who wants
+  to show their own application. The expiry is enforced, not just displayed
+- **Stable addresses** per person and template — across the evening and across a restart. Without
+  that, an upstream corporate firewall could not be pointed at a workspace
+- **An overview with throughput and dropped packets** per workspace. A port scan looks exactly like
+  what it is in that number
+
 **Getting software into the workspaces**
 - Pick packages, build the image, activate the version — with a log and a way back
 - **Packages are checked first**: does the image know the name, and is it any good?
@@ -130,15 +157,20 @@ In detail in [handbook chapter 2](docs/wiki/02-erste-schritte.md) (German).
   not in the image
 
 **Operations**
-- **An own base image** `ota/base-xfce`: Ubuntu 24.04 + XFCE + KasmVNC, **965 MB instead of 20 GB** —
-  no application, no Kasm label, and none of the inherited start script that restarted an
-  application every three seconds. It carries `:test` and replaces nothing yet;
-  `scripts/build-base-image.sh --pruefen` measures 27 points against the agent's contract
+- **An own base image** `ota/base-desktop`: Debian 13 + XFCE + **Selkies**, with no application and
+  **no third-party streaming software** — H.264 over WebRTC instead of rectangles over RFB. The
+  account is called `ota` and lives in `/home/ota`; nothing in it carries the Kasm name.
+  `scripts/build-desktop-image.sh --pruefen` measures 19 points against the agent's contract
+- **The older path remains** — `ota/base-xfce` (Ubuntu + KasmVNC) for images from Kasm that do not
+  ship Selkies. Switchable per workspace under **Streaming**
 - **A bill of materials per image** (`make sbom`) in SPDX and CycloneDX — needed as soon as an image
   leaves the building
 - Own registry in the stack; if an image is missing locally it is fetched from there at start
 - Backup and restore of profile, container and database, by hand and on a schedule
 - HTTPS out of the box with a small own CA, replaceable or behind a reverse proxy
+- **Nothing is fetched from foreign hosts.** Fonts ship with the interface; it requests nothing from
+  the internet — it looks the same offline and behind a corporate proxy, and no user's IP address
+  leaves the building
 - **Runs next to an existing Kasm installation** on the same host, without changing anything there
 
 ## How it is built
@@ -169,7 +201,7 @@ the same separation applies to the host filesystem.
 
 ## Documentation
 
-- **[Handbook](docs/wiki/README.md)** — use, administration, operations, troubleshooting (19
+- **[Handbook](docs/wiki/README.md)** — use, administration, operations, troubleshooting (23
   chapters, German)
 - **[plan.md](plan.md)** — architecture **and the reasoning behind it**, dead ends included
 - **[docs/adr/](docs/adr/README.md)** — decisions that are expensive to reverse, with the
@@ -193,7 +225,7 @@ make test
 | `test-authz.sh` | An ordinary user provably cannot do anything administrative and cannot sit at anyone else's screen; plus container hardening, metrics, quotas and two-factor |
 | `test-clipboard-bridge.sh` | Copying between two applications in one workspace: both directions, umlauts, an image, a megabyte, after a pause, and switched off |
 | `tests/e2e.mjs` | The interface in a real browser — down to whether the stream actually connects |
-| `test-ldap.sh` | Directory sign-in against a real OpenLDAP in a container — above all that a local account stays untouchable and an outage does not take it down |
+| `test-ldap.sh` | Directory sign-in **through Keycloak** against a real OpenLDAP in a container — above all that a directory entry cannot take over a local account and an outage does not take the emergency login down |
 | `test-streaming.sh` | The media path: does the TURN server actually relay, and does a picture arrive in the browser? The probe browser runs in a network from which the session container is **not** directly reachable — like a workstation on a corporate network |
 | `test-firewall.sh` | The network isolation, **measured from inside**: neighbour, host, corporate network, TURN, name service, internet per level, an exception by name, a published port — and all of it again after the router restarts |
 | `test-backup.sh` | Backup and restore of profile, container and database. It stops sessions to do so — **only its own**, and it checks that explicitly |
@@ -214,8 +246,14 @@ pulled at runtime as container images. **They keep their own licences and are no
 Apache-2.0 by OTA** — broken down into three layers in
 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md), briefly in [NOTICE](NOTICE).
 
-A workspace **image** is a composite work: OTA configuration, KasmVNC (GPL-2.0), XFCE, hundreds of
-distribution packages, the installed applications. It is **not** "Apache-2.0".
+A workspace **image** is a composite work: OTA configuration, Selkies (MPL-2.0, **modified by
+OTA**), libx264 (GPL-2.0+), XFCE, hundreds of distribution packages, the installed applications. It
+is **not** "Apache-2.0".
+
+The base image **may be passed on** — with four obligations: offer sources for the GPL parts,
+include the five Selkies patches (MPL-2.0 works file by file), leave the licence texts in the image,
+and ship a bill of materials. Finished workspaces containing Microsoft VS Code or Google Chrome
+**may not** — the same ones with VSCodium and Firefox may.
 
 **Applications inside a golden image keep their own licence.** For Microsoft VS Code, use within
 your own corporate network is explicitly permitted; passing it on to third parties is not. Checked

@@ -1,5 +1,7 @@
-# Der Firewall-Dienst. Er laeuft im Netzwerk-Namensraum des Wirts und braucht
-# ausser NET_ADMIN nichts — kein Docker-Socket, keine Datenbank, keine Ablage.
+# Der Router aller Arbeitsplaetze. Er haengt in `ota_uplink` und bekommt zur
+# Laufzeit je Sitzung ein weiteres Netz dazu; er braucht ausser NET_ADMIN,
+# NET_RAW und SYS_ADMIN nichts — kein Docker-Socket, keine Datenbank, keine
+# Ablage ausser dem Socket zum Agent.
 FROM python:3.12-slim AS runtime
 
 # `iptables` in der nft-Fassung, weil Docker auf Debian 13 dieselbe benutzt:
@@ -21,8 +23,9 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY otafw ./otafw
 
-# **Kein Netzwerkport.** Der Dienst laeuft im Namensraum des Wirts; ein Port
-# waere damit auf jeder Adresse des Wirts offen, auch der im Firmennetz. Der
+# **Kein Netzwerkport.** Dieser Dienst steuert die Firewall aller Arbeitsplaetze
+# — und haengt selbst in **jedem** Sitzungsnetz. Ein Port waere damit aus jedem
+# Arbeitsplatz erreichbar, und wer ihn erreicht, schreibt das Regelwerk. Der
 # Agent erreicht ihn statt dessen ueber einen Unix-Socket im gemeinsamen
 # Ablageverzeichnis — kein Port, keine Adresse, und die Dateirechte entscheiden.
 CMD ["uvicorn", "otafw.main:app", "--uds", "/srv/ota/runtime/firewall.sock"]

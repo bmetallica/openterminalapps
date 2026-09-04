@@ -15,6 +15,22 @@
 | CPU | 4 Kerne für einen Piloten, **16+** für die Zielgröße |
 | Platte | 100 GB für einen Piloten, **1 TB** für die Zielgröße |
 
+**Diese Ports müssen auf dem Host frei sein** — und, wo eine Firewall davor steht, für die
+Arbeitsplätze erreichbar:
+
+| Port | Wofür | Einstellbar über |
+|---|---|---|
+| **8443** (TCP) | Die Oberfläche und der Bildstrom | `OTA_HTTPS_PORT` |
+| **8081** (TCP) | Leitet nur auf HTTPS um | `OTA_HTTP_PORT` |
+| **3478** (UDP/TCP) | Der TURN-Server, sobald eine Vorlage auf Selkies steht | `OTA_TURN_PORT` |
+| **49160–49260** (UDP) | Worüber TURN den Medienstrom vermittelt. Eine Verbindung belegt vier Ports | `OTA_TURN_MIN/MAX` |
+| **30000–30019** (TCP) | Der Vorrat für Portfreigaben („+ NAT", [Kapitel 23](23-netz.md)). Belegt wird davon nur, was jemand freigibt | `OTA_NAT_MIN/MAX` |
+
+Dazu ein **freier Adressbereich für die Arbeitsplatznetze**: ab Werk `10.99.0.0/16`. Er darf sich
+nicht mit dem Firmennetz überschneiden — sonst gewinnt das Sitzungsnetz, und das echte Ziel ist aus
+dem Arbeitsplatz nicht mehr erreichbar. Umzustellen über `OTA_SESSION_POOL`, **bevor** die erste
+Sitzung läuft.
+
 Ein Arbeitsplatz ist mit 4 Kernen und 6 GB veranschlagt. Der Container muss auf die **Spitze**
 ausgelegt sein — auf alles, was ein Nutzer gleichzeitig offen hat.
 
@@ -27,11 +43,17 @@ in Containern gebaut und ausgeführt.
 git clone <repo> /opt/openterminalapps
 cd /opt/openterminalapps
 
-make setup                 # Zertifikat und deploy/.env anlegen
-$EDITOR deploy/.env        # Geheimnisse eintragen (das Skript nennt sie)
-make up                    # Stack bauen und starten
-make admin NAME=deinname   # ersten Administrator anlegen
+sudo make setup            # Zertifikat, deploy/.env, Geheimnisse, Verzeichnisse
+sudo make up               # Stack bauen und starten
+sudo make admin NAME=deinname   # ersten Administrator anlegen
 ```
+
+**Die Geheimnisse erzeugt `make setup` selbst** und trägt sie ein — von Hand ist nichts
+nachzutragen. Ein zweiter Aufruf lässt vorhandene Werte unangetastet und ergänzt nur, was in einer
+neuen Fassung dazugekommen ist; deshalb läuft er auch bei jedem `make update` mit.
+
+`sudo` braucht es für die Verzeichnisse unter `/srv/ota` und den Docker-Socket. Wer in der Gruppe
+`docker` ist und `/srv/ota` selbst angelegt hat, kann es weglassen.
 
 `make help` zeigt alle Befehle.
 
@@ -87,6 +109,8 @@ Der Nutzer landet in den Gruppen `admins` und `users`.
 | **Arbeitsplatz mit mehreren Apps** | ✅ Grundfunktion |
 | **Zwischenablage-Brücke zwischen den Apps** | ✅ |
 | Leerlauf-Aufräumer, Waisen-Aufräumer | ✅ |
+| **Ein eigenes Netz je Arbeitsplatz, hinter einem Router** | ✅ [Kapitel 23](23-netz.md) |
+| **Firewall in der Oberfläche**: Profile, Freigaben, Portfreigaben, Übersicht | ✅ |
 | Golden Images mit Build-Pipeline, Rezepte, App-Erkennung | ✅ |
 | LDAP/AD | ✅ (über Keycloak) |
 | Netzlaufwerke, Kerberos | gestrichen — siehe [Kapitel 8](08-nutzer-und-gruppen.md#netzlaufwerke-im-arbeitsplatz--gestrichen) |

@@ -34,15 +34,15 @@ heute schon funktioniert.
 6. [Ressourcen und Zuteilung je Nutzer](06-ressourcen-und-zuteilung.md)
 7. [Golden Images](07-golden-images.md)
 8. [Nutzer, Gruppen und Rechte](08-nutzer-und-gruppen.md)
+9. [Kasm-Images und Registries einbinden](09-kasm-images-und-registries.md)
+16. [Images verwalten](16-images-verwalten.md)
+17. [Ablagen und Startskript](17-ablage-und-startskript.md)
 18. [Zentrale Anmeldung (Keycloak)](18-zentrale-anmeldung.md)
 19. [Das eigene Basisimage](19-eigenes-basisimage.md)
 20. [Selkies — der Streaming-Weg](20-selkies-versuch.md)
 21. [Betrieb hinter einem Firmenproxy](21-firmenproxy.md)
 22. [Die eigene Marke — Name, Farbe, Zeichen](22-marke.md)
 23. [Das Netz der Arbeitsplätze](23-netz.md)
-9. [Kasm-Images und Registries einbinden](09-kasm-images-und-registries.md)
-16. [Images verwalten](16-images-verwalten.md)
-17. [Ablagen und Startskript](17-ablage-und-startskript.md)
 
 **Betrieb**
 10. [Zertifikate und HTTPS](10-zertifikate-und-https.md)
@@ -51,6 +51,10 @@ heute schon funktioniert.
 13. [Lizenzen](13-lizenzen.md)
 14. [Sicherung und Wiederherstellung](14-sicherung.md)
 15. [Ein Profil aus Kasm übernehmen](15-migration-aus-kasm.md)
+
+Die Nummern sind die Reihenfolge, in der die Kapitel entstanden sind, nicht die, in der man sie
+liest — deshalb stehen 16 bis 23 zwischen 9 und 10. Umnummerieren würde jeden Verweis brechen, der
+irgendwo schon steht.
 
 ## Wo was steht
 

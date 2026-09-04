@@ -28,10 +28,11 @@ früh. Die Einbindung vorhandener **Kasm-Images und -Registries** ist ein Featur
 | **M9** | Optionale Erweiterungen | WebAuthn ✅, Gruppenlaufwerke ✅; ~~Guacamole~~, ~~code-server~~ **gestrichen** | ✅ **erledigt** |
 | **M10** | Skalierung | Mehrere Hosts, Pools | offen |
 | **M11** | **Zentrale Identität** | Keycloak als Anmeldung, OTA als sein Verwalter und Portal | ✅ **erledigt** |
+| **M12** | **Das Netz der Arbeitsplätze** | Ein Netz je Sitzung, ein Router davor, Firewall in der Oberfläche | ✅ **erledigt** |
 
 Bis zum produktiven Einsatz (M5–M7): **realistisch 4–6 Wochen** in Teilzeit.
 
-**Stand 2026-09-01**: M0 bis M4, M8 und M11 laufen, dazu die Build-Pipeline aus M5 und die
+**Stand 2026-09-04**: M0 bis M4, M8, M11 und M12 laufen, dazu die Build-Pipeline aus M5 und die
 Sicherung aus M7.
 
 Ein Nutzer meldet sich über die **zentrale Anmeldung** an, startet seinen Arbeitsplatz und öffnet
@@ -44,8 +45,12 @@ Ein Administrator baut Software ins Image, bindet fremde Kataloge ein, stellt Si
 her, richtet ein **Active Directory** in OTAs Oberfläche ein und bindet **fremde Web-Anwendungen**
 an, die dieselbe Anmeldung benutzen.
 
-Geprüft durch **357 automatische Prüfungen in fünf Reihen**, davon 95 in einem echten Browser
-(`make test`). Ein voller Lauf dauert rund eine Dreiviertelstunde — er baut Container, friert ein
+Und sein Arbeitsplatz kommt dabei **weder ins Firmennetz noch an die Sitzung eines Kollegen** —
+nicht, weil eine Regel es verbietet, sondern weil er in einem eigenen Netz hängt, dessen einziger
+Ausgang ein Router ist (M12).
+
+Geprüft durch **434 automatische Prüfungen in sieben Reihen**, davon 107 in einem echten Browser
+(`make test`). Ein voller Lauf dauert rund eine halbe Stunde — er baut Container, friert ein
 Image ein, zieht ein Wegwerf-Verzeichnis hoch und misst im Browser nach.
 
 ---
@@ -553,10 +558,12 @@ prüfen. Wer Laufwerke im Arbeitsplatz braucht, verbindet sie dort selbst (Weg 3
       Folgen, beide geprüft: Firefox fällt auf eine schwächere interne Sandbox zurück und startet
       normal; AppImages hängen sich nicht mehr per FUSE ein, weshalb das Rezept jetzt
       `APPIMAGE_EXTRACT_AND_RUN=1` setzt (Handbuch, Kapitel 11)
-- [x] **Netzsegmentierung**: Session-Container hängen in `ota_sessions` und zusätzlich im
-      öffentlichen Netz (für Traefik) — die Datenbank liegt in keinem von beiden. Als Prüfung
-      in `scripts/test-authz.sh`: ein `/dev/tcp`-Versuch aus dem Container auf `ota-db:5432`
-      muss scheitern
+- [x] **Netzsegmentierung** — erste Fassung: Session-Container hingen in `ota_sessions` und
+      zusätzlich im öffentlichen Netz (für Traefik); die Datenbank lag in keinem von beiden.
+      Geprüft in `scripts/test-authz.sh` mit einem `/dev/tcp`-Versuch auf `ota-db:5432`.
+      **Das hat nicht gereicht** und ist mit M12 ersetzt: Auf derselben Brücke greift `iptables`
+      gar nicht, solange `br_netfilter` nicht geladen ist — die Arbeitsplätze erreichten einander,
+      den Wirt und das ganze Firmennetz. Ein Sammelnetz gibt es nicht mehr
 - [x] **Security-Review der Auth- und Autorisierungspfade** — drei Befunde, alle behoben und alle
       mit einer Prüfung in `scripts/test-authz.sh` festgenagelt:
       1. **`sessions.view_all` reichte bis auf den fremden Bildschirm.** Das Recht heisst in der
@@ -757,6 +764,48 @@ sondern daraus, dass jemand es benutzt hat:
 
 ---
 
+## M12 — Das Netz der Arbeitsplätze · ✅ erledigt am 2026-09-04
+
+Entstanden aus der Sicherheitsbetrachtung: Ein Arbeitsplatz erreichte den Wirt, das ganze
+Firmennetz, die Sitzung des Kollegen und den Agent — und der Agent ist der einzige Dienst mit
+schreibendem Docker-Socket. Das war die kürzeste Strecke von einem beliebigen Nutzer zu root auf
+dem Wirt.
+
+Der Entwurf mit allen Messungen steht in [`firewall.md`](firewall.md), die Bedienung im Handbuch,
+[Kapitel 23](docs/wiki/23-netz.md).
+
+- [x] **Ein `internal`-Netz je Sitzung**, angelegt vom Agent, mit fester Adresse je Paar aus Mensch
+      und Vorlage (`net_leases`). Ohne feste Adresse liesse sich weder eine dauerhafte Portfreigabe
+      setzen noch eine vorgelagerte Firewall auf einen Arbeitsplatz einstellen
+- [x] **Ein Router** (`ota-firewall`) mit nftables, NAT, Routing und eigenem Namensdienst. Er ist
+      der einzige Weg nach draussen — erreichbar für den Agent nur über einen **Unix-Socket**,
+      nicht über einen Port: Er hängt in jedem Sitzungsnetz, und wer ihn erreicht, schreibt das
+      Regelwerk
+- [x] **Grundregelsatz, sichtbar in der Oberfläche** — TURN, die eigene Adresse, Namensdienst,
+      Firmenproxy, Zeitserver. Je Zeile mit Grund und Herkunft, abgeleitet aus der `.env` und
+      deshalb nicht änderbar. Eine unsichtbare Grundregel wäre eine Firewall, von der niemand
+      weiss, was sie ohnehin durchlässt
+- [x] **Profile je Vorlage** in drei Stufen (`abgeschottet` / `internet` / `aus`), zwei davon
+      mitgeliefert. Die Stufe „aus" verlangt eine Begründung und steht im Protokoll; ein
+      mitgeliefertes Profil dafür gibt es bewusst **nicht**
+- [x] **Freigaben nach Adresse, Bereich oder Name**, global oder je Profil, Notiz verpflichtend.
+      Namen funktionieren, weil der Router zugleich der Namensdienst ist und seine eigenen
+      Antworten in die Regel schreibt — mit deren Lebensdauer
+- [x] **Portfreigaben („+ NAT")** mit Frist, die durchgesetzt wird; sie hängen an Mensch und
+      Vorlage und überleben den Feierabend
+- [x] **Übersicht** mit Durchsatz und verworfenen Paketen je Arbeitsplatz. Live, nichts gespeichert
+      — eine Zeitreihe daraus wären personenbezogene Daten
+- [x] **19 Prüfungen, von innen gemessen** (`scripts/test-firewall.sh`), inklusive eines Neustarts
+      des Routers. Am Regelwerk zu messen hätte nichts gebracht: Es stand dreimal vollständig da,
+      und die Brücke des Wirts war trotzdem erreichbar
+
+**Was offen bleibt:** Der Router ist eine einzelne Stelle, an der alles hängt — startet er neu,
+sind alle Arbeitsplätze kurz ohne Netz. Das ist der Preis dafür, dass es keinen Weg an ihm vorbei
+gibt, und mit `restart: unless-stopped` plus Selbstheilung im Abgleich der beste Kompromiss, den
+dieser Aufbau hergibt.
+
+---
+
 ## M10 — Skalierung · offen
 
 Erst mit Hardware für die Zielgröße (`plan.md` §17.1).
@@ -789,19 +838,16 @@ Erst mit Hardware für die Zielgröße (`plan.md` §17.1).
 
 ## Nächster Schritt
 
-**Zuerst: eine Weile benutzen.** Der ganze Umbau auf Keycloak ist zwei Tage alt, und alles, was
-seit Etappe E dazukam, kam nicht aus dem Entwurf, sondern daraus, dass jemand die Anlage benutzt
-hat — das Abmelden, die E-Mail-Pflicht, die Nachführung nach Keycloak, das Aussehen der
-Anmeldemaske. Der nächste Fund kommt vermutlich genauso.
+**Zuerst: eine Weile benutzen.** Fast alles, was seit M11 dazukam, kam nicht aus dem Entwurf,
+sondern daraus, dass jemand die Anlage benutzt hat — das Abmelden, die E-Mail-Pflicht, die
+Nachführung nach Keycloak, das Aussehen der Anmeldemaske. Der nächste Fund kommt vermutlich genauso.
+
+~~**Die Profilpfade**~~ ✅ **erledigt.** Sie heissen jetzt nach der unveränderlichen Kennung
+(`users.id`), daneben liegt ein Verweis unter dem Anmeldenamen, damit im Dateisystem trotzdem
+jemand etwas findet ([`auth-roadmap.md`](auth-roadmap.md) §4, Entscheidung 5). Ein Konto in
+Keycloak umzubenennen ist damit gefahrlos; `scripts/migrate-profilpfade.sh` zieht Bestände nach.
 
 Dann, in dieser Reihenfolge:
-
-**Zuerst aber eine Sache, die nicht warten sollte: die Profilpfade.** Sie heissen nach dem
-Anmeldenamen, und seit M11 zieht OTA einen im Verzeichnis geänderten Namen nach — wer umbenannt
-wird, findet beim nächsten Start ein leeres Zuhause. Das alte liegt noch da, aber niemand sucht
-dort. Entschieden war, sie nach der unveränderlichen Kennung zu benennen und einen Verweis unter
-dem Namen danebenzulegen ([`auth-roadmap.md`](auth-roadmap.md) §4, Entscheidung 5); umgesetzt ist
-das nicht. Bis dahin gilt: **kein Konto in Keycloak umbenennen.**
 
 ~~**Netzlaufwerke** (der Rest von M6)~~ — **gestrichen (2026-09-03)**, zusammen mit der
 Guacamole-Engine und code-server. Kerberos bräuchte ein KDC und einen Dateiserver; ohne beides

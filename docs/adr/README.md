@@ -44,5 +44,7 @@ selbstverständlicher Schritte aus, und das war sie nie.
 |---|---|---|
 | [ADR-001](001-arbeitsplatz-als-fundament.md) | Der Arbeitsplatz ist das Fundament, Einzel-Apps sind ein Feature | angenommen |
 | [ADR-002](002-nur-der-agent-fasst-docker-an.md) | Nur der Agent fasst Docker und das Dateisystem an | angenommen |
-| [ADR-003](003-kasmvnc-als-engine.md) | KasmVNC ist die Streaming-Engine, ein Display je Anwendung | angenommen |
+| [ADR-003](003-kasmvnc-als-engine.md) | KasmVNC ist die Streaming-Engine, ein Display je Anwendung | **abgelöst durch ADR-005** |
 | [ADR-004](004-keine-signaturpruefung-fuer-registries.md) | Registry-Signaturen werden nicht geprüft | angenommen |
+| [ADR-005](005-selkies-statt-kasmvnc.md) | Selkies überträgt das Bild, KasmVNC bleibt für fremde Images | angenommen |
+| [ADR-006](006-ein-netz-je-sitzung.md) | Jeder Arbeitsplatz bekommt ein eigenes Netz, der einzige Ausgang ist ein Router | angenommen |

@@ -1,7 +1,11 @@
 # ADR-003 · KasmVNC ist die Streaming-Engine, mit einem Display je Anwendung
 
-**Stand:** angenommen
+**Stand:** **abgelöst durch [ADR-005](005-selkies-statt-kasmvnc.md)** (2026-09-03)
 **Datum:** 2026-08-27
+
+> Die Entscheidung war richtig und hat den Arbeitsplatz zum Laufen gebracht. Abgelöst wurde sie
+> nicht, weil sie falsch war, sondern weil das Verfahren die Grenze war: RFB überträgt Rechtecke.
+> KasmVNC bleibt für Images von Kasm erhalten und ist je Vorlage wählbar.
 
 ## Ausgangslage
 

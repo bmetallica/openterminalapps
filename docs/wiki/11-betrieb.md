@@ -9,7 +9,20 @@
 | `ota-api` | REST-API, Anmeldung, Rechte, Geschäftslogik | ✅ |
 | `ota-agent` | **Einziger** Dienst mit Docker-Zugriff; startet Container und Displays | ✅ |
 | `ota-db` | PostgreSQL 16 | ✅ |
+| `ota-firewall` | **Der Router aller Arbeitsplätze**: nftables, NAT, Namensdienst, Portfreigaben. Ohne ihn hat kein Arbeitsplatz Netz | ✅ |
+| `ota-turn` | Vermittelt den Medienstrom zwischen Browser und Arbeitsplatz (Selkies/WebRTC) | ✅ |
+| `ota-registry` | Eigene Registry für die gebauten Images | ✅ |
+| `ota-keycloak` | Identitätsanbieter, mitgeliefert oder abgeschaltet | ✅ |
 | `ota-worker` | Leerlauf- und Waisen-Aufräumer laufen derzeit in `ota-api` mit | ✅ teilweise |
+
+**Was ein Neustart kostet**, nach Dienst getrennt:
+
+| Neustart von | Wirkung auf laufende Arbeitsplätze |
+|---|---|
+| `ota-api`, `ota-web`, `ota-agent` | **keine.** Der Bildstrom geht direkt über Traefik zum Container |
+| `ota-traefik` | Der Bildstrom hängt für ein paar Sekunden, dann verbindet sich der Betrachter neu |
+| `ota-firewall` | Die Arbeitsplätze sind **kurz ohne Netz**. Der Abgleich zieht die Anbindung selbst nach (alle 30 s); wer währenddessen lädt, sieht einen Abbruch |
+| `ota-db` | Die Oberfläche meldet Fehler; laufende Ströme merken nichts |
 
 ### Warum der Agent getrennt ist
 
@@ -21,9 +34,26 @@ Schnittstelle. Traefik erhält den Socket nur lesend.
 
 | Netz | Wer | Zweck |
 |---|---|---|
-| `ota_public` | Traefik, Web, API | von außen erreichbar |
-| `ota_internal` | API, DB, Agent | kein Weg nach draußen |
-| `ota_sessions` | Session-Container | erreicht `ota-db` **bewusst nicht** |
+| `ota_public` | Traefik, Web, API, Keycloak, TURN | von aussen erreichbar |
+| `ota_internal` | API, DB, Agent, Registry | `internal` — kein Weg nach draussen |
+| `ota_uplink` | Der Router | sein **einziger** Weg nach draussen |
+| `ota-n-<sitzung>` | je ein Arbeitsplatz + der Router | eines je Sitzung, `internal`, ohne Standardroute |
+
+**Ein Sammelnetz für alle Sitzungen gibt es seit dem 2026-09-04 nicht mehr.** Es war der Grund,
+aus dem sich Arbeitsplätze gegenseitig und den Agent erreichen konnten: Auf **derselben** Brücke
+greift `iptables` gar nicht, solange `br_netfilter` nicht geladen ist — eine Regel dagegen hätte
+also nichts genützt. Jede Sitzung bekommt jetzt ihr eigenes Netz, angelegt vom Agent, und alle
+enden im Router. Aufbau und Bedienung: [Kapitel 23](23-netz.md), Begründung:
+[`firewall.md`](../../firewall.md).
+
+Die Sitzungsnetze sind `internal` und die Brücke des Wirts hat dort **keine Adresse**. Vom Host aus
+ist ein Arbeitsplatz deshalb nicht anzupingen — das ist kein Fehler, sondern der Punkt. Wer
+hineinsehen will:
+
+```bash
+docker exec -it ota-s-<id> bash
+docker exec ota-firewall nft list table inet ota | less    # das ganze Regelwerk
+```
 
 ## Alltag
 
@@ -186,7 +216,7 @@ Jeder Container, der nicht einem Administrator gehört, läuft mit:
 | seccomp | der Standardfilter von Docker; er sperrt rund 40 Systemaufrufe, die ein Anwendungscontainer nicht braucht |
 | `pids_limit: 4096` | eine Fork-Bombe legt den eigenen Container lahm, nicht den Host |
 | `mem_limit`, `nano_cpus` | je Nutzer und Workspace einstellbar ([Kapitel 6](06-ressourcen-und-zuteilung.md)) |
-| eigenes Netz | `ota_sessions`; die Datenbank liegt nicht darin |
+| eigenes Netz | Ein `internal`-Netz **je Sitzung**, dessen einziger Ausgang der Router ist. Weder die Datenbank noch der Agent noch die Nachbarsitzung liegen darin ([Kapitel 23](23-netz.md)) |
 | `shm_size: 1g` | grosszügig, weil Browser und Electron-Anwendungen sonst unvermittelt abstürzen |
 
 Für Administratoren fallen die ersten beiden Zeilen weg — sonst liefe `sudo` nicht

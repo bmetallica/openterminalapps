@@ -36,6 +36,23 @@ daneben.
 
 Ein deaktivierter Workspace verschwindet aus den Dashboards, die Zuweisungen bleiben aber bestehen.
 
+**Streaming** steht ebenfalls hier: `Selkies (WebRTC)` ist die Vorgabe und der Weg des eigenen
+Basisimages; `KasmVNC (RFB)` gehört zu Images von Kasm, die kein Selkies mitbringen.
+
+### Netz ✅
+
+Ein Auswahlfeld, und ohne Zutun steht dort **Vorgabe (Internet, kein Firmennetz)**: Der
+Arbeitsplatz kommt ins Internet, aber nicht ins Firmennetz, nicht an die Nachbarsitzung und nicht
+an den Wirt. Für die meisten Vorlagen ist das die richtige Antwort und nichts zu tun.
+
+Wer mehr oder weniger braucht, legt unter **Netz** ein Profil an und wählt es hier aus — etwa
+*Abgeschottet* für eine Vorlage, die nur mit lokalen Daten umgeht, oder ein eigenes mit einer
+Freigabe auf den internen Paketspiegel. Ein Profil gilt für **jede Sitzung dieser Vorlage**.
+
+Das Feld wirkt erst beim **nächsten Start** einer Sitzung. Was der Grundregelsatz ohnehin
+durchlässt, steht in [Kapitel 23](23-netz.md) — dort auch die Stufe „aus", die jede Einschränkung
+aufhebt und deshalb eine Begründung verlangt.
+
 ### Apps (nur bei `mode: workspace`) ✅
 Der Katalog der im Golden Image installierten Anwendungen. Je App: aktiv/inaktiv und die Quelle ihrer
 Extensions.
