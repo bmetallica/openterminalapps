@@ -36,7 +36,7 @@ http:
           # Preis — require-corp lässt jede fremde Ressource ohne CORP
           # kommentarlos ausfallen, und genau solche Quellen kommen mit den
           # Kasm-Registries noch dazu.
-          Content-Security-Policy: "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self' ws: wss:; frame-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'"
+          Content-Security-Policy: "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; connect-src 'self' ws: wss:; frame-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'"
           Server: ""
 
     # Erst aktivieren, wenn die CA verteilt oder ein echtes Zertifikat aktiv ist.

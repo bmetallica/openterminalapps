@@ -79,6 +79,11 @@ if [ "${1:-}" = "zeigen" ]; then
 fi
 
 # -------------------------------------------------------------- Realm
+# Mindestens zwölf Zeichen — dieselbe Untergrenze, die OTAs eigene Anmeldung
+# seit jeher verlangt (`api/ota/security.py`). Zwei Wege zu derselben Anlage
+# sollen nicht verschieden streng sein.
+PASSWORTREGEL="${OTA_KC_PASSWORTREGEL:-length(12) and notUsername(undefined) and notEmail(undefined)}"
+
 CODE=$(kc GET "/admin/realms/$REALM")
 if [ "$CODE" = "200" ]; then
   info "Realm $REALM gibt es schon"
@@ -89,10 +94,32 @@ else
  "registrationAllowed":false,"resetPasswordAllowed":false,
  "bruteForceProtected":true,"permanentLockout":false,
  "maxFailureWaitSeconds":900,"failureFactor":5,
+ "passwordPolicy":"$PASSWORTREGEL",
  "loginWithEmailAllowed":true,"duplicateEmailsAllowed":false}
 JSON
 )")
   [ "$CODE" = "201" ] && ok "Realm $REALM angelegt" || { bad "Realm anlegen: HTTP $CODE $(kc_body)"; exit 1; }
+fi
+
+# ------------------------------------------------------- Die Passwortregel
+#
+# Auch für einen Realm, den es schon gibt: Sie fehlte bis zum 2026-09-04, und
+# damit war der **Hauptweg** schwächer als der Notzugang — OTAs eigene
+# Anmeldung verlangt seit jeher zwölf Zeichen, Keycloak nahm jede Länge
+# (`security.md`, M3).
+#
+# `notUsername` und `notEmail` kosten nichts und schliessen die beiden
+# Passwörter aus, die Menschen zuerst einfallen.
+kc GET "/admin/realms/$REALM" >/dev/null
+IST=$(kc_body | jq_py "d.get('passwordPolicy') or ''")
+if [ "$IST" = "$PASSWORTREGEL" ]; then
+  info "Passwortregel steht: $PASSWORTREGEL"
+else
+  CODE=$(kc PUT "/admin/realms/$REALM" "{\"passwordPolicy\":\"$PASSWORTREGEL\"}")
+  case "$CODE" in
+    20*) ok "Passwortregel gesetzt: $PASSWORTREGEL" ;;
+    *)   bad "Passwortregel nicht setzbar: HTTP $CODE $(kc_body)" ;;
+  esac
 fi
 
 # ------------------------------------------------- Gruppen in den Token

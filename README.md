@@ -18,7 +18,7 @@ sowie ganze Registries einbinden — als Zusatz, nicht als Fundament.
 **Jeder Arbeitsplatz hängt in einem eigenen Netz** hinter einem Router: kein Firmennetz, keine
 Nachbarsitzung, kein Wirt — bis jemand es ausdrücklich freigibt ([firewall.md](firewall.md)).
 
-> **Stand:** läuft und wird benutzt. 431 automatische Prüfungen, davon 107 in einem echten Browser.
+> **Stand:** läuft und wird benutzt. 434 automatische Prüfungen, davon 107 in einem echten Browser.
 > Was noch fehlt, steht offen in [roadmap.md](roadmap.md) — nichts davon ist beschönigt.
 
 ---
@@ -297,7 +297,7 @@ aussahen, als sie waren.
 make test
 ```
 
-**431 Prüfungen in sieben Suiten**, jede stellt ihren Vorzustand selbst her:
+**434 Prüfungen in sieben Suiten**, jede stellt ihren Vorzustand selbst her:
 
 | Suite | Prüft |
 |---|---|

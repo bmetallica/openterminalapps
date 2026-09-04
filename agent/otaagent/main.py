@@ -581,17 +581,33 @@ def list_images() -> list[dict[str, Any]]:
 
 
 def _ensure_profile(path: str) -> None:
-    """Legt das Profilverzeichnis an und setzt UID/GID 1000.
+    """Legt das Profilverzeichnis an, setzt UID/GID 1000 und haelt es eng.
 
-    Die Kasm-Images laufen als Nutzer 1000. Ohne diesen Schritt kann der
+    Die Images laufen als Nutzer 1000. Ohne den Eigentuemerwechsel kann der
     Container in sein eigenes Home nicht schreiben.
+
+    **0700, nicht 0755.** Ein Zuhause enthaelt Browser-Profile samt
+    Anmeldedaten, SSH- und GPG-Schluessel, Dokumente. Bis zum 2026-09-04
+    standen manche davon auf 0755 und zwei sogar auf 0777 — auf dem Wirt fuer
+    jeden lesbar, zwei davon fuer jeden beschreibbar (`security.md`, M2). Im
+    Container aendert das nichts: Dort laeuft alles als 1000, und dem gehoert
+    es.
+
+    Die Wurzel darueber gehoert root und steht ebenfalls auf 0700; der
+    Docker-Daemon haengt die Verzeichnisse als root ein und braucht das nicht.
     """
     if not path:
         return
     os.makedirs(path, exist_ok=True)
     try:
         os.chown(path, 1000, 1000)
-    except PermissionError:
+        os.chmod(path, 0o700)
+    except (PermissionError, OSError):
+        pass
+    try:
+        wurzel = os.environ.get("OTA_PROFILES_ROOT", "/srv/ota/profiles")
+        os.chmod(wurzel, 0o700)
+    except (PermissionError, OSError, FileNotFoundError):
         pass
 
 

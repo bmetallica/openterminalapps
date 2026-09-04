@@ -215,21 +215,20 @@ aufgeräumt, deren Datenbankzeile noch `running` war, und mit `pkill -f` die eig
 
 ### ⚠️ Bekannte Bugs & Test-Status
 
-* **Testergebnis: `make test` vollständig grün — 431/431** (2026-09-04).
-  `226 authz · 18 Zwischenablage · 107 e2e · 20 Verzeichnis · 2 Medienweg · 19 Netz · 39 Sicherung`.
+* **Testergebnis: `make test` vollständig grün — 434/434** (2026-09-04).
+  `229 authz · 18 Zwischenablage · 107 e2e · 20 Verzeichnis · 2 Medienweg · 19 Netz · 39 Sicherung`.
   Die Verzeichnisreihe ist von 42 auf 20 geschrumpft: Die Hälfte prüfte OTAs eigene
-  LDAP-Anbindung, und die ist entfallen.
-  dazu `scripts/build-desktop-image.sh --pruefen` **19/19**.
+  LDAP-Anbindung, und die ist entfallen. Die drei neuen Prüfungen in der Autorisierungsreihe
+  gehören zum protokollierten Aufschalten. Dazu `scripts/build-desktop-image.sh --pruefen`
+  **19/19**.
 * **Die Sicherungsprüfung war nie gefährlich.** Ich hatte sie zwei Tage lang gemieden, weil sie
   „Sitzungen beendet" — sie beendet aber nur die **eigenen**: `/api/sessions` liefert ohne
   `all_users` ausschliesslich die des anfragenden Kontos, und die Wiederherstellung fasst allein
   das Profil des Testkontos an. Die Reihe prüft das jetzt ausdrücklich nach. Übertriebene Vorsicht
   hat den weissen Fleck erst erzeugt.
 
-* **Testergebnis:** `scripts/test-authz.sh` **226/226**,
-  `scripts/build-desktop-image.sh --pruefen` **19/19**, `scripts/pruef-selkies.mjs` liefert ein
-  Bild, `scripts/pruef-turn.py` grün. **Der vollständige `make test` ist am 2026-09-03 gelaufen: 434/434**
-  (226 authz · 18 Zwischenablage · 107 e2e · 42 ldap · 2 Streaming · 39 Sicherung).
+* **Ausserhalb von `make test`:** `scripts/pruef-selkies.mjs` liefert ein Bild,
+  `scripts/pruef-turn.py` ist grün. Beide laufen von Hand, nicht in der Reihe.
 * **Zwei Fallen beim Prüfen, beide selbst gestellt:** Wer während eines Laufs Dienste neu startet,
   bekommt „Der Container-Dienst ist nicht erreichbar" und 16 Fehlschläge, die keine sind. Und wer
   Session-Container aufräumt, deren Datenbankzeile noch `running` ist, lässt den e2e auf einen
@@ -249,7 +248,7 @@ aufgeräumt, deren Datenbankzeile noch `running` war, und mit `pkill -f` die eig
 
 ## 🚀 NÄCHSTE ARBEITSSCHRITTE (BACKLOG FÜR DEN AGENTEN)
 
-1. **Die Befunde aus [`security.md`](security.md) und [`dsgvo.md`](dsgvo.md)** (2026-09-04) — **H1, H2 und H3 sind am 2026-09-04 erledigt** (Netzabsicherung, siehe [`firewall.md`](firewall.md)). Offen bleiben H4 und die mittleren Befunde. Sechzehn technische Befunde, davon vier hoch, und zehn Datenschutzaufgaben. **Die drei mit dem besten Verhältnis von Aufwand zu Wirkung sind an einem Vormittag erledigt**: Zeichensatz mitliefern statt von Google laden, das Aufschalten auf fremde Bildschirme protokollieren, Dateirechte auf Sicherungen und Profilen.
+1. **Die Befunde aus [`security.md`](security.md) und [`dsgvo.md`](dsgvo.md)** (2026-09-04). Erledigt sind **H1, H2, H3** (Netzabsicherung, siehe [`firewall.md`](firewall.md)) sowie **M2 Teil 1, M3, M6 und H4 Schritt 1** — die vier Punkte mit dem besten Verhältnis von Aufwand zu Wirkung: Zeichensatz mitgeliefert statt von Google geladen, das Aufschalten protokolliert, Dateirechte auf Sicherungen und Profilen, Passwortregel in Keycloak. **Als Nächstes**: M1 (ungenutzten Endpunkt löschen), H4 Schritt 2 (den Betroffenen sehen lassen, dass jemand zusieht), M4, dann die Aufbewahrungsfristen aus `dsgvo.md`. Die offene Liste führt [`todo.md`](todo.md).
 2. **Mehrere Hosts (M10)** — braucht eine zweite Maschine. Vom Betreiber auf später gelegt (2026-09-03).
 
 **Am 2026-09-03 erledigt** (was hier bis dahin als 1, 2 und 4 stand):

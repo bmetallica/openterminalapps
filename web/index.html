@@ -34,9 +34,10 @@
     <!-- Faerbt die Browserleiste auf dem Telefon. Derselbe Grund wie im
          Manifest: Das Fenster soll nicht zweifarbig anfangen. -->
     <meta name="theme-color" content="#0B1315" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+    <!-- Die Schriften liegen im Haus (web/public/fonts, eingebunden in
+         styles/app.css). Bis zum 2026-09-04 standen hier drei Zeilen, die sie
+         bei jedem Aufruf von Google holten — und dabei die IP-Adresse jedes
+         Nutzers in die USA schickten. Siehe dsgvo.md §7. -->
   </head>
   <body>
     <div id="root"></div>

@@ -45,10 +45,48 @@ class SharedError(ValueError):
     """Eine Angabe taugt nicht. Die Meldung geht an den Menschen."""
 
 
+# Wie die Wurzeln der Ablagen stehen sollen.
+#
+# **0700 und root.** Darunter liegen die Zuhause von Menschen, ihre Dateien und
+# die Sicherungen; ein Datenbankabzug enthaelt Passwort-Hashes, TOTP-Startwerte
+# und das Kennwort des Verzeichnis-Dienstkontos. Bis zum 2026-09-04 stand das
+# alles auf 0755 — fuer jeden Benutzer des Wirts lesbar (`security.md`, M2).
+#
+# In die Container kommt trotzdem alles hinein: Der Docker-Daemon haengt die
+# Unterverzeichnisse als root ein, und dabei entscheidet der Modus des
+# eingehaengten Verzeichnisses, nicht der seiner Eltern.
+WURZEL_MODUS = 0o700
+
+
+def _wurzel(pfad: Path, *, eigner: int | None = None) -> Path:
+    """Eine Ablagenwurzel anlegen und eng halten.
+
+    `eigner` fuer die Wurzeln, die **selbst** in einen Container eingehaengt
+    werden. Dort zaehlt ihr Modus auch im Container — und der laeuft als 1000.
+    Bleibt so eine Wurzel root:0700, sieht der Arbeitsplatz ein leeres
+    Verzeichnis statt der gemeinsamen Ablage. (Genau so gemessen am
+    2026-09-04: `touch` meldete „Permission denied" statt „Read-only file
+    system", und die Ablage war unlesbar.)
+
+    Wurzeln, von denen nur **Unterverzeichnisse** eingehaengt werden — Profile,
+    eigene Ablagen, Gruppenlaufwerke — brauchen das nicht: Der Docker-Daemon
+    haengt als root ein, und im Container entscheidet dann der Modus des
+    eingehaengten Verzeichnisses.
+    """
+    pfad.mkdir(parents=True, exist_ok=True)
+    try:
+        if eigner is not None:
+            os.chown(pfad, eigner, eigner)
+        pfad.chmod(WURZEL_MODUS)
+    except OSError:
+        pass
+    return pfad
+
+
 def root() -> Path:
-    path = Path(os.environ.get("OTA_SHARED_ROOT", "/srv/ota/shared"))
-    path.mkdir(parents=True, exist_ok=True)
-    return path.resolve()
+    # Wird als Ganzes eingehaengt (nur lesbar) — deshalb gehoert sie 1000.
+    return _wurzel(Path(os.environ.get("OTA_SHARED_ROOT", "/srv/ota/shared")),
+                   eigner=1000).resolve()
 
 
 # Ein Benutzername, wie er als Verzeichnisname taugt. Bewusst enger als das,
@@ -66,8 +104,7 @@ def user_root(username: str) -> Path:
     if not NAME_OK.match(username or ""):
         raise SharedError("Dieser Name taugt nicht als Ablage.")
 
-    base = Path(os.environ.get("OTA_USERFILES_ROOT", "/srv/ota/userfiles"))
-    base.mkdir(parents=True, exist_ok=True)
+    base = _wurzel(Path(os.environ.get("OTA_USERFILES_ROOT", "/srv/ota/userfiles")))
     target = (base / username).resolve()
     # Nach dem Aufloesen pruefen, nicht davor: Ein Symlink faellt sonst nicht
     # auf. Dieselbe Regel wie in `_resolve`.
@@ -80,7 +117,10 @@ def user_root(username: str) -> Path:
             os.chown(target, 1000, 1000)
         except (PermissionError, OSError):
             pass
-        os.chmod(target, 0o755)
+        # 0700, nicht 0755: Es ist die Ablage **eines** Menschen. Im Container
+        # laeuft alles als 1000, also aendert das dort nichts — auf dem Wirt
+        # schon.
+        os.chmod(target, 0o700)
     return target
 
 
@@ -102,8 +142,7 @@ def group_root(group_id: str) -> Path:
     if not NAME_OK.match(group_id or ""):
         raise SharedError("Diese Gruppenkennung taugt nicht als Ablage.")
 
-    base = Path(os.environ.get("OTA_GROUPFILES_ROOT", "/srv/ota/groupfiles"))
-    base.mkdir(parents=True, exist_ok=True)
+    base = _wurzel(Path(os.environ.get("OTA_GROUPFILES_ROOT", "/srv/ota/groupfiles")))
     target = (base / group_id).resolve()
     # Nach dem Aufloesen pruefen, nicht davor — dieselbe Regel wie in
     # `user_root` und `_resolve`.

@@ -30,7 +30,10 @@ Die dritte Grenze ist die schwächste, und die drei schwerwiegendsten Befunde li
 
 Bewertet nach dem, was ein Angreifer damit erreicht — nicht nach dem Aufwand, es zu beheben.
 
-> **Stand 2026-09-04: H1, H2 und H3 sind geschlossen.** Jeder Arbeitsplatz hängt in einem eigenen
+> **Stand 2026-09-04: H1, H2, H3, M2 (Teil 1), M3 und M6 sind geschlossen, H4 zur Hälfte.**
+> Was im Einzelnen erledigt wurde und wie es nachgemessen ist, steht in [`todo.md`](todo.md).
+>
+> **H1, H2 und H3:** Jeder Arbeitsplatz hängt in einem eigenen
 > `internal`-Netz und erreicht die Aussenwelt nur über einen Router-Container; einen Weg daran
 > vorbei gibt es nicht. Nachgewiesen von innen durch `scripts/test-firewall.sh` (19 Prüfungen).
 > Aufbau und Begründung: [`firewall.md`](firewall.md).
@@ -40,13 +43,13 @@ Bewertet nach dem, was ein Angreifer damit erreicht — nicht nach dem Aufwand, 
 | [H1](#h1) | ~~Aus jedem Arbeitsplatz sind Wirt und Firmennetz vollständig erreichbar~~ ✅ behoben | **hoch** |
 | [H2](#h2) | ~~Arbeitsplätze erreichen einander direkt~~ ✅ behoben | **hoch** |
 | [H3](#h3) | ~~Der Agent ist aus jedem Arbeitsplatz erreichbar~~ ✅ behoben | **hoch** |
-| [H4](#h4) | Ein Administrator kann sich unbemerkt auf einen laufenden Bildschirm schalten | **hoch** |
+| [H4](#h4) | Ein Administrator kann sich auf einen laufenden Bildschirm schalten — jetzt protokolliert, aber für den Betroffenen noch unsichtbar | mittel |
 | [M1](#m1) | Ungenutzter Endpunkt am Agent führt beliebige Befehle in beliebigen Containern aus | mittel |
-| [M2](#m2) | Geheimnisse liegen im Klartext in der Datenbank, Sicherungen sind für alle lesbar | mittel |
-| [M3](#m3) | Keycloak hat keine Passwortregel — der Hauptweg ist schwächer als der Nebenweg | mittel |
+| [M2](#m2) | ~~Sicherungen für alle lesbar~~ ✅ behoben · TOTP-Startwerte weiterhin im Klartext | mittel |
+| [M3](#m3) | ~~Keycloak hat keine Passwortregel~~ ✅ behoben | mittel |
 | [M4](#m4) | Keycloaks Verwaltungsoberfläche ist von aussen erreichbar | mittel |
 | [M5](#m5) | `script-src 'unsafe-inline'` entwertet einen Teil der CSP | mittel |
-| [M6](#m6) | Der Zeichensatz kommt bei jedem Aufruf von Google | mittel |
+| [M6](#m6) | ~~Der Zeichensatz kommt bei jedem Aufruf von Google~~ ✅ behoben | mittel |
 | [N1](#n1) | Kennzahlen-Merkmal wird nicht zeitkonstant verglichen | niedrig |
 | [N2](#n2) | Keine Bremse am Reverse Proxy; die Kontosperre lässt sich gegen Kollegen richten | niedrig |
 | [N3](#n3) | Container-Protokolle wachsen unbegrenzt und enthalten IP-Adressen | niedrig |
@@ -155,7 +158,11 @@ und je Anlage einzigartig halten (`make setup` erzeugt es), und bei jedem Verdac
 
 ---
 
-### H4 · Ein Administrator kann sich unbemerkt aufschalten {#h4}
+### H4 · Ein Administrator kann sich aufschalten {#h4}
+
+> **Stand 2026-09-04: Schritt 1 von 3 ist gebaut** — das Aufschalten hinterlässt eine Spur.
+> Sichtbar für den Betroffenen ist es weiterhin nicht; die Schwere sinkt damit von hoch auf
+> mittel, der Befund bleibt offen.
 
 **Im Quelltext**, `api/ota/security.py`:
 
@@ -168,14 +175,19 @@ Die Unterscheidung zwischen „alle Sitzungen sehen" (`sessions.view_all`) und �
 Bildschirm sitzen" ist sauber gezogen und war ein bewusster Fix — ein Supporter mit `view_all`
 kommt **nicht** heran. Ein voller Administrator kommt heran.
 
-**Was fehlt**: Es gibt **keinen Protokolleintrag** dafür. Nachgesehen in
-`api/ota/routers/internal.py` (kein `audit.record`) und in der Datenbank:
+~~**Was fehlt**: Es gibt **keinen Protokolleintrag** dafür.~~ Seit dem 2026-09-04 schreibt
+`api/ota/routers/internal.py` einen Eintrag `session.attached`, sobald Betrachter und Eigentümer
+verschieden sind — mit dem Namen des Eigentümers, damit im Protokoll steht, *wem* zugesehen wurde:
 
 ```sql
-select action, count(*) from audit_log where action like '%attach%'; → leer
+select action, count(*) from audit_log where action like '%attach%'; → session.attached | 1
 ```
 
-Und der Mensch am Bildschirm merkt nichts davon.
+Die Rechteprüfung läuft vor **jeder** Anfrage der Sitzung, auch vor jedem Bild. Ein Eintrag je
+Anfrage wäre kein Protokoll, sondern Rauschen — deshalb ein Eintrag je Viertelstunde und Paar
+(`AUFSCHALT_ABSTAND`). Der Blick auf den eigenen Bildschirm erzeugt keinen Eintrag.
+
+Was bleibt: **Der Mensch am Bildschirm merkt nichts davon.**
 
 **Was das heisst.** Ein Administrator kann jederzeit still auf dem offenen Terminal, dem
 Passwortspeicher und der Mailanwendung eines Kollegen mitlesen und mitarbeiten. Technisch ist das
@@ -184,8 +196,7 @@ deshalb aber nicht sein, und aus Sicht des Beschäftigtendatenschutzes darf es d
 (siehe [`dsgvo.md`](dsgvo.md), Abschnitt „Aufschalten").
 
 **Empfehlung**, aufsteigend:
-1. **Protokollieren.** Ein Eintrag `session.attached` in `/api/internal/authz`, wenn Betrachter und
-   Eigentümer verschieden sind. Zwei Zeilen Code, und der Vorgang ist nachvollziehbar.
+1. ~~**Protokollieren.**~~ ✅ am 2026-09-04 gebaut, drei Prüfungen in `scripts/test-authz.sh`.
 2. **Sichtbar machen.** Ein Streifen im Bild der betroffenen Sitzung, solange jemand Fremdes
    zusieht.
 3. **Zustimmung einholen.** Fernhilfe auf Anfrage statt auf Zuruf. Der Quelltext nennt das seit
@@ -214,10 +225,13 @@ Arbeitsplatz laufen über eigene, engere Wege.
 
 ### M2 · Geheimnisse im Klartext, Sicherungen für alle lesbar {#m2}
 
+> **Stand 2026-09-04: Die Dateirechte sind gesetzt, das AD-Kennwort gibt es nicht mehr.**
+> Offen bleibt allein der TOTP-Startwert im Klartext (Empfehlung 3).
+
 Im Klartext in der Datenbank:
 
-* `identity_configs.bind_password` — das Dienstkonto zum Verzeichnis (nur Leserecht, aber ein
-  gültiges AD-Konto)
+* ~~`identity_configs.bind_password` — das Dienstkonto zum Verzeichnis.~~ Die Tabelle ist mit dem
+  alten Verzeichnisweg entfallen (Migration `a1c4e7b90f21`); das Kennwort liegt nirgends mehr.
 * `users.totp_secret` — der Startwert des zweiten Faktors. Wer ihn hat, erzeugt gültige Codes.
   (Die **Rückfallcodes** sind gehasht — das ist richtig gemacht.)
 
@@ -230,22 +244,30 @@ drwxr-xr-x root root  /srv/ota/profiles
 drwxrwxrwx bmetallica  /srv/ota/profiles/7c1185e1-…/user     ← 777
 ```
 
+Seit dem 2026-09-04 stehen dieselben Pfade auf `0700` beziehungsweise `0600`, und der Agent setzt
+das beim Anlegen mit (`agent/otaagent/shared.py`, `backup.py`, `main.py`). **Eine Ausnahme mit
+Grund**: Die gemeinsame Ablage `/srv/ota/shared` wird als **Ganzes** in die Arbeitsplätze
+eingehängt, dort gilt ihr Modus auch im Container — sie steht deshalb auf `0700` und gehört der
+UID 1000, sonst sähe jeder Arbeitsplatz ein leeres Verzeichnis.
+
 **Was das heisst.** Ein Datenbankabzug enthält Passwort-Hashes, TOTP-Startwerte und das
 AD-Kennwort — und ist für **jeden** Benutzer des Wirts lesbar. Zwei Profilverzeichnisse stehen auf
 777, also für jeden auch beschreibbar. Zusätzlich laufen **alle** Sitzungen als dieselbe UID 1000
 auf dem Wirt: Die Trennung der Zuhause ist eine Frage der Einhängung, nicht der Dateirechte.
 
 **Empfehlung.**
-1. `chmod 0700` auf `/srv/ota/{profiles,backups,userfiles,groupfiles}` und `0600` auf die Archive;
-   der Agent setzt die Rechte beim Anlegen mit.
-2. Die beiden 777-Verzeichnisse geraderücken.
+1. ~~`chmod 0700` … und `0600` auf die Archive~~ ✅ am 2026-09-04 erledigt.
+2. ~~Die beiden 777-Verzeichnisse geraderücken.~~ ✅ erledigt; jedes Zuhause steht auf `0700`.
 3. Mittelfristig: TOTP-Startwerte und `bind_password` mit einem Schlüssel aus der `.env`
-   verschlüsseln. Das schützt nicht gegen einen kompromittierten Wirt, aber gegen ein abhanden
-   gekommenes Sicherungsarchiv — und genau das ist der wahrscheinlichere Fall.
+   verschlüsseln — nach dem Wegfall der `identity_configs` betrifft das nur noch den
+   TOTP-Startwert. Das schützt nicht gegen einen kompromittierten Wirt, aber gegen ein abhanden
+   gekommenes Sicherungsarchiv — und genau das ist der wahrscheinlichere Fall. **Offen.**
 
 ---
 
 ### M3 · Keycloak hat keine Passwortregel {#m3}
+
+> **Stand 2026-09-04: behoben.**
 
 Abgefragt am Realm `ota`:
 
@@ -260,8 +282,15 @@ Länge. OTAs eigene, lokale Anmeldung verlangt dagegen mindestens zwölf Zeichen
 (`api/ota/security.py`). Damit ist der **Hauptweg** schwächer als der Nebenweg, der nur noch für
 den Notzugang gedacht ist.
 
-**Empfehlung.** Im Realm eine Regel setzen, mindestens `length(12)`, und die Einrichtung in
-`scripts/keycloak-init.sh` mitnehmen, damit sie nicht bei der nächsten Anlage wieder fehlt.
+**Behoben** am 2026-09-04. Der Realm trägt jetzt
+
+```
+  passwordPolicy: length(12) and notUsername(undefined) and notEmail(undefined)
+```
+
+— dieselbe Untergrenze, die OTAs eigene Anmeldung seit jeher verlangt, dazu die beiden
+naheliegenden Verbote. `scripts/keycloak-init.sh` setzt die Regel bei der Anlage **und** bei einem
+Realm, den es schon gibt; über `OTA_KC_PASSWORTREGEL` lässt sie sich verschärfen.
 
 ---
 
@@ -304,7 +333,9 @@ eigentliche Verteidigung.
 
 ### M6 · Der Zeichensatz kommt von Google {#m6}
 
-`web/index.html`:
+> **Stand 2026-09-04: behoben.**
+
+`web/index.html` **bis** zum 2026-09-04:
 
 ```html
 <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -316,9 +347,12 @@ ist das eine fremde Herkunft im Ladepfad der Oberfläche und eine Abhängigkeit 
 einem Firmenproxy oder offline lädt die Seite langsamer und sieht anders aus. Datenschutzrechtlich
 ist es der schwerwiegendere Punkt; er steht in [`dsgvo.md`](dsgvo.md).
 
-**Empfehlung.** Die beiden Schriften mitliefern (`web/public/fonts/`, `@font-face`), die beiden
-Google-Herkünfte aus der CSP streichen. Das ist eine halbe Stunde Arbeit und löst beide Probleme
-auf einmal.
+**Behoben** am 2026-09-04. Beide Schriften liegen jetzt unter `web/public/fonts/` — Archivo als
+variable Schrift, weil die Gestaltung die Breitenachse benutzt, dazu IBM Plex Mono, je in den
+Bereichen latin und latin-ext, zusammen 256 KB. Die `@font-face`-Regeln stehen in `app.css`, die
+beiden Google-Herkünfte sind aus `index.html` und aus der CSP verschwunden. Im Browser
+nachgemessen: beide Schriften laden echt (`document.fonts.check`), und im Netzwerkmitschnitt steht
+**keine einzige Anfrage an einen fremden Host**.
 
 ---
 
@@ -392,7 +426,7 @@ Damit das Bild stimmt — das hier ist geprüft und trägt:
   stehen auf `0600`.
 * **Container-Härtung für Nicht-Administratoren**: `cap_drop: ALL`, `no-new-privileges`, kein
   `SYS_ADMIN`, `pids_limit`, Speicher- und Kerngrenze.
-* **434 automatische Prüfungen**, davon 226 zur Autorisierung — sie prüfen unter anderem
+* **434 automatische Prüfungen**, davon 229 zur Autorisierung — sie prüfen unter anderem
   nachweisbar, dass ein normaler Nutzer nichts Administratives tun und an keinem fremden Bildschirm
   sitzen kann.
 
@@ -431,11 +465,14 @@ Schritt und gehört in den Betrieb, nicht in eine einmalige Durchsicht.
 
 ## Reihenfolge, wenn nur begrenzt Zeit ist
 
-1. **H4 protokollieren** — zwei Zeilen, und das Aufschalten ist nachvollziehbar. Auch die
-   dringendste Zeile in [`dsgvo.md`](dsgvo.md).
-2. **M1 löschen** — ein Endpunkt weniger, den niemand braucht.
-3. **M2, Teil 1** — Dateirechte auf Sicherungen und Profile. Ein `chmod`, sofort wirksam.
-4. **M3** — Passwortregel in Keycloak.
-5. **M6** — Zeichensatz mitliefern. Löst zugleich den grössten DSGVO-Punkt.
+1. ~~**H4 protokollieren**~~ ✅ 2026-09-04.
+2. **M1 löschen** — ein Endpunkt weniger, den niemand braucht. **Offen.**
+3. ~~**M2, Teil 1** — Dateirechte auf Sicherungen und Profile.~~ ✅ 2026-09-04.
+4. ~~**M3** — Passwortregel in Keycloak.~~ ✅ 2026-09-04.
+5. ~~**M6** — Zeichensatz mitliefern.~~ ✅ 2026-09-04; damit ist auch der grösste DSGVO-Punkt erledigt.
 
 ~~H1, H2 und H3~~ sind am 2026-09-04 erledigt — siehe [`firewall.md`](firewall.md).
+
+**Als Nächstes**, in dieser Reihenfolge: M1 (Endpunkt löschen), H4 Schritt 2 (den Betroffenen
+sehen lassen, dass jemand zusieht), M4 (Keycloaks Verwaltung nach innen legen), M2 Schritt 3
+(TOTP-Startwerte verschlüsseln). Die offene Liste führt [`todo.md`](todo.md).

@@ -59,6 +59,25 @@ FastAPI, Uvicorn, SQLAlchemy, Alembic, Pydantic (alle MIT bzw. BSD),
 React (MIT), Vite (MIT), TypeScript (Apache-2.0) und deren Abhängigkeiten.
 Maßgeblich ist der jeweilige Stand in `web/package-lock.json`.
 
+### Schriften — mitgeliefert, nicht nachgeladen
+
+| Schrift | Lizenz | Wo |
+|---|---|---|
+| **Archivo** (variabel, wdth/wght) | SIL Open Font License 1.1 | `web/public/fonts/archivo-*.woff2` |
+| **IBM Plex Mono** (400/500/600) | SIL Open Font License 1.1 | `web/public/fonts/ibm-plex-mono-*.woff2` |
+
+Beide liegen im Repository und werden mit ausgeliefert. Die OFL erlaubt das
+ausdrücklich, auch eingebettet in Software, solange die Schriften nicht
+einzeln verkauft werden und die Lizenz mitgeht — sie liegt je Schrift daneben
+(`web/public/fonts/OFL-Archivo.txt`, `OFL-IBMPlexMono.txt`).
+
+**Warum sie überhaupt hier liegen:** Bis zum 2026-09-04 lud die Oberfläche sie
+bei jedem Aufruf von Google. Dabei ging die IP-Adresse jedes Nutzers an Google
+LLC in den USA — ohne Einwilligung und ohne Notwendigkeit. Genau dafür hat das
+LG München I am 20.01.2022 (3 O 17493/20) Schadensersatz zugesprochen; siehe
+[`dsgvo.md`](dsgvo.md) §7. Mitgeliefert werden die Bereiche **latin** und
+**latin-ext**; alles Weitere fällt auf die Systemschrift zurück.
+
 > Die Aufstellung nennt die unmittelbaren Abhängigkeiten. Die vollständige,
 > transitive Liste steht in den Lock-Dateien (`api/requirements.txt`,
 > `web/package-lock.json`) und ist dort auch die verlässlichere Quelle.

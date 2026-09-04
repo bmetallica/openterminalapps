@@ -15,7 +15,7 @@ key, the same clipboard.
 Alongside that, single applications can run as throwaway containers, and existing Kasm images and
 whole registries can be attached — as an addition, not as the foundation.
 
-> **Status:** running and in use. 431 automated checks, 107 of them in a real browser. What is still
+> **Status:** running and in use. 434 automated checks, 107 of them in a real browser. What is still
 > missing is listed openly in [roadmap.md](roadmap.md) — nothing there is dressed up.
 >
 > The documentation is written in German. This file is the exception.
@@ -186,7 +186,7 @@ were.
 make test
 ```
 
-**431 checks in seven suites**, each one setting up its own preconditions:
+**434 checks in seven suites**, each one setting up its own preconditions:
 
 | Suite | Checks |
 |---|---|

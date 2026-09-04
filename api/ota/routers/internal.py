@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import re
+import time
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session as DbSession
 
+from .. import audit
 from ..config import settings
 from ..db import get_db
 from ..models import Session as SessionModel, User
@@ -15,6 +18,45 @@ from ..security import as_uuid, may_attach_to_session, read_token
 router = APIRouter(prefix="/api/internal", tags=["internal"])
 
 _SESSION_PATH = re.compile(r"^/s/([0-9a-fA-F-]{36})(/|$)")
+
+# Wann zuletzt vermerkt wurde, dass jemand auf einem fremden Bildschirm sass.
+#
+# **Warum gedrosselt.** Diese Pruefung laeuft vor *jedem* Zugriff auf
+# /s/<id>/… — Bild, Zwischenablage, jede Datei des Clients. Ein Eintrag je
+# Anfrage waere kein Protokoll, sondern Rauschen, und das Protokoll waere in
+# Minuten unbrauchbar. Ein Eintrag je Viertelstunde und Paar sagt dasselbe:
+# **wer wann auf wessen Bildschirm sass.**
+_AUFGESCHALTET: dict[tuple[uuid.UUID, uuid.UUID], float] = {}
+AUFSCHALT_ABSTAND = 900.0
+
+
+def _aufschalten_vermerken(db: DbSession, sess: SessionModel, betrachter: User,
+                           request: Request) -> None:
+    """Vermerkt, dass jemand einen fremden Bildschirm geoeffnet hat.
+
+    Technisch laesst sich das kaum verhindern — wer am Docker-Host sitzt,
+    erreicht dasselbe ohnehin. **Unsichtbar muss es deshalb nicht sein.** Bis
+    zum 2026-09-04 war es genau das: kein Eintrag, keine Anzeige, keine Spur
+    (`security.md`, H4). Aus Sicht des Beschaeftigtendatenschutzes ist das der
+    Vorgang mit dem groessten Schadenspotenzial in dieser Anlage — ein
+    Administrator sieht das offene Terminal, den Passwortspeicher und die
+    Mailanwendung eines Kollegen.
+    """
+    schluessel = (betrachter.id, sess.id)
+    jetzt = time.monotonic()
+    if jetzt - _AUFGESCHALTET.get(schluessel, 0.0) < AUFSCHALT_ABSTAND:
+        return
+    _AUFGESCHALTET[schluessel] = jetzt
+    # Alte Eintraege wegwerfen, damit die Ablage nicht mit jeder Sitzung waechst.
+    for k, t in list(_AUFGESCHALTET.items()):
+        if jetzt - t > AUFSCHALT_ABSTAND * 4:
+            _AUFGESCHALTET.pop(k, None)
+
+    eigner = db.get(User, sess.user_id)
+    audit.record(db, "session.attached", actor=betrachter, object_type="session",
+                 object_id=str(sess.id), request=request,
+                 eigner=eigner.username if eigner else str(sess.user_id))
+    db.commit()
 
 
 @router.get("/authz")
@@ -51,6 +93,9 @@ def authz(request: Request, db: DbSession = Depends(get_db)) -> Response:
     # nicht das Recht, an einem fremden Bildschirm zu sitzen.
     if not sess or not may_attach_to_session(sess, user):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Diese Session gehört dir nicht")
+
+    if sess.user_id != user.id:
+        _aufschalten_vermerken(db, sess, user, request)
 
     return Response(status_code=status.HTTP_200_OK)
 

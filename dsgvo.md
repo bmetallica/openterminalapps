@@ -22,8 +22,8 @@ Anlage betreibt.**
 
 Zwei Einschränkungen dazu:
 
-* **Der Zeichensatz kommt von Google** (siehe Abschnitt 7). Das ist der einzige Datenfluss aus der
-  Anlage heraus — und ausgerechnet einer in ein Drittland.
+* ~~**Der Zeichensatz kommt von Google**~~ — am 2026-09-04 behoben (siehe Abschnitt 7). Damit
+  gibt es beim Aufruf der Oberfläche **keinen** Datenfluss aus der Anlage heraus mehr.
 * **Container-Images werden aus fremden Registries geholt** (Docker Hub, Kasm). Dabei fliessen
   keine personenbezogenen Daten heraus; es fliesst nur die Information, dass diese Anlage ein
   bestimmtes Image lädt. Kein Auftragsverarbeitungsverhältnis, aber ein Punkt für das
@@ -226,22 +226,27 @@ jemand sie dafür benutzen will:
 
 1. **Das Protokoll.** Anmeldezeiten, Sitzungsdauer, gestartete Anwendungen, IP-Adressen. Daraus
    lässt sich ablesen, wer wann wie lange gearbeitet hat.
-2. **Das Aufschalten auf einen laufenden Bildschirm.** Ein Administrator kann jede Sitzung öffnen —
-   **ohne Protokolleintrag und ohne dass der Mensch davor es merkt** ([H4](security.md#h4)).
-   Gemessen: Es gibt keinen einzigen Eintrag dazu in `audit_log`, weil keiner geschrieben wird.
+2. **Das Aufschalten auf einen laufenden Bildschirm.** Ein Administrator kann jede Sitzung öffnen.
+   Seit dem 2026-09-04 **hinterlässt das eine Spur** (`session.attached`, mit dem Namen des
+   Eigentümers); **dass jemand zusieht, merkt der Mensch davor weiterhin nicht**
+   ([H4](security.md#h4)).
 3. **Die Kennzahlen.** `/metrics` nennt keine Namen, zeigt aber, wie viele Menschen wann arbeiten.
 
 👉 **Empfehlung:** Eine Betriebsvereinbarung, die drei Dinge festhält — welche Daten protokolliert
 werden, wie lange sie bleiben, und unter welchen Bedingungen sich jemand aufschalten darf. Für den
-dritten Punkt ist die technische Lösung schon beschrieben: protokollieren, sichtbar machen,
-Zustimmung einholen ([H4](security.md#h4)). **Ohne Protokoll über das Aufschalten ist jede
-Vereinbarung dazu unüberprüfbar.**
+dritten Punkt ist die technische Lösung in drei Stufen beschrieben: protokollieren, sichtbar
+machen, Zustimmung einholen ([H4](security.md#h4)). Die erste Stufe steht seit dem 2026-09-04 —
+**damit ist eine Vereinbarung über das Aufschalten überhaupt erst überprüfbar.**
 
 ---
 
-## 7 · Drittlandübermittlung: der Zeichensatz von Google
+## 7 · Drittlandübermittlung: der Zeichensatz von Google — behoben
 
-`web/index.html` lädt bei **jedem** Aufruf der Oberfläche zwei Schriften von Google:
+> **Stand 2026-09-04: erledigt.** Der Abschnitt bleibt stehen, weil er die einzige
+> Drittlandübermittlung dokumentiert, die es in dieser Anlage je gab.
+
+`web/index.html` lud **bis** zum 2026-09-04 bei jedem Aufruf der Oberfläche zwei Schriften von
+Google:
 
 ```html
 <link href="https://fonts.googleapis.com/css2?family=Archivo…" rel="stylesheet" />
@@ -255,11 +260,16 @@ Das ist der bekannteste vermeidbare Datenschutzfehler im Web. Das **LG München 
 serienmässiger Abmahnungen. Dass OTA intern läuft, verkleinert den Kreis der Betroffenen — es macht
 die Übermittlung nicht rechtmässig.
 
-👉 **Das ist der Punkt mit dem besten Verhältnis von Aufwand zu Wirkung in diesem ganzen Dokument.**
-Die beiden Schriften mitliefern (`web/public/fonts/`, `@font-face` in `app.css`), die beiden
-Google-Herkünfte aus der CSP streichen — eine halbe Stunde. Danach gibt es **keinen** Datenfluss
-aus dieser Anlage heraus, und die Oberfläche funktioniert auch offline und hinter einem
-Firmenproxy unverändert.
+✅ **Behoben am 2026-09-04.** Beide Schriften liegen jetzt unter `web/public/fonts/` (Archivo als
+variable Schrift, IBM Plex Mono, je latin und latin-ext, zusammen 256 KB), die `@font-face`-Regeln
+stehen in `app.css`, und die beiden Google-Herkünfte sind aus `index.html` **und** aus der CSP
+verschwunden. Im Browser nachgemessen: beide Schriften laden echt, und im Netzwerkmitschnitt steht
+keine einzige Anfrage an einen fremden Host.
+
+Damit gibt es beim Aufruf der Oberfläche **keinen** Datenfluss aus dieser Anlage heraus, und sie
+funktioniert offline und hinter einem Firmenproxy unverändert. Die Lizenzen der beiden Schriften
+(OFL 1.1, Weitergabe ausdrücklich erlaubt) stehen in
+[`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).
 
 ---
 
@@ -272,16 +282,18 @@ Was vorhanden ist — die Nachweise stehen in [`security.md`](security.md):
 | **Verschlüsselung der Übertragung** | ✅ TLS 1.2 als Untergrenze, gemessen; TLS 1.1 wird abgelehnt |
 | **Verschlüsselung im Ruhezustand** | ❌ Weder Datenbank noch Zuhause noch Sicherungen sind verschlüsselt. Bei einer gestohlenen Platte ist alles lesbar. |
 | **Zugangskontrolle** | ✅ Keycloak, zweiter Faktor möglich, Kontosperre nach 8 Fehlversuchen, Argon2 |
-| **Zugriffskontrolle** | ✅ Rechte je Gruppe, serverseitig an jedem Endpunkt geprüft; 226 automatische Prüfungen genau dazu |
-| **Trennungskontrolle** | ⚠️ Zwischen Nutzern durch getrennte Einhängungen — aber **alle Container laufen als dieselbe UID 1000**, und sie erreichen einander im Netz ([H2](security.md#h2)) |
-| **Eingabekontrolle** | ✅ Protokoll über Verwaltungsvorgänge — ⚠️ **ausser dem Aufschalten** |
+| **Zugriffskontrolle** | ✅ Rechte je Gruppe, serverseitig an jedem Endpunkt geprüft; 229 automatische Prüfungen genau dazu |
+| **Trennungskontrolle** | ⚠️ Im Netz seit dem 2026-09-04 vollständig: jeder Arbeitsplatz in einem eigenen Netz, untereinander nicht erreichbar ([H2](security.md#h2)). Im Dateisystem durch getrennte Einhängungen und `0700` — aber **alle Container laufen als dieselbe UID 1000** |
+| **Eingabekontrolle** | ✅ Protokoll über Verwaltungsvorgänge, seit dem 2026-09-04 **einschliesslich des Aufschaltens** |
 | **Verfügbarkeit und Wiederherstellbarkeit** | ✅ Sicherung und Rückspielung sind gebaut **und geprüft** (39 automatische Prüfungen) |
 | **Belastbarkeit** | ✅ Kontingente je Nutzer, Untergrenze für freien Plattenplatz, Leerlauf-Aufräumer |
 | **Regelmässige Überprüfung** | ⚠️ 434 automatische Prüfungen bei jeder Änderung — aber kein Abgleich gegen Schwachstellenlisten |
 
-**Die grösste Lücke in dieser Tabelle ist die zweite Zeile.** Ein Datenbankabzug enthält
-Passwort-Hashes, TOTP-Startwerte und das AD-Kennwort — und liegt heute für jeden Benutzer des
-Wirts lesbar da ([M2](security.md#m2)). Das ist zugleich der billigste Punkt: ein `chmod`.
+**Die grösste Lücke in dieser Tabelle ist die zweite Zeile** — und sie ist jetzt die einzige
+grosse. Ein Datenbankabzug enthält weiterhin Passwort-Hashes und TOTP-Startwerte (das AD-Kennwort
+ist mit dem alten Verzeichnisweg entfallen). Seit dem 2026-09-04 liegt er wenigstens nicht mehr
+offen: `0600` für die Archive, `0700` für die Verzeichnisse ([M2](security.md#m2)). Gegen eine
+gestohlene Platte hilft das nicht — dafür braucht es Verschlüsselung im Ruhezustand.
 
 ---
 
@@ -321,9 +333,9 @@ Nach Wirkung geordnet, nicht nach Aufwand.
 
 | # | Aufgabe | Aufwand | Warum |
 |---|---|---|---|
-| 1 | **Zeichensatz mitliefern**, Google aus der CSP streichen | ½ Stunde | Beseitigt die einzige Drittlandübermittlung (Abschnitt 7) |
-| 2 | **Aufschalten protokollieren** | 2 Zeilen | Ohne das ist keine Betriebsvereinbarung überprüfbar (Abschnitt 6) |
-| 3 | **Dateirechte** auf Sicherungen und Profile (`0700`/`0600`) | ein `chmod` | Datenbankabzüge sind heute für alle lesbar (Abschnitt 8) |
+| ~~1~~ | ~~**Zeichensatz mitliefern**, Google aus der CSP streichen~~ | ✅ 2026-09-04 | Die einzige Drittlandübermittlung ist beseitigt (Abschnitt 7) |
+| ~~2~~ | ~~**Aufschalten protokollieren**~~ | ✅ 2026-09-04 | `session.attached`, gedrosselt auf einen Eintrag je Viertelstunde und Paar (Abschnitt 6) |
+| ~~3~~ | ~~**Dateirechte** auf Sicherungen und Profile (`0700`/`0600`)~~ | ✅ 2026-09-04 | Datenbankabzüge stehen jetzt auf `0600`, die Verzeichnisse auf `0700` (Abschnitt 8) |
 | 4 | **Aufbewahrungsfristen** für `audit_log` und Container-Protokolle | ½ Tag | Art. 5 Abs. 1 lit. e (Abschnitt 4) |
 | 5 | **Datenschutzhinweis** als Kapitel im Handbuch | 1 Stunde | Art. 13 (Abschnitt 5) |
 | 6 | **„Konto endgültig entfernen"** — Zuhause, Ablagen, Keycloak, Protokollnamen | 1 Tag | Art. 17 (Abschnitt 4.1) |
@@ -332,8 +344,10 @@ Nach Wirkung geordnet, nicht nach Aufwand.
 | 9 | **Schwellwertanalyse** dokumentieren | 1 Seite | Art. 35 (Abschnitt 9) |
 | 10 | **Verschlüsselung im Ruhezustand** prüfen | Konzept | Abschnitt 8, zweite Zeile |
 
-Die Punkte 1 bis 3 sind an einem Vormittag erledigt und beheben die drei Befunde, bei denen der
-Abstand zwischen Aufwand und Wirkung am grössten ist.
+Die Punkte 1 bis 3 sind am 2026-09-04 erledigt. Der nächste Punkt mit dem besten Verhältnis von
+Aufwand zu Wirkung ist Nummer 4: **Aufbewahrungsfristen**. Solange `audit_log` unbegrenzt wächst,
+sammelt die Anlage Verhaltensdaten ohne Ende — und seit dem 2026-09-04 auch die Einträge darüber,
+wer wem zugesehen hat.
 
 ---
 

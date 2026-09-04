@@ -7,14 +7,14 @@ aufgefallen; wo es herkommt, steht dabei. Nach Wirkung geordnet, nicht nach Aufw
 
 ---
 
-## Zuerst — kleiner Aufwand, grosse Wirkung
+## Erledigt am 2026-09-04
 
-| # | Was | Aufwand | Woher |
-|---|---|---|---|
-| 1 | **Zeichensatz mitliefern** statt von Google laden. Beseitigt die einzige Übermittlung in ein Drittland und macht die Oberfläche offline- und proxyfest. | ½ Stunde | [`dsgvo.md`](dsgvo.md) §7, [`security.md`](security.md#m6) |
-| 2 | **Aufschalten auf fremde Bildschirme protokollieren.** Ein Administrator kann heute jede laufende Sitzung öffnen — ohne Eintrag, ohne dass der Mensch davor es merkt. | 2 Zeilen | [`security.md`](security.md#h4) |
-| 3 | **Dateirechte** auf `/srv/ota/{profiles,backups,userfiles,groupfiles}` (0700) und auf die Archive (0600). Ein Datenbankabzug mit Passwort-Hashes, TOTP-Startwerten und dem AD-Kennwort liegt heute auf 0644. | ein `chmod` | [`security.md`](security.md#m2) |
-| 4 | **Passwortregel in Keycloak** setzen (`length(12)`), und in `scripts/keycloak-init.sh` mitnehmen. Der Hauptweg ist sonst schwächer als der Notzugang. | ½ Stunde | [`security.md`](security.md#m3) |
+| # | Was | Wie es ausging |
+|---|---|---|
+| 1 | **Zeichensatz mitgeliefert** statt von Google geladen | Archivo (variabel, die Gestaltung braucht die Breitenachse) und IBM Plex Mono, Bereiche latin und latin-ext, 256 KB. Im Browser nachgemessen: beide laden echt, **keine einzige Anfrage an einen fremden Host**. Google ist aus `index.html` und aus der CSP verschwunden. |
+| 2 | **Aufschalten protokolliert** | Eintrag `session.attached` mit dem Namen des Eigentümers. Gedrosselt auf einen Eintrag je Viertelstunde und Paar — die Rechteprüfung läuft vor *jedem* Zugriff, ein Eintrag je Anfrage wäre Rauschen. Der eigene Bildschirm erzeugt keinen Eintrag. Drei neue Prüfungen. |
+| 3 | **Dateirechte** | `/srv/ota/{profiles,backups,userfiles,groupfiles,shared}` auf 0700, Archive und Datenbankabzüge auf 0600, jedes Zuhause auf 0700 — zwei standen auf **777**. Der Agent setzt es beim Anlegen mit. **Eine Falle dabei**: Die gemeinsame Ablage wird als Ganzes eingehängt, dort zählt ihr Modus auch im Container — sie gehört jetzt dem Container-Nutzer, sonst sieht der Arbeitsplatz ein leeres Verzeichnis. |
+| 4 | **Passwortregel in Keycloak** | `length(12) and notUsername and notEmail` — dieselbe Untergrenze, die OTAs eigene Anmeldung seit jeher verlangt. In `scripts/keycloak-init.sh` mitgenommen, idempotent, und auch für einen Realm, den es schon gibt. |
 
 ---
 

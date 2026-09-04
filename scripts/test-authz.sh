@@ -2115,6 +2115,62 @@ STATE=$(curl -s --cacert "$CA" -b "$TMP/user.jar" "$BASE/api/auth/me" | jqp "d.g
                        || bad "Zweiter Faktor blieb an"
 
 # --------------------------------------------------------------------------
+# Aufschalten auf einen fremden Bildschirm
+#
+# Technisch laesst es sich kaum verhindern — wer am Docker-Host sitzt,
+# erreicht dasselbe. Unsichtbar darf es trotzdem nicht sein: Es ist der
+# Vorgang mit dem groessten Schadenspotenzial in dieser Anlage.
+#
+# **Geprueft wird ueber den echten Weg**, also ueber `/s/<id>/` durch Traefik.
+# Der Versuch, die Rechtepruefung direkt aufzurufen und `X-Forwarded-Uri`
+# selbst mitzugeben, schlaegt fehl: Traefik setzt diesen Kopf fuer jede Anfrage
+# neu, und die Pruefung sieht dann ihren eigenen Pfad statt des Bildschirms.
+echo
+echo "Aufschalten hinterlässt eine Spur"
+
+VORLAGE_AUF=$(api "$TMP/admin.jar" "$BASE/api/templates" | jqp "
+next((t['id'] for t in d if t['mode'] == 'workspace'), '')")
+SID_FREMD=$(api "$TMP/user.jar" -X POST "$BASE/api/sessions" \
+  -H 'Content-Type: application/json' -d "{\"template_id\":\"$VORLAGE_AUF\"}" \
+  | jqp "d.get('id','')")
+
+if [ -z "$SID_FREMD" ]; then
+  bad "Für diese Prüfung liess sich keine fremde Sitzung starten"
+else
+  sleep 6
+  VORHER=$(api "$TMP/admin.jar" "$BASE/api/admin/audit?limit=300" | jqp "
+sum(1 for e in d if e['action'] == 'session.attached')")
+
+  # Der eigene Bildschirm darf **keinen** Eintrag erzeugen — sonst stuende bei
+  # jedem Blick auf die eigene Sitzung etwas im Protokoll, und die Eintraege,
+  # auf die es ankommt, gingen darin unter.
+  SID_EIGEN=$(laufende_session "$VORLAGE_AUF")
+  [ -n "$SID_EIGEN" ] && code "$TMP/admin.jar" "$BASE/s/$SID_EIGEN/" >/dev/null
+  sleep 1
+  MITTE=$(api "$TMP/admin.jar" "$BASE/api/admin/audit?limit=300" | jqp "
+sum(1 for e in d if e['action'] == 'session.attached')")
+  expect "$VORHER" "$MITTE" "Der eigene Bildschirm erzeugt keinen Eintrag"
+
+  code "$TMP/admin.jar" "$BASE/s/$SID_FREMD/" >/dev/null
+  sleep 1
+  NACHHER=$(api "$TMP/admin.jar" "$BASE/api/admin/audit?limit=300" | jqp "
+sum(1 for e in d if e['action'] == 'session.attached')")
+  [ "${NACHHER:-0}" -gt "${MITTE:-0}" ] \
+    && ok "Ein fremder Bildschirm steht im Protokoll" \
+    || bad "Das Aufschalten auf einen fremden Bildschirm hinterliess keine Spur"
+
+  # Und der Eintrag sagt, **wessen** Bildschirm es war — sonst steht dort nur,
+  # dass jemand irgendwo war.
+  api "$TMP/admin.jar" "$BASE/api/admin/audit?limit=300" | jqp "
+next((e['detail'].get('eigner','') for e in d if e['action'] == 'session.attached'), '')" \
+    | grep -q "$TEST_USER" \
+    && ok "Im Eintrag steht, wem der Bildschirm gehört" \
+    || bad "Der Eintrag nennt den Eigentümer nicht"
+
+  api "$TMP/user.jar" -X DELETE "$BASE/api/sessions/$SID_FREMD" >/dev/null 2>&1
+fi
+
+# --------------------------------------------------------------------------
 # Die Marke
 #
 # Zwei Fragen, und nur die beiden: Kommt jeder an das Gesicht der Anlage heran

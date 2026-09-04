@@ -94,6 +94,13 @@ def stamp() -> str:
 
 def ensure_root() -> None:
     BACKUP_ROOT.mkdir(parents=True, exist_ok=True)
+    # Nur root. Ein Datenbankabzug enthaelt Passwort-Hashes, TOTP-Startwerte
+    # und das Kennwort des Verzeichnis-Dienstkontos; bis zum 2026-09-04 lag er
+    # fuer jeden Benutzer des Wirts lesbar da (`security.md`, M2).
+    try:
+        BACKUP_ROOT.chmod(0o700)
+    except OSError:
+        pass
 
 
 def root_info() -> dict[str, Any]:
@@ -180,6 +187,12 @@ def _tar_directory(source: Path, target: Path) -> tuple[int, int, list[str]]:
             raise RuntimeError(f"Komprimierung fehlgeschlagen: {err[:300]}")
 
     tmp.replace(target)
+    # Das Archiv selbst ebenso: Es ist eine vollstaendige Kopie dessen, was
+    # darin lag.
+    try:
+        target.chmod(0o600)
+    except OSError:
+        pass
     return target.stat().st_size, count, notes
 
 
@@ -396,6 +409,12 @@ def backup_database(container, db_user: str, db_name: str) -> dict[str, Any]:
                           capture_output=True, check=True)
     tmp.write_bytes(proc.stdout)
     tmp.replace(target)
+    # Der empfindlichste Stand von allen: Passwort-Hashes, TOTP-Startwerte,
+    # das Kennwort des Verzeichnis-Dienstkontos.
+    try:
+        target.chmod(0o600)
+    except OSError:
+        pass
 
     lines = stdout.count(b"\n")
     return {
