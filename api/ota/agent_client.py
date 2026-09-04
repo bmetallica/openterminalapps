@@ -100,6 +100,16 @@ def start_container(payload: dict[str, Any]) -> dict[str, Any]:
     return _call("POST", "/containers", json=payload)
 
 
+def firewall_global(payload: dict[str, Any]) -> dict[str, Any]:
+    """Globale Freigaben und Portweiterleitungen — der ganze Satz."""
+    return _call("PUT", "/firewall/global", json=payload)
+
+
+def firewall_uebersicht() -> dict[str, Any]:
+    """Welche Sitzung unter welcher Adresse laeuft, samt Zaehlern."""
+    return _call("GET", "/firewall/uebersicht")
+
+
 def container_status(cid: str) -> dict[str, Any]:
     return _call("GET", f"/containers/{cid}")
 

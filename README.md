@@ -15,7 +15,10 @@ Projekte, denselben SSH-Schlüssel, dieselbe Zwischenablage.
 Daneben lassen sich einzelne Anwendungen als Wegwerf-Container starten und vorhandene Kasm-Images
 sowie ganze Registries einbinden — als Zusatz, nicht als Fundament.
 
-> **Stand:** läuft und wird benutzt. 434 automatische Prüfungen, davon 107 in einem echten Browser.
+**Jeder Arbeitsplatz hängt in einem eigenen Netz** hinter einem Router: kein Firmennetz, keine
+Nachbarsitzung, kein Wirt — bis jemand es ausdrücklich freigibt ([firewall.md](firewall.md)).
+
+> **Stand:** läuft und wird benutzt. 453 automatische Prüfungen, davon 107 in einem echten Browser.
 > Was noch fehlt, steht offen in [roadmap.md](roadmap.md) — nichts davon ist beschönigt.
 
 ---
@@ -261,6 +264,7 @@ nicht — dieselbe Trennung gilt für das Dateisystem des Hosts.
 | `api/` | REST-API, Anmeldung, Rechte, Sessions (FastAPI, PostgreSQL) |
 | `agent/` | **Einziger** Dienst mit Docker-Zugriff; Container, Displays, Images, Ablage |
 | `deploy/` | Compose-Stack, Traefik, Registry, Zertifikate |
+| `firewall/` | Der Router aller Arbeitsplätze: nftables, NAT, Namensdienst, Portfreigaben |
 | `extension/` | Firefox-Erweiterung für die Zwischenablage |
 | `docs/wiki/` | Handbuch — wird im Programm als Hilfe ausgeliefert |
 | `images/` | Eigene Basisimages: `base-desktop` (Debian + XFCE + Selkies, Vorgabe) und `base-xfce` (Ubuntu + KasmVNC) |
@@ -277,8 +281,9 @@ nicht — dieselbe Trennung gilt für das Dateisystem des Hosts.
   gelöst ist, und was diese Durchsicht ausdrücklich **nicht** war
 - **[dsgvo.md](dsgvo.md)** — welche personenbezogenen Daten wo liegen, wie lange, wer sie sieht —
   und die vier Stellen, an denen heute etwas fehlt
-- **[firewall.md](firewall.md)** — Entwurf für die Netzabsicherung der Arbeitsplätze: ein Netz je
-  Sitzung, Regeln im Netfilter des Wirts, Profile in der Oberfläche
+- **[firewall.md](firewall.md)** — die Netzabsicherung der Arbeitsplätze: ein Netz je Sitzung, ein
+  Router davor, Profile und Portfreigaben in der Oberfläche — samt der vier Dinge, die beim Bauen
+  anders kamen als geplant
 
 Ein Hinweis zur Fehlersuche: [Kapitel 12](docs/wiki/12-fehlersuche.md) beschreibt echte Fehler aus
 dem Betrieb mit Symptom, Ursache und Reparatur — darunter mehrere, die tagelang nach etwas anderem
@@ -290,7 +295,7 @@ aussahen, als sie waren.
 make test
 ```
 
-**434 Prüfungen in sechs Suiten**, jede stellt ihren Vorzustand selbst her:
+**453 Prüfungen in sieben Suiten**, jede stellt ihren Vorzustand selbst her:
 
 | Suite | Prüft |
 |---|---|
@@ -299,6 +304,7 @@ make test
 | `tests/e2e.mjs` | Die Oberfläche in einem echten Browser — bis zur Frage, ob der Stream wirklich verbindet |
 | `test-ldap.sh` | Verzeichnis-Anmeldung gegen ein echtes OpenLDAP im Container — vor allem, dass ein lokales Konto unantastbar bleibt und ein Ausfall es nicht mitreisst |
 | `test-streaming.sh` | Der Medienweg: Vermittelt der TURN-Server wirklich, und kommt im Browser ein Bild an? Der Prüfbrowser läuft in einem Netz, aus dem der Session-Container **nicht** direkt erreichbar ist — wie ein Arbeitsplatz im Firmennetz |
+| `test-firewall.sh` | Die Netzabsicherung, **von innen gemessen**: Nachbar, Wirt, Firmennetz, TURN, Namensdienst, Internet je Stufe, Freigabe nach Namen, Portfreigabe — und alles noch einmal nach einem Neustart des Routers |
 | `test-backup.sh` | Sicherung und Wiederherstellung von Profil, Container und Datenbank. Beendet dafür Sitzungen — **nur die eigenen**, und prüft das ausdrücklich nach |
 
 Die Zugangsdaten der Prüfung stehen in `deploy/.env` und nicht im Quelltext; die Reihen lesen sie

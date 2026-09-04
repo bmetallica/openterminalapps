@@ -6,6 +6,7 @@ import { People } from './screens/People'
 import { WebApps } from './screens/WebApps'
 import { Workspaces } from './screens/Workspaces'
 import { Help } from './screens/Help'
+import { Netz } from './screens/Netz'
 import { Settings } from './screens/Settings'
 import { Images } from './screens/Images'
 import { Storage } from './screens/Storage'
@@ -21,7 +22,7 @@ import { setTheme, useTheme, type Theme } from './lib/theme'
 import './styles/app.css'
 
 type View = 'dashboard' | 'workspaces' | 'webapps' | 'images' | 'registries' | 'storage'
-  | 'files' | 'people' | 'monitor' | 'settings' | 'account' | 'help'
+  | 'files' | 'people' | 'monitor' | 'netz' | 'settings' | 'account' | 'help'
 type Toast = { id: number; msg: string; tone: 'ok' | 'bad' }
 
 const NAV: { id: View; glyph: string; cap: string; adminOnly: boolean }[] = [
@@ -43,6 +44,10 @@ const NAV: { id: View; glyph: string; cap: string; adminOnly: boolean }[] = [
   { id: 'storage', glyph: '▦', cap: 'Gemeinsame Ablage', adminOnly: true },
   { id: 'people', glyph: '◔', cap: 'Nutzer', adminOnly: true },
   { id: 'monitor', glyph: '◈', cap: 'Betrieb', adminOnly: true },
+  // Eigener Punkt und kein Winkel in „Einstellungen": Hier steht, wer gerade
+  // unter welcher Adresse arbeitet — das schaut man im Betrieb nach, nicht
+  // beim Einrichten.
+  { id: 'netz', glyph: '⌗', cap: 'Netz', adminOnly: true },
   { id: 'settings', glyph: '⚙', cap: 'Einstellungen', adminOnly: true },
   // Das Handbuch steht allen offen. Welche Kapitel jemand sieht, entscheidet
   // die API anhand der Rechte — Betriebs- und Verwaltungskapitel bleiben
@@ -279,6 +284,7 @@ export default function App() {
         )}
         {current === 'people' && <People onToast={toast} />}
         {current === 'monitor' && <Monitor onToast={toast} />}
+        {current === 'netz' && <Netz onToast={toast} />}
         {current === 'settings' && <Settings onToast={toast} />}
         {current === 'account' && <Account me={me} onMe={setMe} onToast={toast} />}
         {current === 'help' && <Help onToast={toast} />}

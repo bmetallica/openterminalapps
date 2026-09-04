@@ -152,6 +152,48 @@ body {
 
 button, input, select, textarea { font: inherit; color: inherit; }
 
+/* Eingabefelder und Auswahllisten — **ohne eigene Klasse**.
+   ============================================================
+   Bis hierher stylte das Projekt nur Felder mit eigener Klasse (`.numfield
+   input`, `.row-item input`). Ein blankes `<input>` oder `<select>` bekam
+   damit den Standard des Browsers: weisse Fläche — und die Schriftfarbe erbte
+   es aus dem dunklen Gewand. Ergebnis: weiss auf weiss, unlesbar.
+
+   Deshalb hier die Grundform für alle. Die vorhandenen Klassen stehen weiter
+   unten in dieser Datei und gewinnen damit, wo sie etwas anderes wollen.
+
+   Ausgenommen sind die Feldarten, die ihr Aussehen selbst mitbringen:
+   Schieber, Kästchen, Farbwähler, Dateiwahl. Ein `padding` auf einem
+   `range` verschiebt den Griff, und auf einer `checkbox` macht es einen
+   Klotz. */
+input:not([type="range"]):not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="color"]),
+select,
+textarea {
+  background: var(--well);
+  color: var(--text);
+  border: 1px solid var(--edge);
+  border-radius: var(--r-ctl);
+  padding: 8px 10px;
+  transition: border-color .12s var(--ease);
+}
+input:hover:not([type="range"]):not([type="checkbox"]):not([type="radio"]),
+select:hover,
+textarea:hover { border-color: var(--edge-lit); }
+input:disabled, select:disabled, textarea:disabled { opacity: .55; cursor: not-allowed; }
+::placeholder { color: var(--mute); opacity: .8; }
+
+/* Die aufgeklappte Liste malt der Browser mit seiner eigenen Palette — ohne
+   diese Zeile steht dort dunkle Schrift auf dunklem Grund oder umgekehrt,
+   je nach Rechner. */
+option { background: var(--bay); color: var(--text); }
+
+/* Der Farbwähler braucht keine Polsterung, aber einen Rahmen — sonst
+   schwimmt sein Farbfeld ohne Kante in der Fläche. */
+input[type="color"] {
+  border: 1px solid var(--edge); border-radius: var(--r-ctl);
+  background: var(--well); padding: 2px; cursor: pointer;
+}
+
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -588,6 +630,32 @@ button, input, select, textarea { font: inherit; color: inherit; }
 /* ============================================================
    Chips (Mehrfachauswahl)
    ============================================================ */
+
+/* ---------------------------------------------------------------- Netz
+   Die Freigabeliste ist eine Zeile je Regel — Ziel, Ports, Protokoll, Notiz.
+   Als Tabelle gesetzt wäre sie starrer, als sie sein muss: Die Notiz ist das
+   längste Feld und darf den Rest nicht schmal drücken. */
+.netz__regeln { display: flex; flex-direction: column; gap: 8px; }
+.netz__regel {
+  display: grid; gap: 8px; align-items: center;
+  grid-template-columns: minmax(160px, 1.4fr) 110px 110px minmax(160px, 1.6fr) auto;
+}
+@media (max-width: 900px) {
+  .netz__regel { grid-template-columns: 1fr 1fr; }
+}
+
+/* Eine Marke am Zeilenende: Stufe, Zustand, Kurzhinweis. */
+.pill {
+  display: inline-block; padding: 2px 9px; border-radius: 999px;
+  font-size: 11.5px; letter-spacing: .02em;
+  border: 1px solid var(--edge-lit); color: var(--label); background: var(--bay-2);
+}
+.pill--live   { border-color: var(--live);    color: var(--live);    background: var(--live-bg); }
+.pill--paused { border-color: var(--paused);  color: var(--paused);  background: var(--paused-bg); }
+.pill--halt   { border-color: var(--halt);    color: var(--halt-text); background: var(--halt-bg); }
+
+/* Auffällig viele abgewiesene Pakete: das interessanteste Sicherheitssignal. */
+.is-warn { color: var(--warn-text); font-weight: 600; }
 
 .chips { display: flex; flex-wrap: wrap; gap: 7px; }
 .chip {

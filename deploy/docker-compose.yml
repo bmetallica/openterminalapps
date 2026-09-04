@@ -378,12 +378,27 @@ services:
     image: ota/firewall:${OTA_VERSION:-dev}
     container_name: ota-firewall
     restart: unless-stopped
-    # Der Namensraum des Wirts: Nur hier sind die Ketten die des Wirts.
-    network_mode: host
+    networks:
+      # Der Uplink — der einzige Weg nach draussen, für alle Arbeitsplätze.
+      # Die Sitzungsnetze kommen zur Laufzeit dazu, eines je Sitzung.
+      - uplink
     cap_add:
-      # Mehr nicht. Kein privileged, kein Docker-Socket, keine Datenbank.
       - NET_ADMIN
       - NET_RAW
+      # Für `nsenter` in den Namensraum eines Arbeitsplatzes. Docker lässt
+      # einen Container nicht Gateway sein; die Standardroute muss deshalb von
+      # aussen gesetzt werden (firewall.md, „Die eine harte Stelle").
+      - SYS_ADMIN
+    sysctls:
+      # Ohne das leitet er nichts weiter und ist kein Router.
+      net.ipv4.ip_forward: 1
+    ports:
+      # Der Bereich für die „+ NAT"-Freigaben. Er steht beim Start fest:
+      # Dockers Portveröffentlichung lässt sich später nicht ändern, ohne den
+      # Container neu zu starten — und der ist der Weg **aller** Arbeitsplätze
+      # nach draussen. Zwanzig Ports sind bewusst wenige: Jeder kostet eine
+      # Regel und einen Hilfsprozess, und die Funktion ist die Ausnahme.
+      - "${OTA_NAT_MIN:-30000}-${OTA_NAT_MAX:-30019}:${OTA_NAT_MIN:-30000}-${OTA_NAT_MAX:-30019}"
     environment:
       OTA_AGENT_TOKEN: "${OTA_AGENT_TOKEN}"
       OTA_SESSION_POOL: "${OTA_SESSION_POOL:-10.99.0.0/16}"
@@ -391,10 +406,15 @@ services:
       # Wen der eigene Resolver fragt. Leer heisst: die Nameserver des Wirts.
       OTA_FW_DNS_UPSTREAM: "${OTA_FW_DNS_UPSTREAM:-}"
     volumes:
-      # Der Draht zum Agent — ein Socket, kein Port. Ein Port waere im
-      # Namensraum des Wirts auf **jeder** seiner Adressen offen.
+      # Der Draht zum Agent — ein Socket, kein Port.
       - ${OTA_RUNTIME_ROOT:-/srv/ota/runtime}:/srv/ota/runtime
       - ota_firewall_state:/var/lib/ota-firewall
+      # Dockers Netzwerk-Namensräume. **`rshared` ist nicht schmückend**: Die
+      # Einträge darin sind selbst Einhängungen, und ohne Weitergabe sähe
+      # dieser Container nur die, die beim Start schon da waren — also keine
+      # einzige neue Sitzung. Gemessen: mit `rshared` greift `nsenter`, ohne
+      # nicht.
+      - /run/docker/netns:/run/docker/netns:rshared
     healthcheck:
       test: ["CMD-SHELL", "test -S /srv/ota/runtime/firewall.sock"]
       interval: 20s
@@ -576,6 +596,14 @@ networks:
     name: ota_internal
     internal: true
 
+  # Der Uplink des Routers — der einzige Weg der Arbeitsplätze nach draussen.
+  uplink:
+    name: ota_uplink
+
   # Später: Session-Container. Erreichen ota-db bewusst nicht.
+  #
+  # **Wird nicht mehr benutzt** (2026-09-04): Jede Sitzung bekommt ihr eigenes
+  # `internal`-Netz, angelegt vom Agent. Der Eintrag bleibt, bis der letzte
+  # Container daraus verschwunden ist.
   sessions:
     name: ota_sessions

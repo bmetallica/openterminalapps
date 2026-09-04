@@ -172,6 +172,25 @@ def metrics(request: Request, db: DbSession = Depends(get_db)) -> Response:
             tag = f"{{{inner}}}"
         lines.append(f"{name}{tag} {value}")
 
+    # Das Netz je Arbeitsplatz. Die Zahlen kommen live aus den Zaehlern des
+    # Routers und werden **nirgends aufbewahrt** — es gibt also keine
+    # Verlaufsdaten und damit auch nichts zu loeschen. Wer eine Zeitreihe
+    # daraus macht (Prometheus tut genau das), legt personenbezogene Daten an
+    # und braucht eine Frist; der Vorschlag steht in `dsgvo.md`.
+    #
+    # Beschriftet wird mit dem **Netz**, nicht mit dem Namen des Menschen. Wer
+    # dahintersteht, loest die Oberflaeche auf — und dafuer braucht es Rechte.
+    try:
+        netz = agent_client.firewall_uebersicht()
+        for subnetz, werte in (netz.get("zaehler") or {}).items():
+            gauge("ota_netz_bytes", "Verkehr eines Arbeitsplatzes seit dem Start des Routers",
+                  werte.get("bytes", 0), netz=subnetz)
+            gauge("ota_netz_verworfen",
+                  "Verworfene Pakete eines Arbeitsplatzes — das Signal fuer einen Portscan",
+                  werte.get("verworfen", 0), netz=subnetz)
+    except Exception:  # noqa: BLE001 — Kennzahlen duerfen nie eine Antwort kippen
+        pass
+
     # Sessions nach Zustand. Der interessante Wert ist nicht die Summe,
     # sondern wie viele gerade Speicher belegen.
     by_status = db.execute(

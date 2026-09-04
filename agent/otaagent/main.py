@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import base64
 import ipaddress
+import json
 import logging
 import os
 from pathlib import Path
@@ -71,12 +72,33 @@ PUBLIC_NETWORK = os.environ.get("OTA_PUBLIC_NETWORK", "ota_public")
 # von dort geladen (`/api/help/extension/firefox`).
 def _grundfreigaben() -> list[tuple[str, str, str]]:
     raus: list[tuple[str, str, str]] = []
+
+    # Der Medienweg. Der TURN-Dienst laeuft im Namensraum des Wirts, ist also
+    # unter dessen Adresse erreichbar — und die liegt im privaten Bereich, den
+    # die Stufe „internet" sonst sperrt. Ohne diese Zeilen kommt kein Bild an.
+    turn = os.environ.get("OTA_TURN_HOST", "").strip()
+    if turn:
+        raus.append((turn, os.environ.get("OTA_TURN_PORT", "3478"), "beide"))
+        raus.append((turn, f"{os.environ.get('OTA_TURN_MIN', '49160')}-"
+                           f"{os.environ.get('OTA_TURN_MAX', '49260')}", "beide"))
+
+    # OTA selbst. Der Browser im Arbeitsplatz muss es erreichen — die
+    # Firefox-Erweiterung fuer die Zwischenablage wird von dort geladen.
     eigene = os.environ.get("OTA_SELF_ADDRESS", "").strip()
     if eigene:
         raus.append((eigene, os.environ.get("OTA_HTTPS_PORT", "8443"), "tcp"))
+
+    # Der Firmenproxy, falls einer gesetzt ist. Ohne ihn kommt dahinter
+    # nichts durch.
     proxy = os.environ.get("OTA_PROXY_HOST", "").strip()
     if proxy:
         raus.append((proxy, os.environ.get("OTA_PROXY_PORT", "3128"), "tcp"))
+
+    # Zeit. Eine falsche Uhr bricht TLS und macht Fehler, die nach allem
+    # aussehen ausser nach der Uhr.
+    ntp = os.environ.get("OTA_NTP_HOST", "").strip()
+    if ntp:
+        raus.append((ntp, "123", "udp"))
     return raus
 
 log = logging.getLogger("ota.agent")
@@ -244,6 +266,9 @@ class StartRequest(BaseModel):
     # Beschriftung an das Netz — damit er den Gesamtzustand nach einem
     # Neustart allein aus Docker rekonstruieren kann.
     netzprofil: dict = {}
+    # Das Subnetz, das diesem Menschen an diesem Arbeitsplatz dauerhaft
+    # gehoert. Leer heisst: der Agent sucht sich eines.
+    subnetz: str = ""
 
 
 @app.get("/healthz")
@@ -523,6 +548,94 @@ def _ensure_profile(path: str) -> None:
         pass
 
 
+# Was die API zuletzt gesetzt hat.
+#
+# **Auf Platte, nicht nur im Speicher.** Gemessen am 2026-09-04: Nach einem
+# Neustart des Agents war die Liste leer, der naechste Abgleich schickte einen
+# Satz ohne Weiterleitungen, und eine bestehende Portfreigabe verschwand
+# stillschweigend aus dem Router — waehrend sie in der Datenbank und in der
+# Oberflaeche weiter stand. Dieselbe Falle wie bei der Anbindung des Routers:
+# Was nur im Speicher steht, geht genau dann verloren, wenn es darauf ankommt.
+VERWALTUNG_DATEI = os.path.join(RUNTIME_ROOT, "firewall-verwaltung.json")
+_globale_freigaben: list[dict] = []
+_weiterleitungen: list[dict] = []
+
+
+def _verwaltung_laden() -> None:
+    global _globale_freigaben, _weiterleitungen
+    try:
+        with open(VERWALTUNG_DATEI, encoding="utf-8") as fh:
+            daten = json.load(fh)
+        _globale_freigaben = daten.get("freigaben", [])
+        _weiterleitungen = daten.get("weiterleitungen", [])
+        log.info("Firewall-Verwaltung gelesen: %d Freigaben, %d Weiterleitungen",
+                 len(_globale_freigaben), len(_weiterleitungen))
+    except (OSError, ValueError):
+        pass
+
+
+def _verwaltung_speichern() -> None:
+    try:
+        os.makedirs(RUNTIME_ROOT, exist_ok=True)
+        with open(VERWALTUNG_DATEI, "w", encoding="utf-8") as fh:
+            json.dump({"freigaben": _globale_freigaben,
+                       "weiterleitungen": _weiterleitungen}, fh)
+    except OSError as exc:
+        log.warning("Firewall-Verwaltung nicht speicherbar: %s", exc)
+
+
+class GlobalIn(BaseModel):
+    freigaben: list[dict] = []
+    weiterleitungen: list[dict] = []
+
+
+@app.put("/firewall/global", dependencies=[Depends(require_token)])
+def firewall_global(body: GlobalIn) -> dict:
+    """Globale Freigaben und Portweiterleitungen setzen — der ganze Satz."""
+    global _globale_freigaben, _weiterleitungen
+    _globale_freigaben = body.freigaben
+    _weiterleitungen = body.weiterleitungen
+    _verwaltung_speichern()
+    return _firewall_abgleich()
+
+
+def _weiterleitungen_aufloesen(client) -> list[dict]:
+    """Aus `session_id` die Adresse machen, die gerade gilt."""
+    nach_sitzung = {n["session_id"]: n for n in netz_ops.sitzungsnetze(client)}
+    raus = []
+    for w in _weiterleitungen:
+        netz = nach_sitzung.get(w.get("session_id", ""))
+        if not netz or not netz.get("adresse"):
+            continue
+        raus.append({"aussen": w["aussen"], "innen": w["innen"],
+                     "ziel": netz["adresse"], "protokoll": w.get("protokoll", "tcp")})
+    return raus
+
+
+@app.on_event("startup")
+def _firewall_start() -> None:
+    """Was die API gesetzt hat, wieder aufnehmen — und einmal abgleichen."""
+    _verwaltung_laden()
+    try:
+        log.info("Firewall beim Start: %s", _firewall_abgleich())
+    except Exception as exc:  # noqa: BLE001
+        log.error("Firewall-Abgleich beim Start fehlgeschlagen: %s", exc)
+
+
+@app.get("/firewall/uebersicht", dependencies=[Depends(require_token)])
+def firewall_uebersicht() -> dict:
+    """Welche Sitzung unter welcher Adresse laeuft — samt Zaehlern."""
+    client = dc()
+    netze = [{"session_id": n["session_id"], "subnetz": n["subnetz"],
+              "adresse": n["adresse"]} for n in netz_ops.sitzungsnetze(client)]
+    zaehler = {}
+    try:
+        zaehler = fwclient.zaehler().get("sitzungen", {})
+    except (OSError, RuntimeError):
+        pass
+    return {"netze": netze, "zaehler": zaehler}
+
+
 def _firewall_abgleich(client=None) -> dict:
     """Den gewuenschten Gesamtzustand an den Firewall-Dienst schicken.
 
@@ -540,8 +653,14 @@ def _firewall_abgleich(client=None) -> dict:
                     fwclient.SOCKET)
         return {"status": "kein Dienst"}
 
+    # Erst die Anbindung, dann die Regeln. Ein Router, der nicht im Netz
+    # haengt, kann noch so gute Regeln haben.
+    netz_ops.anbindung_sichern(client)
+
     sitzungen = [{
         "subnetz": n["subnetz"],
+        "gateway": n["gateway"],
+        "sandbox": n["sandbox"],
         "stufe": n["stufe"],
         "freigaben": n["freigaben"],
         "namen": n["namen"],
@@ -549,17 +668,13 @@ def _firewall_abgleich(client=None) -> dict:
 
     zustand = {
         "sitzungen": sitzungen,
-        "traefik_ips": netz_ops.traefik_adressen(client),
-        "turn": {
-            "port": int(os.environ.get("OTA_TURN_PORT", "3478") or 3478),
-            "min": int(os.environ.get("OTA_TURN_MIN", "49160") or 49160),
-            "max": int(os.environ.get("OTA_TURN_MAX", "49260") or 49260),
-        },
         "grundfreigaben": _grundfreigaben(),
-        # Der eigene Resolver lauscht im Namensraum des Wirts auf allen
-        # Bruecken. Erreichbar sein soll er nur aus den Sitzungen — diese
-        # Angabe ist die Schranke dafuer.
-        "dns_port": int(os.environ.get("OTA_FW_DNS_PORT", "53") or 53),
+        # Was fuer **alle** Arbeitsplaetze gilt, an einer Stelle gepflegt.
+        # Die API reicht es durch; der Agent haelt es nicht vor.
+        "global_": _globale_freigaben,
+        # Die API kennt die Sitzung, aber nicht ihre Adresse — die weiss nur
+        # Docker. Hier wird aus „Sitzung X, Port 8080" ein Ziel.
+        "weiterleitungen": _weiterleitungen_aufloesen(client),
     }
     try:
         return fwclient.regelwerk_setzen(zustand)
@@ -780,16 +895,22 @@ def start_container(req: StartRequest) -> dict[str, Any]:
     # ist nicht beliebig: Die Grundsperre im Firewall-Dienst gilt fuer den
     # ganzen Bereich, ein neues Netz ist also von seiner ersten Sekunde an
     # dicht. Erst der Abgleich macht die Freigaben dieser Sitzung auf.
-    sitzungsnetz, subnetz = netz_ops.netz_anlegen(client, req.session_id, req.netzprofil)
-    _firewall_abgleich(client)
+    # **Erst das Netz, dann der Router, dann der Arbeitsplatz.** Die
+    # Reihenfolge ist nicht beliebig: Das Netz ist `internal`, ohne Router
+    # gibt es darin keinen Weg — und ohne Regelwerk soll es auch keinen geben.
+    sitzungsnetz, subnetz = netz_ops.netz_anlegen(
+        client, req.session_id, req.netzprofil, req.subnetz)
+    router = netz_ops.router_verbinden(client, sitzungsnetz, subnetz)
+    platz = netz_ops.platz_adresse(subnetz)
+    log.info("Sitzungsnetz %s (%s): Router %s, Arbeitsplatz %s, Profil %s",
+             sitzungsnetz, subnetz, router, platz,
+             req.netzprofil.get("stufe", "internet"))
 
-    # **Der eigene Resolver, nicht irgendeiner.** Freigaben nach Namen
-    # funktionieren nur, wenn Freigabe und Verbindung aus derselben Auskunft
-    # stammen — deshalb beantwortet ihn der Firewall-Dienst, und deshalb sind
-    # fremde Resolver gesperrt. Die Adresse ist das Gateway dieses Netzes;
-    # dort lauscht dnsmasq im Namensraum des Wirts.
-    resolver = str(ipaddress.ip_network(subnetz)[1]) if subnetz else ""
-    dns = [resolver] if resolver and fwclient.erreichbar() else None
+    # **Der eigene Resolver, nicht irgendeiner.** Er laeuft im Router; ein
+    # anderer ist aus einem `internal`-Netz gar nicht erreichbar. Freigaben
+    # nach Namen funktionieren nur, wenn Freigabe und Verbindung aus derselben
+    # Auskunft stammen — deshalb beantwortet er sie.
+    dns = [router] if fwclient.erreichbar() else None
     log.info("Sitzungsnetz %s (%s), Profil %s",
              sitzungsnetz, subnetz, req.netzprofil.get("stufe", "internet"))
 
@@ -806,6 +927,9 @@ def start_container(req: StartRequest) -> dict[str, Any]:
             environment=env,
             mounts=mounts,
             network=sitzungsnetz,
+            networking_config=client.api.create_networking_config({
+                sitzungsnetz: client.api.create_endpoint_config(ipv4_address=platz),
+            }),
             ports=ports or None,
             labels=beschriftung,
             dns=dns,
@@ -845,6 +969,8 @@ def start_container(req: StartRequest) -> dict[str, Any]:
     # nur in dieses eine Netz. Frueher hingen alle Sitzungen gemeinsam in
     # `ota_public`; genau das war Befund H2.
     netz_ops.traefik_verbinden(client, sitzungsnetz)
+    # Jetzt erst: Regelwerk **und** Standardroute. Vorher hatte der
+    # Arbeitsplatz keinen Weg — genau so soll es sein.
     _firewall_abgleich(client)
 
     if req.elevated:

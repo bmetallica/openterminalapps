@@ -69,3 +69,7 @@ def regelwerk_setzen(zustand: dict) -> dict:
 
 def zustand() -> dict:
     return _ruf("GET", "/zustand")
+
+
+def zaehler() -> dict:
+    return _ruf("GET", "/zaehler")

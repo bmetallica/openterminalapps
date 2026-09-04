@@ -16,12 +16,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DbSession
 
 from .. import agent_client, audit, settings_store
+from .firewall import schieben as firewall_schieben
 from ..config import settings
 from ..db import get_db
 from ..deps import current_user
 from ..models import (
-    AppStream, NetProfile, OnceScriptRun, Session as SessionModel, Template,
-    TemplateApp, User,
+    AppStream, NetLease, NetProfile, OnceScriptRun, Session as SessionModel,
+    Template, TemplateApp, User,
 )
 from ..schemas import SessionOut, SessionStartIn, StreamOut
 from ..security import (
@@ -159,6 +160,12 @@ def _out(s: SessionModel) -> SessionOut:
         started_at=s.started_at,
         last_seen_at=s.last_seen_at,
         error=s.error,
+        # Damit im Dashboard steht, was gilt. Ohne Profil ist es die Vorgabe:
+        # Internet ja, Firmennetz nein.
+        netzprofil=(s.template.net_profile.name
+                    if s.template and s.template.net_profile else "Vorgabe"),
+        netzstufe=(s.template.net_profile.stufe
+                   if s.template and s.template.net_profile else "internet"),
         # Der KasmVNC-Client haengt seinen Websocket-Pfad an die Wurzel der
         # Seite, nicht an den aktuellen Pfad. Ohne diesen Parameter versucht er
         # wss://host/websockify — das landet bei der Weboberflaeche, die mit
@@ -306,6 +313,32 @@ def _traefik_labels(sess_id: uuid.UUID, user_id: uuid.UUID, vnc_user: str,
         })
 
     return labels
+
+
+def _subnetz(db: DbSession, user: User, tpl: Template) -> str:
+    """Das Subnetz, das diesem Menschen an diesem Arbeitsplatz gehoert.
+
+    **Dauerhaft.** Ohne das bekaeme jede Sitzung irgendein freies Stueck, und
+    die Adresse waere nach jedem Feierabend eine andere — unbrauchbar fuer
+    eine vorgelagerte Firewall und verwirrend in der Uebersicht.
+
+    Vergeben wird die kleinste freie Nummer. Ist der Bereich voll, gibt es
+    keine feste Nummer mehr und der Agent sucht sich selbst eine — lieber eine
+    wechselnde Adresse als kein Arbeitsplatz.
+    """
+    lease = db.scalar(select(NetLease).where(
+        NetLease.user_id == user.id, NetLease.template_id == tpl.id))
+    if lease is None:
+        belegt = {n for (n,) in db.execute(select(NetLease.idx)).all()}
+        frei = next((i for i in range(0, 256) if i not in belegt), None)
+        if frei is None:
+            return ""
+        lease = NetLease(user_id=user.id, template_id=tpl.id, idx=frei)
+        db.add(lease)
+        db.flush()
+    pool = os.environ.get("OTA_SESSION_POOL", "10.99.0.0/16").split("/")[0]
+    a, b, _c, _d = pool.split(".")
+    return f"{a}.{b}.{lease.idx}.0/24"
 
 
 def _netzprofil(tpl: Template) -> dict:
@@ -545,6 +578,9 @@ def start_session(
             # Netz und schickt es an den Firewall-Dienst; durchgesetzt wird es
             # im Netfilter des Wirts, nicht hier.
             "netzprofil": _netzprofil(tpl),
+            # Das Subnetz, das diesem Menschen an diesem Arbeitsplatz gehoert —
+            # dasselbe bei jedem Start. Leer heisst: such dir eines.
+            "subnetz": _subnetz(db, user, tpl),
             # Die eigene Ablage des Nutzers, beschreibbar unter
             # /mnt/austausch. Die Vorlage kann sie abschalten — fuer
             # Arbeitsplaetze, aus denen bewusst nichts herausgetragen werden
@@ -595,6 +631,10 @@ def start_session(
                  object_id=str(sess.id), request=request,
                  template=tpl.slug, cores=cores, memory_bytes=memory)
     db.commit()
+    # Der Router kennt die Sitzung jetzt; was ihm fehlt, sind die globalen
+    # Freigaben und die Portfreigaben dieses Menschen für diesen Arbeitsplatz.
+    # Die weiss nur die Datenbank — deshalb hier und nicht im Agent.
+    firewall_schieben(db)
     return _out(sess)
 
 
@@ -707,6 +747,9 @@ def delete_session(
     audit.record(db, "session.deleted", actor=user, object_type="session",
                  object_id=str(sess.id), request=request)
     db.commit()
+    # Der Router weiss jetzt von einer Sitzung weniger — und eine
+    # Portfreigabe, die daran hing, gehoert weg.
+    firewall_schieben(db)
     # Das persistente Profil bleibt erhalten — geloescht wird nur der Container.
     return {"status": "Session beendet. Dein Profil bleibt erhalten."}
 

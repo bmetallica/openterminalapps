@@ -30,11 +30,16 @@ Die dritte Grenze ist die schwächste, und die drei schwerwiegendsten Befunde li
 
 Bewertet nach dem, was ein Angreifer damit erreicht — nicht nach dem Aufwand, es zu beheben.
 
+> **Stand 2026-09-04: H1, H2 und H3 sind geschlossen.** Jeder Arbeitsplatz hängt in einem eigenen
+> `internal`-Netz und erreicht die Aussenwelt nur über einen Router-Container; einen Weg daran
+> vorbei gibt es nicht. Nachgewiesen von innen durch `scripts/test-firewall.sh` (19 Prüfungen).
+> Aufbau und Begründung: [`firewall.md`](firewall.md).
+
 | Nr. | Befund | Schwere |
 |---|---|---|
-| [H1](#h1) | Aus jedem Arbeitsplatz sind Wirt und Firmennetz vollständig erreichbar | **hoch** |
-| [H2](#h2) | Arbeitsplätze erreichen einander direkt — an Traefiks Rechteprüfung vorbei | **hoch** |
-| [H3](#h3) | Der Agent ist aus jedem Arbeitsplatz erreichbar; ein Merkmal trennt ihn vom Docker-Socket | **hoch** |
+| [H1](#h1) | ~~Aus jedem Arbeitsplatz sind Wirt und Firmennetz vollständig erreichbar~~ ✅ behoben | **hoch** |
+| [H2](#h2) | ~~Arbeitsplätze erreichen einander direkt~~ ✅ behoben | **hoch** |
+| [H3](#h3) | ~~Der Agent ist aus jedem Arbeitsplatz erreichbar~~ ✅ behoben | **hoch** |
 | [H4](#h4) | Ein Administrator kann sich unbemerkt auf einen laufenden Bildschirm schalten | **hoch** |
 | [M1](#m1) | Ungenutzter Endpunkt am Agent führt beliebige Befehle in beliebigen Containern aus | mittel |
 | [M2](#m2) | Geheimnisse liegen im Klartext in der Datenbank, Sicherungen sind für alle lesbar | mittel |
@@ -52,6 +57,10 @@ Bewertet nach dem, was ein Angreifer damit erreicht — nicht nach dem Aufwand, 
 ---
 
 ### H1 · Aus jedem Arbeitsplatz sind Wirt und Firmennetz vollständig erreichbar {#h1}
+
+> ✅ **Behoben am 2026-09-04.** Die Sitzungsnetze sind `internal`, der Router ist der einzige Weg
+> hinaus, und die Brücke des Wirts trägt keine Adresse mehr. Gemessen von innen: Wirt, Firmennetz
+> und Nachbarsitzung sind zu; TURN, OTA selbst, DNS und Internet gehen.
 
 **Gemessen**, aus einem Container im Netz `ota_sessions`:
 
@@ -91,6 +100,9 @@ mitgeliefert.
 
 ### H2 · Arbeitsplätze erreichen einander direkt {#h2}
 
+> ✅ **Behoben am 2026-09-04.** Ein Netz je Sitzung — der einzige Weg, der wirklich trennt: Ohne
+> geladenes `br_netfilter` läuft Verkehr auf derselben Brücke an jeder Regel vorbei.
+
 **Gemessen**, zwei Container im Netz `ota_sessions`:
 
 ```
@@ -113,6 +125,9 @@ diesen Verkehr nie. Ausgearbeitet in [`firewall.md`](firewall.md).
 ---
 
 ### H3 · Der Agent ist aus jedem Arbeitsplatz erreichbar {#h3}
+
+> ✅ **Behoben am 2026-09-04.** Der Agent hängt in keinem Sitzungsnetz mehr; er braucht es nicht,
+> weil er über den Docker-Socket arbeitet.
 
 **Gemessen**, aus einem Container im Netz `ota_sessions`:
 
@@ -420,8 +435,7 @@ Schritt und gehört in den Betrieb, nicht in eine einmalige Durchsicht.
    dringendste Zeile in [`dsgvo.md`](dsgvo.md).
 2. **M1 löschen** — ein Endpunkt weniger, den niemand braucht.
 3. **M2, Teil 1** — Dateirechte auf Sicherungen und Profile. Ein `chmod`, sofort wirksam.
-4. **H1, Teil 1** — den Wirt vor seinen Containern schützen (`DOCKER-USER`).
-5. **M3** — Passwortregel in Keycloak.
-6. **M6** — Zeichensatz mitliefern. Löst zugleich den grössten DSGVO-Punkt.
-7. **H2 / H3** — je ein Netz für jede Sitzung, Agent aus `ota_sessions` heraus. Die grösste
-   Verbesserung und der grösste Eingriff; gehört geplant, nicht nebenbei gemacht.
+4. **M3** — Passwortregel in Keycloak.
+5. **M6** — Zeichensatz mitliefern. Löst zugleich den grössten DSGVO-Punkt.
+
+~~H1, H2 und H3~~ sind am 2026-09-04 erledigt — siehe [`firewall.md`](firewall.md).

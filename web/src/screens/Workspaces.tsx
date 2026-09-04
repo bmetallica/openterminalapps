@@ -7,7 +7,8 @@ import { Workbench } from '../components/Workbench'
 import { cores as coresLabel, gb, idleLabel } from '../lib/format'
 import {
   ApiError, api,
-  type Allocation, type Group, type Host, type HostImage, type Template,
+  type Allocation, type Group, type Host, type HostImage, type NetzProfil,
+  type Template,
 } from '../lib/api'
 import { AppIcon } from '../components/AppIcon'
 import { Skeleton } from './Skeleton'
@@ -45,6 +46,7 @@ function toPayload(d: Draft) {
     categories: d.categories,
     mode: d.mode,
     stream_engine: d.stream_engine,
+    net_profile_id: d.net_profile_id ?? null,
     image_ref: d.image_ref,
     cores: d.cores,
     memory_bytes: Math.round(d.memory_bytes),
@@ -66,11 +68,12 @@ function toPayload(d: Draft) {
   }
 }
 
-function Editor({ tpl, host, groups, images, onSaved, onClose, onToast }: {
+function Editor({ tpl, host, groups, images, netzprofile, onSaved, onClose, onToast }: {
   tpl: Template
   host: Host | null
   groups: Group[]
   images: HostImage[]
+  netzprofile: NetzProfil[]
   onSaved: () => void
   onClose: () => void
   onToast: (m: string, tone?: 'ok' | 'bad') => void
@@ -247,6 +250,18 @@ function Editor({ tpl, host, groups, images, onSaved, onClose, onToast }: {
                 { value: 'kasmvnc' as const, label: tr('KasmVNC (RFB)') },
               ]}
               onChange={(v) => set('stream_engine', v)} />
+          </Field>
+
+          <Field label={tr('Netz')}
+            hint={tr('Was dieser Arbeitsplatz im Netz erreichen darf. Ohne Profil gilt die Vorgabe: Internet ja, Firmennetz nein, Nachbarsitzung nein.')}>
+            <select value={draft.net_profile_id ?? ''}
+              aria-label={tr('Netzprofil')}
+              onChange={(e) => set('net_profile_id', e.target.value || null)}>
+              <option value="">{tr('Vorgabe (Internet, kein Firmennetz)')}</option>
+              {netzprofile.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
           </Field>
 
           <Field label={tr('Kategorien')} hint={tr('Bestimmt, unter welchem Filter der Workspace erscheint.')}>
@@ -594,15 +609,20 @@ export function Workspaces({ onToast }: { onToast: (m: string, tone?: 'ok' | 'ba
   const [groups, setGroups] = useState<Group[]>([])
   const [images, setImages] = useState<HostImage[]>([])
   const [host, setHost] = useState<Host | null>(null)
+  const [netzprofile, setNetzprofile] = useState<NetzProfil[]>([])
   const [editing, setEditing] = useState<Template | null>(null)
   const [failed, setFailed] = useState<string | null>(null)
 
   async function load() {
     try {
-      const [t, g, i, h] = await Promise.all([
+      const [t, g, i, h, n] = await Promise.all([
         api.templates(), api.groups(), api.images(), api.host(),
+        // Ohne Recht auf die Einstellungen gibt es keine Profile zu sehen —
+        // dann bleibt die Auswahl bei der Vorgabe, statt die Seite zu kippen.
+        api.netProfiles().catch(() => [] as NetzProfil[]),
       ])
-      setList(t); setGroups(g); setImages(i); setHost(h); setFailed(null)
+      setList(t); setGroups(g); setImages(i); setHost(h); setNetzprofile(n)
+      setFailed(null)
     } catch (err) {
       setFailed(err instanceof ApiError ? err.message : 'Laden fehlgeschlagen')
     }
@@ -655,6 +675,7 @@ export function Workspaces({ onToast }: { onToast: (m: string, tone?: 'ok' | 'ba
   if (editing) {
     return (
       <Editor tpl={editing} host={host} groups={groups} images={images}
+        netzprofile={netzprofile}
         onClose={() => setEditing(null)}
         onSaved={() => { setEditing(null); void load() }}
         onToast={onToast} />

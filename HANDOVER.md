@@ -215,8 +215,8 @@ aufgeräumt, deren Datenbankzeile noch `running` war, und mit `pkill -f` die eig
 
 ### ⚠️ Bekannte Bugs & Test-Status
 
-* **Testergebnis: `make test` vollständig grün — 434/434** (2026-09-03).
-  `226 authz · 18 Zwischenablage · 107 e2e · 42 ldap · 2 Medienweg · 39 Sicherung`,
+* **Testergebnis: `make test` vollständig grün — 453/453** (2026-09-04).
+  `226 authz · 18 Zwischenablage · 107 e2e · 42 ldap · 2 Medienweg · 19 Netz · 39 Sicherung`,
   dazu `scripts/build-desktop-image.sh --pruefen` **19/19**.
 * **Die Sicherungsprüfung war nie gefährlich.** Ich hatte sie zwei Tage lang gemieden, weil sie
   „Sitzungen beendet" — sie beendet aber nur die **eigenen**: `/api/sessions` liefert ohne
@@ -247,7 +247,7 @@ aufgeräumt, deren Datenbankzeile noch `running` war, und mit `pkill -f` die eig
 
 ## 🚀 NÄCHSTE ARBEITSSCHRITTE (BACKLOG FÜR DEN AGENTEN)
 
-1. **Die Befunde aus [`security.md`](security.md) und [`dsgvo.md`](dsgvo.md)** (2026-09-04). Sechzehn technische Befunde, davon vier hoch, und zehn Datenschutzaufgaben. **Die drei mit dem besten Verhältnis von Aufwand zu Wirkung sind an einem Vormittag erledigt**: Zeichensatz mitliefern statt von Google laden, das Aufschalten auf fremde Bildschirme protokollieren, Dateirechte auf Sicherungen und Profilen. Die drei schweren (Netztrennung der Sitzungen, Agent aus `ota_sessions`, Wirt vor seinen Containern schützen) gehören geplant, nicht nebenbei gemacht.
+1. **Die Befunde aus [`security.md`](security.md) und [`dsgvo.md`](dsgvo.md)** (2026-09-04) — **H1, H2 und H3 sind am 2026-09-04 erledigt** (Netzabsicherung, siehe [`firewall.md`](firewall.md)). Offen bleiben H4 und die mittleren Befunde. Sechzehn technische Befunde, davon vier hoch, und zehn Datenschutzaufgaben. **Die drei mit dem besten Verhältnis von Aufwand zu Wirkung sind an einem Vormittag erledigt**: Zeichensatz mitliefern statt von Google laden, das Aufschalten auf fremde Bildschirme protokollieren, Dateirechte auf Sicherungen und Profilen.
 2. **Mehrere Hosts (M10)** — braucht eine zweite Maschine. Vom Betreiber auf später gelegt (2026-09-03).
 
 **Am 2026-09-03 erledigt** (was hier bis dahin als 1, 2 und 4 stand):

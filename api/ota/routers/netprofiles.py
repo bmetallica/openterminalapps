@@ -29,7 +29,10 @@ router = APIRouter(prefix="/api/netprofiles", tags=["netprofiles"])
 
 manage = require_permission("settings.manage")
 
-STUFEN = ("abgeschottet", "internet", "offen")
+# Dieselben drei Woerter wie im Regelwerk des Routers (`firewall/otafw/nft.py`).
+# **"aus" heisst nicht "ohne Firewall"**: Der Weg fuehrt weiter durch den
+# Router, er filtert nur nicht mehr. Der Zaehler laeuft weiter.
+STUFEN = ("abgeschottet", "internet", "aus")
 NAME = re.compile(r"^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$")
 PORTS = re.compile(r"^(\*|(\d{1,5}(-\d{1,5})?)(,\d{1,5}(-\d{1,5})?)*)$")
 
@@ -74,12 +77,12 @@ def _pruefen(body: NetProfileIn) -> None:
     if body.stufe not in STUFEN:
         raise HTTPException(status.HTTP_400_BAD_REQUEST,
                             f"Unbekannte Stufe. Erlaubt: {', '.join(STUFEN)}.")
-    if body.stufe == "offen" and not body.begruendung.strip():
+    if body.stufe == "aus" and not body.begruendung.strip():
         # Dieselbe Behandlung wie andere Ausnahmen in diesem Projekt: Wer sie
         # waehlt, soll sie spaeter begruenden koennen.
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            "Die Stufe „offen“ hebt jede Einschränkung auf. Bitte kurz "
+            "Die Stufe „aus“ hebt jede Einschränkung auf. Bitte kurz "
             "begründen, warum dieser Arbeitsplatz sie braucht.")
     if not body.name.strip():
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Ein Name fehlt.")
@@ -160,7 +163,7 @@ def aendern(profil_id: uuid.UUID, body: NetProfileIn, request: Request,
     # Eine Lockerung wird eigens vermerkt. Wer im Protokoll sucht, warum ein
     # Arbeitsplatz ploetzlich ins Firmennetz kam, findet genau diese Zeile.
     aktion = "netprofile.updated"
-    if vorher != body.stufe and body.stufe == "offen":
+    if vorher != body.stufe and body.stufe == "aus":
         aktion = "netprofile.opened"
     audit.record(db, aktion, actor=actor, object_type="netprofile",
                  object_id=profil.name, request=request,

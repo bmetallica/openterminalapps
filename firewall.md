@@ -304,14 +304,40 @@ niemand vorher geprüft hatte. Diesmal stehen sie vorn.
 
 ## Wo die Anlage jetzt steht
 
-Der abgebrochene Bau läuft und ist **nicht kaputt**, aber er ist eine Zwischenstufe:
+**Gebaut, gemessen, in Betrieb** (2026-09-04). Der Aufbau steht so, wie er oben beschrieben ist:
+ein `internal`-Netz je Sitzung, alle enden im Router, der Router ist der einzige Weg nach draussen.
+`scripts/test-firewall.sh` prüft 19 Dinge **von innen** und läuft in `make test` mit; der
+Arbeitsplan mit allen Etappen steht in [`firewall-roadmap.md`](firewall-roadmap.md).
 
-* `ota-firewall` läuft und setzt Regeln auf dem Wirt durch (`OTA-FW`, `OTA-FW-INPUT`).
-* Der Agent legt je Sitzung ein eigenes Netz an und verbindet Traefik damit.
-* Gemessen wirksam: Wirt, LAN und Nachbarsitzungen sind aus einem Arbeitsplatz **nicht** erreichbar,
-  TURN, DNS und Internet schon. Der Haupteingang antwortet.
-* Der Agent hängt nicht mehr im Sitzungsnetz — Befund [H3](security.md#h3) ist damit erledigt.
+Vier Dinge sind unterwegs anders gekommen als geplant. Sie stehen hier, weil sie beim nächsten Mal
+Zeit sparen:
 
-**Vor Etappe 1 zu entscheiden:** diesen Zwischenstand als vorläufige Absicherung stehen lassen (er
-schliesst H1, H2 und H3 heute) oder zurückbauen. Ich würde ihn stehen lassen: Er kostet nichts,
-und die Lücke bleibt sonst offen, bis Fassung 2 fertig ist.
+* **Die Brücke des Wirts war das letzte Loch.** Das Regelwerk stand vollständig — und der
+  Arbeitsplatz erreichte den Wirt trotzdem, über `10.99.k.1`. Dieser Verkehr wird nicht
+  weitergeleitet, also sieht ihn keine Forward-Regel. Die Lösung ist eine Netzoption:
+  `com.docker.network.bridge.inhibit_ipv4` — dann hat die Brücke gar keine Adresse, und es gibt
+  dort nichts anzusprechen.
+* **Fremde Resolver mussten doch gesperrt werden.** Der Entwurf sagte, aus einem `internal`-Netz
+  gebe es keinen Weg zu `8.8.8.8`. Über den Router hinaus gibt es ihn sehr wohl, sobald die Stufe
+  „internet" alles Öffentliche erlaubt. Zwei Zeilen im Regelwerk.
+* **Der Router verliert seine Netze, wenn er neu gebaut wird.** Ein neuer Container bekommt nur die
+  Netze aus der Compose-Datei. Deshalb zieht jeder Abgleich die Anbindung nach — für den Router
+  **und** für Traefik.
+* **`ping` ist als Probe unbrauchbar.** Ein Arbeitsplatz hat kein `NET_RAW`; `ping` scheitert dort
+  immer. Eine Prüfung, die damit misst, meldet „abgeschottet", wo nichts abgeschottet ist.
+
+Die Befunde [H1, H2 und H3](security.md) sind damit geschlossen — nicht durch Regeln, die richtig
+greifen müssen, sondern durch den Aufbau: Ein Arbeitsplatz hat keinen Weg, der am Router vorbeiführt.
+
+### Feste Adressen
+
+Jedes Paar (Mensch, Arbeitsplatz) bekommt ein Subnetz und behält es (`net_leases`). Annas
+Entwicklungs-Arbeitsplatz ist damit immer `10.99.7.x` — auch nach dem Feierabend, auch nach einem
+Neustart. Das war nicht im ersten Entwurf und hat sich als notwendig herausgestellt: Eine
+vorgelagerte Firewall im Unternehmen lässt sich nicht auf eine Adresse einstellen, die morgen eine
+andere ist, und in der Übersicht stünde jeden Tag etwas Neues.
+
+**Die Portfreigaben hängen trotzdem nicht an der Adresse**, sondern an Mensch und Arbeitsplatz. Sie
+überleben den Feierabend, stehen in der Liste weiter (mit dem Vermerk „wartet auf Start") und
+greifen beim nächsten Start wieder — gemessen: zweimal gestartet, dieselbe Adresse, dieselbe
+Freigabe.

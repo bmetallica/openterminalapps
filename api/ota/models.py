@@ -737,16 +737,90 @@ class NetProfile(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
     name: Mapped[str] = mapped_column(String(128), unique=True)
     description: Mapped[str] = mapped_column(Text, default="")
-    # "abgeschottet" | "internet" | "offen"
+    # "abgeschottet" | "internet" | "aus" — dieselben Woerter wie im Router.
     stufe: Mapped[str] = mapped_column(String(16), default="internet")
     regeln: Mapped[list] = mapped_column(JSONB, default=list)
     # Warum diese Anlage jemanden ohne Einschraenkung laufen laesst. Nur bei
-    # der Stufe "offen" gefuellt, und dort verlangt.
+    # der Stufe "aus" gefuellt, und dort verlangt.
     begruendung: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
     )
+
+
+class NetLease(Base):
+    """Welches Subnetz einem Arbeitsplatz eines Menschen **dauerhaft** gehoert.
+
+    Ohne das bekaeme jede Sitzung irgendein freies `/24`, und die Adresse
+    eines Arbeitsplatzes waere nach jedem Feierabend eine andere. Fuer die
+    Portfreigaben ist das egal — die haengen an Mensch und Vorlage, nicht an
+    der Adresse. Fuer alles andere ist es aergerlich: Eine vorgelagerte
+    Firewall im Unternehmen laesst sich nicht auf eine Adresse einstellen, die
+    morgen eine andere ist, und in der Uebersicht steht jeden Tag etwas
+    Neues.
+
+    Deshalb bekommt jedes Paar (Mensch, Arbeitsplatz) eine Nummer und behaelt
+    sie. `idx` ist das dritte Byte: Nummer 7 heisst `10.99.7.0/24`.
+    """
+
+    __tablename__ = "net_leases"
+    __table_args__ = (UniqueConstraint("user_id", "template_id"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    template_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("templates.id", ondelete="CASCADE"), index=True
+    )
+    idx: Mapped[int] = mapped_column(Integer, unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class NetForward(Base):
+    """Eine Portfreigabe ueber den Wirt — die „+ NAT"-Funktion.
+
+    **Sie haengt am Menschen und am Arbeitsplatz, nicht an der Sitzung.** Eine
+    Sitzung bekommt bei jedem Start ein neues Netz und eine neue Adresse; eine
+    Freigabe, die daran haengt, waere nach dem naechsten Feierabend weg. So
+    ueberlebt sie den Neustart, und der Router setzt sie auf die Adresse, die
+    gerade gilt.
+
+    `expires_at = NULL` heisst unbefristet. Das ist erlaubt, aber es ist eine
+    Entscheidung — und `notiz` ist deshalb Pflicht.
+    """
+
+    __tablename__ = "net_forwards"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    template_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("templates.id", ondelete="CASCADE"), index=True
+    )
+    # Der Port auf dem Wirt. Aus dem Bereich, den der Router beim Start
+    # veroeffentlicht hat — mehr gibt es nicht.
+    aussen: Mapped[int] = mapped_column(Integer, unique=True)
+    # Der Port im Arbeitsplatz.
+    innen: Mapped[int] = mapped_column(Integer)
+    protokoll: Mapped[str] = mapped_column(String(8), default="tcp")
+    # Wofuer. Pflicht — sonst steht in einem Jahr eine Freigabe da, die
+    # niemand zu entfernen wagt.
+    notiz: Mapped[str] = mapped_column(Text, default="")
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+
+    user: Mapped[User] = relationship(foreign_keys=[user_id], lazy="selectin")
+    template: Mapped[Template] = relationship(lazy="selectin")
+
+    @property
+    def abgelaufen(self) -> bool:
+        return self.expires_at is not None and self.expires_at <= utcnow()
 
 
 class Setting(Base):

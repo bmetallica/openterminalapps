@@ -80,6 +80,14 @@ function Bay({ session, template, onOpen, onAct, onApp, busy, busyApp }: {
               <b>{tr('{open} von {total}',
                 { open: session.streams.length, total: apps.length })}</b></span>
           )}
+          {/* Was im Netz gilt. Steht hier, weil sonst „das Intranet geht
+              nicht" als Störung gemeldet wird, wo eine Einstellung greift. */}
+          <span className="bay__fact"><span className="silk">{tr('Netz')}</span>
+            <b title={session.netzprofil}>
+              {session.netzstufe === 'abgeschottet' ? tr('abgeschottet')
+                : session.netzstufe === 'aus' ? tr('ohne Einschränkung')
+                : tr('Internet, kein Firmennetz')}
+            </b></span>
         </div>
       </div>
 

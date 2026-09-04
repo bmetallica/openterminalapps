@@ -20,7 +20,7 @@ help:
 	@echo "  make ps        Zustand aller Dienste"
 	@echo "  make admin     Ersten Administrator anlegen (NAME=... setzen)"
 	@echo "  make test      Alle Prüfreihen (Rechte, Zwischenablage, Oberfläche,"
-	@echo "                 Verzeichnis, Medienweg, Sicherung)"
+	@echo "                 Verzeichnis, Medienweg, Netz, Sicherung)"
 	@echo "  make messung   Die beiden Streaming-Maschinen vergleichen (~12 min,"
 	@echo "                 braucht eine ruhige Maschine)"
 	@echo "  make backup    Datenbank und Profile von Hand sichern"
@@ -151,6 +151,12 @@ test:
 	@# Browser alle gleich aus ("Waiting for stream") und standen in keinem
 	@# Protokoll. Ohne konfigurierten TURN wird uebersprungen statt rot.
 	@./scripts/test-streaming.sh
+	@echo
+	@# Die Netzabsicherung. Eigene Reihe, weil sie **von innen** misst: Ein
+	@# Regelwerk zu lesen beweist nichts — in der ersten Fassung standen
+	@# fremde Regeln davor und liessen alles durch, und die Bruecke des
+	@# Wirts war erreichbar, obwohl das Regelwerk vollstaendig aussah.
+	@./scripts/test-firewall.sh
 	@echo
 	@# Zuletzt, weil dieser Test Sessions beendet, um die Wiederherstellung
 	@# überhaupt prüfen zu können — **nur die eigenen**: `/api/sessions`

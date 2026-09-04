@@ -5,7 +5,11 @@ FROM python:3.12-slim AS runtime
 # `iptables` in der nft-Fassung, weil Docker auf Debian 13 dieselbe benutzt:
 # Zwei Regelwerke, die sich gegenseitig nicht sehen, waeren schlimmer als eins.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      iptables ipset dnsmasq ca-certificates \
+      iptables nftables ipset dnsmasq ca-certificates \
+      # `iproute2` fuer die Routen — auch die, die dieser Dienst in den
+      # Namensraum eines Arbeitsplatzes setzt. `util-linux` bringt `nsenter`
+      # mit, das ihn dorthin bringt.
+      iproute2 util-linux iputils-ping \
  && update-alternatives --set iptables /usr/sbin/iptables-nft \
  && update-alternatives --set ip6tables /usr/sbin/ip6tables-nft \
  # dnsmasq wird von diesem Dienst gestartet, nicht von systemd.

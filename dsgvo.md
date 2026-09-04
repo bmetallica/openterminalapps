@@ -61,6 +61,21 @@ Blick aussieht.
 | Verwaltungsvorgänge (wer hat was geändert) | `audit_log` | |
 | Fehlerantworten des Reverse Proxy, mit IP | Traefik-Zugriffsprotokoll (nur 4xx/5xx) | unbegrenzt, siehe [N3](security.md#n3) |
 
+**Dazu seit dem 2026-09-04 die Netzzahlen.** Der Router zählt je Arbeitsplatz mit, wie viel durch
+die Leitung geht und wie viele Pakete verworfen werden (`firewall.md`). Diese Zahlen werden
+**nirgends gespeichert** — sie stehen live in der Netzübersicht und unter `/metrics`, und mit dem
+Ende der Sitzung sind sie weg. Damit gibt es nichts aufzubewahren und nichts zu löschen.
+
+👉 **Das ändert sich, sobald jemand sie abholt.** Ein Prometheus, der `/metrics` im Minutentakt
+fragt, legt genau die Zeitreihe an, die es hier nicht gibt: wer wann wie viel Verkehr hatte. Das
+sind personenbezogene Daten. Wer das einrichtet, braucht eine Frist — mein Vorschlag: **Rohwerte 7
+Tage, Tagessummen 90 Tage** — und einen Punkt in der Betriebsvereinbarung. Die Sicherheitssignale
+(verworfene Pakete) sind dabei der leichtere Teil: Sie sagen etwas über eine Maschine. Die
+Durchsatzzahlen sind der schwerere.
+
+**Was ausdrücklich nicht entsteht:** kein Mitschneiden von Inhalten, kein Aufbrechen von TLS, keine
+Liste besuchter Adressen. Der eigene Resolver beantwortet Anfragen und schreibt sie nicht mit.
+
 **Aus diesen Daten lässt sich ein Arbeitszeitprofil ablesen** — wann jemand anfängt, wann er
 aufhört, wie lange er womit arbeitet. Dass es nicht dafür gedacht ist, ändert daran nichts.
 👉 **Das ist der Punkt für den Datenschutzbeauftragten und den Betriebsrat** (Abschnitt 6).

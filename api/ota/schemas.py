@@ -485,6 +485,11 @@ class SessionOut(BaseModel):
     # braucht das: Reconnect-Erkennung, Leerlaufuhr und Zwischenablage sind
     # gegen KasmVNCs Weboberfläche geschrieben und greifen bei Selkies nicht.
     stream_engine: str = "kasmvnc"
+    # Welches Netzprofil fuer diese Sitzung gilt. Steht im Dashboard, weil
+    # wer die Wirkung nicht kennt, sie als Fehler meldet — „das Intranet geht
+    # nicht" ist sonst ein Ticket statt einer Einstellung.
+    netzprofil: str = "Vorgabe"
+    netzstufe: str = "internet"
 
 
 class SessionStartIn(BaseModel):

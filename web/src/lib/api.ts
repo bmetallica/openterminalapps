@@ -51,6 +51,11 @@ export type Template = {
   icon: string
   categories: string[]
   /**
+   * Welches Netzprofil gilt. `null` heisst: die Vorgabe der Anlage — Internet
+   * ja, Firmennetz nein, Nachbarsitzung nein, Wirt nein.
+   */
+  net_profile_id: string | null
+  /**
    * Welche Streaming-Maschine dieser Arbeitsplatz benutzt.
    *
    * `selkies` ist die Vorgabe — H.264 über WebRTC, der Weg von OTAs eigenem
@@ -113,6 +118,9 @@ export type Session = {
    * Selkies gibt es die Elemente nicht, auf die sie zeigen.
    */
   stream_engine: 'kasmvnc' | 'selkies'
+  /** Welches Netzprofil gilt — steht im Dashboard, damit die Wirkung kein Rätsel ist. */
+  netzprofil: string
+  netzstufe: NetzStufe
 }
 
 export type MyStorage = {
@@ -148,6 +156,62 @@ export type User = {
 }
 
 export type Permission = { key: string; text: string }
+
+/** Was eine Sitzung im Netz darf. Durchgesetzt wird es im Router, nicht hier. */
+export type NetzRegel = {
+  /** IP, CIDR oder Name. Ein Name wird freigegeben, sobald der eigene Resolver ihn beantwortet. */
+  ziel: string
+  /** "443", "80,443", "8080-8090" oder "*" */
+  ports: string
+  protokoll: 'tcp' | 'udp' | 'beide'
+  /** Pflicht. Eine Freigabe ohne Begründung entfernt später niemand mehr. */
+  notiz: string
+}
+
+export type NetzStufe = 'abgeschottet' | 'internet' | 'aus'
+
+export type NetzProfil = {
+  id: string
+  name: string
+  description: string
+  stufe: NetzStufe
+  regeln: NetzRegel[]
+  begruendung: string
+  in_benutzung: number
+}
+
+/** Eine Portfreigabe über den Wirt — die „+ NAT"-Funktion. */
+export type NetzFreigabe = {
+  id: string
+  user_id: string
+  template_id: string
+  user: string
+  template: string
+  aussen: number
+  innen: number
+  protokoll: string
+  notiz: string
+  expires_at: string | null
+  abgelaufen: boolean
+  /** Greift sie gerade? Ohne laufenden Arbeitsplatz wartet sie auf den nächsten Start. */
+  aktiv: boolean
+}
+
+/** Eine Zeile der Netzübersicht: wer arbeitet gerade unter welcher Adresse. */
+export type NetzZeile = {
+  session_id: string
+  user_id: string
+  template_id: string
+  user: string
+  template: string
+  subnetz: string
+  adresse: string
+  stufe: NetzStufe
+  profil: string
+  bytes: number
+  verworfen: number
+  forwards: NetzFreigabe[]
+}
 
 export type GlobalSettings = {
   auth_idle_minutes: number
@@ -828,6 +892,26 @@ export const api = {
 
   // Das Gesicht der Anlage. Lesen darf jeder — die Anmeldemaske braucht es,
   // bevor irgendwer angemeldet ist (`lib/branding.ts`).
+  netProfiles: () => call<NetzProfil[]>('/netprofiles'),
+  createNetProfile: (body: Omit<NetzProfil, 'id' | 'in_benutzung'>) =>
+    call<NetzProfil>('/netprofiles', { method: 'POST', body: JSON.stringify(body) }),
+  saveNetProfile: (id: string, body: Omit<NetzProfil, 'id' | 'in_benutzung'>) =>
+    call<NetzProfil>(`/netprofiles/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  deleteNetProfile: (id: string) =>
+    call<{ status: string }>(`/netprofiles/${id}`, { method: 'DELETE' }),
+
+  netzGlobal: () => call<NetzRegel[]>('/firewall/global'),
+  saveNetzGlobal: (regeln: NetzRegel[]) =>
+    call<NetzRegel[]>('/firewall/global', { method: 'PUT', body: JSON.stringify(regeln) }),
+  netzUebersicht: () => call<NetzZeile[]>('/firewall/uebersicht'),
+  netzFreigaben: () => call<NetzFreigabe[]>('/firewall/forwards'),
+  createNetzFreigabe: (body: {
+    user_id: string; template_id: string; innen: number
+    protokoll: string; notiz: string; tage: number
+  }) => call<NetzFreigabe>('/firewall/forwards', { method: 'POST', body: JSON.stringify(body) }),
+  deleteNetzFreigabe: (id: string) =>
+    call<{ status: string }>(`/firewall/forwards/${id}`, { method: 'DELETE' }),
+
   branding: () => call<Marke>('/branding'),
   saveBranding: (body: { name?: string; accent?: string }) =>
     call<Marke>('/branding', { method: 'PUT', body: JSON.stringify(body) }),

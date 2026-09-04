@@ -61,6 +61,11 @@ BRAND_NAME = "brand.name"
 BRAND_ACCENT = "brand.accent"
 BRAND_LOGO = "brand.logo"
 
+# Freigaben, die fuer **alle** Arbeitsplaetze gelten — der Dateiserver, das
+# interne Rechenzentrum, der Paketspiegel. An einer Stelle gepflegt statt in
+# jedem Profil wiederholt.
+FIREWALL_GLOBAL = "firewall.global"
+
 DEFAULTS: dict[str, Any] = {
     # Acht Stunden: ein Arbeitstag. Wer morgens kommt, meldet sich einmal an.
     AUTH_IDLE_MINUTES: 480,
@@ -72,6 +77,7 @@ DEFAULTS: dict[str, Any] = {
     # gefragt hat — und beim Zuruecksetzen soll genau diese herauskommen.
     BRAND_ACCENT: "#06B6D4",
     BRAND_LOGO: None,
+    FIREWALL_GLOBAL: [],
 }
 
 _cache: dict[str, tuple[float, Any]] = {}
