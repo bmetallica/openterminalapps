@@ -277,6 +277,8 @@ nicht — dieselbe Trennung gilt für das Dateisystem des Hosts.
   gelöst ist, und was diese Durchsicht ausdrücklich **nicht** war
 - **[dsgvo.md](dsgvo.md)** — welche personenbezogenen Daten wo liegen, wie lange, wer sie sieht —
   und die vier Stellen, an denen heute etwas fehlt
+- **[firewall.md](firewall.md)** — Entwurf für die Netzabsicherung der Arbeitsplätze: ein Netz je
+  Sitzung, Regeln im Netfilter des Wirts, Profile in der Oberfläche
 
 Ein Hinweis zur Fehlersuche: [Kapitel 12](docs/wiki/12-fehlersuche.md) beschreibt echte Fehler aus
 dem Betrieb mit Symptom, Ursache und Reparatur — darunter mehrere, die tagelang nach etwas anderem

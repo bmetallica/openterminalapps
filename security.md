@@ -77,10 +77,11 @@ ins Internet und an interne Dienste. Der Befund ist deshalb keine Fehlfunktion, 
 Rechenzentrum heraus. Das gehört entschieden und aufgeschrieben, nicht stillschweigend
 mitgeliefert.
 
-**Empfehlung**, in dieser Reihenfolge:
+**Empfehlung**, in dieser Reihenfolge — ausgearbeitet in [`firewall.md`](firewall.md):
 1. Den Wirt vor seinen eigenen Containern schützen: Die Verwaltungsports des Wirts (22, und was
-   sonst nur der Administrator braucht) auf dem Docker-Bridge-Interface sperren. Eine Regel in
-   `DOCKER-USER` reicht — sie überlebt Neustarts von Docker, Regeln in `FORWARD` nicht.
+   sonst nur der Administrator braucht) für den Adressbereich der Sitzungen sperren. **Und zwar in
+   `INPUT`, nicht in `DOCKER-USER`** — Verkehr an den Wirt selbst wird nicht weitergeleitet und
+   läuft an `DOCKER-USER` vorbei.
 2. Nachbarstapel abschirmen (Elasticsearch, Redis): entweder auf `127.0.0.1` binden oder
    Anmeldung einschalten.
 3. Erst danach über eine allgemeine Ausgangsregel nachdenken. Sie ist die grösste Änderung und die
@@ -104,9 +105,10 @@ KasmVNC das aus dem Profil abgeleitete VNC-Geheimnis, bei Selkies die Basic-Auth
 sind nicht zu erraten, aber sie sind die **einzige** verbleibende Schranke, und sie stehen im
 Klartext in der Umgebung des jeweiligen Containers.
 
-**Empfehlung.** Je Sitzung ein eigenes Netz statt eines gemeinsamen `ota_sessions`. Der Agent legt
-Container ohnehin selbst an; ein Netz je Sitzung ist ein Aufruf mehr. Alternativ, billiger und
-schwächer: `--icc=false` auf dem Bridge-Netz.
+**Empfehlung.** Je Sitzung ein eigenes Netz statt eines gemeinsamen `ota_sessions` — und zwar
+zwingend so: Ohne geladenes `br_netfilter` läuft Verkehr auf **derselben** Brücke gebrückt statt
+geroutet und damit an jeder iptables-Regel vorbei. Eine Firewall über einem gemeinsamen Netz sähe
+diesen Verkehr nie. Ausgearbeitet in [`firewall.md`](firewall.md).
 
 ---
 
