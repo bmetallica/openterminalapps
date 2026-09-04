@@ -294,6 +294,20 @@ services:
       OTA_SESSION_NETWORK: ota_sessions
       OTA_PUBLIC_NETWORK: ota_public
       OTA_BACKUP_ROOT: "${OTA_BACKUP_ROOT:-/srv/ota/backups}"
+      # Ein Netz je Sitzung, aus einem eigenen Bereich. Nicht aus Dockers
+      # Vorrat: Der ist auf einer gewachsenen Maschine schnell leer, und
+      # 192.168.x ist in vielen Firmennetzen die LAN-Adresse.
+      OTA_SESSION_POOL: "${OTA_SESSION_POOL:-10.99.0.0/16}"
+      OTA_SESSION_PREFIX: "${OTA_SESSION_PREFIX:-24}"
+      OTA_SESSION_MTU: "${OTA_SESSION_MTU:-1500}"
+      OTA_TRAEFIK_CONTAINER: ota-traefik
+      OTA_FW_SOCKET: "${OTA_RUNTIME_ROOT:-/srv/ota/runtime}/firewall.sock"
+      # Damit der Browser im Arbeitsplatz OTA selbst erreicht — die
+      # Firefox-Erweiterung für die Zwischenablage wird von dort geladen.
+      OTA_SELF_ADDRESS: "${OTA_TURN_HOST:-}"
+      OTA_HTTPS_PORT: "${OTA_HTTPS_PORT:-8443}"
+      OTA_TURN_MIN: "${OTA_TURN_MIN:-49160}"
+      OTA_TURN_MAX: "${OTA_TURN_MAX:-49260}"
     volumes:
       # Der einzige Dienst mit Schreibzugriff auf den Docker-Socket.
       # Die API bekommt ihn bewusst nicht — sie verarbeitet Nutzereingaben.
@@ -314,10 +328,14 @@ services:
       - ${OTA_BACKUP_ROOT:-/srv/ota/backups}:${OTA_BACKUP_ROOT:-/srv/ota/backups}
     networks:
       # Kein "public": Von aussen ist der Agent nicht erreichbar.
+      #
+      # Und **kein "sessions" mehr** (2026-09-04): Der Agent hing dort, damit
+      # Compose das Netz anlegt — und war damit aus jedem Arbeitsplatz
+      # erreichbar (`security.md`, H3). Er ist der einzige Dienst mit
+      # schreibendem Zugriff auf den Docker-Socket; das war die kürzeste
+      # Strecke von einem beliebigen Nutzer zu root auf dem Wirt. Die
+      # Sitzungsnetze legt jetzt der Agent selbst an, eines je Sitzung.
       - internal
-      # Nur damit Compose das Session-Netz überhaupt anlegt. Compose erzeugt
-      # ausschliesslich Netze, die mindestens ein Dienst verwendet.
-      - sessions
     labels:
       - "traefik.enable=false"
 
@@ -339,6 +357,50 @@ services:
   # localhost kein TLS — deshalb braucht diese Registry weder Zertifikat noch
   # einen Eintrag in daemon.json. Von aussen ist sie damit nicht erreichbar;
   # wer sie einem zweiten Host anbieten will, stellt sie hinter Traefik.
+  # ---------------------------------------------------------------- Firewall
+  #
+  # Schreibt Regeln, transportiert keine Pakete. Er laeuft im Netzwerk-
+  # Namensraum des Wirts, weil dort die Regeln hingehoeren — ein Container als
+  # *Router* funktionierte nicht: Docker richtet fuer jedes Bridge-Netz eigenes
+  # NAT ein, der Weg nach draussen ginge an ihm vorbei, und ihn zum Gateway zu
+  # machen braeuchte NET_ADMIN **im Sitzungscontainer** (firewall.md).
+  firewall:
+    build:
+      context: ../firewall
+      dockerfile: Dockerfile
+      args:
+        http_proxy: "${OTA_HTTP_PROXY:-}"
+        https_proxy: "${OTA_HTTPS_PROXY:-}"
+        no_proxy: "${OTA_NO_PROXY:-}"
+        HTTP_PROXY: "${OTA_HTTP_PROXY:-}"
+        HTTPS_PROXY: "${OTA_HTTPS_PROXY:-}"
+        NO_PROXY: "${OTA_NO_PROXY:-}"
+    image: ota/firewall:${OTA_VERSION:-dev}
+    container_name: ota-firewall
+    restart: unless-stopped
+    # Der Namensraum des Wirts: Nur hier sind die Ketten die des Wirts.
+    network_mode: host
+    cap_add:
+      # Mehr nicht. Kein privileged, kein Docker-Socket, keine Datenbank.
+      - NET_ADMIN
+      - NET_RAW
+    environment:
+      OTA_AGENT_TOKEN: "${OTA_AGENT_TOKEN}"
+      OTA_SESSION_POOL: "${OTA_SESSION_POOL:-10.99.0.0/16}"
+      OTA_FW_RESYNC: "${OTA_FW_RESYNC:-30}"
+      # Wen der eigene Resolver fragt. Leer heisst: die Nameserver des Wirts.
+      OTA_FW_DNS_UPSTREAM: "${OTA_FW_DNS_UPSTREAM:-}"
+    volumes:
+      # Der Draht zum Agent — ein Socket, kein Port. Ein Port waere im
+      # Namensraum des Wirts auf **jeder** seiner Adressen offen.
+      - ${OTA_RUNTIME_ROOT:-/srv/ota/runtime}:/srv/ota/runtime
+      - ota_firewall_state:/var/lib/ota-firewall
+    healthcheck:
+      test: ["CMD-SHELL", "test -S /srv/ota/runtime/firewall.sock"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+
   registry:
     image: registry:2
     container_name: ota-registry
@@ -492,6 +554,12 @@ services:
       - "traefik.http.services.ota-keycloak.loadbalancer.server.port=8080"
 
 volumes:
+  # Der zuletzt gewuenschte Zustand der Firewall. Auf Platte, damit ein
+  # Neustart des Dienstes nichts vergisst — sonst staenden danach Sitzungen
+  # ohne Freigaben da, und die Grundsperre haette sie stumm abgeschnitten.
+  ota_firewall_state:
+    name: ota_firewall_state
+
   registry-data:
     name: ota_registry_data
 

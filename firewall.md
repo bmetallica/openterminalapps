@@ -1,371 +1,317 @@
 # Netzabsicherung der Arbeitsplätze
 
-**Entwurf, 2026-09-04.** Antwort auf die Befunde [H1, H2 und H3](security.md) — und auf den
-Vorschlag, jeder Sitzung ein eigenes Docker-Netz zu geben und den Verkehr über einen
-Firewall-Container zu führen, konfigurierbar in der Oberfläche.
-
-*(Kleingeschrieben wie `security.md` und `dsgvo.md` daneben.)*
-
----
-
-## Kurze Antwort
-
-**Ja — der Kern trägt, und er löst mehr als den ersten Punkt.** Je Sitzung ein eigenes Netz plus
-eine Freigabeliste beseitigt H1 (Wirt und Firmennetz erreichbar) und H2 (Arbeitsplätze erreichen
-einander), und nebenbei H3 (der Agent ist erreichbar), sobald der Agent nicht mehr in den
-Sitzungsnetzen hängt.
-
-**Zwei Stellen im Entwurf würde ich anders bauen.** Beide sind Fallen, die man erst im Betrieb
-merkt — und die zweite ist genau der Fall, um den es in H1 in erster Linie geht.
+**Fassung 2, 2026-09-04.** Die erste Fassung wurde teilweise gebaut und dabei verworfen — nicht
+weil sie nicht funktionierte, sondern weil sie **zu viele Stellen hatte, an denen man sie verstehen
+musste**. Was dabei gemessen wurde, steht weiter unten; es ist das stärkste Argument für den
+Aufbau, der jetzt hier steht.
 
 ---
 
-## Korrektur 1 · Der Firewall-Container kann nicht der Router sein
-
-Der Gedanke ist naheliegend: ein Container mit `iptables`, alle Sitzungsnetze hängen daran, aller
-Verkehr geht durch ihn. Das funktioniert so nicht, und der Grund ist Docker selbst.
-
-**Docker richtet für jedes Bridge-Netz eigenständig NAT und Weiterleitung ein.** Ein Container
-bekommt seine Standardroute auf die Bridge des Wirts, nicht auf einen Nachbarcontainer. Der Weg
-nach draussen geht also **am Firewall-Container vorbei**, egal wie viele Netze an ihm hängen.
-
-Ihn tatsächlich zum Gateway zu machen ginge nur auf zwei Wegen, und beide sind schlechter als das
-Problem:
-
-* **Standardroute im Sitzungscontainer umbiegen.** Dafür braucht dieser Container `NET_ADMIN` —
-  also genau die Fähigkeit, die wir ihm mit `cap_drop: ALL` gerade genommen haben. Wer seine
-  Routen setzen darf, darf sie auch wieder wegnehmen.
-* **Netz-Namensraum teilen** (`network_mode: container:<firewall>`). Dann liegen alle Sitzungen im
-  selben Namensraum — das Gegenteil von Trennung.
-
-**Stattdessen:** Die Regeln gehören in den Netfilter des **Wirts**. Der Container darf bleiben, nur
-seine Rolle ändert sich — vom **Router** zum **Regelschreiber**. Ein `ota-firewall` mit
-`network_mode: host` und `cap_add: NET_ADMIN`, der nichts weiter tut, als Regeln zu setzen und
-nachzuhalten. Er transportiert kein einziges Paket; er entscheidet nur, welche der Kernel
-weiterleitet. Das ist schneller (kein zusätzlicher Sprung), einfacher (keine Routen im Container)
-und robuster.
-
-> Der Vollständigkeit halber: Auch der Agent könnte die Regeln schreiben — er hat mit dem
-> Docker-Socket ohnehin Wirtsrechte. Ein eigener Dienst ist mir trotzdem lieber. `NET_ADMIN` und
-> `network_mode: host` sind eine Rechteklasse für sich, und der Agent ist schon heute der Dienst
-> mit der grössten Angriffsfläche ([H3](security.md#h3)).
-
----
-
-## Korrektur 2 · `DOCKER-USER` sieht den Wirt nicht
-
-Die übliche Stelle für eigene Regeln ist die Kette `DOCKER-USER`. Sie hängt in **`FORWARD`** — also
-in dem Weg, den *weitergeleiteter* Verkehr nimmt: Container nach draussen, Container zu Container
-über verschiedene Brücken.
-
-**Verkehr vom Container an den Wirt selbst geht nicht durch `FORWARD`, sondern durch `INPUT`.**
-`DOCKER-USER` sieht ihn nie. Und genau das ist der erste Teil von H1:
-
-```
-192.168.0.1:22   OFFEN     ← SSH des Wirts
-192.168.0.1:9200 OFFEN     ← Elasticsearch eines anderen Stapels
-192.168.0.1:6379 OFFEN     ← Redis eines anderen Stapels
-```
-
-Alle drei Ziele sind **der Wirt**. Eine Firewall, die nur `DOCKER-USER` bespielt, lässt sie offen —
-und man sieht es dem Regelwerk nicht an.
-
-**Also zwei Regelwerke, nicht eins:**
-
-| Kette | Was sie abdeckt |
-|---|---|
-| `DOCKER-USER` (in `FORWARD`) | Container → Internet, Container → LAN, Container → anderer Container |
-| `INPUT` (`-i br-…` oder `-s <sitzungsnetz>`) | Container → Dienste **auf dem Wirt** |
-
----
-
-## Warum je Sitzung ein eigenes Netz nicht optional ist
-
-Der Gedanke „ein gemeinsames Sitzungsnetz reicht, die Firewall trennt sie darin" scheitert an einer
-Kernel-Eigenschaft. **Gemessen auf dieser Maschine:**
-
-```
-$ sysctl net.bridge.bridge-nf-call-iptables
-(kein solcher Schlüssel)
-$ lsmod | grep -c br_netfilter
-0
-```
-
-Das Modul `br_netfilter` ist nicht geladen. **Verkehr zwischen zwei Containern auf derselben Brücke
-wird gebrückt, nicht geroutet — und läuft damit an iptables vollständig vorbei.** Keine Regel der
-Welt sieht ihn.
-
-Erst wenn beide in **verschiedenen** Netzen liegen, muss der Kernel routen, und erst dann greift
-`FORWARD` und damit `DOCKER-USER`. Das eigene Netz je Sitzung ist also nicht die bequeme, sondern
-die **einzige** Variante, die H2 wirklich schliesst.
-
-*(Man könnte `br_netfilter` laden. Dann läuft aller Brückenverkehr des ganzen Wirts durch
-Netfilter — mit Nebenwirkungen für jeden anderen Stapel auf dieser Maschine. Kein guter Tausch.)*
-
----
-
-## Der Aufbau
+## Das Bild
 
 ```
    Browser
-      │  https
+      │ https
       ▼
-  ┌─────────┐   je Sitzung verbunden    ┌──────────────────┐
-  │ Traefik │◄─────────────────────────►│ ota-s-<id>       │
-  └─────────┘                           │ Netz 10.99.k.0/24│
-                                        └────────┬─────────┘
-                                                 │  alles Übrige
-                                    ┌────────────▼─────────────┐
-                                    │  Netfilter des Wirts     │
-                                    │  FORWARD / DOCKER-USER   │  ← ota-firewall
-                                    │  INPUT                   │     schreibt hier
-                                    └────────────┬─────────────┘
-                                       erlaubt?  │
-                                  ┌──────────────┼───────────────┐
-                                  ▼              ▼               ▼
-                              TURN (Wirt)   Internet         LAN ✗
+  ┌─────────┐
+  │ Traefik │
+  └────┬────┘
+       │                        ┌──────────────────────────────────┐
+       │                        │            ota-fw                │
+       │                        │  Router für alle Arbeitsplätze:  │
+       └───────────────────────►│  Regeln · NAT · DNS · Freigaben  │──► Internet
+                                └───┬──────────┬──────────┬────────┘    ──► Firmennetz
+                        internal ───┘          │          └─── internal      (nur erlaubtes)
+                        ota-n-1            ota-n-2            ota-n-3
+                        10.99.1.0/24       10.99.2.0/24       10.99.3.0/24
+                        │                  │                  │
+                     ┌──┴───┐           ┌──┴───┐           ┌──┴───┐
+                     │ Anna │           │ Bernd│           │ Cem  │
+                     └──────┘           └──────┘           └──────┘
 ```
 
-**Ablauf beim Start einer Sitzung**, Reihenfolge nicht beliebig:
+**Ein Satz, den man sich merken kann:** Jeder Arbeitsplatz hängt an einem eigenen Kabel, alle Kabel
+enden in einer Firewall, und die Firewall ist der einzige Weg nach draussen. Genau dein Vorschlag —
+und er ist besser als meiner.
 
-1. **Netz anlegen** mit ausdrücklichem Subnetz aus OTAs eigenem Bereich (dazu unten mehr).
-2. **Regeln setzen** — Freigaben für dieses Subnetz. Die Grundsperre steht schon (Punkt 0, siehe
-   unten), das Netz ist also von seiner ersten Sekunde an dicht.
-3. **Container starten**, nur in diesem einen Netz.
-4. **Traefik verbinden** (`docker network connect`) und am Container
-   `traefik.docker.network=<netz>` setzen, damit Traefik die richtige Adresse nimmt.
-5. Beim Beenden alles rückwärts: Traefik trennen, Regeln entfernen, Netz löschen.
-
-**Punkt 0 — die Grundsperre.** Einmalig, unabhängig von einzelnen Sitzungen: eine Regel, die den
-**ganzen** OTA-Adressbereich verwirft. Erst danach die Freigaben je Sitzung. Sonst gibt es beim
-Anlegen ein Zeitfenster, in dem ein Netz schon existiert und noch keine Regel hat. Ein solches
-Fenster ist genau die Art Fehler, die im Betrieb einmal im Jahr zuschlägt und nie reproduzierbar
-ist.
-
-**Der Agent verbindet sich nicht mehr mit den Sitzungsnetzen.** Er braucht sie nur, um Ports
-abzufragen — das geht über den Docker-Socket, den er ohnehin hat. Damit fällt [H3](security.md#h3)
-als Nebenwirkung weg.
+Die Sitzungsnetze sind **`internal`**. Docker richtet für solche Netze **kein** NAT ein und lässt
+nichts an ihnen vorbei: Ohne die Firewall kommt ein Arbeitsplatz nirgendwohin — auch nicht an den
+Wirt, auch nicht ins LAN, auch nicht zu einem Nachbarn. Die Absicherung ist damit nicht mehr eine
+Sammlung von Regeln, die richtig greifen müssen, sondern **eine Eigenschaft des Aufbaus**.
 
 ---
 
-## Der Grundregelsatz, den OTA selbst braucht
+## Warum das die bessere Wahl ist — mit Belegen aus dem abgebrochenen Bau
 
-Ausgehend vom Sitzungsnetz. Alles, was hier nicht steht, ist verworfen.
+Die erste Fassung setzte die Regeln im Netfilter des **Wirts** durch. Sie lief, aber unterwegs sind
+drei Dinge aufgetreten, die alle dieselbe Ursache haben: **Man teilt sich das Regelwerk mit
+Docker.** Alle drei verschwinden im neuen Aufbau ersatzlos.
 
-| Ziel | Warum |
+| Was passierte | Warum es in Fassung 2 wegfällt |
 |---|---|
-| `ESTABLISHED,RELATED` | Antwortpakete. Ohne das funktioniert nichts. |
-| **DNS** → der festgelegte Resolver, 53/udp+tcp | Ohne Namensauflösung startet keine Anwendung sauber. **Nur der eine Resolver** — siehe „DNS-Namen" unten. |
-| **TURN** → Wirt, 3478/tcp+udp und der Relay-Bereich (Vorgabe 49160–49260/udp) | Der Medienweg. Läuft gegen den Wirt, also **`INPUT`**, nicht `DOCKER-USER`. |
-| **Traefik** → Sitzung, 6901 bzw. 8080 | Eingehend, damit das Bild ankommt. Nur von Traefiks Adresse. |
-| **Firmenproxy** → falls gesetzt, Host:Port aus `OTA_HTTP_PROXY` | Sonst kommt hinter dem Proxy nichts durch. Ohne Proxy entfällt die Zeile. |
-| **NTP**, 123/udp — optional | Eine falsche Uhr im Container bricht TLS und Kerberos-Tickets. |
+| **Der Haupteingang ging zu.** Sobald Traefik mit einem Sitzungsnetz verbunden wurde, schrieb Docker den DNAT seines veröffentlichten Ports auf Traefiks Adresse **in diesem Netz** um (`--to-destination 10.99.0.3:8443`). Die Grundsperre traf damit OTA selbst — von aussen kam niemand mehr herein, und nirgends stand ein Fehler. | Auf `internal`-Netzen veröffentlicht Docker keine Ports. Der DNAT bleibt, wo er hingehört. |
+| **Der eigene Resolver stand offen im Firmennetz.** `dnsmasq` bindet mit `bind-dynamic` jede Schnittstelle — prompt auch die LAN-Adresse des Wirts. Es brauchte drei zusätzliche Regelpaare, um ihn wieder zu schliessen. | Der Resolver läuft **im** Firewall-Container und ist nur über die Sitzungsnetze erreichbar. Nichts zu sperren. |
+| **Fremde Resolver mussten eigens verboten werden**, sonst hebelt ein `8.8.8.8` jede Freigabe nach Namen aus. | Aus einem `internal`-Netz gibt es keinen Weg zu `8.8.8.8`. Der eigene Resolver ist der einzige. |
 
-Ausdrücklich **nicht** freigegeben, auch nicht in der Stufe „Internet":
-
-* das Netz des Wirts (alle seine Adressen, nicht nur die Bridge-Adresse),
-* die anderen Sitzungsnetze,
-* `ota_internal` (Datenbank, API, Keycloak) — heute schon dicht, bleibt dicht,
-* der Agent.
+Dazu kommt, was gar nicht mehr nötig ist: keine Kette in `DOCKER-USER`, keine zweite in `INPUT`,
+keine Abgleichschleife gegen Dockers Neustart, keine Sonderbehandlung für veröffentlichte Ports
+fremder Stapel. **Das Regelwerk des Wirts bleibt unangetastet.**
 
 ---
 
-## Die Stufen in der Oberfläche
+## Die eine harte Stelle
 
-Drei Stufen sind genug. Mehr Knöpfe erzeugen mehr falsch eingestellte Anlagen.
+Sie ist es wert, dass man sie kennt, bevor gebaut wird:
+
+**Docker lässt einen Container nicht Gateway sein.** Ein Container bekommt seine Standardroute
+immer auf die Brücke des Wirts — auch in einem `internal`-Netz, wo sie ins Leere führt. Damit der
+Arbeitsplatz über `ota-fw` hinausfindet, muss seine Standardroute auf dessen Adresse zeigen. Dafür
+gibt es genau drei Wege, und zwei davon fallen aus:
+
+* ~~`NET_ADMIN` im Arbeitsplatz~~ — das ist die Fähigkeit, die wir dort gerade weggenommen haben.
+  Wer Routen setzen darf, darf sie auch wieder wegnehmen.
+* ~~Netz-Namensraum teilen~~ (`network_mode: container:…`) — hebt die Trennung auf.
+* ✅ **Die Route von aussen setzen.** `ota-fw` betritt den Namensraum des Arbeitsplatzes
+  (`nsenter --net=<SandboxKey>`) und setzt dort die Standardroute. Der Arbeitsplatz selbst braucht
+  dafür keine einzige Fähigkeit; er merkt nichts davon.
+
+Das ist derselbe Handgriff, mit dem Netz-Plugins in Kubernetes arbeiten. Er kostet: `ota-fw`
+braucht `/var/run/docker/netns` und `SYS_ADMIN`. **Das ist der Preis dieses Aufbaus** — ein
+privilegierter Container statt vieler Regeln auf dem Wirt. Ich halte ihn für den besseren Tausch,
+weil die Privilegien an *einer* Stelle sitzen und dort sichtbar sind.
+
+**Was geprüft werden muss, bevor darauf gebaut wird** (eine halbe Stunde, Etappe 0):
+
+1. Zeigt Docker den Namensraum als `SandboxKey` an, und lässt sich darin die Route setzen?
+2. Veröffentlicht Docker auf `internal`-Netzen wirklich keine Ports — bleibt der DNAT von 8443 in
+   Ruhe, wenn Traefik einem Sitzungsnetz beitritt?
+3. Erreicht Traefik den Arbeitsplatz in einem `internal`-Netz?
+4. Wie viele Netze verträgt ein Container? Bei 50 gleichzeitigen Sitzungen hat `ota-fw` 50
+   Schnittstellen.
+
+Fällt Punkt 2 oder 3 durch, ändert sich der Aufbau an genau einer Stelle: Dann bekommt Traefik
+seinen Weg zum Arbeitsplatz ebenfalls über `ota-fw` statt direkt.
+
+---
+
+## Was wir nicht bauen — und warum
+
+**Keinen DHCP-Server.** Du hast ihn vorgeschlagen, und in einem echten Netz wäre er richtig. Hier
+nicht: Docker vergibt die Adressen bereits selbst und **fest** — das Subnetz gehört der Sitzung,
+die Adresse dem Container, beides steht in Dockers eigener Verwaltung. Ein DHCP-Server daneben
+würde um dieselbe Aufgabe streiten, und ein Arbeitsplatz bräuchte einen DHCP-Client, der seine
+Route ändern darf — also wieder `NET_ADMIN`. **Deine „IP → Container"-Liste bekommst du trotzdem**,
+und sogar zuverlässiger: Sie kommt aus OTAs eigener Tabelle und ist damit immer aktuell (siehe
+„Netzübersicht" unten).
+
+**Keine fertige Firewall-Lösung.** Du hast danach gefragt, und die Antwort ist ehrlich
+enttäuschend:
+
+| Kandidat | Warum nicht |
+|---|---|
+| **OPNsense / pfSense** | FreeBSD. Läuft als VM, nicht als Container. |
+| **VyOS** | Es gibt Container-Abbilder und eine HTTP-API. Aber es ist ein vollständiges Router-Betriebssystem, das man je Sitzung umkonfigurieren müsste — und die Route-Injektion oben bräuchte es trotzdem. Viel Maschine für wenig Nutzen. |
+| **OpenWrt im Container** | Dasselbe in kleiner. Die `ubus`-API ist nicht dafür gedacht, im Sekundentakt von einer fremden Anwendung gefahren zu werden. |
+| **firewalld** | Läuft auf dem Wirt — genau das wollen wir loswerden. |
+
+**Empfehlung: `nftables` + `dnsmasq` in einem kleinen Container, gefahren über unsere eigene API.**
+Weniger Teile als ein eingebettetes Router-Betriebssystem, und jede Regel ist eine, die wir selbst
+geschrieben haben. Der Container bleibt klein genug, dass man ihn in einer Stunde versteht.
+
+---
+
+## Was `ota-fw` tut
+
+Vier Aufgaben, mehr nicht:
+
+1. **Routen** zwischen den Sitzungsnetzen und dem Uplink — und **nur** dorthin, wo es erlaubt ist.
+2. **NAT** (Masquerade) auf dem Uplink, damit die Arbeitsplätze unter einer Adresse nach draussen
+   gehen. Für vorgelagerte Firewalls im Unternehmen ist das genau eine Adresse statt 256.
+3. **DNS** — `dnsmasq`, erreichbar nur aus den Sitzungsnetzen. Freigaben nach Namen tragen sich
+   beim Beantworten in eine Menge ein, mit der Lebensdauer der Antwort. (Eine Auflösung auf Vorrat
+   ist bei jedem Ziel hinter einem Lastverteiler falsch.)
+4. **Portfreigaben nach innen** — die „+NAT"-Funktion, siehe unten.
+
+Er bekommt seinen Zustand von OTA als **Gesamtbild**, nicht als Einzelbefehle: „So sieht die Welt
+aus." Ein verlorener Aufruf heilt sich damit beim nächsten Mal von selbst; bei Einzelbefehlen
+bleibt sonst etwas offen, ohne dass etwas kaputtgeht — und niemand merkt es.
+
+---
+
+## Was OTA steuert
+
+### Netzprofile — drei Stufen und Listen
 
 | Stufe | Bedeutung |
 |---|---|
-| **Abgeschottet** | Nur der Grundregelsatz. Kein Internet, kein LAN. Für Arbeitsplätze, die nur mit lokalen Daten arbeiten. |
-| **Internet** *(Vorgabe)* | Grundregelsatz plus alles ausserhalb der privaten Bereiche (RFC 1918, `169.254/16`, `100.64/10`). Das LAN bleibt zu. |
-| **Offen** | Keine Einschränkung. |
+| **Abgeschottet** | Nur der Grundregelsatz. Kein Internet, kein LAN. |
+| **Internet** *(Vorgabe)* | Grundregelsatz plus alles ausserhalb der privaten Bereiche. Das Firmennetz bleibt zu. |
+| **Aus** | Die Firewall lässt alles durch. |
 
-Dazu je Profil eine **Freigabeliste** für das, was zusätzlich erreichbar sein soll:
+**„Aus" heisst nicht „ohne Firewall".** Der Arbeitsplatz hängt weiter am selben Kabel und geht
+weiter durch `ota-fw` — der Router leitet nur alles weiter, statt zu filtern. Das ist besser als in
+Fassung 1, wo „offen" bedeutet hätte, dass der Container wieder direkt am Netz des Wirts hängt.
+Verlangt eine Begründung und steht im Protokoll.
+
+Dazu je Profil eine **Freigabeliste**: Ziel (IP, CIDR **oder Name**), Ports oder Portbereich,
+Protokoll — und eine **Notiz als Pflichtfeld**. Eine Freigabe ohne Begründung ist in einem Jahr
+eine, die niemand zu entfernen wagt.
+
+### Globale Freigaben
+
+Was für **alle** Arbeitsplätze gilt: der Dateiserver, das interne Rechenzentrum, der Paketspiegel.
+Dieselbe Form wie im Profil, aber an einer Stelle gepflegt. Reihenfolge: Grundregelsatz → globale
+Freigaben → Profil-Freigaben → Stufe.
+
+### Netzübersicht — die Hostliste
+
+Eine Tabelle über alle laufenden Arbeitsplätze:
 
 ```
-  Ziel                 Ports        Protokoll
-  192.168.66.10        445, 139     tcp        ← Dateiserver
-  10.20.0.0/16         443          tcp        ← internes Rechenzentrum
-  git.firma.de         22, 443      tcp        ← per Name, siehe unten
-  buildserver.firma.de 8080-8090    tcp        ← Bereich
+  Nutzer      Arbeitsplatz     Adresse       Profil        Freigaben nach aussen
+  anna        Entwicklung      10.99.1.2     Entwickler    30017 → 8080  (bis 12.09.)
+  bernd       Büro             10.99.2.2     Standard      —          [+ NAT]
+  cem         Labor            10.99.3.2     Abgeschottet  —          [+ NAT]
 ```
 
-**„Offen" ist eine Entscheidung, keine Einstellung.** Sie gehört mit Warnung, Protokolleintrag
-(`firewall.disabled`) und Namensnennung versehen — dieselbe Behandlung wie die
-Passwort-Durchreichung in `plan.md` §17.9. Wer sie wählt, soll das später begründen können.
+Das ist die „IP → Container"-Liste, und sie ist immer richtig, weil sie aus den laufenden Sitzungen
+kommt und nicht aus einer gepflegten Datei.
 
-**Wo das Profil hängt.** Am besten wie die Ressourcen: eine Vorgabe an der Vorlage, überschreibbar
-je Gruppe und je Nutzer (`security.py: effective_resources` ist das Muster). Dann bekommt die
-Entwicklungsabteilung ihren Buildserver, ohne dass ihn alle bekommen.
+### „+ NAT" — eine Portfreigabe über den Wirt
 
----
+Der Knopf in der Zeile. Er fragt drei Dinge: **welcher Port im Arbeitsplatz**, **wie lange**, und
+**wofür** (Pflichtfeld — dieselbe Regel wie bei den Freigaben).
 
-## DNS-Namen — ehrlich betrachtet
+Wie es funktioniert: `ota-fw` veröffentlicht beim Start des Stapels einen **Portbereich** auf dem
+Wirt (Vorgabe 30000–30099). Eine Freigabe belegt daraus einen Port und leitet ihn auf den
+Arbeitsplatz weiter. Der Nutzer bekommt „erreichbar unter `<wirt>:30017` bis zum 12.09." Der
+Ablauf wird durchgesetzt, nicht nur angezeigt: Ist die Frist um, verschwindet die Regel beim
+nächsten Abgleich, und der Vorgang steht im Protokoll.
 
-Netfilter kennt keine Namen, nur Adressen. Für `git.firma.de` gibt es zwei Wege, und der
-naheliegende ist der schlechtere:
+Warum ein fester Bereich und keine beliebigen Ports: Dockers Portveröffentlichung steht beim Start
+des Containers fest; ein neuer Port bräuchte einen Neustart von `ota-fw` — und der ist der Weg
+**aller** Arbeitsplätze nach draussen. Ein reservierter Bereich kostet nichts und erspart das.
 
-**Der naheliegende:** den Namen alle paar Minuten auflösen und die Adressen in eine Menge (`ipset`
-bzw. nft-Set) schreiben. Das funktioniert für einen Server mit fester Adresse und **bricht** bei
-allem mit kurzer TTL oder mehreren Adressen: Der Browser bekommt vom DNS die Adresse A, die
-Freigabe enthält noch B — und der Zugriff scheitert scheinbar grundlos. Bei CDN-gestützten Zielen
-ist das der Normalfall, nicht die Ausnahme.
+**Beantragt wird das ausserhalb** (Mail an den Administrator), wie du es beschrieben hast. OTA
+bildet die Entscheidung ab, nicht den Antrag.
 
-**Der bessere:** ein eigener Resolver für die Sitzungsnetze (`dnsmasq` oder `unbound` im
-`ota-firewall`), der **beim Beantworten** genau die Adresse in die Menge legt, die er gerade
-herausgibt — mit der TTL der Antwort. Dann stimmen Freigabe und Verbindung immer überein, weil
-beide aus derselben Auskunft stammen. `dnsmasq --ipset=/git.firma.de/ota-frei-<sitzung>` macht
-genau das.
+### Der Grundregelsatz
 
-**Damit das trägt, muss der Weg zu fremden Resolvern zu sein.** Sonst fragt eine Anwendung
-`8.8.8.8`, bekommt eine Adresse, die in keiner Menge steht — oder umgekehrt: sie umgeht die
-Freigabeliste über einen Namen, den unser Resolver nie gesehen hat. Deshalb steht im
-Grundregelsatz oben **ein** Resolver und keine allgemeine Freigabe für Port 53.
+Was jede Sitzung darf, damit OTA überhaupt funktioniert — unabhängig von der Stufe:
 
-*(Und ja: DNS über HTTPS umgeht auch das. Wer „Internet" freigibt, gibt DoH mit frei. Das ist keine
-Lücke dieses Entwurfs, sondern die Grenze jeder namensbasierten Freigabe — sie gehört
-aufgeschrieben, nicht wegdiskutiert.)*
-
----
-
-## Was das löst — und was nicht
-
-| Befund | danach |
+| Ziel | Warum |
 |---|---|
-| [H1](security.md#h1) Wirt und LAN erreichbar | ✅ gelöst, **wenn** `INPUT` mitbedacht ist (Korrektur 2) |
-| [H2](security.md#h2) Arbeitsplätze untereinander | ✅ gelöst durch getrennte Netze |
-| [H3](security.md#h3) Agent erreichbar | ✅ gelöst, sobald der Agent draussen bleibt |
-| [H4](security.md#h4) Stilles Aufschalten | ❌ **unberührt.** Anderes Thema, andere Lösung. |
-| Ausbruch aus dem Container | ❌ unberührt — gemeinsamer Kernel bleibt gemeinsamer Kernel |
-| Abfluss von Daten ins Internet | ⚠️ In der Stufe „Internet" möglich. Das ist eine Richtlinienfrage, keine technische. |
+| Antwortpakete (`ESTABLISHED,RELATED`) | Ohne das funktioniert nichts. |
+| **DNS** → `ota-fw` selbst | Namensauflösung. Ein anderer Resolver ist nicht erreichbar. |
+| **TURN** → Wirt, 3478 und der Relay-Bereich | Der Medienweg. |
+| **OTA selbst** → Traefik, 8443 | Der Browser im Arbeitsplatz muss OTA erreichen — die Firefox-Erweiterung für die Zwischenablage wird von dort geladen. |
+| **Firmenproxy**, falls gesetzt | Sonst kommt hinter dem Proxy nichts durch. |
+| **NTP**, optional | Eine falsche Uhr bricht TLS. |
 
-Und eine Einschränkung, die man sich merken sollte: **Das Regelwerk ist nur so gut wie seine
-Verankerung.** Auf dieser Maschine stehen heute vier Regeln für ein fremdes Netz **vor**
-`DOCKER-USER`:
-
-```
-1  -P FORWARD DROP
-2  -A FORWARD -o br_kasm_sidecar … -j ACCEPT
-4  -A FORWARD -i br_kasm_sidecar ! -o br_kasm_sidecar -j ACCEPT   ← lässt alles durch
-6  -A FORWARD -j DOCKER-USER                                       ← erst hier sind wir
-```
-
-Für dieses eine Netz wäre `DOCKER-USER` wirkungslos. OTAs eigene Netze sind nicht betroffen (Docker
-29 hängt sie hinter `DOCKER-USER` ein), aber die Lehre gilt: **Die Wirkung des Regelwerks wird
-geprüft, nicht gelesen.**
+Traefik erreicht den Arbeitsplatz auf 6901 bzw. 8080 — die Gegenrichtung, und nur von Traefik.
 
 ---
 
-## Fallstricke
+## Was dabei abfällt: Messen und Sehen
 
-**Der Adressbereich ist auf dieser Maschine fast leer.** Gemessen:
+Wenn aller Verkehr durch **eine** Stelle läuft, ist das Zählen fast geschenkt — und es ist der
+zweite gute Grund für diesen Aufbau. Auf dem Wirt wäre dasselbe nur mit Mühe zu haben gewesen,
+weil dort niemand weiss, welches Paket zu welcher Sitzung gehört.
 
-```
-172.17 … 172.31   belegt (15 Netze, Dockers erster Pool ist voll)
-192.168.0.0/20    ota_sessions        ← zweiter Pool, /20-Häppchen
-192.168.16.0/20   sonnensystem_default
-```
+**Was billig ist** (nftables zählt ohnehin mit, es muss nur ausgelesen werden):
 
-Dockers Standardvorrat gibt noch **14** weitere Netze her — für alle Stapel auf diesem Rechner
-zusammen. Ein Netz je Sitzung würde ihn in einer Woche aufbrauchen, und der Fehler beim Start
-lautet dann `could not find an available, non-overlapping IPv4 address pool`.
+| Wert | Woher | Wofür |
+|---|---|---|
+| **Durchsatz je Arbeitsplatz**, ein und aus | Zähler an der Kette der Sitzung | Wer zieht das Netz leer, und wann |
+| **Verworfene Pakete je Arbeitsplatz** | Zähler an der Sperre | **Das interessanteste Signal.** Ein Arbeitsplatz, der plötzlich hundert verschiedene Ziele im Firmennetz anspricht, ist ein Portscan — und sieht in dieser Zahl genau so aus |
+| **Offene Verbindungen** | `conntrack` | Last, und ein zweites Scan-Signal |
+| **Abgewiesene Namensanfragen** | `dnsmasq` | Etwas im Container will woandershin, als es soll |
+| **Summe über alle** | dieselben Zähler | Kapazitätsplanung: Was kostet ein Arbeitsplatz wirklich |
 
-Zwei Auswege, und der zweite ist der bessere:
+Ausgegeben wird das über OTAs vorhandenen Weg: `/metrics` (mit Merkmal, siehe
+[`security.md`](security.md#n1)) und eine Spalte in der Netzübersicht. Die Zähler stehen je
+**Sitzung**, nicht je Person — wer dahintersteht, löst erst die Oberfläche auf, und dafür braucht
+es Rechte.
 
-* `default-address-pools` in `/etc/docker/daemon.json` erweitern — braucht einen **Neustart des
-  Docker-Dienstes**, und der reisst jeden Container auf dieser Maschine mit. Wartungsfenster.
-* **OTA vergibt die Subnetze selbst**: ein eigener Bereich, etwa `10.99.0.0/16`, aufgeteilt in
-  `/24`. Das sind 256 gleichzeitige Sitzungen, `docker network create --subnet 10.99.k.0/24`, kein
-  Neustart, keine Kollision mit fremden Stapeln — und die Regeln lassen sich über den ganzen
-  Bereich in **einer** Grundsperre formulieren.
+**Was ausdrücklich nicht kommt:** kein Mitschneiden von Inhalten, kein Aufbrechen von TLS, keine
+Liste besuchter Adressen. Das wäre technisch möglich und wäre der Punkt, an dem aus einer Firewall
+eine Überwachungsanlage wird.
 
-**Nicht `192.168.x` nehmen.** Das heutige `ota_sessions` liegt auf `192.168.0.0/20` — in vielen
-Firmen- und Heimnetzen ist genau das die LAN-Adresse. Beim Einsatz an anderer Stelle kollidiert es,
-und dann ist nicht die Firewall schuld, sondern die Route. `10.99` ist unverbrauchter.
+**Und ein Hinweis, der dazugehört.** Durchsatz und Verbindungen je Arbeitsplatz sind
+personenbezogene Daten, sobald sich eine Sitzung einem Menschen zuordnen lässt — und sie lässt
+sich. Damit gilt dasselbe wie für das Protokoll in [`dsgvo.md`](dsgvo.md#6--beschäftigtendatenschutz--was-mitbestimmungspflichtig-ist):
+**eine Frist** (mein Vorschlag: Rohwerte 7 Tage, Tagessummen 90 Tage) und ein Punkt in der
+Betriebsvereinbarung. Die Sicherheitssignale — verworfene Pakete, abgewiesene Namen — sind dabei
+der leichtere Teil: Sie sagen etwas über eine *Maschine*, nicht über einen Menschen. Die
+Durchsatzzahlen sind der schwerere.
 
-**Regeln überleben keinen Docker-Neustart.** Docker baut seine Ketten beim Start neu auf; was in
-`DOCKER-USER` stand, ist weg. Der `ota-firewall` braucht deshalb eine **Abgleichschleife**: beim
-Start und danach regelmässig prüfen, ob für jede laufende Sitzung ihre Regeln stehen, und fehlende
-nachziehen. OTA hat dieses Muster schon — der Waisen-Aufräumer arbeitet genauso.
-
-**IPv6.** Auf den Netzen ist es aus (`EnableIPv6=false`), aber `ip6tables` hat eine
-`DOCKER-USER`-Kette. Wer IPv6 einschaltet, ohne die Regeln zu spiegeln, hat eine Firewall, die für
-die Hälfte des Verkehrs nicht existiert. Entweder beide Familien bedienen oder IPv6 ausdrücklich
-aus lassen — und das aufschreiben.
-
-**51 Brücken stehen schon auf diesem Wirt.** Ein paar Dutzend mehr sind unkritisch; bei Hunderten
-werden `iptables`-Durchläufe und `ip link` spürbar. Ein Grund mehr, das Netz beim Beenden der
-Sitzung wirklich zu löschen und nicht liegen zu lassen.
-
-**MTU.** Neue Brücken erben die Vorgabe. Wer über einen Tunnel mit kleiner MTU arbeitet (hier:
-WireGuard mit 1000), sollte `com.docker.network.driver.mtu` bewusst setzen, statt es später zu
-suchen — dieses Projekt hat mit MTU schon einmal zwei Tage verloren
-([Kapitel 20](docs/wiki/20-selkies-versuch.md)).
-
-**nftables und iptables nebeneinander.** Debian 13 setzt `iptables-nft` ein, Docker schreibt
-darüber. Der `ota-firewall` sollte dasselbe Werkzeug benutzen und **kein** eigenes nft-Tabellenwerk
-danebenstellen — zwei Regelwerke, die sich gegenseitig nicht sehen, sind schlimmer als keins.
+Zum Bauen gehört das in eine eigene Etappe, nicht in die erste. Die Zähler kosten nichts, wenn der
+Aufbau von Anfang an je Sitzung eine eigene Kette hat — genau das ist der Punkt, den man **jetzt**
+mitdenken muss und später nicht mehr nachrüsten kann, ohne alles anzufassen.
 
 ---
 
-## Datenmodell und Oberfläche
+## Was aus dem abgebrochenen Bau bleibt
 
-Ein neues Objekt, angelehnt an das, was es schon gibt:
+Ungefähr zwei Drittel. Das ist der Grund, warum der Neuanfang billig ist:
 
-```
-netzprofile
-  id, name, beschreibung
-  stufe            abgeschottet | internet | offen
-  regeln  [ { ziel: "10.20.0.0/16" | "git.firma.de",
-              ports: "443" | "8080-8090" | "*",
-              protokoll: tcp | udp | beide,
-              notiz: "Warum das offen ist" } ]
-```
-
-* `templates.netzprofil_id` — die Vorgabe je Arbeitsplatz.
-* `template_overrides` — je Gruppe und je Nutzer, wie bei Kernen und Speicher.
-* **`notiz` ist Pflicht.** Eine Freigabe ohne Begründung ist in einem Jahr eine Freigabe, die
-  niemand zu entfernen wagt.
-
-In der Oberfläche unter **Verwaltung → Netzprofile**, und am Arbeitsplatz eine Auswahl wie bei
-**Streaming**. Auf dem Dashboard des Nutzers ein kleiner Hinweis, welches Profil gilt — wer nicht
-weiss, dass eine Firewall läuft, meldet ihre Wirkung als Fehler.
-
----
-
-## Die Prüfreihe ist der eigentliche Beweis
-
-Das Regelwerk zu lesen genügt nicht (siehe oben, `br_kasm_sidecar`). `scripts/test-firewall.sh`
-startet eine Sitzung und prüft **von innen**:
-
-| Prüfung | Erwartung |
+| Bleibt | Fliegt weg |
 |---|---|
-| Nachbarsitzung auf 6901/8080 | ✗ nicht erreichbar |
-| SSH des Wirts (22) | ✗ nicht erreichbar |
-| Ein Dienst eines anderen Stapels auf dem Wirt (9200) | ✗ nicht erreichbar |
-| Eine LAN-Adresse | ✗ nicht erreichbar |
-| TURN auf dem Wirt (3478) | ✓ erreichbar |
-| Namensauflösung | ✓ funktioniert |
-| Fremder Resolver (`8.8.8.8:53`) | ✗ nicht erreichbar |
-| Internet in Stufe „Internet" | ✓ erreichbar |
-| Internet in Stufe „abgeschottet" | ✗ nicht erreichbar |
-| Eine Freigabe aus der Liste | ✓ erreichbar |
-| Nach `systemctl restart docker` erneut | alles wie oben |
+| Ein Netz je Sitzung, eigener Bereich `10.99.0.0/16`, Vergabe im Agent (`netz.py`) | Die Ketten auf dem Wirt (`DOCKER-USER`, `INPUT`) |
+| Datenmodell `net_profiles`, Stufen, Freigabeliste mit Pflichtnotiz | Die Ausnahme für Traefiks umgeschriebenen DNAT |
+| API-Router, Prüfungen auf dem Server, Protokolleinträge | Die Sperre gegen fremde Resolver (im neuen Aufbau gegenstandslos) |
+| Der Weg Vorlage → Profil → Agent → Firewall | Die Abgleichschleife gegen Dockers Neustart |
+| Vollabgleich statt Einzelbefehlen, Zustand auf Platte | `dnsmasq` im Namensraum des Wirts |
+| Der Unix-Socket statt eines Ports | |
 
-Die letzte Zeile ist die wichtigste — sie prüft die Abgleichschleife, und genau die vergisst man.
+---
+
+## Risiken, ehrlich
+
+* **`ota-fw` ist ein privilegierter Container** (`SYS_ADMIN`, `NET_ADMIN`, Zugriff auf die
+  Namensräume). Er ist damit nach dem Agent der zweite Dienst, dessen Übernahme teuer wäre. Dafür
+  bleibt der Wirt sauber.
+* **Er ist der einzige Weg nach draussen.** Fällt er aus, hat kein Arbeitsplatz mehr Netz — der
+  Bildschirm läuft weiter (der geht über Traefik), aber Internet und Firmennetz sind weg. Das ist
+  bei einem echten Router genauso; es gehört in die Überwachung.
+* **Er liegt im Datenweg.** Für den Bildstrom nicht (Traefik → Arbeitsplatz), wohl aber für alles,
+  was der Nutzer selbst abruft. Kosten: eine Weiterleitung mehr. Sollte gemessen werden.
+* **Die Route-Injektion hängt an einem Docker-Detail** (`SandboxKey`). Ändert Docker das, hat eine
+  neue Sitzung kein Netz. Deshalb: beim Start prüfen und **laut** scheitern, nicht still.
+* **Viele Schnittstellen an einem Container.** 50 Sitzungen sind 50 `veth`-Paare an `ota-fw`. Muss
+  gemessen werden (Etappe 0, Punkt 4).
 
 ---
 
 ## Etappen
 
-| # | Schritt | Aufwand | Wirkung |
-|---|---|---|---|
-| 1 | Wirt vor seinen Containern schützen: `INPUT`-Regeln für `ota_sessions`, von Hand | **1 Stunde** | Schliesst den schlimmsten Teil von H1 **heute**, ohne eine Zeile Code |
-| 2 | Eigener Adressbereich `10.99.0.0/16`, ein Netz je Sitzung, Traefik dynamisch verbinden | 1–2 Tage | H2 und H3 |
-| 3 | `ota-firewall` als Regelschreiber, Grundsperre, Freigaben je Sitzung, Abgleichschleife | 2–3 Tage | H1 vollständig |
-| 4 | Netzprofile in Datenmodell und Oberfläche, drei Stufen, Freigabeliste | 2–3 Tage | Bedienbar statt gebaut |
-| 5 | Eigener Resolver, Freigaben nach Namen | 1–2 Tage | Der Teil, der ohne ihn nur halb funktioniert |
-| 6 | `scripts/test-firewall.sh` | ½ Tag | Ohne sie ist alles darüber eine Behauptung |
+| # | Schritt | Aufwand |
+|---|---|---|
+| **0** | **Die vier Annahmen messen** (siehe oben). Erst danach wird gebaut. | ½ Tag |
+| 1 | `ota-fw` als Router: Uplink, Masquerade, `nftables`-Grundgerüst, Zustand über Unix-Socket | 1–2 Tage |
+| 2 | Sitzungsnetze auf `internal` umstellen, Route-Injektion, Traefik-Anbindung | 1–2 Tage |
+| 3 | Regelwerk: Grundregelsatz, globale Freigaben, Profile, Stufen | 1 Tag |
+| 4 | `dnsmasq` im Container, Freigaben nach Namen | 1 Tag |
+| 5 | Oberfläche: Netzprofile, globale Freigaben, Netzübersicht mit „+ NAT" | 2–3 Tage |
+| 6 | Portfreigaben mit Ablauf, Protokoll, Durchsetzung | 1 Tag |
+| 7 | `scripts/test-firewall.sh` — misst **von innen**, nicht am Regelwerk | ½ Tag |
+| 8 | Zähler auslesen, `/metrics`, Spalte in der Netzübersicht, Fristen | 1–2 Tage |
 
-**Schritt 1 lohnt sofort**, unabhängig vom Rest: Er ist in einer Stunde erledigt, braucht keinen
-Code und nimmt dem gravierendsten Befund die Spitze. Alles Weitere kann danach in Ruhe entstehen.
+**Etappe 0 ist nicht verhandelbar.** Die erste Fassung ist an drei Annahmen gescheitert, die
+niemand vorher geprüft hatte. Diesmal stehen sie vorn.
+
+---
+
+## Wo die Anlage jetzt steht
+
+Der abgebrochene Bau läuft und ist **nicht kaputt**, aber er ist eine Zwischenstufe:
+
+* `ota-firewall` läuft und setzt Regeln auf dem Wirt durch (`OTA-FW`, `OTA-FW-INPUT`).
+* Der Agent legt je Sitzung ein eigenes Netz an und verbindet Traefik damit.
+* Gemessen wirksam: Wirt, LAN und Nachbarsitzungen sind aus einem Arbeitsplatz **nicht** erreichbar,
+  TURN, DNS und Internet schon. Der Haupteingang antwortet.
+* Der Agent hängt nicht mehr im Sitzungsnetz — Befund [H3](security.md#h3) ist damit erledigt.
+
+**Vor Etappe 1 zu entscheiden:** diesen Zwischenstand als vorläufige Absicherung stehen lassen (er
+schliesst H1, H2 und H3 heute) oder zurückbauen. Ich würde ihn stehen lassen: Er kostet nichts,
+und die Lücke bleibt sonst offen, bis Fassung 2 fertig ist.

@@ -20,7 +20,8 @@ from ..config import settings
 from ..db import get_db
 from ..deps import current_user
 from ..models import (
-    AppStream, OnceScriptRun, Session as SessionModel, Template, TemplateApp, User,
+    AppStream, NetProfile, OnceScriptRun, Session as SessionModel, Template,
+    TemplateApp, User,
 )
 from ..schemas import SessionOut, SessionStartIn, StreamOut
 from ..security import (
@@ -307,6 +308,39 @@ def _traefik_labels(sess_id: uuid.UUID, user_id: uuid.UUID, vnc_user: str,
     return labels
 
 
+def _netzprofil(tpl: Template) -> dict:
+    """Was diese Sitzung im Netz darf — aufgeloest fuer den Agent.
+
+    Ohne zugewiesenes Profil gilt die Vorgabe der Anlage: **internet** —
+    Internet ja, Firmennetz nein, Nachbarsitzung nein, Wirt nein. Das ist die
+    strengere der beiden naheliegenden Vorgaben, und sie ist die richtige:
+    Eine Anlage, die im Auslieferungszustand offen steht, wird nie geschlossen.
+
+    Namen und Adressen werden getrennt uebergeben. Adressen werden zu Regeln,
+    Namen gehen an den eigenen Resolver — er traegt sie beim Beantworten in
+    eine Menge ein, mit der Lebensdauer der Antwort. Eine Aufloesung auf
+    Vorrat waere bei jedem Ziel hinter einem Lastverteiler falsch.
+    """
+    profil: NetProfile | None = tpl.net_profile
+    if profil is None:
+        return {"stufe": "internet", "freigaben": [], "namen": []}
+
+    freigaben, namen = [], []
+    for regel in profil.regeln or []:
+        ziel = str(regel.get("ziel", "")).strip()
+        if not ziel:
+            continue
+        if any(c.isalpha() for c in ziel.replace(":", "")):
+            namen.append(ziel)
+        else:
+            freigaben.append({
+                "ziel": ziel,
+                "ports": regel.get("ports", "*"),
+                "protokoll": regel.get("protokoll", "beide"),
+            })
+    return {"stufe": profil.stufe, "freigaben": freigaben, "namen": namen}
+
+
 @router.get("")
 def list_sessions(
     all_users: bool = False,
@@ -507,6 +541,10 @@ def start_session(
             # koennten sie dort nichts nachinstallieren. Die Entscheidung faellt
             # hier und nicht im Agent: Der Agent kennt keine Rollen.
             "elevated": user.is_admin,
+            # Was diese Sitzung im Netz darf. Der Agent schreibt es an das
+            # Netz und schickt es an den Firewall-Dienst; durchgesetzt wird es
+            # im Netfilter des Wirts, nicht hier.
+            "netzprofil": _netzprofil(tpl),
             # Die eigene Ablage des Nutzers, beschreibbar unter
             # /mnt/austausch. Die Vorlage kann sie abschalten — fuer
             # Arbeitsplaetze, aus denen bewusst nichts herausgetragen werden

@@ -226,6 +226,14 @@ class Template(Base):
     # anlegen. Nicht fuer Installationen — die gehoeren ins Golden Image (§8),
     # sonst wartet jeder Nutzer bei jedem Start darauf.
     start_script: Mapped[str] = mapped_column(Text, default="")
+    # Welches Netzprofil gilt. Leer heisst: die Vorgabe der Anlage — heute
+    # "internet" (kein LAN, keine Nachbarsitzung, kein Wirt).
+    net_profile_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("net_profiles.id", ondelete="SET NULL")
+    )
+    # `selectin`, weil das Profil bei **jedem** Sessionstart gebraucht wird:
+    # Ohne das faellt fuer jede Vorlage eine eigene Abfrage an.
+    net_profile: Mapped["NetProfile | None"] = relationship(lazy="selectin")
     # Pfade im Skeleton, die bei **jedem** Start ueberschreiben. Der Rest
     # kommt nur ins leere Zuhause. Die Ausnahme ist mit Bedacht die Ausnahme:
     # Ein Zuhause gehoert dem Menschen, der darin arbeitet.
@@ -708,6 +716,37 @@ class AuditLog(Base):
     object_id: Mapped[str | None] = mapped_column(String(64))
     ip: Mapped[str | None] = mapped_column(String(64))
     detail: Mapped[dict] = mapped_column(JSONB, default=dict)
+
+
+class NetProfile(Base):
+    """Was eine Sitzung im Netz darf.
+
+    Drei Stufen und eine Freigabeliste — mehr nicht. Mehr Knoepfe erzeugen
+    mehr falsch eingestellte Anlagen, und die Trennung zwischen „das
+    Firmennetz ist zu" und „das Firmennetz ist offen" ist die Entscheidung,
+    auf die es ankommt.
+
+    `regeln` ist eine Liste von
+    ``{"ziel": …, "ports": …, "protokoll": …, "notiz": …}``. **`notiz` ist
+    Pflicht**: Eine Freigabe ohne Begruendung ist in einem Jahr eine Freigabe,
+    die niemand zu entfernen wagt.
+    """
+
+    __tablename__ = "net_profiles"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    name: Mapped[str] = mapped_column(String(128), unique=True)
+    description: Mapped[str] = mapped_column(Text, default="")
+    # "abgeschottet" | "internet" | "offen"
+    stufe: Mapped[str] = mapped_column(String(16), default="internet")
+    regeln: Mapped[list] = mapped_column(JSONB, default=list)
+    # Warum diese Anlage jemanden ohne Einschraenkung laufen laesst. Nur bei
+    # der Stufe "offen" gefuellt, und dort verlangt.
+    begruendung: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
 
 
 class Setting(Base):

@@ -8,6 +8,7 @@ was darf. Das passiert in der API.
 from __future__ import annotations
 
 import base64
+import ipaddress
 import logging
 import os
 from pathlib import Path
@@ -35,6 +36,8 @@ from . import clipboard as clip_scripts
 from . import discover
 from . import registry as registry_reader
 from . import shared as shared_store
+from . import fwclient
+from . import netz as netz_ops
 
 AGENT_TOKEN = os.environ.get("OTA_AGENT_TOKEN", "")
 PROFILES_ROOT = os.environ.get("OTA_PROFILES_ROOT", "/srv/ota/profiles")
@@ -58,6 +61,23 @@ USERFILES_MOUNT = "/mnt/austausch"
 GROUPFILES_MOUNT = "/mnt/gruppen"
 SESSION_NETWORK = os.environ.get("OTA_SESSION_NETWORK", "ota_sessions")
 PUBLIC_NETWORK = os.environ.get("OTA_PUBLIC_NETWORK", "ota_public")
+
+# Was jede Sitzung erreichen darf, damit OTA ueberhaupt funktioniert — auch in
+# der Stufe „abgeschottet". Mehr steht hier nicht: Jede Zeile, die hier
+# grosszuegig ist, ist in **jedem** Arbeitsplatz grosszuegig.
+#
+# Die eigene Adresse ist dabei, weil der Browser im Arbeitsplatz OTA selbst
+# erreichen koennen muss — die Firefox-Erweiterung fuer die Zwischenablage wird
+# von dort geladen (`/api/help/extension/firefox`).
+def _grundfreigaben() -> list[tuple[str, str, str]]:
+    raus: list[tuple[str, str, str]] = []
+    eigene = os.environ.get("OTA_SELF_ADDRESS", "").strip()
+    if eigene:
+        raus.append((eigene, os.environ.get("OTA_HTTPS_PORT", "8443"), "tcp"))
+    proxy = os.environ.get("OTA_PROXY_HOST", "").strip()
+    if proxy:
+        raus.append((proxy, os.environ.get("OTA_PROXY_PORT", "3128"), "tcp"))
+    return raus
 
 log = logging.getLogger("ota.agent")
 
@@ -97,6 +117,14 @@ while true; do sleep 3600; done
 def _workspace_startup_file() -> str:
     """Legt das Ersatzskript ab und gibt seinen Pfad zurueck."""
     os.makedirs(RUNTIME_ROOT, exist_ok=True)
+    # Nur root. In diesem Verzeichnis liegt der Socket zum Firewall-Dienst,
+    # und ein Socket ist so gut geschuetzt wie das Verzeichnis darueber:
+    # uvicorn legt ihn mit 0666 an. Bind-Mounts in Session-Container laufen
+    # ueber den Docker-Daemon und sind davon nicht betroffen.
+    try:
+        os.chmod(RUNTIME_ROOT, 0o700)
+    except OSError:
+        pass
     path = os.path.join(RUNTIME_ROOT, "workspace-startup.sh")
     current = ""
     try:
@@ -211,6 +239,11 @@ class StartRequest(BaseModel):
     # sind, weiss die API — der Agent fuehrt aus und berichtet, was dabei
     # herauskam. Siehe `_run_once_scripts`.
     once_scripts: list[dict[str, str]] = []
+    # Was diese Sitzung im Netz darf. Kommt aus dem Netzprofil der Vorlage;
+    # die API loest es auf, der Agent gibt es weiter und schreibt es als
+    # Beschriftung an das Netz — damit er den Gesamtzustand nach einem
+    # Neustart allein aus Docker rekonstruieren kann.
+    netzprofil: dict = {}
 
 
 @app.get("/healthz")
@@ -490,6 +523,66 @@ def _ensure_profile(path: str) -> None:
         pass
 
 
+def _firewall_abgleich(client=None) -> dict:
+    """Den gewuenschten Gesamtzustand an den Firewall-Dienst schicken.
+
+    **Gesamtzustand, nicht Einzelaenderung.** Ein verlorener Aufruf faellt bei
+    Einzelbefehlen niemandem auf: Es geht nichts kaputt, es bleibt nur etwas
+    offen. Hier heilt sich das beim naechsten Abgleich von selbst.
+
+    Die Wahrheit steht dabei in Docker und nicht im Speicher dieses Prozesses —
+    jedes Sitzungsnetz traegt sein Profil als Beschriftung. Ein Neustart des
+    Agents verliert damit nichts.
+    """
+    client = client or dc()
+    if not fwclient.erreichbar():
+        log.warning("Firewall-Dienst nicht erreichbar (%s) — Regeln unveraendert",
+                    fwclient.SOCKET)
+        return {"status": "kein Dienst"}
+
+    sitzungen = [{
+        "subnetz": n["subnetz"],
+        "stufe": n["stufe"],
+        "freigaben": n["freigaben"],
+        "namen": n["namen"],
+    } for n in netz_ops.sitzungsnetze(client)]
+
+    zustand = {
+        "sitzungen": sitzungen,
+        "traefik_ips": netz_ops.traefik_adressen(client),
+        "turn": {
+            "port": int(os.environ.get("OTA_TURN_PORT", "3478") or 3478),
+            "min": int(os.environ.get("OTA_TURN_MIN", "49160") or 49160),
+            "max": int(os.environ.get("OTA_TURN_MAX", "49260") or 49260),
+        },
+        "grundfreigaben": _grundfreigaben(),
+        # Der eigene Resolver lauscht im Namensraum des Wirts auf allen
+        # Bruecken. Erreichbar sein soll er nur aus den Sitzungen — diese
+        # Angabe ist die Schranke dafuer.
+        "dns_port": int(os.environ.get("OTA_FW_DNS_PORT", "53") or 53),
+    }
+    try:
+        return fwclient.regelwerk_setzen(zustand)
+    except (OSError, RuntimeError) as exc:
+        log.error("Firewall-Abgleich fehlgeschlagen: %s", exc)
+        return {"status": "fehlgeschlagen", "fehler": str(exc)}
+
+
+@app.get("/firewall", dependencies=[Depends(require_token)])
+def firewall_zustand() -> dict:
+    """Was die Firewall gerade durchsetzt — fuer die Oberflaeche und die Pruefreihe."""
+    try:
+        zustand = fwclient.zustand()
+    except (OSError, RuntimeError) as exc:
+        return {"erreichbar": False, "fehler": str(exc)}
+    return {"erreichbar": True, **zustand}
+
+
+@app.post("/firewall/abgleich", dependencies=[Depends(require_token)])
+def firewall_abgleich() -> dict:
+    return _firewall_abgleich()
+
+
 @app.post("/containers", dependencies=[Depends(require_token)])
 def start_container(req: StartRequest) -> dict[str, Any]:
     client = dc()
@@ -683,6 +776,28 @@ def start_container(req: StartRequest) -> dict[str, Any]:
         env.setdefault("SELKIES_STUN_PORT",
                        os.environ.get("OTA_TURN_PORT", "3478"))
 
+    # **Erst das Netz, dann die Regeln, dann der Container.** Die Reihenfolge
+    # ist nicht beliebig: Die Grundsperre im Firewall-Dienst gilt fuer den
+    # ganzen Bereich, ein neues Netz ist also von seiner ersten Sekunde an
+    # dicht. Erst der Abgleich macht die Freigaben dieser Sitzung auf.
+    sitzungsnetz, subnetz = netz_ops.netz_anlegen(client, req.session_id, req.netzprofil)
+    _firewall_abgleich(client)
+
+    # **Der eigene Resolver, nicht irgendeiner.** Freigaben nach Namen
+    # funktionieren nur, wenn Freigabe und Verbindung aus derselben Auskunft
+    # stammen — deshalb beantwortet ihn der Firewall-Dienst, und deshalb sind
+    # fremde Resolver gesperrt. Die Adresse ist das Gateway dieses Netzes;
+    # dort lauscht dnsmasq im Namensraum des Wirts.
+    resolver = str(ipaddress.ip_network(subnetz)[1]) if subnetz else ""
+    dns = [resolver] if resolver and fwclient.erreichbar() else None
+    log.info("Sitzungsnetz %s (%s), Profil %s",
+             sitzungsnetz, subnetz, req.netzprofil.get("stufe", "internet"))
+
+    # Traefik muss wissen, ueber welches Netz er den Container erreicht — er
+    # haengt in vielen und wuerde sonst irgendeines nehmen.
+    beschriftung = dict(req.labels)
+    beschriftung["traefik.docker.network"] = sitzungsnetz
+
     try:
         container = client.containers.run(
             req.image,
@@ -690,9 +805,10 @@ def start_container(req: StartRequest) -> dict[str, Any]:
             name=f"ota-s-{req.session_id[:12]}",
             environment=env,
             mounts=mounts,
-            network=SESSION_NETWORK,
+            network=sitzungsnetz,
             ports=ports or None,
-            labels=req.labels,
+            labels=beschriftung,
+            dns=dns,
             nano_cpus=int(req.cores * 1_000_000_000),
             mem_limit=req.memory_bytes,
             # Grosszuegig, weil Browser und Electron-Anwendungen sonst
@@ -725,11 +841,11 @@ def start_container(req: StartRequest) -> dict[str, Any]:
     except APIError as exc:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Docker meldet: {exc}") from exc
 
-    # Der Session-Container muss auch fuer Traefik erreichbar sein.
-    try:
-        client.networks.get(PUBLIC_NETWORK).connect(container.id)
-    except (NotFound, APIError):
-        pass
+    # Traefik muss hinein, damit ein Bild ankommt — aber **nur** Traefik, und
+    # nur in dieses eine Netz. Frueher hingen alle Sitzungen gemeinsam in
+    # `ota_public`; genau das war Befund H2.
+    netz_ops.traefik_verbinden(client, sitzungsnetz)
+    _firewall_abgleich(client)
 
     if req.elevated:
         _elevate(container)
@@ -1133,13 +1249,26 @@ def container_action(cid: str, action: str) -> dict[str, str]:
 
 @app.delete("/containers/{cid}", dependencies=[Depends(require_token)])
 def remove_container(cid: str) -> dict[str, str]:
+    client = dc()
+    session_id = ""
     try:
-        c = dc().containers.get(cid)
+        c = client.containers.get(cid)
+        session_id = (c.labels or {}).get("ota.session_id", "")
         c.remove(force=True)
     except NotFound:
         pass
     except APIError as exc:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+
+    # Das Netz geht mit. Bleibt es stehen, bleibt sein Subnetz vergeben — und
+    # nach genug Waisen ist der Bereich voll, mit einer Fehlermeldung, die nach
+    # einem Docker-Problem aussieht und keines ist.
+    if session_id:
+        netz_ops.traefik_trennen(client, netz_ops.netzname(session_id))
+        netz_ops.netz_entfernen(client, session_id)
+    else:
+        netz_ops.waisen_aufraeumen(client)
+    _firewall_abgleich(client)
     return {"status": "removed"}
 
 

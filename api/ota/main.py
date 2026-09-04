@@ -15,6 +15,7 @@ from .db import Base, SessionLocal, engine
 from .models import ImageBuild, Session as SessionModel
 from .routers import (
     admin, auth, backups, branding, builds, help as help_router,
+    netprofiles,
     identity as identity_router, internal, monitoring,
     files, groupfiles, pwa, recipes as recipes_router, webapps,
     registries as registries_router,
@@ -306,6 +307,7 @@ app.include_router(admin.router)
 app.include_router(help_router.router)
 app.include_router(pwa.router)
 app.include_router(branding.router)
+app.include_router(netprofiles.router)
 app.include_router(files.router)
 app.include_router(groupfiles.router)
 app.include_router(webapps.router)

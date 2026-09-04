@@ -216,6 +216,7 @@ class TemplateOut(BaseModel):
     group_shelf: bool = True
     # "selkies" (Vorgabe) oder "kasmvnc". Siehe `Template.stream_engine`.
     stream_engine: str = "selkies"
+    net_profile_id: uuid.UUID | None = None
     is_enabled: bool
     apps: list[AppOut] = []
     group_ids: list[uuid.UUID] = []
@@ -251,6 +252,8 @@ class TemplateIn(BaseModel):
     # Selkies, der Agent wartete neunzig Sekunden auf einen Port, den niemand
     # oeffnet, und die Sitzung kaeme nie hoch.
     stream_engine: str | None = None
+    # Welches Netzprofil gilt. `None` heisst: die Vorgabe der Anlage.
+    net_profile_id: uuid.UUID | None = None
     is_enabled: bool = True
     # `None` heisst „nicht mitgeschickt" und laesst die Zuweisung stehen; eine
     # leere Liste heisst „niemand mehr". Ohne diese Unterscheidung nimmt ein
@@ -258,6 +261,42 @@ class TemplateIn(BaseModel):
     # Workspace verschwindet wortlos von jedem Dashboard. Genau das ist am
     # 2026-08-28 passiert.
     group_ids: list[uuid.UUID] | None = None
+
+
+class NetzRegel(BaseModel):
+    """Eine Zeile der Freigabeliste."""
+
+    # IP, CIDR oder Name. Ein Name wird vom eigenen Resolver freigegeben,
+    # sobald er ihn beantwortet — nicht aus einer Aufloesung von vorgestern.
+    ziel: str
+    # "443", "8080-8090", "80,443" oder "*"
+    ports: str = "*"
+    # tcp | udp | beide
+    protokoll: str = "beide"
+    # Pflicht. Eine Freigabe ohne Begruendung ist in einem Jahr eine, die
+    # niemand zu entfernen wagt.
+    notiz: str = ""
+
+
+class NetProfileIn(BaseModel):
+    name: str
+    description: str = ""
+    stufe: str = "internet"
+    regeln: list[NetzRegel] = []
+    begruendung: str = ""
+
+
+class NetProfileOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    name: str
+    description: str
+    stufe: str
+    regeln: list[NetzRegel]
+    begruendung: str
+    # Wie viele Arbeitsplaetze es benutzen — damit niemand eines loescht, das
+    # noch irgendwo gilt.
+    in_benutzung: int = 0
 
 
 class BrandingIn(BaseModel):
