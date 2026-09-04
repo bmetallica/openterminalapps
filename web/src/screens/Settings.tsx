@@ -131,7 +131,7 @@ export function Settings({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad'
       </div>
 
       <div className="section__head" style={{ marginTop: 30 }}>
-        <span className="silk">{t('Verzeichnis (LDAP / Active Directory)')}</span>
+        <span className="silk">{t('Anmeldung und Verzeichnis')}</span>
         <span className="section__rule" />
       </div>
       <div style={{ maxWidth: 620 }}>

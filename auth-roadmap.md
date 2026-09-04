@@ -849,7 +849,7 @@ Keycloak steht unter Apache-2.0 und passt damit zur Lizenzlage von OTA. Es gehö
 | 1 | Bestandskonten und Passwörter | Konten übernehmen, Passwörter einmalig neu, Wechsel erzwungen | **entschieden** 2026-08-28 |
 | 2 | Notzugang, wenn Keycloak steht | Ein Notfallkonto unter eigener Adresse, protokolliert, mit eigener zweiter Stufe | **entschieden** 2026-08-28 |
 | 3 | Ort der zweiten Stufe | Keycloak — bis auf das Notfallkonto | **entschieden** 2026-08-28 |
-| 4 | Eigene LDAP-Anbindung | Bis Etappe E Rückweg, dort entfernt; ab sofort eingefroren | **entschieden** 2026-08-28 |
+| 4 | Eigene LDAP-Anbindung | Bis Etappe E Rückweg, dort entfernt; ab sofort eingefroren | **erledigt** 2026-09-04 — entfernt: `directory.py`, `identity.py`, die Tabelle `identity_configs` (Migration `a1c4e7b90f21`), die alten Endpunkte, das Formular in der Oberfläche und die halbe Prüfreihe |
 | 5 | Profil- und Ablagepfade | Nach `sub` benannt, Verweis unter dem Namen | **beschlossen, nicht umgesetzt** — siehe unten |
 | 6 | Eigener Realm statt `master` | Ja, zwingend (falls Keycloak) | ergibt sich aus 5.5 |
 | 7 | **Welcher Identity Provider** | **Keycloak** — die konservative Wahl: tiefste AD-Föderation, Apache-2.0, CNCF. Zitadel, Authelia, Dex, Ory und Kanidm sind an den Anforderungen gescheitert, authentik unterlag | **entschieden** 2026-08-28 |

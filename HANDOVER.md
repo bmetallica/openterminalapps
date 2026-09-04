@@ -215,8 +215,10 @@ aufgeräumt, deren Datenbankzeile noch `running` war, und mit `pkill -f` die eig
 
 ### ⚠️ Bekannte Bugs & Test-Status
 
-* **Testergebnis: `make test` vollständig grün — 453/453** (2026-09-04).
-  `226 authz · 18 Zwischenablage · 107 e2e · 42 ldap · 2 Medienweg · 19 Netz · 39 Sicherung`,
+* **Testergebnis: `make test` vollständig grün — 431/431** (2026-09-04).
+  `226 authz · 18 Zwischenablage · 107 e2e · 20 Verzeichnis · 2 Medienweg · 19 Netz · 39 Sicherung`.
+  Die Verzeichnisreihe ist von 42 auf 20 geschrumpft: Die Hälfte prüfte OTAs eigene
+  LDAP-Anbindung, und die ist entfallen.
   dazu `scripts/build-desktop-image.sh --pruefen` **19/19**.
 * **Die Sicherungsprüfung war nie gefährlich.** Ich hatte sie zwei Tage lang gemieden, weil sie
   „Sitzungen beendet" — sie beendet aber nur die **eigenen**: `/api/sessions` liefert ohne

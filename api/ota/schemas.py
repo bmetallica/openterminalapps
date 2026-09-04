@@ -662,59 +662,7 @@ class SettingsIn(BaseModel):
     disk_floor_gb: int | None = None
 
 
-class IdentityOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    is_enabled: bool = False
-    server_uri: str = ""
-    tls_mode: str = "starttls"
-    tls_verify: bool = True
-    ca_cert: str = ""
-    bind_dn: str = ""
-    # Das Kennwort selbst kommt nie zurueck.
-    has_bind_password: bool = False
-    base_dn: str = ""
-    login_attribute: str = "uid"
-    user_filter: str = "(objectClass=inetOrgPerson)"
-    mail_attribute: str = "mail"
-    name_attribute: str = "cn"
-    group_base_dn: str = ""
-    group_filter: str = "(objectClass=groupOfNames)"
-    member_attribute: str = "member"
-    group_name_attribute: str = "cn"
-    group_map: dict = {}
-    jit_create: bool = True
-    sync_enabled: bool = True
-    last_sync_at: datetime | None = None
-    last_error: str | None = None
 
-
-class IdentityIn(BaseModel):
-    # Alles optional: Die Oberflaeche schickt, was sie geaendert hat.
-    is_enabled: bool | None = None
-    server_uri: str | None = None
-    tls_mode: str | None = None
-    tls_verify: bool | None = None
-    ca_cert: str | None = None
-    bind_dn: str | None = None
-    # Leer heisst „nicht geaendert", nicht „loeschen".
-    bind_password: str | None = None
-    base_dn: str | None = None
-    login_attribute: str | None = None
-    user_filter: str | None = None
-    mail_attribute: str | None = None
-    name_attribute: str | None = None
-    group_base_dn: str | None = None
-    group_filter: str | None = None
-    member_attribute: str | None = None
-    group_name_attribute: str | None = None
-    group_map: dict | None = None
-    jit_create: bool | None = None
-    sync_enabled: bool | None = None
-
-
-class IdentityTestIn(BaseModel):
-    # Ein Name, an dem sich zeigen laesst, was das Verzeichnis liefert.
-    probe_login: str = ""
 
 
 class SkeletonDirIn(BaseModel):

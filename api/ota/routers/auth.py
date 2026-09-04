@@ -12,7 +12,7 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session as DbSession
 
-from .. import agent_client, audit, directory, identity, kcidentity, keycloak
+from .. import agent_client, audit, kcidentity, keycloak
 from ..config import settings
 from ..db import get_db
 from ..deps import current_user, set_session_cookie
@@ -38,68 +38,6 @@ _DUMMY_HASH = hash_password(secrets.token_urlsafe(32))
 
 
 
-def _from_directory(db: DbSession, cfg, body: LoginIn, request: Request) -> User | None:
-    """Erster Anmeldeversuch eines Menschen, den OTA noch nicht kennt.
-
-    Erst pruefen lassen, dann anlegen. Andersherum entstuende bei jedem
-    Tippfehler im Benutzernamen ein Konto.
-    """
-    try:
-        person = directory.authenticate(cfg, body.username, body.password)
-    except directory.DirectoryError as exc:
-        log.warning("Verzeichnis-Anmeldung fehlgeschlagen: %s", exc)
-        return None
-    if person is None:
-        return None
-
-    user = identity.adopt(db, cfg, person)
-    if user is None:
-        # Der Name gehoert einem lokalen Konto. Das Verzeichnis bekommt ihn
-        # nicht — und der Vorgang gehoert ins Protokoll, denn er sieht von
-        # aussen aus wie ein falsches Passwort.
-        audit.record(db, "login.directory_name_taken", actor=None,
-                     request=request, username=body.username)
-        db.commit()
-        return None
-
-    audit.record(db, "user.created_from_directory", actor=user,
-                 object_type="user", object_id=user.username, request=request,
-                 dn=person.dn, groups=len(user.groups))
-    db.commit()
-    return user
-
-
-def _check_directory(db: DbSession, cfg, user: User, body: LoginIn,
-                     request: Request, now: datetime) -> bool:
-    """Prueft das Passwort eines Verzeichniskontos und frischt es auf."""
-    if cfg is None:
-        log.warning("Konto %s gehoert zum Verzeichnis, aber die Anbindung ist "
-                    "abgeschaltet.", user.username)
-        return False
-    try:
-        person = directory.authenticate(cfg, user.username, body.password)
-    except directory.DirectoryError as exc:
-        log.warning("Verzeichnis nicht erreichbar: %s", exc)
-        audit.record(db, "login.directory_unreachable", actor=user, request=request)
-        db.commit()
-        return False
-
-    if person is None:
-        user.failed_logins += 1
-        if user.failed_logins >= LOCK_AFTER:
-            user.locked_until = now + timedelta(minutes=LOCK_MINUTES)
-            user.failed_logins = 0
-        audit.record(db, "login.failed", actor=user, request=request)
-        db.commit()
-        return False
-
-    # Bei jeder Anmeldung auf den Stand des Verzeichnisses bringen. Das ist
-    # der Grund, warum der naechtliche Abgleich keine Voraussetzung ist:
-    # Wessen Gruppen sich aendern, merkt es beim naechsten Anmelden.
-    identity.refresh(db, cfg, user, person)
-    return True
-
-
 @router.post("/login")
 def login(
     body: LoginIn,
@@ -113,27 +51,20 @@ def login(
     # sonst laesst sich herausfinden, welche Konten existieren.
     invalid = HTTPException(status.HTTP_401_UNAUTHORIZED, "Benutzername oder Passwort ist falsch.")
 
-    # Wo dieses Passwort geprueft wird, entscheidet das Konto — nicht die
-    # Anfrage und nicht das Verzeichnis. Ein lokales Konto wird lokal
-    # geprueft, auch wenn im Verzeichnis ein gleichnamiger Eintrag steht.
-    # Ohne diese Regel koennte jeder, der dort einen Eintrag anlegen darf,
-    # das Konto des ersten Administrators uebernehmen (identity.py).
-    dir_cfg = identity.active(db)
-    weg = identity.where_to_check(user, dir_cfg)
-
+    # **Dieser Weg prueft lokal, und nur lokal.**
+    #
+    # Bis zur Uebernahme der Bestandskonten pruefte er auch gegen ein
+    # Verzeichnis: OTA sprach selbst LDAP, legte Konten daraus an und frischte
+    # sie beim Anmelden auf. Dieser Weg ist am 2026-09-04 entfallen — ein
+    # Verzeichnis bindet man in Keycloak an, und Keycloak macht die Anmeldung
+    # (auth-roadmap.md, Entscheidung 4). Was hier bleibt, ist der Notzugang.
     if user is None:
-        if weg == identity.LDAP and dir_cfg is not None:
-            user = _from_directory(db, dir_cfg, body, request)
-            if user is None:
-                verify_password(body.password, _DUMMY_HASH)
-                raise invalid
-        else:
-            # Die Meldung ist gleich, die Dauer muss es auch sein: Ohne diesen
-            # Leerlauf antwortet ein unbekannter Name in Mikrosekunden und ein
-            # bekannter erst nach einem Argon2-Durchlauf. Damit liesse sich die
-            # Nutzerliste abfragen, ohne je hereinzukommen.
-            verify_password(body.password, _DUMMY_HASH)
-            raise invalid
+        # Die Meldung ist gleich, die Dauer muss es auch sein: Ohne diesen
+        # Leerlauf antwortet ein unbekannter Name in Mikrosekunden und ein
+        # bekannter erst nach einem Argon2-Durchlauf. Damit liesse sich die
+        # Nutzerliste abfragen, ohne je hereinzukommen.
+        verify_password(body.password, _DUMMY_HASH)
+        raise invalid
 
     now = datetime.now(timezone.utc)
     if user.locked_until and user.locked_until > now:
@@ -146,7 +77,7 @@ def login(
     if not user.is_active or user.is_locked:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Dieses Konto ist deaktiviert.")
 
-    if weg == "none" and user.auth_provider == identity.KEYCLOAK:
+    if user.auth_provider == "keycloak":
         # Kein 401: Hier ist nichts falsch eingegeben, hier steht jemand am
         # falschen Eingang. Die Meldung sagt, wo der richtige ist.
         raise HTTPException(
@@ -155,14 +86,7 @@ def login(
             "Ruf OTA ohne /login auf, dann geht es von selbst weiter.",
         )
 
-    if weg == identity.LDAP and user.auth_provider == identity.LDAP:
-        # Das Verzeichnis entscheidet, nicht wir. Faellt es aus, kommt dieses
-        # Konto nicht herein — und das ist richtig so: Ein Ausweichen auf
-        # einen lokalen Hash waere ein zweiter Weg an der Stelle, an der es
-        # genau einen geben soll.
-        if not _check_directory(db, dir_cfg, user, body, request, now):
-            raise invalid
-    elif not verify_password(body.password, user.password_hash):
+    if not verify_password(body.password, user.password_hash):
         user.failed_logins += 1
         if user.failed_logins >= LOCK_AFTER:
             user.locked_until = now + timedelta(minutes=LOCK_MINUTES)

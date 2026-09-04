@@ -478,7 +478,8 @@ Session-Prozesse, und die ereignisgesteuerte statt abfragende Brücke (braucht e
 Erst mit dem Arbeitsplatz sinnvoll (`plan.md` §9.4).
 
 > **Die Identitäts-Hälfte ist mit M11 erledigt und ersetzt.** Die eigene LDAP-Anbindung
-> (`directory.py`) war ab 2026-08-28 eingefroren und ist mit der Übernahme weggefallen; ein
+> (`directory.py`) war ab 2026-08-28 eingefroren und ist am **2026-09-04 wirklich entfernt** —
+> samt Tabelle, Endpunkten, Formular und der halben Prüfreihe; ein
 > Verzeichnis bindet man jetzt in Keycloak an, eingerichtet über OTAs Oberfläche
 > ([`auth-roadmap.md`](auth-roadmap.md), Etappe C).
 >

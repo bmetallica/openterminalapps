@@ -104,6 +104,7 @@ export function Netz({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad') =>
   // kommen aus der Umgebung und aus dem Aufbau.
   const [grund, setGrund] = useState<Grundregel[]>([])
   const [grundOffen, setGrundOffen] = useState(false)
+  const [neuesProfil, setNeuesProfil] = useState('')
 
   const laden = () => {
     void api.netProfiles().then(setProfile).catch(() => setProfile([]))
@@ -132,6 +133,17 @@ export function Netz({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad') =>
     } finally {
       setBusy(false)
     }
+  }
+
+  // Ein eigenes Feld statt `window.prompt`: Der Rest der Anwendung fragt
+  // nirgends über einen Browser-Dialog nach einem Namen, und ein Dialog lässt
+  // sich weder beschriften noch übersetzen.
+  const anlegen = () => {
+    const name = neuesProfil.trim()
+    if (!name) return
+    void tun(() => api.createNetProfile({
+      name, description: '', stufe: 'internet', regeln: [], begruendung: '',
+    }), t('Profil angelegt')).then(() => setNeuesProfil(''))
   }
 
   if (!profile || !global || !zeilen) {
@@ -474,16 +486,21 @@ export function Netz({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad') =>
         </div>
       ))}
 
-      <button className="btn btn--sm" disabled={busy}
-        onClick={() => {
-          const name = window.prompt(t('Name des neuen Profils'))
-          if (!name) return
-          void tun(() => api.createNetProfile({
-            name, description: '', stufe: 'internet', regeln: [], begruendung: '',
-          }), t('Profil angelegt'))
-        }}>
-        {t('Profil anlegen')}
-      </button>
+      <div className="panel" style={{ padding: '14px 20px', maxWidth: 900 }}>
+        <div className="viewer__row">
+          <input type="text" value={neuesProfil} style={{ maxWidth: 280 }}
+            placeholder={t('Name des neuen Profils')} aria-label={t('Name des neuen Profils')}
+            onChange={(e) => setNeuesProfil(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') anlegen() }} />
+          <button className="btn btn--sm" disabled={busy || !neuesProfil.trim()}
+            onClick={anlegen}>
+            {t('Profil anlegen')}
+          </button>
+          <span className="sub">
+            {t('Beginnt mit der Stufe „Internet" und ohne Freigaben — beides danach änderbar.')}
+          </span>
+        </div>
+      </div>
     </div>
   )
 }

@@ -163,8 +163,6 @@ export const EN: Record<string, string> = {
   'Ein Satz, der Nutzern sagt, wofür sie diesen Workspace öffnen.':
     'One sentence telling users what to open this workspace for.',
   'Image': 'Image',
-  'Wählbar sind die Images, die auf diesem Host bereitliegen.':
-    'You can pick any image already present on this host.',
   'Betriebsart': 'Mode',
   'Ein Linux je Nutzer mit mehreren Apps darin. Der Standard.':
     'One Linux per user with several apps inside. The default.',
@@ -355,7 +353,6 @@ export const EN: Record<string, string> = {
 
   // Vorgangsnamen im Protokoll
   'Anmeldung': 'Sign-in',
-  'Anmeldung fehlgeschlagen ': 'Sign-in failed',
   'Zweiter Faktor falsch': 'Second factor incorrect',
   'Session gestartet': 'Session started',
   'Session gestoppt': 'Session stopped',
@@ -519,7 +516,6 @@ export const EN: Record<string, string> = {
   'In eigenem Tab öffnen': 'Open in its own tab',
   'Tab schliessen': 'Close tab',
   'Auf den Desktop legen': 'Add to desktop',
-  'Wird auf dem Desktop abgelegt…': 'Adding to your desktop…',
   '{name} liegt jetzt auf deinem Desktop.': '{name} is on your desktop now.',
   'Der Browser hat die Verknüpfung abgelehnt.': 'The browser refused the shortcut.',
   '{name} auf den Desktop legen': 'Add {name} to desktop',
@@ -592,7 +588,6 @@ export const EN: Record<string, string> = {
   'Der Server antwortet.': 'The server answers.',
   'Der Server antwortet nicht.': 'The server does not answer.',
   'Das Dienstkonto kommt herein.': 'The service account gets in.',
-  'Verbindung (alte Anbindung)': 'Connection (old binding)',
   'Keycloak holt die Konten aus dem Verzeichnis. OTA schreibt nie hinein — was dort steht, wird gelesen, nicht geändert.':
     'Keycloak fetches the accounts from the directory. OTA never writes into it — what is there is read, not changed.',
   'Anmeldename ist sAMAccountName, Kennung objectGUID.': 'Login name is sAMAccountName, identifier objectGUID.',
@@ -606,8 +601,6 @@ export const EN: Record<string, string> = {
     'Off means: the binding stays, but nobody signs in through it.',
   'Die Anbindung entfernen? Konten, die daraus stammen, können sich danach nicht mehr anmelden.':
     'Remove the binding? Accounts that came from it will no longer be able to sign in.',
-  'Wird von der Anbindung über Keycloak abgelöst und nicht mehr weiterentwickelt. Sie bleibt als Rückweg bestehen, bis die Umstellung abgeschlossen ist.':
-    'Being replaced by the Keycloak binding and no longer developed. It stays as a fallback until the switch is complete.',
   'Anmeldung wird geöffnet…': 'Opening sign-in…',
   'Einen Moment…': 'One moment…',
   'Notzugang': 'Emergency access',
@@ -623,8 +616,6 @@ export const EN: Record<string, string> = {
   'Vorhanden': 'Existing',
   'Realm': 'Realm',
   'Verzeichnisanbindung': 'Directory federation',
-  'Läuft in diesem Stack. Die Anmeldung macht OTA vorerst weiterhin selbst — diese Anbindung wird sie später ablösen.':
-    'Runs in this stack. OTA still handles sign-in itself for now — this connection will take over later.',
   'Ein fremdes Keycloak. OTA ist dort Gast: Es löscht nichts und fasst nur die eigenen Gruppen an. Was oben grau ist, darf das Dienstkonto nicht.':
     'Somebody else\'s Keycloak. OTA is a guest there: it deletes nothing and touches only its own groups. Anything greyed out above is something the service account may not do.',
   'Einmal': 'One-time',
@@ -708,8 +699,6 @@ export const EN: Record<string, string> = {
   'Firefox lässt Webseiten nicht in die Zwischenablage sehen. Mit der OTA-Erweiterung geht Kopieren und Einfügen wie gewohnt; ohne sie bleibt Strg+V im Stream.':
     'Firefox does not let web pages read the clipboard. With the OTA add-on, copy and paste work as usual; without it, Ctrl+V inside the stream is the way.',
   'Erweiterung herunterladen': 'Download the add-on',
-  'Firefox gibt die Zwischenablage nicht frei. Einfügen geht mit Strg+V, für den bequemen Weg gibt es die OTA-Erweiterung.':
-    'Firefox withholds clipboard access. Pasting works with Ctrl+V; for the comfortable route there is the OTA add-on.',
 
   // ------------------------------------------------ Software und Freigabe
   'Software einbauen': 'Install software',
@@ -1112,52 +1101,13 @@ export const EN: Record<string, string> = {
   'Was hier liegt, sehen alle Mitglieder. Zieh Dateien in die Fläche oben oder leg einen Ordner an.':
     'Everything here is visible to all members. Drag files into the area above, or create a folder.',
   'Entfernen fehlgeschlagen': 'Removal failed',
-  'Verzeichnis (LDAP / Active Directory)': 'Directory (LDAP / Active Directory)',
-  'Konten aus einem Verzeichnis anmelden lassen, statt sie von Hand anzulegen. Lokale Konten bleiben davon unberührt — sie werden weiterhin lokal geprüft, auch wenn im Verzeichnis ein gleichnamiger Eintrag steht.': 'Let accounts sign in from a directory instead of creating them by hand. Local accounts are untouched — they are still checked locally, even if the directory holds an entry with the same name.',
   'Verbindung': 'Connection',
   'Adresse': 'Address',
-  'ldaps://server:636 für eine verschlüsselte Verbindung, oder ldap://server:389 mit StartTLS.': 'ldaps://server:636 for an encrypted connection, or ldap://server:389 with StartTLS.',
-  'Verschlüsselung': 'Encryption',
-  'StartTLS': 'StartTLS',
   'ohne': 'none',
-  'Ohne Verschlüsselung geht jedes Anmeldepasswort im Klartext über das Netz. Für einen Testaufbau in Ordnung, für den Betrieb nicht.': 'Without encryption every sign-in password crosses the network in the clear. Fine for a test setup, not for production.',
-  'Wird zum Suchen gebraucht und braucht nur Leserecht. Der Mensch, der sich anmeldet, kennt seinen eigenen Eintrag nicht.': 'Needed for searching and needs read access only. The person signing in does not know their own entry.',
   'Kennwort': 'Password',
-  'hinterlegt — leer lassen, um es zu behalten': 'stored — leave empty to keep it',
   'Basis': 'Base',
-  'Ab wo gesucht wird.': 'Where the search starts.',
-  'Anmeldemerkmal': 'Login attribute',
-  'Womit sich jemand anmeldet: uid bei OpenLDAP, sAMAccountName im Active Directory.': 'What people sign in with: uid on OpenLDAP, sAMAccountName on Active Directory.',
-  'Gruppen-Basis': 'Group base',
-  'Leer lassen, wenn die Gruppen unter derselben Basis liegen.': 'Leave empty if groups live under the same base.',
   'Prüfen': 'Check',
-  'Ein Name zur Probe': 'A name to try',
-  'Freiwillig. Mit einem Namen zeigt die Prüfung ausserdem, was das Verzeichnis über diesen Menschen liefert — vor allem seine Gruppen.': 'Optional. With a name, the check also shows what the directory returns for that person — above all their groups.',
-  'Speichern und prüfen': 'Save and check',
-  'Die Prüfung schlug fehl': 'The check failed',
-  'Gespeichert, wird geprüft…': 'Saved, checking…',
-  '{n} Einträge sichtbar, {g} Gruppen.': '{n} entries visible, {g} groups.',
-  'Gruppen im Verzeichnis:': 'Groups in the directory:',
-  'Gruppen zuordnen': 'Map groups',
-  'Was nicht zugeordnet ist, bringt keine Rechte mit. Ein Verzeichnis hat Dutzende Gruppen, die OTA nichts angehen — sie automatisch zu übernehmen hiesse, nach dem ersten Abgleich vierzig Gruppen zu haben, die niemand wollte.': 'Anything unmapped brings no permissions. A directory has dozens of groups that are none of OTA\u2019s business — adopting them automatically would mean forty groups nobody wanted after the first sync.',
-  'Erst prüfen — dann stehen die Gruppen des Verzeichnisses hier zur Auswahl.': 'Run the check first — then the directory\u2019s groups appear here.',
-  'Zuordnung für {name}': 'Mapping for {name}',
-  '— keine —': '— none —',
-  'Zuordnung speichern': 'Save mapping',
-  'Zuordnung gespeichert.': 'Mapping saved.',
-  'Konten beim ersten Anmelden anlegen': 'Create accounts at first sign-in',
-  'Ohne das muss jedes Konto vorher von Hand angelegt werden.': 'Without this, every account must be created by hand first.',
-  'Nächtlich abgleichen': 'Sync nightly',
-  'Holt Gruppenänderungen nach. Wer sich anmeldet, wird ohnehin bei jeder Anmeldung aufgefrischt.': 'Picks up group changes. Anyone who signs in is refreshed at every sign-in anyway.',
-  'zuletzt {when}': 'last {when}',
-  '{n} Konten geprüft, {a} geändert, {d} deaktiviert.': '{n} accounts checked, {a} changed, {d} deactivated.',
   'Abgleich fehlgeschlagen': 'Sync failed',
-  'Anmeldung über das Verzeichnis einschalten': 'Turn on directory sign-in',
-  'Neue Namen werden im Verzeichnis gesucht. Lokale Konten bleiben lokal.': 'New names are looked up in the directory. Local accounts stay local.',
-  'Abgeschaltet. An der Anmeldung ändert sich nichts.': 'Off. Nothing about signing in changes.',
-  'Verzeichnis-Anmeldung eingeschaltet.': 'Directory sign-in turned on.',
-  'Verzeichnis-Anmeldung abgeschaltet.': 'Directory sign-in turned off.',
-  'Das Passwort eines lokalen Kontos wird nie gegen das Verzeichnis geprüft — auch dann nicht, wenn dort ein Eintrag mit demselben Namen steht. Sonst könnte jeder, der im Verzeichnis einen Eintrag anlegen darf, ein bestehendes Konto übernehmen.': 'A local account\u2019s password is never checked against the directory — not even when an entry with the same name exists there. Otherwise anyone who can create a directory entry could take over an existing account.',
   'Verbindung unterbrochen.': 'Connection lost.',
   'Wird neu verbunden…': 'Reconnecting…',
   'Wird neu verbunden — Versuch {n}.': 'Reconnecting — attempt {n}.',
@@ -1263,4 +1213,11 @@ export const EN: Record<string, string> = {
   '{n} Regeln, die für jeden Arbeitsplatz gelten — unabhängig vom Profil': '{n} rules that apply to every workspace \u2014 regardless of profile',
   'Diese Regeln sind abgeleitet, nicht eingetragen: Sie kommen aus der Umgebung (deploy/.env) und aus dem Aufbau selbst. Hier zu sehen, geändert werden sie dort, wo sie herkommen.': 'These rules are derived, not entered: they come from the environment (deploy/.env) and from the setup itself. Visible here, changed where they come from.',
   'Warum': 'Why',
+
+  // Identität: ein Weg, nicht zwei (die eigene LDAP-Anbindung ist entfallen)
+  'Anmeldung und Verzeichnis': 'Sign-in and directory',
+  'Ein Verzeichnis (LDAP oder Active Directory) wird in Keycloak angebunden — dort liegt die Anmeldung, und dort werden die Konten geführt. OTA übernimmt sie und ordnet ihre Gruppen zu.': 'A directory (LDAP or Active Directory) is attached in Keycloak \u2014 that is where sign-in happens and where the accounts live. OTA adopts them and maps their groups.',
+  'Das lokale Notfallkonto bleibt davon unberührt. Es wird immer lokal geprüft — auch wenn im Verzeichnis ein gleichnamiger Eintrag steht.': 'The local emergency account is unaffected. It is always checked locally \u2014 even if the directory holds an entry with the same name.',
+  'Läuft in diesem Stack und macht die Anmeldung. OTA richtet ihn ein und verwaltet ihn von hier aus.': 'Runs in this stack and handles sign-in. OTA sets it up and manages it from here.',
+  'Beginnt mit der Stufe „Internet" und ohne Freigaben — beides danach änderbar.': 'Starts at level \u201cInternet\u201d with no exceptions \u2014 both can be changed afterwards.',
 }

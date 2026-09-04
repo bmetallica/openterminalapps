@@ -18,7 +18,7 @@ sowie ganze Registries einbinden — als Zusatz, nicht als Fundament.
 **Jeder Arbeitsplatz hängt in einem eigenen Netz** hinter einem Router: kein Firmennetz, keine
 Nachbarsitzung, kein Wirt — bis jemand es ausdrücklich freigibt ([firewall.md](firewall.md)).
 
-> **Stand:** läuft und wird benutzt. 453 automatische Prüfungen, davon 107 in einem echten Browser.
+> **Stand:** läuft und wird benutzt. 431 automatische Prüfungen, davon 107 in einem echten Browser.
 > Was noch fehlt, steht offen in [roadmap.md](roadmap.md) — nichts davon ist beschönigt.
 
 ---
@@ -277,6 +277,8 @@ nicht — dieselbe Trennung gilt für das Dateisystem des Hosts.
 - **[docs/adr/](docs/adr/README.md)** — Entscheidungen, die teuer rückgängig zu machen sind, mit den
   Alternativen, die nicht getragen hätten
 - **[roadmap.md](roadmap.md)** — Umsetzungsstand, ehrlich
+- **[todo.md](todo.md)** — was noch zu tun ist, nach Wirkung geordnet: vier Punkte an einem
+  Vormittag, dann Sicherheit, Datenschutz, Aufräumen
 - **[security.md](security.md)** — Sicherheitsbetrachtung: sechzehn Befunde mit Nachweis, was gut
   gelöst ist, und was diese Durchsicht ausdrücklich **nicht** war
 - **[dsgvo.md](dsgvo.md)** — welche personenbezogenen Daten wo liegen, wie lange, wer sie sieht —
@@ -295,14 +297,14 @@ aussahen, als sie waren.
 make test
 ```
 
-**453 Prüfungen in sieben Suiten**, jede stellt ihren Vorzustand selbst her:
+**431 Prüfungen in sieben Suiten**, jede stellt ihren Vorzustand selbst her:
 
 | Suite | Prüft |
 |---|---|
 | `test-authz.sh` | Ein normaler Nutzer kann beweisbar nichts Administratives tun und an keinem fremden Bildschirm sitzen; dazu Container-Härtung, Kennzahlen, Kontingente und zweiter Faktor |
 | `test-clipboard-bridge.sh` | Kopieren zwischen zwei Anwendungen im selben Arbeitsplatz: beide Richtungen, Umlaute, ein Bild, ein Megabyte, nach Pause, und abgeschaltet |
 | `tests/e2e.mjs` | Die Oberfläche in einem echten Browser — bis zur Frage, ob der Stream wirklich verbindet |
-| `test-ldap.sh` | Verzeichnis-Anmeldung gegen ein echtes OpenLDAP im Container — vor allem, dass ein lokales Konto unantastbar bleibt und ein Ausfall es nicht mitreisst |
+| `test-ldap.sh` | Verzeichnis-Anbindung **über Keycloak** gegen ein echtes OpenLDAP im Container — vor allem, dass ein Verzeichniseintrag kein lokales Konto übernimmt und ein Ausfall den Notzugang nicht mitreisst |
 | `test-streaming.sh` | Der Medienweg: Vermittelt der TURN-Server wirklich, und kommt im Browser ein Bild an? Der Prüfbrowser läuft in einem Netz, aus dem der Session-Container **nicht** direkt erreichbar ist — wie ein Arbeitsplatz im Firmennetz |
 | `test-firewall.sh` | Die Netzabsicherung, **von innen gemessen**: Nachbar, Wirt, Firmennetz, TURN, Namensdienst, Internet je Stufe, Freigabe nach Namen, Portfreigabe — und alles noch einmal nach einem Neustart des Routers |
 | `test-backup.sh` | Sicherung und Wiederherstellung von Profil, Container und Datenbank. Beendet dafür Sitzungen — **nur die eigenen**, und prüft das ausdrücklich nach |

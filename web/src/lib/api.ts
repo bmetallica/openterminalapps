@@ -466,31 +466,6 @@ export type FreezePreview = {
   session_id: string
 }
 
-export type IdentityConfig = {
-  is_enabled: boolean
-  server_uri: string
-  tls_mode: 'starttls' | 'none'
-  tls_verify: boolean
-  ca_cert: string
-  bind_dn: string
-  /** Das Kennwort selbst kommt nie zurück — nur, ob eines hinterlegt ist. */
-  has_bind_password: boolean
-  base_dn: string
-  login_attribute: string
-  user_filter: string
-  mail_attribute: string
-  name_attribute: string
-  group_base_dn: string
-  group_filter: string
-  member_attribute: string
-  group_name_attribute: string
-  /** Gruppenname im Verzeichnis → Gruppen-Kennung in OTA. */
-  group_map: Record<string, string>
-  jit_create: boolean
-  sync_enabled: boolean
-  last_sync_at: string | null
-  last_error: string | null
-}
 
 export type SkeletonEntry = {
   name: string
@@ -879,16 +854,6 @@ export const api = {
   groups: () => call<Group[]>('/admin/groups'),
   audit: (limit = 100) => call<AuditEntry[]>(`/admin/audit?limit=${limit}`),
   permissions: () => call<Permission[]>('/admin/permissions'),
-  identity: () => call<IdentityConfig>('/admin/identity'),
-  saveIdentity: (body: unknown) =>
-    call<IdentityConfig>('/admin/identity', { method: 'PUT', body: JSON.stringify(body) }),
-  testIdentity: (probe: string) =>
-    call<Record<string, unknown>>('/admin/identity/test', {
-      method: 'POST', body: JSON.stringify({ probe_login: probe }),
-    }),
-  syncIdentity: () =>
-    call<{ geprueft: number; geaendert: number; deaktiviert: number; fehler: number }>(
-      '/admin/identity/sync', { method: 'POST' }),
 
   settings: () => call<GlobalSettings>('/admin/settings'),
   myStorage: () => call<MyStorage>('/auth/storage'),

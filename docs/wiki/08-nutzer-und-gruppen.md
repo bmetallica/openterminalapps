@@ -175,8 +175,17 @@ nicht als Ersatz für das Passwort.
 
 ## Active Directory und LDAP ✅
 
-Unter **Verwaltung → Einstellungen → Verzeichnis**. Die Reihenfolge auf dem Bildschirm ist die, in
-der man das tatsächlich einrichtet: verbinden, prüfen, zuordnen, einschalten.
+**Ein Weg, nicht zwei.** Ein Verzeichnis wird in **Keycloak** angebunden — dort liegt die
+Anmeldung, dort werden die Konten geführt, und OTA übernimmt sie und ordnet ihre Gruppen zu.
+Eingerichtet wird das aus OTAs Oberfläche heraus: **Verwaltung → Einstellungen → Anmeldung und
+Verzeichnis**. Die Keycloak-Konsole braucht man dafür nicht.
+
+Wie das im Einzelnen geht, steht in [Kapitel 18](18-zentrale-anmeldung.md#ein-active-directory-anbinden).
+
+> **Bis zum 2026-09-04 gab es einen zweiten Weg:** OTA sprach selbst LDAP — eigene Anbindung,
+> eigener nächtlicher Abgleich, eigene Anmeldung. Er ist entfallen. Zwei Wege zu derselben Sache
+> waren einer zu viel, und der alte war der, den niemand mehr gepflegt hat
+> (`auth-roadmap.md`, Entscheidung 4).
 
 ### Die Regel, die über allem steht
 
@@ -190,68 +199,15 @@ Der Angriff, gegen den das steht, ist unspektakulär und deshalb leicht zu über
 Verzeichnis einen Eintrag anlegen darf, legt einen mit dem Namen des ersten Administrators an und
 meldet sich mit seinem eigenen Passwort als dieser an. Ohne diese Regel funktioniert das.
 
-Das Testverzeichnis (`scripts/ldap-test-server.sh`) enthält deshalb absichtlich einen Eintrag
-`bmetallica` mit einem anderen Passwort. Die Prüfung besteht darin, dass er **nicht** hereinkommt.
-
-### Einrichten
-
-| Feld | Was hineingehört |
-|---|---|
-| **Adresse** | `ldaps://dc01.firma.local:636` — oder `ldap://…:389` mit StartTLS |
-| **Verschlüsselung** | StartTLS. „ohne" ist möglich und wird gewarnt: Dann geht jedes Anmeldepasswort im Klartext über das Netz |
-| **Dienstkonto** | Ein Konto mit **Leserecht**, mehr nicht. Es sucht die Einträge — der Mensch, der sich anmeldet, kennt seinen eigenen DN nicht |
-| **Basis** | Ab wo gesucht wird |
-| **Anmeldemerkmal** | `uid` bei OpenLDAP, `sAMAccountName` oder `userPrincipalName` im Active Directory |
-| **Gruppen-Basis** | Leer lassen, wenn die Gruppen unter derselben Basis liegen |
-
-### Der Prüf-Knopf
-
-Er meldet **keinen** Erfolg, wenn nur die Verbindung steht. Ein Dienstkonto, das sich anmelden kann,
-aber nichts sieht, ist der häufigste Fall beim Anbinden — und der, den eine reine
-Verbindungsprüfung übersieht. Gezeigt wird deshalb: wie viele Einträge sichtbar sind, welche
-Gruppen es gibt, und für einen Namen zur Probe dessen Gruppen im Verzeichnis.
-
-> **„No such object" heißt fast nie, dass die Basis falsch ist.** OpenLDAP meldet fehlende
-> Leserechte mit derselben Antwort wie einen nicht vorhandenen Zweig. Wer daran sucht, sucht meist
-> an der falschen Stelle — es fehlt dem Dienstkonto das Leserecht.
-
-### Gruppen zuordnen
-
-**Was nicht zugeordnet ist, bringt keine Rechte mit.** Ein Verzeichnis hat Dutzende Gruppen, die
-OTA nichts angehen; sie automatisch zu übernehmen hieße, nach dem ersten Abgleich vierzig Gruppen
-zu haben, die niemand wollte.
-
-Die Zuordnung bleibt sichtbar, auch ohne erneutes Prüfen.
-
-### Im Betrieb
-
-- **Konten beim ersten Anmelden anlegen** — sonst muss jedes Konto vorher von Hand entstehen.
-- **Bei jeder Anmeldung** werden Name, Mail und Gruppen aufgefrischt. Wer versetzt wird, merkt es
-  beim nächsten Anmelden; der nächtliche Abgleich ist dafür keine Voraussetzung.
-- **Nächtlich um 3 Uhr** läuft der Abgleich über alle Verzeichniskonten.
-- Wer im Verzeichnis **verschwindet**, wird **deaktiviert, nicht gelöscht**. Sein Zuhause, seine
-  Sicherungen und seine Spur im Protokoll bleiben. Löschen ist eine Entscheidung, die ein Mensch
-  trifft (siehe *Offboarding*).
-- Von Hand vergebene **Systemgruppen bleiben**. Der Abgleich bildet das Verzeichnis ab; er soll
-  keine Entscheidung überschreiben, die es dort gar nicht abzubilden gibt.
-
-### Wenn das Verzeichnis ausfällt
-
-**Lokale Konten sind davon nicht betroffen** — sie werden lokal geprüft und melden sich weiter an.
-Verzeichniskonten kommen nicht herein, und zwar **sofort** und nicht nach einem Zeitablauf: Die
-Verbindung läuft in fünf Sekunden aus, ein nicht erreichbarer Server antwortet in Millisekunden.
-
-Ein Ausweichen auf einen lokal gespeicherten Hash gibt es bewusst nicht. Das wäre ein zweiter Weg
-an der Stelle, an der es genau einen geben soll — und er wäre genau dann offen, wenn das
-Verzeichnis nicht widersprechen kann.
-
-Kommt das Verzeichnis zurück, geht es von selbst weiter.
+Das Testverzeichnis (`scripts/ldap-test-server.sh`) enthält deshalb absichtlich einen Eintrag mit
+dem Namen eines bestehenden lokalen Kontos und einem anderen Passwort. Die Prüfung besteht darin,
+dass er **nicht** hereinkommt — weder bei OTA noch bei Keycloak.
 
 ### Selbst ausprobieren
 
 ```bash
-scripts/ldap-test-server.sh start   # Wegwerf-Verzeichnis mit vier Konten
-./scripts/test-ldap.sh              # 29 Prüfungen, räumt hinterher auf
+scripts/ldap-test-server.sh start     # OpenLDAP mit vier Einträgen
+scripts/test-ldap.sh                  # die ganze Reihe, von Anbinden bis Ausfall
 scripts/ldap-test-server.sh stop
 ```
 
