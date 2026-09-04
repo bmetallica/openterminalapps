@@ -70,36 +70,83 @@ PUBLIC_NETWORK = os.environ.get("OTA_PUBLIC_NETWORK", "ota_public")
 # Die eigene Adresse ist dabei, weil der Browser im Arbeitsplatz OTA selbst
 # erreichen koennen muss — die Firefox-Erweiterung fuer die Zwischenablage wird
 # von dort geladen (`/api/help/extension/firefox`).
-def _grundfreigaben() -> list[tuple[str, str, str]]:
-    raus: list[tuple[str, str, str]] = []
+def _grundregeln() -> list[dict]:
+    """Was jede Sitzung erreichen darf, damit OTA funktioniert — **mit Grund**.
+
+    Der Grund steht dabei, weil diese Liste in der Oberflaeche erscheint. Eine
+    Regel ohne Begruendung ist dort dasselbe wie eine Freigabe ohne Notiz: Sie
+    steht da, und in einem Jahr traut sich niemand, sie anzufassen.
+
+    Sie ist **abgeleitet, nicht eingetragen**: Was hier steht, kommt aus der
+    Umgebung (`.env`) — Adresse des TURN-Servers, eigene Adresse, Proxy, NTP.
+    Deshalb ist sie in der Oberflaeche nicht aenderbar; geaendert wird sie
+    dort, wo sie herkommt.
+    """
+    raus: list[dict] = []
 
     # Der Medienweg. Der TURN-Dienst laeuft im Namensraum des Wirts, ist also
     # unter dessen Adresse erreichbar — und die liegt im privaten Bereich, den
     # die Stufe „internet" sonst sperrt. Ohne diese Zeilen kommt kein Bild an.
     turn = os.environ.get("OTA_TURN_HOST", "").strip()
     if turn:
-        raus.append((turn, os.environ.get("OTA_TURN_PORT", "3478"), "beide"))
-        raus.append((turn, f"{os.environ.get('OTA_TURN_MIN', '49160')}-"
-                           f"{os.environ.get('OTA_TURN_MAX', '49260')}", "beide"))
+        raus.append({"ziel": turn, "ports": os.environ.get("OTA_TURN_PORT", "3478"),
+                     "protokoll": "beide", "herkunft": "OTA_TURN_HOST/PORT",
+                     "grund": "Der Medienweg. Ohne ihn kommt kein Bild an."})
+        raus.append({"ziel": turn,
+                     "ports": f"{os.environ.get('OTA_TURN_MIN', '49160')}-"
+                              f"{os.environ.get('OTA_TURN_MAX', '49260')}",
+                     "protokoll": "beide", "herkunft": "OTA_TURN_MIN/MAX",
+                     "grund": "Der Bereich, über den der TURN-Server vermittelt."})
 
     # OTA selbst. Der Browser im Arbeitsplatz muss es erreichen — die
     # Firefox-Erweiterung fuer die Zwischenablage wird von dort geladen.
     eigene = os.environ.get("OTA_SELF_ADDRESS", "").strip()
     if eigene:
-        raus.append((eigene, os.environ.get("OTA_HTTPS_PORT", "8443"), "tcp"))
+        raus.append({"ziel": eigene, "ports": os.environ.get("OTA_HTTPS_PORT", "8443"),
+                     "protokoll": "tcp", "herkunft": "OTA_TURN_HOST/OTA_HTTPS_PORT",
+                     "grund": "OTA selbst — der Browser im Arbeitsplatz lädt von "
+                              "dort die Erweiterung für die Zwischenablage."})
 
     # Der Firmenproxy, falls einer gesetzt ist. Ohne ihn kommt dahinter
     # nichts durch.
     proxy = os.environ.get("OTA_PROXY_HOST", "").strip()
     if proxy:
-        raus.append((proxy, os.environ.get("OTA_PROXY_PORT", "3128"), "tcp"))
+        raus.append({"ziel": proxy, "ports": os.environ.get("OTA_PROXY_PORT", "3128"),
+                     "protokoll": "tcp", "herkunft": "OTA_PROXY_HOST/PORT",
+                     "grund": "Der Firmenproxy. Ohne ihn kommt dahinter nichts durch."})
 
     # Zeit. Eine falsche Uhr bricht TLS und macht Fehler, die nach allem
     # aussehen ausser nach der Uhr.
     ntp = os.environ.get("OTA_NTP_HOST", "").strip()
     if ntp:
-        raus.append((ntp, "123", "udp"))
+        raus.append({"ziel": ntp, "ports": "123", "protokoll": "udp",
+                     "herkunft": "OTA_NTP_HOST",
+                     "grund": "Zeit. Eine falsche Uhr bricht TLS."})
+
+    # Was der Router selbst mitbringt und nirgends steht: der Namensdienst.
+    # Er ist der Router; erreichbar ist er, ohne dass es dafür eine Regel
+    # braucht — und genau deshalb gehört er in diese Liste, sonst sucht ihn
+    # jemand vergeblich im Regelwerk.
+    raus.append({"ziel": "der Router selbst", "ports": "53", "protokoll": "beide",
+                 "herkunft": "eingebaut",
+                 "grund": "Namensauflösung. Ein anderer Namensdienst ist aus "
+                          "einem Arbeitsplatz nicht erreichbar — sonst wären "
+                          "Freigaben nach Namen wirkungslos."})
+    raus.append({"ziel": "Traefik → Arbeitsplatz", "ports": "6901, 8080",
+                 "protokoll": "tcp", "herkunft": "eingebaut",
+                 "grund": "Die Gegenrichtung: der Bildstrom. Nur von Traefik, "
+                          "nicht von irgendwoher."})
     return raus
+
+
+def _grundfreigaben() -> list[tuple[str, str, str]]:
+    """Dieselbe Liste, wie der Router sie braucht — ohne die Begruendungen.
+
+    Die beiden eingebauten Zeilen (Namensdienst, Traefik) sind hier nicht
+    dabei: Sie ergeben sich aus dem Aufbau und nicht aus einer Regel.
+    """
+    return [(r["ziel"], r["ports"], r["protokoll"])
+            for r in _grundregeln() if r["herkunft"] != "eingebaut"]
 
 log = logging.getLogger("ota.agent")
 
@@ -620,6 +667,12 @@ def _firewall_start() -> None:
         log.info("Firewall beim Start: %s", _firewall_abgleich())
     except Exception as exc:  # noqa: BLE001
         log.error("Firewall-Abgleich beim Start fehlgeschlagen: %s", exc)
+
+
+@app.get("/firewall/grundregeln", dependencies=[Depends(require_token)])
+def firewall_grundregeln() -> dict:
+    """Was jede Sitzung erreichen darf, damit OTA funktioniert — fuer die Oberflaeche."""
+    return {"regeln": _grundregeln()}
 
 
 @app.get("/firewall/uebersicht", dependencies=[Depends(require_token)])

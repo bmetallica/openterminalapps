@@ -170,6 +170,19 @@ export type NetzRegel = {
 
 export type NetzStufe = 'abgeschottet' | 'internet' | 'aus'
 
+/**
+ * Eine Zeile des Grundregelsatzes: was **jede** Sitzung erreichen darf, damit
+ * OTA funktioniert. Abgeleitet aus der Umgebung und dem Aufbau — hier zu
+ * sehen, aber nicht zu ändern.
+ */
+export type Grundregel = {
+  ziel: string
+  ports: string
+  protokoll: string
+  herkunft: string
+  grund: string
+}
+
 export type NetzProfil = {
   id: string
   name: string
@@ -900,6 +913,7 @@ export const api = {
   deleteNetProfile: (id: string) =>
     call<{ status: string }>(`/netprofiles/${id}`, { method: 'DELETE' }),
 
+  netzGrundregeln: () => call<Grundregel[]>('/firewall/grundregeln'),
   netzGlobal: () => call<NetzRegel[]>('/firewall/global'),
   saveNetzGlobal: (regeln: NetzRegel[]) =>
     call<NetzRegel[]>('/firewall/global', { method: 'PUT', body: JSON.stringify(regeln) }),

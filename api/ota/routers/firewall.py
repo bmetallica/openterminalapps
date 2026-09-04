@@ -87,6 +87,38 @@ def _laufende(db: DbSession) -> set[tuple[uuid.UUID, uuid.UUID]]:
 
 
 # --------------------------------------------------------------------------
+# Der Grundregelsatz
+# --------------------------------------------------------------------------
+
+class Grundregel(BaseModel):
+    ziel: str
+    ports: str
+    protokoll: str
+    # Woher der Wert kommt — meist ein Eintrag in der `.env`. Steht dabei,
+    # weil die Liste sonst wie etwas aussieht, das man hier ändern könnte.
+    herkunft: str
+    grund: str
+
+
+@router.get("/grundregeln", dependencies=[Depends(manage)])
+def grundregeln() -> list[Grundregel]:
+    """Was **jede** Sitzung erreichen darf, unabhängig vom Profil.
+
+    Abgeleitet und nicht eingetragen: Die Werte kommen aus der Umgebung
+    (`deploy/.env`) und aus dem Aufbau selbst. Deshalb ist die Liste hier zu
+    sehen, aber nicht zu ändern — geändert wird sie dort, wo sie herkommt.
+
+    Sichtbar sein muss sie trotzdem. Ohne sie steht in der Oberfläche eine
+    Firewall, von der niemand weiss, was sie ohnehin durchlässt — und die
+    erste Frage bei jedem Problem wäre, ob TURN überhaupt erlaubt ist.
+    """
+    try:
+        return [Grundregel(**r) for r in agent_client.firewall_grundregeln().get("regeln", [])]
+    except Exception:  # noqa: BLE001 — lieber leer als eine kaputte Seite
+        return []
+
+
+# --------------------------------------------------------------------------
 # Globale Freigaben
 # --------------------------------------------------------------------------
 

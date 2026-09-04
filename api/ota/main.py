@@ -277,6 +277,16 @@ async def lifespan(_: FastAPI):
         except Exception as exc:  # noqa: BLE001 — der Start darf daran nicht scheitern
             log.warning("Mitgelieferte Rezepte nicht angelegt: %s", exc)
 
+        # Dasselbe fuer die Netzprofile. Eine leere Liste waere keine Vorgabe,
+        # sondern eine Aufgabe — und bis sie jemand erledigt, sieht niemand,
+        # was eigentlich gilt.
+        try:
+            angelegt = netprofiles.ensure_builtins(db)
+            if angelegt:
+                log.info("Netzprofile angelegt: %d", angelegt)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Mitgelieferte Netzprofile nicht angelegt: %s", exc)
+
     tasks = [asyncio.create_task(_reaper()), asyncio.create_task(_scheduler())]
     try:
         yield

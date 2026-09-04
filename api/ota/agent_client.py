@@ -105,6 +105,11 @@ def firewall_global(payload: dict[str, Any]) -> dict[str, Any]:
     return _call("PUT", "/firewall/global", json=payload)
 
 
+def firewall_grundregeln() -> dict[str, Any]:
+    """Was jede Sitzung erreichen darf, damit OTA funktioniert."""
+    return _call("GET", "/firewall/grundregeln")
+
+
 def firewall_uebersicht() -> dict[str, Any]:
     """Welche Sitzung unter welcher Adresse laeuft, samt Zaehlern."""
     return _call("GET", "/firewall/uebersicht")

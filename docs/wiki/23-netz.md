@@ -25,6 +25,40 @@ Zu finden unter **Netz**. Es braucht das Recht `settings.manage`.
 
 Das ist die Stufe **Internet**, und sie gilt für jeden Arbeitsplatz ohne eigenes Profil.
 
+### Der Grundregelsatz — was OTA für sich selbst öffnet
+
+Die letzte Zeile der Tabelle steht in der Oberfläche ausgeklappt: **Netz → Was ohne Zutun gilt.**
+Dort steht jede Regel einzeln, mit **Ziel, Ports, Protokoll, Grund und Herkunft**:
+
+| Ziel | Ports | Warum |
+|---|---|---|
+| Der TURN-Server | 3478 und der Relay-Bereich | Der Medienweg. Ohne ihn kommt kein Bild an. |
+| OTA selbst | 8443 | Der Browser im Arbeitsplatz lädt von dort die Erweiterung für die Zwischenablage. |
+| Der Router selbst | 53 | Namensauflösung. Ein anderer Namensdienst ist nicht erreichbar. |
+| Traefik → Arbeitsplatz | 6901, 8080 | Die Gegenrichtung: der Bildstrom. |
+| Der Firmenproxy | wie eingestellt | Nur, wenn einer gesetzt ist. |
+| Zeitserver | 123 | Nur, wenn einer gesetzt ist. Eine falsche Uhr bricht TLS. |
+
+**Diese Liste ist abgeleitet, nicht eingetragen.** Die Werte kommen aus `deploy/.env`
+(`OTA_TURN_HOST`, `OTA_HTTP_PROXY`, `OTA_NTP_HOST` …) und aus dem Aufbau selbst. Deshalb ist sie in
+der Oberfläche zu **sehen**, aber nicht zu ändern — geändert wird sie dort, wo sie herkommt. Zu
+sehen sein muss sie trotzdem: Sonst stünde dort eine Firewall, von der niemand weiss, was sie
+ohnehin durchlässt, und die erste Frage bei jedem Problem wäre, ob TURN überhaupt erlaubt ist.
+
+## Die mitgelieferten Profile
+
+Jede Anlage bringt zwei Profile mit. Sie entstehen beim ersten Start und werden **nie
+überschrieben** — wer sie umbaut, hat es absichtlich getan.
+
+| Profil | Stufe | Wofür |
+|---|---|---|
+| **Standard** | internet | Internet ja, Firmennetz nein. Dasselbe, was ohne Profil gilt — aber sichtbar. |
+| **Abgeschottet** | abgeschottet | Nur was OTA selbst braucht. Für Arbeitsplätze, die nur mit lokalen Daten umgehen. |
+
+**Ein Profil mit der Stufe „aus" wird bewusst nicht mitgeliefert.** Es hebt jede Einschränkung auf
+und verlangt eine Begründung; ein mitgeliefertes wäre eine, die niemand geschrieben hat — und ein
+Profil, das man nur noch zuweisen muss, wird zugewiesen.
+
 ## Die drei Stufen
 
 | Stufe | Bedeutung |

@@ -1258,4 +1258,9 @@ export const EN: Record<string, string> = {
   'Nutzer wählen…': 'Choose a person…',
   'Arbeitsplatz wählen…': 'Choose a workspace…',
   'Der Port auf dem Wirt wird aus dem Bereich vergeben, den der Router beim Start veröffentlicht hat. Gültig für {n} Tage — 0 heisst unbefristet.': 'The host port comes from the range the router published at start. Valid for {n} days \u2014 0 means no expiry.',
+
+  'Was ohne Zutun gilt': 'What applies without doing anything',
+  '{n} Regeln, die für jeden Arbeitsplatz gelten — unabhängig vom Profil': '{n} rules that apply to every workspace \u2014 regardless of profile',
+  'Diese Regeln sind abgeleitet, nicht eingetragen: Sie kommen aus der Umgebung (deploy/.env) und aus dem Aufbau selbst. Hier zu sehen, geändert werden sie dort, wo sie herkommen.': 'These rules are derived, not entered: they come from the environment (deploy/.env) and from the setup itself. Visible here, changed where they come from.',
+  'Warum': 'Why',
 }

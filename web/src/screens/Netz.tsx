@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react'
 import { Field } from '../components/controls'
 import {
   ApiError, api,
-  type NetzFreigabe, type NetzProfil, type NetzRegel, type NetzStufe, type NetzZeile,
-  type Template, type User,
+  type Grundregel, type NetzFreigabe, type NetzProfil, type NetzRegel,
+  type NetzStufe, type NetzZeile, type Template, type User,
 } from '../lib/api'
 import { t, useLang } from '../lib/i18n'
 
@@ -100,12 +100,17 @@ export function Netz({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad') =>
   const [nutzer, setNutzer] = useState<User[]>([])
   const [vorlagen, setVorlagen] = useState<Template[]>([])
   const [neu, setNeu] = useState({ user: '', template: '', port: '8080', tage: '30', notiz: '' })
+  // Was jede Sitzung ohnehin darf. Sichtbar, aber nicht änderbar — die Werte
+  // kommen aus der Umgebung und aus dem Aufbau.
+  const [grund, setGrund] = useState<Grundregel[]>([])
+  const [grundOffen, setGrundOffen] = useState(false)
 
   const laden = () => {
     void api.netProfiles().then(setProfile).catch(() => setProfile([]))
     void api.netzGlobal().then(setGlobal).catch(() => setGlobal([]))
     void api.netzUebersicht().then(setZeilen).catch(() => setZeilen([]))
     void api.netzFreigaben().then(setFreigaben).catch(() => setFreigaben([]))
+    void api.netzGrundregeln().then(setGrund).catch(() => setGrund([]))
     void api.users().then(setNutzer).catch(() => setNutzer([]))
     void api.templates().then(setVorlagen).catch(() => setVorlagen([]))
   }
@@ -145,6 +150,47 @@ export function Netz({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad') =>
       <p className="note-info" style={{ maxWidth: 720 }}>
         {t('Jeder Arbeitsplatz hängt in einem eigenen Netz und erreicht die Aussenwelt nur über den Router. Ohne Freigabe gilt: kein Firmennetz, keine Nachbarsitzung, kein Wirt.')}
       </p>
+
+      {/* --------------------------------------------- Grundregelsatz */}
+      <div className="section__head" style={{ marginTop: 26 }}>
+        <span className="silk">{t('Was ohne Zutun gilt')}</span><span className="section__rule" />
+      </div>
+      <div className="panel" style={{ padding: '14px 20px', maxWidth: 900 }}>
+        <div className="viewer__row">
+          <button className="btn btn--sm btn--ghost"
+            onClick={() => setGrundOffen(!grundOffen)}>{grundOffen ? '▾' : '▸'}</button>
+          <span>{t('{n} Regeln, die für jeden Arbeitsplatz gelten — unabhängig vom Profil',
+            { n: grund.length })}</span>
+        </div>
+        {grundOffen && (
+          <>
+            <p className="sub" style={{ margin: '12px 0' }}>
+              {t('Diese Regeln sind abgeleitet, nicht eingetragen: Sie kommen aus der Umgebung (deploy/.env) und aus dem Aufbau selbst. Hier zu sehen, geändert werden sie dort, wo sie herkommen.')}
+            </p>
+            <div style={{ overflowX: 'auto' }}>
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>{t('Ziel')}</th><th>{t('Ports')}</th><th>{t('Protokoll')}</th>
+                    <th>{t('Warum')}</th><th>{t('Herkunft')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {grund.map((r, i) => (
+                    <tr key={i}>
+                      <td className="data">{r.ziel}</td>
+                      <td className="data">{r.ports}</td>
+                      <td>{r.protokoll}</td>
+                      <td className="sub">{r.grund}</td>
+                      <td className="data sub">{r.herkunft}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </div>
 
       {/* ------------------------------------------------ Netzübersicht */}
       <div className="section__head" style={{ marginTop: 26 }}>

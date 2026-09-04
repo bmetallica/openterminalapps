@@ -140,6 +140,16 @@ bleibt sonst etwas offen, ohne dass etwas kaputtgeht — und niemand merkt es.
 
 ## Was OTA steuert
 
+### Der Grundregelsatz — sichtbar, nicht versteckt
+
+Was **jede** Sitzung erreichen darf, damit OTA funktioniert, steht in der Oberfläche unter
+**Netz → Was ohne Zutun gilt**: Ziel, Ports, Protokoll, **Grund** und **Herkunft** je Zeile.
+
+Die Liste ist abgeleitet und nicht eingetragen — die Werte kommen aus `deploy/.env` und aus dem
+Aufbau. Sie ist deshalb zu sehen, aber nicht zu ändern. **Zu sehen sein muss sie trotzdem:** Eine
+Firewall, von der niemand weiss, was sie ohnehin durchlässt, macht aus jedem Problem erst einmal
+die Frage, ob TURN überhaupt erlaubt ist.
+
 ### Netzprofile — drei Stufen und Listen
 
 | Stufe | Bedeutung |
@@ -156,6 +166,11 @@ Verlangt eine Begründung und steht im Protokoll.
 Dazu je Profil eine **Freigabeliste**: Ziel (IP, CIDR **oder Name**), Ports oder Portbereich,
 Protokoll — und eine **Notiz als Pflichtfeld**. Eine Freigabe ohne Begründung ist in einem Jahr
 eine, die niemand zu entfernen wagt.
+
+**Zwei Profile bringt jede Anlage mit** — „Standard" (internet) und „Abgeschottet". Eine leere
+Liste wäre keine Vorgabe, sondern eine Aufgabe: Bis jemand sie erledigt, liefe alles auf einer
+eingebauten Vorgabe, ohne dass irgendwo stünde, welche das ist. Eines mit der Stufe „aus" ist
+**nicht** dabei — ein Profil, das man nur noch zuweisen muss, wird zugewiesen.
 
 ### Globale Freigaben
 

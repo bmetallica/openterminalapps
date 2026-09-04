@@ -27,6 +27,55 @@ from ..schemas import NetProfileIn, NetProfileOut
 
 router = APIRouter(prefix="/api/netprofiles", tags=["netprofiles"])
 
+# Die Profile, die jede Anlage mitbringt.
+#
+# **Warum ueberhaupt welche.** Eine leere Liste ist keine Vorgabe, sondern eine
+# Aufgabe: Wer die Anlage aufsetzt, muesste sich erst ueberlegen, welche
+# Profile es geben soll — und in der Zwischenzeit laeuft alles auf der
+# eingebauten Vorgabe, ohne dass irgendwo steht, welche das ist. Zwei fertige
+# Profile machen sichtbar, was gilt, und geben etwas zum Danebenstellen.
+#
+# **Warum keines mit der Stufe „aus".** Die hebt jede Einschraenkung auf und
+# verlangt eine Begruendung. Ein mitgeliefertes waere eine, die niemand
+# geschrieben hat — und ein Profil, das man nur noch zuweisen muss, wird
+# zugewiesen. Wer es braucht, legt es an; das ist der Punkt.
+MITGELIEFERT = [
+    {
+        "name": "Standard",
+        "description": "Internet ja, Firmennetz nein, Nachbarsitzung nein. "
+                       "Das ist die Vorgabe — ein Arbeitsplatz ohne Profil "
+                       "verhält sich genauso.",
+        "stufe": "internet",
+        "regeln": [],
+    },
+    {
+        "name": "Abgeschottet",
+        "description": "Nur was OTA selbst braucht: Bild, Zwischenablage, "
+                       "Namensauflösung. Kein Internet, kein Firmennetz. "
+                       "Für Arbeitsplätze, die nur mit lokalen Daten umgehen.",
+        "stufe": "abgeschottet",
+        "regeln": [],
+    },
+]
+
+
+def ensure_builtins(db: DbSession) -> int:
+    """Die mitgelieferten Profile anlegen, falls sie fehlen.
+
+    **Nur anlegen, nie überschreiben.** Wer „Standard" umbaut, hat es
+    absichtlich getan; ein Start, der das jede Nacht zurückdreht, wäre eine
+    Zumutung. Dieselbe Regel wie bei den mitgelieferten Rezepten.
+    """
+    neu = 0
+    for spec in MITGELIEFERT:
+        if db.scalar(select(NetProfile).where(NetProfile.name == spec["name"])):
+            continue
+        db.add(NetProfile(**spec))
+        neu += 1
+    if neu:
+        db.commit()
+    return neu
+
 manage = require_permission("settings.manage")
 
 # Dieselben drei Woerter wie im Regelwerk des Routers (`firewall/otafw/nft.py`).
