@@ -735,6 +735,10 @@ docker exec ota-firewall nft list table inet ota | head -40
 | Ein freigegebener **Name** geht nicht | Die Anwendung fragt über verschlüsseltes DNS (DoH) und damit nicht den Namensdienst des Routers. Adresse statt Name freigeben |
 | Gar nichts geht, auch nicht die Namensauflösung | Profil steht auf **abgeschottet**. Steht so auch im Dashboard des Nutzers |
 
+> **Wo ein Paket endet, und warum** — dafür stehen in [Kapitel 23](23-netz.md) fünf Diagramme, je
+> eines für die drei Stufen, eine Freigabe nach Namen und eine Portfreigabe. Sie beantworten die
+> Frage schneller als jede Regelwerksausgabe.
+
 **Anpingen lässt sich ein Arbeitsplatz vom Host aus grundsätzlich nicht** — die Sitzungsnetze sind
 `internal`, die Brücke des Wirts hat dort keine Adresse. Das ist kein Fehler, sondern der Aufbau.
 Wer hineinsehen will, geht über `docker exec`.

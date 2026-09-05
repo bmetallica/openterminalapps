@@ -119,6 +119,44 @@ def read_chapter(slug: str, user: User = Depends(current_user)) -> HelpPage:
 
 
 # --------------------------------------------------------------------------
+# Bilder im Handbuch
+# --------------------------------------------------------------------------
+
+BILD_OK = re.compile(r"^[0-9a-z-]+\.svg$")
+
+
+@router.get("/bild/{datei}")
+def read_bild(datei: str, user: User = Depends(current_user)) -> Response:
+    """Ein Bild aus `docs/wiki/bilder/`.
+
+    Nur SVG, nur aus diesem einen Ordner, und der Name muss aus Kleinbuchstaben,
+    Ziffern und Bindestrichen bestehen. Der Name kommt aus der Adresse — ohne
+    diese Pruefung liesse sich mit `../../etc/passwd` alles lesen, was der
+    Prozess lesen darf. Dieselbe Ueberlegung wie bei den Kapiteln oben.
+
+    **Ohne Rechtefilter**, anders als die Kapitel: Ein Bild ist ohne den Text
+    darum herum nichts, und wer den Text nicht sehen darf, bekommt ihn auch
+    nicht. Eine zweite Rechteliste, die mit der ersten auseinanderlaeuft, waere
+    die groessere Gefahr.
+    """
+    if not BILD_OK.match(datei):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Bild nicht gefunden")
+
+    pfad = WIKI_DIR / "bilder" / datei
+    try:
+        inhalt = pfad.read_bytes()
+    except OSError:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Bild nicht gefunden") from None
+
+    return Response(
+        content=inhalt,
+        media_type="image/svg+xml",
+        # Die Bilder aendern sich nur mit einer neuen Fassung des Handbuchs.
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
+
+
+# --------------------------------------------------------------------------
 # Firefox-Erweiterung
 # --------------------------------------------------------------------------
 

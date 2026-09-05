@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 330" width="860" height="330" role="img" aria-label="Eine Freigabe nach Namen. Der Router beantwortet den Namen und trägt seine eigene Antwort ins Regelwerk ein.">
+  <title>Eine Freigabe nach Namen</title>
+  <desc>Der Router beantwortet den Namen und trägt seine eigene Antwort ins Regelwerk ein.</desc>
+  <style>
+    .titel { fill: #F1F5F9; font: 600 14px system-ui, -apple-system, sans-serif; }
+    .unter { fill: #94A3B8; font: 400 11px ui-monospace, monospace; }
+    .urteil { font: 600 11.5px system-ui, sans-serif; }
+    .kopf { fill: #F1F5F9; font: 600 15px system-ui, sans-serif; }
+    .fuss { fill: #64748B; font: 400 11.5px system-ui, sans-serif; }
+    /* `backwards`: Waehrend der Verzoegerung gilt schon der erste Keyframe —
+       ohne das stuende ein Paket sichtbar an seiner Ruhelage und spraenge
+       dann an den Anfang. */
+    .paket { animation-timing-function: linear; animation-iteration-count: infinite;
+             animation-fill-mode: backwards; }
+    @media (prefers-reduced-motion: reduce) {
+      .paket { animation: none !important; opacity: 1; }
+    }
+    @keyframes p0 {
+    0.0% { transform: translate(200px, 165px); }
+    29.6% { transform: translate(352px, 165px); }
+    53.6% { transform: translate(470px, 131px); }
+    63.3% { transform: translate(520px, 131px); }
+    78.2% { transform: translate(596px, 131px); }
+    91.0% { transform: translate(596px, 65px); }
+    100.0% { transform: translate(642px, 65px); }
+  }
+  @keyframes p0-blende {
+    0% { opacity: 0; } 8% { opacity: 1; }
+    88% { opacity: 1; } 100% { opacity: 0; }
+  }
+  @keyframes p1 {
+    0.0% { transform: translate(200px, 165px); }
+    34.4% { transform: translate(352px, 165px); }
+    61.1% { transform: translate(470px, 165px); }
+    72.4% { transform: translate(520px, 165px); }
+    89.6% { transform: translate(596px, 165px); }
+    89.6% { transform: translate(596px, 165px); }
+    100.0% { transform: translate(642px, 165px); }
+  }
+  @keyframes p1-blende {
+    0% { opacity: 0; } 8% { opacity: 1; }
+    88% { opacity: 1; } 100% { opacity: 0; }
+  }
+  @keyframes p2 {
+    0.0% { transform: translate(200px, 165px); }
+    44.6% { transform: translate(352px, 165px); }
+    80.6% { transform: translate(470px, 199px); }
+    100.0% { transform: translate(536px, 199px); }
+  }
+  @keyframes p2-blende {
+    0% { opacity: 0; } 8% { opacity: 1; }
+    88% { opacity: 1; } 100% { opacity: 0; }
+  }
+  </style>
+  <rect width="860" height="330" fill="#090D16"/>
+  <text class="kopf" x="24" y="30">Eine Freigabe nach Namen</text>
+  <text class="fuss" x="24" y="318">Der Router beantwortet den Namen und trägt seine eigene Antwort ins Regelwerk ein.</text>
+    <path id="w0" d="M200 165.0 L352 165.0 L470 131.0 L520 131.0 L596 131.0 L596 65.0 L642 65.0" fill="none" stroke="#06B6D4" stroke-width="2"/>
+  <path id="w1" d="M200 165.0 L352 165.0 L470 165.0 L520 165.0 L596 165.0 L596 165.0 L642 165.0" fill="none" stroke="#06B6D4" stroke-width="2"/>
+  <path id="w2" d="M200 165.0 L352 165.0 L470 199.0 L536 199.0" fill="none" stroke="#06B6D4" stroke-width="2"/>
+  <path id="wg2" d="M520 199.0 L596 199.0 L596 265.0 L642 265.0" fill="none" stroke="#1E293B" stroke-width="2" stroke-dasharray="5 4"/>
+    <rect x="24" y="128" width="176" height="74" rx="8" fill="#1B2436" stroke="#334155" stroke-width="1.5"/>
+  <text class="titel" x="42" y="154">Arbeitsplatz</text>
+  <text class="unter" x="42" y="174">10.99.7.10</text>
+  <rect x="352" y="116" width="168" height="98" rx="8" fill="#1B2436" stroke="#06B6D4" stroke-width="2"/>
+  <text class="titel" x="370" y="142">ota-firewall</text>
+  <text class="unter" x="370" y="162">Namensdienst + Regelwerk</text>
+  <text class="unter" x="370" y="179">die Antwort füllt die Menge</text>
+  <rect x="664" y="34" width="172" height="62" rx="8" fill="#0F172A" stroke="#1E293B" stroke-width="1.5"/>
+  <text class="titel" x="682" y="60">git.firma.de</text>
+  <text class="unter" x="682" y="80">freigegeben</text>
+  <rect x="664" y="134" width="172" height="62" rx="8" fill="#0F172A" stroke="#1E293B" stroke-width="1.5"/>
+  <text class="titel" x="682" y="160">Der Namensdienst</text>
+  <text class="unter" x="682" y="180">der Router selbst</text>
+  <rect x="664" y="234" width="172" height="62" rx="8" fill="#0F172A" stroke="#1E293B" stroke-width="1.5"/>
+  <text class="titel" x="682" y="260">wiki.firma.de</text>
+  <text class="unter" x="682" y="280">nicht freigegeben</text>
+    <circle cx="642" cy="65.0" r="11" fill="#090D16" stroke="#06B6D4" stroke-width="1.5"/><path d="M637 65.0 L641 69.0 L648 61.0" fill="none" stroke="#06B6D4" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+  <text class="urteil" x="624" y="52.0" text-anchor="end" fill="#06B6D4">erlaubt</text>
+  <circle cx="642" cy="165.0" r="11" fill="#090D16" stroke="#06B6D4" stroke-width="1.5"/><path d="M637 165.0 L641 169.0 L648 161.0" fill="none" stroke="#06B6D4" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+  <text class="urteil" x="624" y="152.0" text-anchor="end" fill="#06B6D4">beantwortet</text>
+  <circle cx="536" cy="199.0" r="11" fill="#090D16" stroke="#EF4444" stroke-width="1.5"/><path d="M531 194.0 L541 204.0 M541 194.0 L531 204.0" stroke="#EF4444" stroke-width="2.4" stroke-linecap="round"/>
+  <text class="urteil" x="553" y="203.0" fill="#EF4444">verworfen</text>
+    <rect class="paket" x="-7" y="-5" width="14" height="10" rx="2.5" fill="#06B6D4" transform="translate(352 165)" style="animation-name: p0, p0-blende; animation-duration: 4.2s, 4.2s; animation-delay: 0.0s, 0.0s;"/>
+  <rect class="paket" x="-7" y="-5" width="14" height="10" rx="2.5" fill="#06B6D4" transform="translate(352 165)" style="animation-name: p1, p1-blende; animation-duration: 4.2s, 4.2s; animation-delay: 0.8s, 0.8s;"/>
+  <rect class="paket" x="-7" y="-5" width="14" height="10" rx="2.5" fill="#EF4444" transform="translate(352 165)" style="animation-name: p2, p2-blende; animation-duration: 4.2s, 4.2s; animation-delay: 1.6s, 1.6s;"/>
+</svg>

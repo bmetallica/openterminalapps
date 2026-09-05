@@ -306,12 +306,12 @@ Was vorhanden ist — die Nachweise stehen in `security.md`:
 | **Verschlüsselung der Übertragung** | ✅ TLS 1.2 als Untergrenze, gemessen; TLS 1.1 wird abgelehnt |
 | **Verschlüsselung im Ruhezustand** | ❌ **Bewusst nicht** (2026-09-05). Weder Datenbank noch Zuhause noch Sicherungen sind verschlüsselt; bei einer gestohlenen Platte ist alles lesbar. Ersatzweise Dateirechte 0600/0700, und ein Abzug, der ausser Haus geht, wird von Hand verschlüsselt |
 | **Zugangskontrolle** | ✅ Keycloak, zweiter Faktor möglich, Kontosperre nach 8 Fehlversuchen, Argon2 |
-| **Zugriffskontrolle** | ✅ Rechte je Gruppe, serverseitig an jedem Endpunkt geprüft; 236 automatische Prüfungen genau dazu |
+| **Zugriffskontrolle** | ✅ Rechte je Gruppe, serverseitig an jedem Endpunkt geprüft; 241 automatische Prüfungen genau dazu |
 | **Trennungskontrolle** | ⚠️ Im Netz seit dem 2026-09-04 vollständig: jeder Arbeitsplatz in einem eigenen Netz, untereinander nicht erreichbar (`H2`). Im Dateisystem durch getrennte Einhängungen und `0700` — aber **alle Container laufen als dieselbe UID 1000** |
 | **Eingabekontrolle** | ✅ Protokoll über Verwaltungsvorgänge, seit dem 2026-09-04 **einschliesslich des Aufschaltens** |
 | **Verfügbarkeit und Wiederherstellbarkeit** | ✅ Sicherung und Rückspielung sind gebaut **und geprüft** (39 automatische Prüfungen) |
 | **Belastbarkeit** | ✅ Kontingente je Nutzer, Untergrenze für freien Plattenplatz, Leerlauf-Aufräumer |
-| **Regelmässige Überprüfung** | ⚠️ 441 automatische Prüfungen bei jeder Änderung — aber kein Abgleich gegen Schwachstellenlisten |
+| **Regelmässige Überprüfung** | ⚠️ 446 automatische Prüfungen bei jeder Änderung — aber kein Abgleich gegen Schwachstellenlisten |
 
 **Die zweite Zeile ist die verbliebene Lücke — und sie ist eine bewusste.** Ein Datenbankabzug
 enthält weiterhin Passwort-Hashes und TOTP-Startwerte im Klartext (das AD-Kennwort ist mit dem

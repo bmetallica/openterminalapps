@@ -25,6 +25,11 @@ Zu finden unter **Netz**. Es braucht das Recht `settings.manage`.
 
 Das ist die Stufe **Internet**, und sie gilt für jeden Arbeitsplatz ohne eigenes Profil.
 
+![Ein Paket geht ins Internet durch, eines ins Firmennetz wird im Router verworfen, und zum Nachbarn führt gar keine Leitung](bilder/netzfluss-internet.svg)
+
+**Die dritte Zeile ist die wichtigste.** Zum Nachbarn wird nichts *verworfen* — dorthin führt gar
+keine Leitung. Der Unterschied zählt: Eine Regel kann falsch sein, ein fehlender Weg nicht.
+
 ### Der Grundregelsatz — was OTA für sich selbst öffnet
 
 Die letzte Zeile der Tabelle steht in der Oberfläche ausgeklappt: **Netz → Was ohne Zutun gilt.**
@@ -67,8 +72,16 @@ Profil, das man nur noch zuweisen muss, wird zugewiesen.
 | **Internet** *(Vorgabe)* | Wie oben. |
 | **Aus** | Der Router lässt alles durch. |
 
-**„Aus" heisst nicht „ohne Firewall".** Der Arbeitsplatz hängt weiter am selben Kabel und geht
-weiter durch den Router — der filtert nur nicht mehr. Die Stufe verlangt eine Begründung und steht
+![In der Stufe „abgeschottet" geht nur der Grundregelsatz durch; Internet und Firmennetz werden verworfen](bilder/netzfluss-abgeschottet.svg)
+
+**Abgeschottet** heisst nicht „vom Strom getrennt": Der Grundregelsatz gilt weiter, sonst käme im
+Browser kein Bild an. Was darüber hinausgeht, endet im Router.
+
+![In der Stufe „aus" gehen Internet und Firmennetz durch; zum Nachbarn führt weiterhin keine Leitung](bilder/netzfluss-aus.svg)
+
+**„Aus" heisst nicht „ohne Firewall".** Das Bild oben zeigt es: Der Arbeitsplatz hängt weiter am
+selben Kabel und geht weiter durch den Router — der filtert nur nicht mehr, und **zum Nachbarn
+führt auch hier keine Leitung.** Das ist keine Regel, die man abschalten könnte; es ist der Aufbau. Die Stufe verlangt eine Begründung und steht
 im Protokoll (`netprofile.opened`).
 
 ## Freigaben
@@ -84,6 +97,8 @@ Als Ziel geht eine Adresse (`192.168.66.10`), ein Bereich (`10.20.0.0/16`) **ode
 
 **Die Notiz ist Pflicht.** Eine Freigabe ohne Begründung ist in einem Jahr eine, die niemand zu
 entfernen wagt.
+
+![Der Router beantwortet die Namensfrage und trägt seine eigene Antwort ins Regelwerk ein; ein freigegebener Name geht durch, ein nicht freigegebener wird verworfen](bilder/netzfluss-freigabe.svg)
 
 ### Warum Namen funktionieren, obwohl eine Firewall keine Namen kennt
 
@@ -121,6 +136,8 @@ Wenn jemand seine eigene Anwendung im Arbeitsplatz testen will und sie von ausse
 soll: **Netz → Portfreigaben → Neue Freigabe**, oder der Knopf **+ NAT** in der Zeile eines
 laufenden Arbeitsplatzes.
 
+![Von aussen kommt ein Paket auf den Wirt und wird über den Router in den Arbeitsplatz weitergeleitet; ein nicht freigegebener Port wird verworfen](bilder/netzfluss-nat.svg)
+
 Gefragt wird nach drei Dingen: welcher Port im Arbeitsplatz, wie lange, und **wofür**. Der Port auf
 dem Wirt wird vergeben — aus dem Bereich, den der Router beim Start veröffentlicht hat (ab Werk
 30000–30019). Der Mensch bekommt „erreichbar unter `<wirt>:30003` bis zum 12.09."
@@ -149,6 +166,14 @@ sind es ab Werk zwanzig und nicht tausend.
 | Ein freigegebener **Name** geht nicht | Läuft die Anwendung über verschlüsseltes DNS (DoH), fragt sie den eigenen Namensdienst nicht — dann greift die Freigabe nicht. Adresse statt Name eintragen. |
 | Nach einem Neustart des Routers hat niemand Netz | Der Abgleich zieht die Anbindung nach; er läuft alle 30 Sekunden. Bleibt es dabei, sagt `docker logs ota-firewall`, woran es liegt. |
 | Kein Bild mehr, aber die Sitzung läuft | Nicht das Netz: Der Bildstrom geht über Traefik, nicht über den Router. Siehe [Kapitel 12](12-fehlersuche.md). |
+
+## Die Bilder
+
+Die fünf Diagramme oben erzeugt `python3 scripts/netzfluss.py` — sie unterscheiden sich nur in den
+Urteilen an den Leitungen, und von Hand wären es fünf Dateien, die auseinanderlaufen, sobald jemand
+eine Farbe ändert. Animiert sind sie mit CSS und nicht mit SMIL; nur so lässt sich
+`prefers-reduced-motion` beachten. **Wer Bewegung abgestellt hat, sieht dasselbe Bild mit stehenden
+Paketen** — nicht ein leeres.
 
 ## Prüfen
 

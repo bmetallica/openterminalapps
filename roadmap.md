@@ -50,7 +50,7 @@ Und sein Arbeitsplatz kommt dabei **weder ins Firmennetz noch an die Sitzung ein
 nicht, weil eine Regel es verbietet, sondern weil er in einem eigenen Netz hängt, dessen einziger
 Ausgang ein Router ist (M12).
 
-Geprüft durch **441 automatische Prüfungen in sieben Reihen**, davon 107 in einem echten Browser
+Geprüft durch **446 automatische Prüfungen in sieben Reihen**, davon 107 in einem echten Browser
 (`make test`). Ein voller Lauf dauert rund eine halbe Stunde — er baut Container, friert ein
 Image ein, zieht ein Wegwerf-Verzeichnis hoch und misst im Browser nach.
 
@@ -799,6 +799,10 @@ Der Entwurf mit allen Messungen steht in [`firewall.md`](firewall.md), die Bedie
 - [x] **19 Prüfungen, von innen gemessen** (`scripts/test-firewall.sh`), inklusive eines Neustarts
       des Routers. Am Regelwerk zu messen hätte nichts gebracht: Es stand dreimal vollständig da,
       und die Brücke des Wirts war trotzdem erreichbar
+- [x] **Fünf animierte Diagramme** (2026-09-05, `scripts/netzfluss.py`) — die Reise eines Pakets je
+      Stufe und je Freigabeart, in der README und in Kapitel 23. Sie beantworten die Frage, die in
+      Prosa mühsam ist: *wo endet ein Paket, und warum?* Dafür kann das Handbuch **im Programm**
+      jetzt Bilder darstellen — der Renderer kannte nur Links
 
 **Was offen bleibt:** Der Router ist eine einzelne Stelle, an der alles hängt — startet er neu,
 sind alle Arbeitsplätze kurz ohne Netz. Das ist der Preis dafür, dass es keinen Weg an ihm vorbei

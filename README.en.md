@@ -18,7 +18,7 @@ whole registries can be attached — as an addition, not as the foundation.
 **Every workspace sits in a network of its own** behind a router: no corporate network, no
 neighbouring session, no host — until someone explicitly opens it ([firewall.md](firewall.md)).
 
-> **Status:** running and in use. 441 automated checks, 107 of them in a real browser. What is still
+> **Status:** running and in use. 446 automated checks, 107 of them in a real browser. What is still
 > missing is listed openly in [roadmap.md](roadmap.md) — nothing there is dressed up.
 >
 > The documentation is written in German. This file is the exception.
@@ -137,6 +137,13 @@ In detail in [handbook chapter 2](docs/wiki/02-erste-schritte.md) (German).
 - **An overview with throughput and dropped packets** per workspace. A port scan looks exactly like
   what it is in that number
 
+![One packet reaches the internet, one to the corporate network is dropped at the router, and there is no line at all to the neighbour](docs/wiki/bilder/netzfluss-internet.svg)
+
+*Where a packet ends, and why — the default level. **The third row is the important one**: nothing
+is *dropped* on the way to the neighbour, because there is no line there at all. A rule can be
+wrong; a missing path cannot. Four more diagrams (isolated, off, an exception by name, and an
+inbound published port) are in [handbook chapter 23](docs/wiki/23-netz.md).*
+
 > The local sign-in at `/api/auth/login` is the emergency door, not the main one — Keycloak
 > accounts are turned away there. It is rate-limited to ten attempts per minute and sender, and the
 > lockout after failed attempts applies per **(account, sender)**: it cannot be aimed at a
@@ -250,7 +257,7 @@ were.
 make test
 ```
 
-**441 checks in seven suites**, each one setting up its own preconditions:
+**446 checks in seven suites**, each one setting up its own preconditions:
 
 | Suite | Checks |
 |---|---|

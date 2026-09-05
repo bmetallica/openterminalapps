@@ -1479,21 +1479,35 @@ try {
       }, USER, PW)
 
       if (angemeldet) {
-        for (const sid of aufzuraeumen.sessions) {
-          await putz.evaluate((id) => fetch(`/api/sessions/${id}`,
-            { method: 'DELETE', credentials: 'include' }).catch(() => {}), sid)
-        }
+        // **Den Status zurückgeben, nicht die Antwort.** Ein `Response` lässt
+        // sich nicht serialisieren; `evaluate` löst dann auf, bevor der Aufruf
+        // durch ist, und die Nachschau unten sieht einen Stand von vorhin. Am
+        // 2026-09-05 hat genau das eine Prüfvorlage als „stehengeblieben"
+        // gemeldet, die im Protokoll eine Sekunde später gelöscht wurde.
+        const weg = (pfad) => putz.evaluate(async (p) => {
+          try {
+            const r = await fetch(p, { method: 'DELETE', credentials: 'include' })
+            return r.status
+          } catch { return 0 }
+        }, pfad)
+
+        for (const sid of aufzuraeumen.sessions) await weg(`/api/sessions/${sid}`)
         await new Promise((r) => setTimeout(r, 2000))
-        for (const tid of aufzuraeumen.vorlagen) {
-          await putz.evaluate((id) => fetch(`/api/templates/${id}`,
-            { method: 'DELETE', credentials: 'include' }).catch(() => {}), tid)
+        for (const tid of aufzuraeumen.vorlagen) await weg(`/api/templates/${tid}`)
+
+        // Und nachsehen, statt es zu glauben — mit ein paar Anläufen, weil das
+        // Löschen einer Vorlage am Ende einer Sitzung hängen kann.
+        let rest = []
+        for (let versuch = 0; versuch < 10; versuch++) {
+          rest = await putz.evaluate(async (ids) => {
+            const alle = await (await fetch('/api/templates',
+              { credentials: 'include' })).json()
+            return alle.filter((t) => ids.includes(t.id)).map((t) => t.slug)
+          }, aufzuraeumen.vorlagen)
+          if (rest.length === 0) break
+          await new Promise((r) => setTimeout(r, 1500))
+          for (const tid of aufzuraeumen.vorlagen) await weg(`/api/templates/${tid}`)
         }
-        // Und nachsehen, statt es zu glauben.
-        const rest = await putz.evaluate(async (ids) => {
-          const alle = await (await fetch('/api/templates',
-            { credentials: 'include' })).json()
-          return alle.filter((t) => ids.includes(t.id)).map((t) => t.slug)
-        }, aufzuraeumen.vorlagen)
         check(rest.length === 0, rest.length
           ? `Prüfvorlagen blieben im Katalog stehen: ${rest.join(', ')}`
           : 'Der Lauf hinterlässt keine Prüfvorlage im Katalog')

@@ -23,7 +23,7 @@ help:
 	@echo "                 Verzeichnis, Medienweg, Netz, Sicherung)"
 	@echo "  make messung   Die beiden Streaming-Maschinen vergleichen (~12 min,"
 	@echo "                 braucht eine ruhige Maschine)"
-	@echo "  make bilder    Bilder der Oberfläche für die README erzeugen"
+	@echo "  make bilder    Alle Bilder der Doku erzeugen (Diagramme + Bildschirmfotos)"
 	@echo "  make backup    Datenbank und Profile von Hand sichern"
 	@echo "  make cert      Serverzertifikat erneuern (CA bleibt)"
 	@echo
@@ -92,8 +92,12 @@ update:
 
 .PHONY: bilder
 bilder:
-	@# Bilder der Oberflaeche fuer die README. Keine Pruefung — ein Werkzeug.
-	@# Es liegt bei den Tests, weil es denselben Browser braucht.
+	@# Alle Bilder der Dokumentation. Keine Pruefung — ein Werkzeug.
+	@#
+	@# Zwei Quellen: Die Netzfluss-Diagramme entstehen aus einer Beschreibung,
+	@# die Bildschirmfotos aus der laufenden Anlage. Das Foto-Werkzeug liegt bei
+	@# den Tests, weil es denselben Browser braucht.
+	@python3 scripts/netzfluss.py
 	@set -a; . ./deploy/.env; set +a; cd tests && node screenshots.mjs
 
 .PHONY: down

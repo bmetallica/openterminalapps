@@ -2248,6 +2248,25 @@ api "$TMP/admin.jar" -X PUT "$BASE/api/branding" -H 'Content-Type: application/j
 expect "$VORHER" "$(api "$TMP/admin.jar" "$BASE/api/branding" | jqp "d['name']")" \
   "Und wieder zurueck"
 
+# ------------------------------------------------------- Bilder im Handbuch
+echo
+echo "Bilder im Handbuch"
+
+# Der Dateiname kommt aus der Adresse. Ohne Pruefung liesse sich damit alles
+# lesen, was der Prozess lesen darf — dieselbe Falle wie bei den Kapiteln.
+expect "200" "$(code "$TMP/admin.jar" "$BASE/api/help/bild/netzfluss-internet.svg")" \
+  "Ein Diagramm wird ausgeliefert"
+expect "image/svg+xml" "$(curl -s --cacert "$CA" -b "$TMP/admin.jar" -o /dev/null \
+  -w '%{content_type}' "$BASE/api/help/bild/netzfluss-internet.svg")" \
+  "…und zwar als SVG"
+expect "404" "$(code "$TMP/admin.jar" "$BASE/api/help/bild/..%2F..%2Fetc%2Fpasswd")" \
+  "Ein Pfad nach draussen wird abgewiesen"
+expect "404" "$(code "$TMP/admin.jar" "$BASE/api/help/bild/geheim.md")" \
+  "Und alles, was kein SVG ist"
+expect "401" "$(curl -s --cacert "$CA" -o /dev/null -w '%{http_code}' \
+  "$BASE/api/help/bild/netzfluss-internet.svg")" \
+  "Ohne Anmeldung gibt es kein Bild"
+
 # --------------------------------------------------- Aufbewahrung des Protokolls
 echo
 echo "Aufbewahrung des Protokolls"

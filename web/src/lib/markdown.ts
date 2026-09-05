@@ -29,6 +29,17 @@ function inline(raw: string): string {
     MARK + String(code.push(`<code>${c}</code>`) - 1) + MARK)
   s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
   s = s.replace(/(^|[\s(])\*([^*\n]+)\*/g, '$1<em>$2</em>')
+  // Bilder **vor** den Verweisen: `![…](…)` ist syntaktisch ein Verweis mit
+  // einem Ausrufezeichen davor, und die Verweisregel unten wuerde daraus einen
+  // Link machen, dem ein einsames „!" vorausgeht.
+  //
+  // Erlaubt ist genau eine Form: `bilder/name.svg` neben dem Handbuch. Kein
+  // Pfad nach draussen, kein fremder Host, keine Datenadresse — die API liefert
+  // die Datei aus, und ihr Name muss die Prüfung dort ebenfalls bestehen.
+  s = s.replace(/!\[([^\]]*)\]\(bilder\/([a-z0-9-]+\.svg)\)/g,
+    (_m, alt: string, datei: string) =>
+      `<img class="md-bild" src="/api/help/bild/${datei}" alt="${alt}" loading="lazy" />`)
+
   s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_m, text: string, href: string) => {
     // Verweise zwischen Kapiteln bleiben im Programm; alles andere geht auf.
     const chapter = /^([0-9]{2}-[a-z0-9-]+)\.md/.exec(href)

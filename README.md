@@ -18,7 +18,7 @@ sowie ganze Registries einbinden — als Zusatz, nicht als Fundament.
 **Jeder Arbeitsplatz hängt in einem eigenen Netz** hinter einem Router: kein Firmennetz, keine
 Nachbarsitzung, kein Wirt — bis jemand es ausdrücklich freigibt ([firewall.md](firewall.md)).
 
-> **Stand:** läuft und wird benutzt. 441 automatische Prüfungen, davon 107 in einem echten Browser.
+> **Stand:** läuft und wird benutzt. 446 automatische Prüfungen, davon 107 in einem echten Browser.
 > Was noch fehlt, steht offen in [roadmap.md](roadmap.md) — nichts davon ist beschönigt.
 
 ![Das Dashboard: eine laufende Sitzung mit neun Anwendungen, darunter die Kacheln der übrigen Arbeitsplätze](docs/bilder/01-dashboard.png)
@@ -235,6 +235,22 @@ dabei **nicht** zurückwandert, ist die Datenbank: Neue Spalten bleiben stehen. 
 *Was ohne Zutun gilt, steht ausgeklappt da — mit Grund und Herkunft je Zeile. Darunter, wer gerade
 wo arbeitet, mit Durchsatz und verworfenen Paketen, und der Knopf für eine befristete Portfreigabe.*
 
+### Wo ein Paket endet, und warum
+
+![Ein Paket geht ins Internet durch, eines ins Firmennetz wird im Router verworfen, und zum Nachbarn führt gar keine Leitung](docs/wiki/bilder/netzfluss-internet.svg)
+
+Die Vorgabe. **Die dritte Zeile ist die wichtigste**: Zum Nachbarn wird nichts *verworfen* — dorthin
+führt gar keine Leitung. Eine Regel kann falsch sein, ein fehlender Weg nicht.
+
+![Von aussen kommt ein Paket auf den Wirt und wird über den Router in den Arbeitsplatz weitergeleitet; ein nicht freigegebener Port wird verworfen](docs/wiki/bilder/netzfluss-nat.svg)
+
+Und die Gegenrichtung: Eine Portfreigabe („+ NAT") ist der einzige Weg von aussen hinein — über
+einen benannten Port, und nur solange die Frist läuft. Die übrigen drei Diagramme — *abgeschottet*,
+*aus* und eine Freigabe nach Namen — stehen in
+[Handbuch, Kapitel 23](docs/wiki/23-netz.md). Erzeugt werden sie von
+[`scripts/netzfluss.py`](scripts/netzfluss.py); wer Bewegung abgestellt hat, sieht dasselbe Bild
+mit stehenden Paketen.
+
 **Software in die Arbeitsplätze bringen**
 - Pakete anklicken, Image bauen, Fassung aktivieren — mit Protokoll und Rückrollen
 - **Pakete werden vorher geprüft**: kennt das Image den Namen, und taugt er überhaupt?
@@ -346,7 +362,7 @@ aussahen, als sie waren.
 make test
 ```
 
-**441 Prüfungen in sieben Suiten**, jede stellt ihren Vorzustand selbst her:
+**446 Prüfungen in sieben Suiten**, jede stellt ihren Vorzustand selbst her:
 
 | Suite | Prüft |
 |---|---|
