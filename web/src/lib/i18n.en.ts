@@ -1305,4 +1305,10 @@ export const EN: Record<string, string> = {
   'Profil wiederhergestellt': 'Profile restored',
   'Container wiederhergestellt': 'Container restored',
   'Protokoll aufgeräumt (Aufbewahrungsfrist)': 'Log swept (retention period)',
+
+  // Frische Anlage: Es liegt noch kein Arbeitsplatz-Abbild auf dem Host.
+  'Auf diesem Host liegt noch kein Arbeitsplatz-Abbild. Das eigene baut „make up" beim nächsten Start.': 'There is no workspace image on this host yet. \u201cmake up\u201d builds the base image on its next run.',
+  'Auf diesem Host liegt noch kein Arbeitsplatz-Abbild.': 'There is no workspace image on this host yet.',
+  'Die Abbilder des Stacks (coturn, postgres, Traefik) sind keine — mit ihnen lässt sich kein Arbeitsplatz starten. Das eigene Basisimage': 'The stack\u2019s own images (coturn, postgres, Traefik) are not workspace images \u2014 no workspace can start from them. The base image',
+  'baut „make up" beim nächsten Start, oder von Hand:': 'is built by \u201cmake up\u201d on its next run, or by hand:',
 }

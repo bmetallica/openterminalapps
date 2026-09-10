@@ -635,14 +635,39 @@ export function Workspaces({ onToast }: { onToast: (m: string, tone?: 'ok' | 'ba
     [list],
   )
 
+  /* Womit ein neuer Arbeitsplatz anfängt.
+   *
+   * **Nicht mit `images[0]`.** Das war bis zum 2026-09-10 so, und auf einer
+   * frischen Anlage liegen dort nur die Abbilder des Stacks — alphabetisch
+   * zuerst `coturn`. Der erste Klick eines neuen Betreibers endete deshalb in
+   * einer Meldung über coturn und Streaming-Maschinen, also weit weg von dem,
+   * was ihm wirklich fehlte: ein Arbeitsplatz-Abbild.
+   *
+   * Gesucht wird deshalb der Reihe nach: das eigene Basisimage, dann irgendein
+   * Abbild, das nach einem Arbeitsplatz aussieht. Findet sich keines, wird gar
+   * nicht erst angelegt — der leere Zustand sagt statt dessen, was zu tun ist.
+   */
+  function startAbbild(): string | null {
+    const eigen = images.find((i) => i.ref.startsWith('ota/base-desktop'))
+    if (eigen) return eigen.ref
+    const arbeitsplatz = images.find((i) =>
+      /(^|\/)(kasmweb|ota)\//.test(i.ref) || /base-(desktop|xfce)/.test(i.ref))
+    return arbeitsplatz?.ref ?? null
+  }
+
   async function create() {
+    const abbild = startAbbild()
+    if (!abbild) {
+      onToast(tr('Auf diesem Host liegt noch kein Arbeitsplatz-Abbild. Das eigene baut „make up" beim nächsten Start.'), 'bad')
+      return
+    }
     try {
       const t = await api.createTemplate({
         friendly_name: 'Neuer Arbeitsplatz',
         description: '',
-        image_ref: images[0]?.ref ?? 'ota/base-desktop:1',
+        image_ref: abbild,
         mode: 'workspace',
-        stream_engine: 'selkies',
+        stream_engine: abbild.startsWith('ota/') ? 'selkies' : 'kasmvnc',
         cores: 2, memory_bytes: 2 * GB,
         rights: { clipboardUp: true, clipboardDown: true, clipboardImages: true },
         group_ids: [],
@@ -691,6 +716,16 @@ export function Workspaces({ onToast }: { onToast: (m: string, tone?: 'ok' | 'ba
         </div>
         <button className="btn btn--primary" onClick={() => void create()}>{tr('Workspace anlegen')}</button>
       </header>
+
+      {images.length > 0 && startAbbild() === null && (
+        <p className="note-warn" style={{ maxWidth: 760, marginBottom: 20 }}>
+          <strong>{tr('Auf diesem Host liegt noch kein Arbeitsplatz-Abbild.')}</strong>{' '}
+          {tr('Die Abbilder des Stacks (coturn, postgres, Traefik) sind keine — mit ihnen lässt sich kein Arbeitsplatz starten. Das eigene Basisimage')}{' '}
+          <code>ota/base-desktop:1</code>{' '}
+          {tr('baut „make up" beim nächsten Start, oder von Hand:')}{' '}
+          <code>scripts/build-desktop-image.sh --pruefen</code>
+        </p>
+      )}
 
       <div className="meters">
         <div className="panel meter">

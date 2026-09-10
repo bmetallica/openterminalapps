@@ -601,6 +601,13 @@ def image_engine(ref: str) -> dict[str, str]:
     Agent wartet dann neunzig Sekunden auf einen Port, den niemand oeffnet,
     und der Anwender sieht eine Sitzung, die nicht hochkommt — ohne einen
     Satz, der sagt warum.
+
+    **Drei Antworten, nicht zwei.** Bis zum 2026-09-10 hiess es hier
+    „Selkies oder sonst KasmVNC" — und damit meldete `coturn` KasmVNC, und
+    `postgres` auch. Auf einer frischen Anlage liegen genau solche Abbilder,
+    und die erste Meldung, die ein neuer Betreiber sah, war eine Unwahrheit
+    ueber ein Abbild, das mit Arbeitsplaetzen nichts zu tun hat. Ein Abbild,
+    das **keine** Maschine mitbringt, sagt das jetzt.
     """
     try:
         angaben = dc().images.get(ref).attrs
@@ -608,8 +615,15 @@ def image_engine(ref: str) -> dict[str, str]:
         # Unbekanntes Image: Die Vorgabe entscheidet die API, nicht der Agent.
         return {"engine": ""}
     env = angaben.get("Config", {}).get("Env") or []
-    hat_selkies = any(e.split("=", 1)[0] == "SELKIES_HOME" for e in env)
-    return {"engine": "selkies" if hat_selkies else "kasmvnc"}
+    namen = {e.split("=", 1)[0] for e in env}
+    if "SELKIES_HOME" in namen:
+        return {"engine": "selkies"}
+    # Kasm-Images tragen ihren Weg in der Umgebung. Eines der drei genuegt:
+    # `KASM_VNC_PATH` setzen die Workspace-Images, `KASMVNC_AUTO_RECOVER` und
+    # `VNC_PORT` kommen aus dem Startskript ihres Basisimages.
+    if namen & {"KASM_VNC_PATH", "KASMVNC_AUTO_RECOVER", "VNC_PORT"}:
+        return {"engine": "kasmvnc"}
+    return {"engine": "keine"}
 
 
 @app.get("/images", dependencies=[Depends(require_token)])

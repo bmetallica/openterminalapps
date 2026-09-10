@@ -2248,6 +2248,29 @@ api "$TMP/admin.jar" -X PUT "$BASE/api/branding" -H 'Content-Type: application/j
 expect "$VORHER" "$(api "$TMP/admin.jar" "$BASE/api/branding" | jqp "d['name']")" \
   "Und wieder zurueck"
 
+# --------------------------------------------- Abbild ohne Streaming-Maschine
+echo
+echo "Abbilder ohne Streaming-Maschine"
+
+# Auf einer frischen Anlage liegen nur die Abbilder des Stacks. Bis zum
+# 2026-09-10 meldete die Erkennung dafuer „KasmVNC" — und der erste Klick eines
+# neuen Betreibers endete in einer Unwahrheit ueber coturn.
+ANTWORT=$(api "$TMP/admin.jar" -X POST "$BASE/api/templates" -H 'Content-Type: application/json' \
+  -d '{"friendly_name":"Pruefung ohne Maschine","description":"","image_ref":"coturn/coturn:4.6-alpine","mode":"workspace","stream_engine":"selkies","cores":2,"memory_bytes":2147483648,"rights":{},"group_ids":[]}')
+grep -q "weder Selkies noch KasmVNC" <<<"$ANTWORT" \
+  && ok "Ein Abbild ohne Streaming-Maschine wird als solches benannt" \
+  || bad "Falsche Auskunft über ein Abbild ohne Maschine: $(head -c 160 <<<"$ANTWORT")"
+grep -q "build-desktop-image" <<<"$ANTWORT" \
+  && ok "…und die Meldung sagt, wie man an eines kommt" \
+  || bad "Die Meldung nennt keinen Weg zu einem Arbeitsplatz-Abbild"
+
+# Und die Gegenprobe: Ein echtes Kasm-Abbild wird weiterhin erkannt.
+ANTWORT=$(api "$TMP/admin.jar" -X POST "$BASE/api/templates" -H 'Content-Type: application/json' \
+  -d '{"friendly_name":"Pruefung falsche Maschine","description":"","image_ref":"kasmweb/vs-code:1.18.0-rolling-weekly","mode":"workspace","stream_engine":"selkies","cores":2,"memory_bytes":2147483648,"rights":{},"group_ids":[]}')
+grep -q "bringt KasmVNC mit" <<<"$ANTWORT" \
+  && ok "Ein Kasm-Abbild mit Selkies angefordert wird abgelehnt" \
+  || bad "Ein Kasm-Abbild ging als Selkies durch: $(head -c 160 <<<"$ANTWORT")"
+
 # ------------------------------------------------------- Bilder im Handbuch
 echo
 echo "Bilder im Handbuch"

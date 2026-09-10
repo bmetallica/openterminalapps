@@ -96,6 +96,33 @@ make admin NAME=<benutzername>
 Gibt ein Einmal-Passwort aus, das beim ersten Login gewechselt werden muss.
 Der Nutzer landet in den Gruppen `admins` und `users`.
 
+## Der erste Arbeitsplatz ✅
+
+**Vor dem ersten Workspace muss ein Arbeitsplatz-Abbild auf dem Host liegen** — und darum kümmert
+sich `make up` seit dem 2026-09-10 selbst: Fehlt `ota/base-desktop:1`, baut es das Abbild beim
+Hochfahren (Debian 13 + XFCE + Selkies, ohne KasmVNC). Das dauert einige Minuten und passiert nur
+beim ersten Mal.
+
+Neu bauen oder nachprüfen geht jederzeit von Hand:
+
+```bash
+scripts/build-desktop-image.sh --pruefen   # baut und misst 19 Punkte gegen den Vertrag mit dem Agent
+```
+
+**Ein Abbild von Kasm braucht es dafür nicht.** Die bleiben möglich — für fertige Kataloge und für
+den Umstieg ([Kapitel 9](09-kasm-images-und-registries.md)) —, aber sie sind die Ausnahme, nicht
+der Weg.
+
+> **Warum das hier steht:** Bis zum 2026-09-10 baute `make up` nur die Dienste, und
+> **Workspaces → Anlegen** nahm dann das alphabetisch erste Abbild des Hosts — auf einer frischen
+> Anlage `coturn`. Die Anlage scheiterte mit einer Meldung über Streaming-Maschinen, und wer sie
+> las, suchte einen Schalter, wo ein Abbild fehlte. Beim Aufsetzen auf frischem Debian gefunden.
+
+Danach **Workspaces → Anlegen**. Der Knopf legt die Vorlage sofort an und öffnet den Editor —
+ein Formular davor gibt es nicht. Dort stehen Anzeigename, Image, Betriebsart, **Streaming** und
+**Netz**; wer das Abbild wechselt, stellt Streaming passend dazu ein
+([Kapitel 5](05-workspaces-verwalten.md)).
+
 ## Was heute schon läuft
 
 | Bestandteil | Status |

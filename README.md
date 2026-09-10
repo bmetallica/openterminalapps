@@ -18,7 +18,7 @@ sowie ganze Registries einbinden — als Zusatz, nicht als Fundament.
 **Jeder Arbeitsplatz hängt in einem eigenen Netz** hinter einem Router: kein Firmennetz, keine
 Nachbarsitzung, kein Wirt — bis jemand es ausdrücklich freigibt ([firewall.md](firewall.md)).
 
-> **Stand:** läuft und wird benutzt. 446 automatische Prüfungen, davon 107 in einem echten Browser.
+> **Stand:** läuft und wird benutzt. 449 automatische Prüfungen, davon 107 in einem echten Browser.
 > Was noch fehlt, steht offen in [roadmap.md](roadmap.md) — nichts davon ist beschönigt.
 
 ![Das Dashboard: eine laufende Sitzung mit neun Anwendungen, darunter die Kacheln der übrigen Arbeitsplätze](docs/bilder/01-dashboard.png)
@@ -113,10 +113,21 @@ echte Fehler aus dem Betrieb mit Symptom, Ursache und Reparatur.
 
 ### Der erste Arbeitsplatz
 
-Nach der Anmeldung: **Workspaces → Anlegen**, ein Image eintragen (etwa
-`kasmweb/core-ubuntu-jammy:1.16.0`), der Gruppe `users` zuweisen, einschalten. Danach unter **Start**
-starten und über **Software → Im Image nachsehen** die Anwendungen freigeben.
-Ausführlich in [Handbuch, Kapitel 2](docs/wiki/02-erste-schritte.md).
+**Das Basisimage baut `make up` beim ersten Start mit** — `ota/base-desktop:1`, Debian 13 + XFCE +
+Selkies, ohne KasmVNC. Das dauert einige Minuten und passiert nur, wenn es fehlt; danach steht es
+unter **Workspaces** zur Auswahl. Neu bauen geht jederzeit von Hand:
+
+```bash
+scripts/build-desktop-image.sh --pruefen      # baut und misst 19 Punkte gegen den Vertrag mit dem Agent
+```
+
+Ein Abbild von Kasm braucht es dafür **nicht**. Die bleiben möglich, sind aber die Ausnahme — für
+fertige Kataloge und für den Umstieg ([Kapitel 9](docs/wiki/09-kasm-images-und-registries.md)).
+
+Danach: **Workspaces → Anlegen** — der Knopf legt sofort eine Vorlage an und nimmt dafür das eigene
+Basisimage, sonst ein anderes, das nach einem Arbeitsplatz aussieht. Im Editor der Gruppe `users`
+zuweisen und einschalten, dann unter **Start** starten und über **Software → Im Image nachsehen**
+die Anwendungen freigeben. Ausführlich in [Handbuch, Kapitel 2](docs/wiki/02-erste-schritte.md).
 
 ## Aktualisieren
 
@@ -362,7 +373,7 @@ aussahen, als sie waren.
 make test
 ```
 
-**446 Prüfungen in sieben Suiten**, jede stellt ihren Vorzustand selbst her:
+**449 Prüfungen in sieben Suiten**, jede stellt ihren Vorzustand selbst her:
 
 | Suite | Prüft |
 |---|---|

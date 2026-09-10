@@ -66,6 +66,31 @@ up:
 	  echo "  (Realm nicht eingerichtet — später:  make identity)"
 	@echo
 	@$(COMPOSE) ps --format '  {{.Name}}\t{{.Status}}'
+	@# **Das Arbeitsplatz-Basisimage gehoert zum Start dazu.**
+	@#
+	@# Bis zum 2026-09-10 baute `make up` nur die Dienste. Auf einem frischen
+	@# Host lag danach kein einziges Abbild, aus dem sich ein Arbeitsplatz
+	@# starten liesse — der erste Klick in der Oberflaeche endete in einer
+	@# Meldung ueber coturn, und der Betreiber suchte einen Schalter, wo ein
+	@# Abbild fehlte.
+	@#
+	@# **Nur wenn es fehlt.** Der Bau dauert Minuten, und die allermeisten
+	@# Laeufe fassen ihn nicht an; deshalb steht hier `inspect` davor und nicht
+	@# einfach der Aufruf. Wer neu baut, ruft das Skript selbst auf —
+	@# `make update` sagt es, sobald die Bauanleitung neuer ist als das Abbild.
+	@if ! docker image inspect ota/base-desktop:1 >/dev/null 2>&1; then \
+	  echo; \
+	  echo "  Das Arbeitsplatz-Basisimage fehlt und wird jetzt gebaut:"; \
+	  echo "  Debian 13 + XFCE + Selkies, ohne KasmVNC. Das dauert einige Minuten."; \
+	  echo; \
+	  ./scripts/build-desktop-image.sh || { \
+	    echo; \
+	    echo "  Der Bau ist gescheitert. Ohne Arbeitsplatz-Abbild laesst sich"; \
+	    echo "  kein Workspace anlegen. Von Hand nachholen:"; \
+	    echo "    scripts/build-desktop-image.sh --pruefen"; \
+	  }; \
+	fi
+	@echo
 
 .PHONY: update
 update:

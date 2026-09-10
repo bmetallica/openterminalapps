@@ -76,6 +76,26 @@ def _maschine(body: TemplateIn, vorher: str = "selkies") -> str:
     ein Satz, der auf etwas ganz anderes zeigt. Gemessen an der Prüfreihe:
     18 Fehlschläge, alle mit derselben Wurzel.
     """
+    erkannt = agent_client.image_engine(body.image_ref)
+
+    # Ein Abbild, das gar keine Maschine mitbringt, ist kein Arbeitsplatz.
+    #
+    # Auf einer frischen Anlage liegen nur die Abbilder des Stacks — coturn,
+    # postgres, traefik. Wer dort einen Arbeitsplatz anlegt, bekam bis zum
+    # 2026-09-10 die Auskunft, coturn bringe KasmVNC mit. Das war falsch und
+    # schickte auf die falsche Faehrte: Wer daraufhin auf KasmVNC umstellte,
+    # bekam eine Sitzung, die erst neunzig Sekunden spaeter und mit einem ganz
+    # anderen Satz scheiterte.
+    if erkannt == "keine":
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"Das Abbild {body.image_ref} bringt weder Selkies noch KasmVNC mit "
+            f"— es ist kein Arbeitsplatz-Abbild. Das eigene Basisimage heisst "
+            f"`ota/base-desktop:1`; fehlt es, baut `make up` es beim naechsten "
+            f"Start, oder von Hand mit "
+            f"`scripts/build-desktop-image.sh --pruefen`.",
+        )
+
     if body.stream_engine:
         # Ausdrücklich gewählt — aber nicht blind übernommen.
         #
@@ -89,7 +109,6 @@ def _maschine(body: TemplateIn, vorher: str = "selkies") -> str:
         # Abgelehnt wird nur bei einer **eindeutigen** Auskunft des Images.
         # Liegt es nicht lokal, antwortet der Agent mit nichts, und dann
         # entscheidet der Mensch.
-        erkannt = agent_client.image_engine(body.image_ref)
         if erkannt and erkannt != body.stream_engine:
             womit = ("Selkies" if erkannt == "selkies" else "KasmVNC")
             gewollt = ("Selkies" if body.stream_engine == "selkies" else "KasmVNC")
@@ -101,7 +120,6 @@ def _maschine(body: TemplateIn, vorher: str = "selkies") -> str:
                 f"{gewollt} enthält.",
             )
         return body.stream_engine
-    erkannt = agent_client.image_engine(body.image_ref)
     return erkannt or vorher
 
 
