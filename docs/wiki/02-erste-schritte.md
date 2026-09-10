@@ -123,6 +123,42 @@ ein Formular davor gibt es nicht. Dort stehen Anzeigename, Image, Betriebsart, *
 **Netz**; wer das Abbild wechselt, stellt Streaming passend dazu ein
 ([Kapitel 5](05-workspaces-verwalten.md)).
 
+## Der Medienweg — und der Zugriff über ein VPN ✅
+
+Seit Selkies die Vorgabe ist, läuft der Bildstrom **nicht durch Traefik**, sondern über den
+TURN-Dienst des Stacks. Der braucht eine Adresse, unter der ihn die **Browser** erreichen — nicht
+die eines Docker-Netzes, nicht `0.0.0.0`. `make setup` schlägt die erste eigene Adresse des Hosts
+vor und erzeugt das Geheimnis dazu:
+
+```ini
+OTA_TURN_HOST=192.168.66.224   # Vorschlag von make setup — prüfen!
+OTA_TURN_SECRET=…              # wird erzeugt
+```
+
+**Ohne `OTA_TURN_HOST` kommt kein Bild an**, und zwar ohne Fehlermeldung: Die Sitzung startet, der
+Tab bleibt leer.
+
+### Über WireGuard oder ein anderes VPN
+
+Zwei Dinge sind dann anders, und beide erzeugen dasselbe Bild — nämlich gar keines:
+
+1. **Die Adresse.** `OTA_TURN_HOST` muss die sein, die der Client **im Tunnel** erreicht. Der
+   Vorschlag von `make setup` ist die LAN-Adresse des Hosts; taugt sie im Tunnel nicht, gehört hier
+   die Tunneladresse hin.
+2. **Die Paketgrösse.** Ein Tunnel mit MTU 1000 lässt den DTLS-Handschlag nicht durch — Chrome
+   verschickt ihn mit fest 1200 Byte und passt sich **nicht** an. Die kleinen ICE-Prüfungen kommen
+   durch, das grosse Paket nicht, und niemand meldet einen Fehler. Abhilfe, **beide Zeilen
+   zusammen**:
+
+```ini
+OTA_TURN_PROTOCOL=tcp
+OTA_TURN_ICE_POLICY=relay
+```
+
+Danach `sudo make up`. Warum ICE den tragfähigen Weg nicht selbst findet, steht mit Messwerten in
+[Kapitel 21](21-firmenproxy.md#warum-ice-den-tragfähigen-weg-nicht-selbst-findet); die Symptome und
+das Paketmuster in [Kapitel 20](20-selkies-versuch.md#netze-mit-kleiner-paketgrösse-vpn).
+
 ## Was heute schon läuft
 
 | Bestandteil | Status |

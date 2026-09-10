@@ -156,6 +156,43 @@ PY2
 fi
 echo
 
+# Wohin die Browser greifen, um den Medienstrom zu holen.
+#
+# **Ohne diesen Wert kommt kein Bild an**, seit Selkies die Vorgabe ist: Der
+# Strom laeuft nicht durch Traefik, sondern ueber den TURN-Dienst, und der
+# braucht eine Adresse, unter der ihn die **Browser** erreichen — nicht die
+# eines Docker-Netzes und nicht 0.0.0.0.
+#
+# Geraten wird die erste eigene Adresse, die kein Rueckkanal ist. Das ist ein
+# Vorschlag und keine Wahrheit: Wer ueber ein VPN zugreift, traegt hier die
+# Adresse ein, die **im Tunnel** erreichbar ist. Ergaenzt wird nur, wenn nichts
+# dasteht.
+if grep -qE "^OTA_TURN_HOST=.+" "$ENV"; then
+  echo "  OTA_TURN_HOST — bleibt, wie es ist"
+else
+  RATEN="$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -vE '^(127\.|172\.1[6-9]\.|172\.2[0-9]\.|172\.3[01]\.|10\.99\.)' | head -1)"
+  if [ -n "$RATEN" ]; then
+    python3 - "$ENV" "$RATEN" <<'PY3'
+import io, re, sys
+pfad, wert = sys.argv[1], sys.argv[2]
+s = io.open(pfad, encoding="utf8").read()
+if re.search(r"^OTA_TURN_HOST=", s, flags=re.M):
+    s = re.sub(r"^OTA_TURN_HOST=.*$", f"OTA_TURN_HOST={wert}", s, count=1, flags=re.M)
+else:
+    s += f"\nOTA_TURN_HOST={wert}\n"
+io.open(pfad, "w", encoding="utf8").write(s)
+PY3
+    echo "  OTA_TURN_HOST — auf $RATEN gesetzt (Vorschlag)"
+    echo "                  Das muss die Adresse sein, unter der die BROWSER"
+    echo "                  diesen Host erreichen. Ueber ein VPN ist das die"
+    echo "                  Adresse im Tunnel — dann hier korrigieren."
+  else
+    echo "  OTA_TURN_HOST — leer, und keine Adresse zu raten."
+    echo "                  Ohne sie kommt kein Bild an: eintragen und 'make up'."
+  fi
+fi
+echo
+
 echo "Geheimnisse in deploy/.env:"
 fuellen POSTGRES_PASSWORD 32 "Datenbank"
 fuellen OTA_JWT_SECRET    64 "Anmeldemerkmale"
@@ -164,6 +201,11 @@ fuellen OTA_AGENT_TOKEN   48 "API → Agent"
 # arbeitet OTA ueber sein eigenes Dienstkonto (`ota-manager`).
 fuellen KEYCLOAK_ADMIN_PW 32 "Keycloak-Ersteinrichtung"
 fuellen OTA_KEYCLOAK_SECRET 48 "OTA → Keycloak"
+# Der Medienweg. **Das war bis zum 2026-09-10 das einzige Geheimnis, das hier
+# fehlte** — und ohne es kommt kein Bild an, seit Selkies die Vorgabe ist. Die
+# Vorlage sagte „erzeugen mit openssl rand", also ein Schritt, den man genau
+# einmal vergisst; danach steht die Sitzung, und im Browser steht nichts.
+fuellen OTA_TURN_SECRET 48 "Medienweg (TURN)"
 
 # Nur für die Prüfungen; ohne Wert wird `make test` es einfordern.
 if ! grep -qE "^OTA_TEST_ADMIN_PW=.+" "$ENV"; then
