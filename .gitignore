@@ -12,6 +12,9 @@ __pycache__/
 *.pyc
 backups/
 deploy/traefik/traefik.yml
+# Erzeugt von scripts/turn-config.sh — enthaelt das TURN-Geheimnis.
+deploy/turn/turnserver.conf
+deploy/turn/.vorher
 # Erzeugt von scripts/traefik-config.sh, wie traefik.yml daneben.
 deploy/traefik/dynamic/anmeldebremse.yml
 

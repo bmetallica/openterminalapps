@@ -659,6 +659,38 @@ Steht dort eine Session, zu der kein Container gehört, ist es das.
 existiert, und schliesst die Session, wenn nicht. Und der Aufräumer räumt solche Leichen bei jedem
 Durchlauf weg — auch ohne dass jemand einen Start versucht.
 
+## `pruef-turn.py` meldet „403 Forbidden IP"
+
+**Symptom.** Die Sitzung startet, der Tab bleibt leer, und die Prüfung sagt:
+
+```
+3. Erlaubnis für 192.168.1.22:59236 -> ABGELEHNT: 403 Forbidden IP
+```
+
+Der TURN-Server verweigert die Erlaubnis für die Gegenstelle, weil deren Adresse in seiner
+**Sperrliste** liegt. Nachsehen, welcher Bereich zutrifft:
+
+```bash
+grep denied-peer-ip deploy/turn/turnserver.conf
+```
+
+Die Datei wird von `scripts/turn-config.sh` erzeugt und enthält nur zweierlei: die universell
+unbrauchbaren Bereiche (0.x, Rückkanal, Link-Local) und die **konkreten** Subnetze von
+`ota_internal` und `ota_public`, gelesen aus `docker network inspect`. Liegt die eigene Adresse in
+einem davon, überschneidet sich das LAN mit einem Docker-Netz — dann gehört das Docker-Netz
+verlegt, nicht die Sperrliste geändert.
+
+> **Wie das entstanden ist:** Bis zum 2026-09-10 stand die Liste fest im Compose-Bestand, mit
+> geratenen Bereichen. Einer lautete `192.168.0.0-192.168.15.255` und war doppelt falsch: Er
+> sperrte keines der eigenen Netze (die lagen anderswo), und er brach **jede Anlage, deren LAN in
+> 192.168.0.x oder 192.168.1.x liegt** — also die häufigste Adressierung überhaupt. Gefunden beim
+> Aufsetzen auf frischem Debian. Geraten wird jetzt nichts mehr, und `scripts/test-streaming.sh`
+> prüft nach, dass die eigene Adresse in keinem gesperrten Bereich liegt.
+
+**Der Uplink gehört ausdrücklich nicht in die Liste.** Der Verkehr eines Arbeitsplatzes erreicht
+den TURN-Dienst hinter der NAT des Routers, also unter dessen Uplink-Adresse. Wer dieses Netz
+sperrt, sperrt den Bildstrom aus, den er gerade aufbauen will.
+
 ## Alte Protokolleinträge sind verschwunden
 
 **Symptom.** Im Protokoll steht nichts mehr von vor drei Monaten, und der Eintrag, den man sucht,

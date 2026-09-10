@@ -98,54 +98,18 @@ services:
     logging: *protokoll
     restart: unless-stopped
     network_mode: host
-    command:
-      - --listening-port=${OTA_TURN_PORT:-3478}
-      # Beide Adressen ausdruecklich und nicht 0.0.0.0: Der Host hat neben
-      # dem Firmennetz ein Dutzend Docker-Bruecken, und coturn boete sonst
-      # Relay-Kandidaten in Netzen an, die kein Browser erreicht.
-      #
-      # Ohne OTA_TURN_HOST bleibt der Dienst auf dem Rueckkanal. Er
-      # stoert dort niemanden, und ohne diese Angabe ist Selkies ohnehin
-      # nicht in Gebrauch.
-      - --listening-ip=${OTA_TURN_HOST:-127.0.0.1}
-      - --relay-ip=${OTA_TURN_HOST:-127.0.0.1}
-      # Rund hundert Relay-Ports fuer den ganzen Host. Vorher waren es elf je
-      # Container, und die waren nach drei Anlaeufen aufgebraucht - eine
-      # Anmeldung belegt vier Stueck, und coturn gibt sie erst nach Ablauf
-      # der Lebenszeit wieder frei.
-      - --min-port=${OTA_TURN_MIN:-49160}
-      - --max-port=${OTA_TURN_MAX:-49260}
-      - --realm=openterminalapps
-      # Kurzlebige Anmeldedaten aus einem HMAC statt eines festen Passworts:
-      # Selkies rechnet sie sich aus demselben Geheimnis aus und gibt sie dem
-      # Browser mit Ablaufzeit mit. Ein abgefangener Zugang ist damit Stunden
-      # spaeter wertlos - und das Sitzungspasswort steht nicht mehr drin.
-      - --use-auth-secret
-      - --static-auth-secret=${OTA_TURN_SECRET:-}
-      - --no-tls
-      - --no-dtls
-      - --no-cli
-      - --no-multicast-peers
-      # Kein Weg in die eigenen Netze. Ohne diese Zeilen stuende im Firmennetz
-      # ein Dienst, ueber den sich Datenbank und Keycloak erreichen liessen -
-      # vorbei an Traefik und ohne Anmeldung an OTA. Die Bereiche sind die
-      # Subnetze von ota_public und ota_internal.
-      #
-      # Der Bereich der Arbeitsplatznetze (10.99.0.0/16) steht bewusst **nicht**
-      # hier: Er waere ohnehin unerreichbar — diese Netze sind `internal`, die
-      # Bruecke des Wirts hat dort keine Adresse, und nur der Router kommt
-      # hinein. Eine Zeile dafuer wuerde nichts sperren, aber jede Anlage
-      # brechen, deren Firmennetz zufaellig 10.99.x benutzt.
-      - --denied-peer-ip=0.0.0.0-0.255.255.255
-      - --denied-peer-ip=127.0.0.0-127.255.255.255
-      - --denied-peer-ip=169.254.0.0-169.254.255.255
-      - --denied-peer-ip=172.16.0.0-172.31.255.255
-      - --denied-peer-ip=192.168.0.0-192.168.15.255
-      # Knapp protokollieren. Für die Fehlersuche am Medienweg lohnt
-      # `OTA_TURN_LOG=verbose` in der .env — dann steht je Sitzung drin,
-      # welche Erlaubnisse entstehen und was durch die Relays geht.
-      - --${OTA_TURN_LOG:-simple-log}
-      - --log-file=stdout
+    # **Die ganze Konfiguration steht in einer Datei, nicht in Argumenten.**
+    #
+    # Sie wird von `scripts/turn-config.sh` erzeugt, weil ein Teil davon nicht
+    # zu raten ist: Welche Subnetze gesperrt gehoeren, weiss erst die laufende
+    # Anlage. Hier stand bis zum 2026-09-10 ein geratener Bereich
+    # (`192.168.0.0-192.168.15.255`), und der war zweimal falsch — er sperrte
+    # keines der eigenen Netze und brach jede Anlage, deren LAN in 192.168.0.x
+    # oder 192.168.1.x liegt. Das Geheimnis steht damit ausserdem nicht mehr in
+    # `docker inspect`, sondern in einer Datei mit Modus 0600.
+    command: ["-c", "/etc/coturn/turnserver.conf"]
+    volumes:
+      - ./turn/turnserver.conf:/etc/coturn/turnserver.conf:ro
 
   web:
     build:

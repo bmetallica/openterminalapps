@@ -109,6 +109,75 @@ else
   sed 's/^/    /' <<<"$AUSGABE" | tail -12 >&2
 fi
 
+# --------------------------------------------------- Die Sperrliste des TURN
+#
+# Sie ist der Teil des Medienwegs, der am leisesten kaputtgeht: coturn
+# antwortet dann mit „403 Forbidden IP", und im Browser steht nichts. Bis zum
+# 2026-09-10 stand dort ein **geratener** Bereich (192.168.0.0-192.168.15.255)
+# — der sperrte keines der eigenen Netze und brach jede Anlage, deren LAN in
+# 192.168.0.x oder 192.168.1.x liegt.
+echo
+echo "Sperrliste des TURN-Servers"
+
+CONF="$ROOT/deploy/turn/turnserver.conf"
+if [ ! -f "$CONF" ]; then
+  bad "Es gibt keine erzeugte turnserver.conf — scripts/turn-config.sh nicht gelaufen?"
+else
+  # 1. Die eigene Adresse darf in keinem gesperrten Bereich liegen. Genau das
+  #    war der Fehler, und genau das sieht man der Datei nicht an.
+  DRIN=$(python3 - "$CONF" "${OTA_TURN_HOST:-}" <<'PY'
+import ipaddress, re, sys
+konf, wirt = sys.argv[1], sys.argv[2].strip()
+if not wirt:
+    print(""); raise SystemExit
+try:
+    adresse = ipaddress.ip_address(wirt)
+except ValueError:
+    print(""); raise SystemExit
+for zeile in open(konf, encoding="utf-8"):
+    treffer = re.match(r"\s*denied-peer-ip=([0-9.]+)-([0-9.]+)", zeile)
+    if not treffer:
+        continue
+    von, bis = (ipaddress.ip_address(x) for x in treffer.groups())
+    if von <= adresse <= bis:
+        print(f"{von}-{bis}")
+        break
+PY
+)
+  [ -z "$DRIN" ] \
+    && ok "Die eigene Adresse ${OTA_TURN_HOST:-(keine)} steht in keinem gesperrten Bereich" \
+    || bad "Die eigene Adresse ${OTA_TURN_HOST} liegt im gesperrten Bereich $DRIN — coturn lehnt jede Erlaubnis mit 403 ab"
+
+  # 2. Und die eigenen Netze *sind* gesperrt. Ohne diese Zeile waere die erste
+  #    Prüfung auch mit einer leeren Liste zufrieden.
+  INTERN=$(docker network inspect ota_internal \
+    --format '{{range .IPAM.Config}}{{.Subnet}}{{end}}' 2>/dev/null)
+  if [ -z "$INTERN" ]; then
+    info "ota_internal nicht gefunden — Prüfung übersprungen"
+  else
+    ERWARTET=$(python3 -c "
+import ipaddress,sys
+n=ipaddress.ip_network('$INTERN')
+print(f'{n.network_address}-{n.broadcast_address}')")
+    grep -q "denied-peer-ip=$ERWARTET" "$CONF" \
+      && ok "Das interne Netz ($INTERN) ist gesperrt" \
+      || bad "Das interne Netz $INTERN steht nicht in der Sperrliste"
+  fi
+
+  # 3. Der Uplink dagegen **nicht** — von dort kommt der Arbeitsplatz.
+  UPLINK=$(docker network inspect ota_uplink \
+    --format '{{range .IPAM.Config}}{{.Subnet}}{{end}}' 2>/dev/null)
+  if [ -n "$UPLINK" ]; then
+    UP_R=$(python3 -c "
+import ipaddress,sys
+n=ipaddress.ip_network('$UPLINK')
+print(f'{n.network_address}-{n.broadcast_address}')")
+    grep -q "denied-peer-ip=$UP_R" "$CONF" \
+      && bad "Der Uplink $UPLINK ist gesperrt — damit käme kein Bild aus einem Arbeitsplatz" \
+      || ok "Der Uplink ($UPLINK) ist offen — von dort kommt der Arbeitsplatz"
+  fi
+fi
+
 echo
 echo "─────────────────────────────────────"
 printf '  bestanden: %s   fehlgeschlagen: %s\n' "$pass" "$fail"

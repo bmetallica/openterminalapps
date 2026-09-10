@@ -311,7 +311,7 @@ Was vorhanden ist — die Nachweise stehen in `security.md`:
 | **Eingabekontrolle** | ✅ Protokoll über Verwaltungsvorgänge, seit dem 2026-09-04 **einschliesslich des Aufschaltens** |
 | **Verfügbarkeit und Wiederherstellbarkeit** | ✅ Sicherung und Rückspielung sind gebaut **und geprüft** (39 automatische Prüfungen) |
 | **Belastbarkeit** | ✅ Kontingente je Nutzer, Untergrenze für freien Plattenplatz, Leerlauf-Aufräumer |
-| **Regelmässige Überprüfung** | ⚠️ 449 automatische Prüfungen bei jeder Änderung — aber kein Abgleich gegen Schwachstellenlisten |
+| **Regelmässige Überprüfung** | ⚠️ 452 automatische Prüfungen bei jeder Änderung — aber kein Abgleich gegen Schwachstellenlisten |
 
 **Die zweite Zeile ist die verbliebene Lücke — und sie ist eine bewusste.** Ein Datenbankabzug
 enthält weiterhin Passwort-Hashes und TOTP-Startwerte im Klartext (das AD-Kennwort ist mit dem

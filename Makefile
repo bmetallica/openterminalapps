@@ -44,7 +44,21 @@ up:
 	@# Traefiks statische Konfiguration haengt an einem Wert aus deploy/.env
 	@# und wird deshalb vor jedem Start neu erzeugt. Siehe die Vorlage daneben.
 	@./scripts/traefik-config.sh
+	@# Die Konfiguration des TURN-Servers haengt an den **echten** Subnetzen
+	@# dieser Anlage, nicht an geratenen. Beim allerersten Lauf gibt es die
+	@# Netze noch nicht — dann traegt der zweite Durchgang weiter unten nach.
+	@./scripts/turn-config.sh
 	$(COMPOSE) up -d --build
+	@# Zweiter Durchgang: Jetzt stehen die Netze. Aendert sich dabei etwas,
+	@# bekommt der TURN-Dienst seine Datei und wird einmal neu gestartet —
+	@# das kostet einen Moment Bildstrom und sonst nichts.
+	@cp deploy/turn/turnserver.conf deploy/turn/.vorher 2>/dev/null || true
+	@./scripts/turn-config.sh >/dev/null
+	@if ! cmp -s deploy/turn/turnserver.conf deploy/turn/.vorher; then \
+	  echo "  TURN-Sperrliste nachgezogen — Dienst wird neu gestartet"; \
+	  $(COMPOSE) up -d turn >/dev/null 2>&1 || true; \
+	fi
+	@rm -f deploy/turn/.vorher
 	@# Der Realm wird nach dem Hochfahren eingerichtet, nicht bei `make setup`:
 	@# Dort läuft Keycloak noch nicht. Idempotent — was da ist, bleibt.
 	@#

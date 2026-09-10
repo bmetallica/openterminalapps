@@ -18,7 +18,7 @@ whole registries can be attached — as an addition, not as the foundation.
 **Every workspace sits in a network of its own** behind a router: no corporate network, no
 neighbouring session, no host — until someone explicitly opens it ([firewall.md](firewall.md)).
 
-> **Status:** running and in use. 449 automated checks, 107 of them in a real browser. What is still
+> **Status:** running and in use. 452 automated checks, 107 of them in a real browser. What is still
 > missing is listed openly in [roadmap.md](roadmap.md) — nothing there is dressed up.
 >
 > The documentation is written in German. This file is the exception.
@@ -257,7 +257,7 @@ were.
 make test
 ```
 
-**449 checks in seven suites**, each one setting up its own preconditions:
+**452 checks in seven suites**, each one setting up its own preconditions:
 
 | Suite | Checks |
 |---|---|
