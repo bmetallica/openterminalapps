@@ -60,6 +60,27 @@ Angelegt wird sie **nur lesend** (`editMode: READ_ONLY`): OTA schreibt nie ins V
 Das Kennwort des Dienstkontos geht nur hinein — leer lassen heisst „nicht anfassen", nicht
 „löschen".
 
+### ldaps und die CA des Verzeichnisses ✅
+
+`ldaps://…:636` ist der Weg; StartTLS auf 389 bietet die Oberfläche nicht an. Keycloak prüft das
+Zertifikat des Verzeichnisses und kennt ab Werk nur die öffentlichen CAs der Java-Laufzeit. Stammt
+das Zertifikat aus der Firmen-PKI, gehört deren CA als PEM-Datei nach
+**`deploy/keycloak-truststore/`**, danach `docker restart ota-keycloak`. Das Verzeichnis ist
+seit dem 2026-09-25 nach `/opt/keycloak/conf/truststores` eingehängt; vorher liess sich ein solches
+Verzeichnis gar nicht verschlüsselt anbinden.
+
+**Verbindung testen** sagt seitdem auch, *warum* es scheitert — Keycloak meldet den Grund, OTA las
+ihn nur nie:
+
+| Meldung | Heisst |
+|---|---|
+| „die verschlüsselte Verbindung scheitert" | CA fehlt im Truststore, oder das Zertifikat passt nicht zur Adresse (`ldaps://<IP>` braucht die IP im Zertifikat) |
+| „Namen … nicht auflösen" | DNS des Hosts |
+| „Am Port antwortet kein Verzeichnis" | falscher Port — `ldaps://` gehört zu 636 |
+| „nicht erreichbar" | Firewall, Routing, oder das Verzeichnis läuft nicht |
+
+Steht das Verzeichnis jenseits einer Firewall: [Kapitel 24](24-hinter-nat.md).
+
 > **Begriffsfalle.** In Keycloak ist das eine *Benutzer-Föderation* und **kein** „Identity
 > Provider" — so heissen dort fremde OIDC- und SAML-Anbieter. Wer im falschen Menü sucht, findet
 > nichts.

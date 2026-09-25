@@ -89,12 +89,52 @@ class Weiterleitung(BaseModel):
     protokoll: str = "tcp"
 
 
+class Umleitung(BaseModel):
+    """Ein Ziel, das der Router auf dem Weg aus einem Arbeitsplatz umbiegt.
+
+    Hinter einer NAT die veroeffentlichte Adresse des TURN-Dienstes auf die
+    des Hosts — sonst liefe der Arbeitsplatz ueber die aeussere Firewall zu
+    diesem Host zurueck. `von` darf ein Name sein; aufgeloest wird hier, weil
+    nur dieser Dienst einen Namensdienst nach draussen hat.
+    """
+
+    von: str
+    nach: str
+    ports: str = "*"
+    protokoll: str = "beide"
+
+
 class Regelwerk(BaseModel):
     sitzungen: list[Sitzung] = []
     # Was fuer alle gilt, an einer Stelle gepflegt.
     global_: list[Freigabe] = []
     grundfreigaben: list[tuple[str, str, str]] = []
     weiterleitungen: list[Weiterleitung] = []
+    umleitungen: list[Umleitung] = []
+
+
+def _umleitungen_aufloesen(liste: list[dict]) -> list[dict]:
+    """Namen in `von` zu Adressen. Was sich nicht aufloesen laesst, entfaellt
+    — laut, weil ein Arbeitsplatz ohne diese Regel kein Bild bekommt."""
+    import ipaddress
+    import socket
+
+    raus = []
+    for u in liste:
+        von = u.get("von", "")
+        try:
+            ipaddress.ip_address(von)
+        except ValueError:
+            try:
+                von = socket.gethostbyname(von)
+            except OSError as exc:
+                log.error("Umleitung %s -> %s: Name nicht aufloesbar (%s)",
+                          u.get("von"), u.get("nach"), exc)
+                continue
+        if von == u.get("nach"):
+            continue
+        raus.append({**u, "von": von})
+    return raus
 
 
 def _speichern() -> None:
@@ -129,6 +169,8 @@ def _durchsetzen() -> dict:
     global _letzter_satz
     with _sperre:
         _zustand["uplink"] = nft.uplink_finden()
+        _zustand["umleitungen_ip"] = _umleitungen_aufloesen(
+            _zustand.get("umleitungen", []))
         satz = nft.regelwerk(_zustand)
         if satz == _letzter_satz and nft.tabelle_da():
             ergebnis = {"regelwerk": "unveraendert"}

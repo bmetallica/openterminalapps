@@ -115,7 +115,12 @@ def main() -> int:
     wurzel = Path(__file__).resolve().parent.parent
     env = env_lesen(wurzel / "deploy" / ".env")
 
-    host = os.environ.get("OTA_TURN_HOST") or env.get("OTA_TURN_HOST", "")
+    # Geprueft wird von diesem Host aus, also gegen die **eigene** Adresse.
+    # Hinter einer NAT ist OTA_TURN_HOST die der Firewall, und die ist von
+    # hier aus womoeglich gar nicht erreichbar; der Weg dorthin gehoert der
+    # Firewall und nicht diesem Test (Kapitel 24).
+    host = (os.environ.get("OTA_TURN_BIND") or env.get("OTA_TURN_BIND", "")
+            or os.environ.get("OTA_TURN_HOST") or env.get("OTA_TURN_HOST", ""))
     port = int(os.environ.get("OTA_TURN_PORT") or env.get("OTA_TURN_PORT", "3478"))
     geheim = os.environ.get("OTA_TURN_SECRET") or env.get("OTA_TURN_SECRET", "")
 

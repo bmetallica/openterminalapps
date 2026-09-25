@@ -58,6 +58,20 @@ for netz in ota_internal ota_public; do
   done
 done
 
+# Woran coturn sich bindet. Ohne NAT dieselbe Adresse wie die, die an die
+# Browser geht; mit NAT die des Hosts (Kapitel 24 des Handbuchs).
+BIND="${OTA_TURN_BIND:-${OTA_TURN_HOST:-127.0.0.1}}"
+if [ -n "${OTA_TURN_HOST:-}" ] && ! python3 -c 'import ipaddress,sys; ipaddress.ip_address(sys.argv[1])' "$BIND" 2>/dev/null; then
+  echo "  WARNUNG: '$BIND' ist keine IP-Adresse. coturn bindet sich nur an eine" >&2
+  echo "           Adresse — steht in OTA_TURN_HOST ein Name, gehoert die eigene" >&2
+  echo "           Adresse des Hosts nach OTA_TURN_BIND." >&2
+elif [ -n "${OTA_TURN_HOST:-}" ] && command -v ip >/dev/null \
+     && ! ip -4 -o addr show 2>/dev/null | grep -qw "inet $BIND/[0-9]*"; then
+  echo "  WARNUNG: $BIND ist keine Adresse dieses Hosts — coturn wird sich nicht" >&2
+  echo "           binden koennen. Hinter einer NAT gehoert die Adresse der" >&2
+  echo "           Firewall nach OTA_TURN_HOST und die eigene nach OTA_TURN_BIND." >&2
+fi
+
 mkdir -p "$(dirname "$ZIEL")"
 {
   echo "# ERZEUGT von scripts/turn-config.sh — Aenderungen hier gehen beim"
@@ -67,8 +81,15 @@ mkdir -p "$(dirname "$ZIEL")"
   # Beide Adressen ausdruecklich und nicht 0.0.0.0: Der Host hat neben dem
   # Firmennetz ein Dutzend Docker-Bruecken, und coturn boete sonst
   # Relay-Kandidaten in Netzen an, die kein Browser erreicht.
-  echo "listening-ip=${OTA_TURN_HOST:-127.0.0.1}"
-  echo "relay-ip=${OTA_TURN_HOST:-127.0.0.1}"
+  #
+  # **Die eigene Adresse, nicht die veroeffentlichte.** Hinter einer NAT
+  # erreichen die Browser den Dienst unter einer Adresse der Firewall
+  # (`OTA_TURN_HOST`), binden kann coturn sich aber nur an eine, die der Host
+  # selbst hat. Bis zum 2026-09-25 stand hier `OTA_TURN_HOST` — hinter NAT
+  # hiess das: entweder startet coturn nicht, oder die Browser bekommen eine
+  # Adresse, die sie nicht erreichen.
+  echo "listening-ip=$BIND"
+  echo "relay-ip=$BIND"
   echo "min-port=${OTA_TURN_MIN:-49160}"
   echo "max-port=${OTA_TURN_MAX:-49260}"
   echo "realm=openterminalapps"

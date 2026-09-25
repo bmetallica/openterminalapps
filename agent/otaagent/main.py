@@ -127,23 +127,38 @@ def _grundregeln() -> list[dict]:
     # Der Medienweg. Der TURN-Dienst laeuft im Namensraum des Wirts, ist also
     # unter dessen Adresse erreichbar — und die liegt im privaten Bereich, den
     # die Stufe „internet" sonst sperrt. Ohne diese Zeilen kommt kein Bild an.
-    turn = os.environ.get("OTA_TURN_HOST", "").strip()
-    if turn:
-        raus.append({"ziel": turn, "ports": os.environ.get("OTA_TURN_PORT", "3478"),
-                     "protokoll": "beide", "herkunft": "OTA_TURN_HOST/PORT",
+    #
+    # **Freigegeben wird die Adresse des Hosts, nicht die veroeffentlichte.**
+    # Hinter einer NAT sind das zwei verschiedene (`_turn_adressen`), und das
+    # Regelwerk sieht ein Paket erst nach der Umleitung weiter unten — also
+    # schon mit der Adresse des Hosts als Ziel. Auch die Relay-Adressen, die
+    # coturn vergibt, sind die des Hosts.
+    aussen, innen = _turn_adressen()
+    if innen:
+        herkunft = "OTA_TURN_BIND" if innen != aussen else "OTA_TURN_HOST"
+        raus.append({"ziel": innen, "ports": os.environ.get("OTA_TURN_PORT", "3478"),
+                     "protokoll": "beide", "herkunft": f"{herkunft}/PORT",
                      "grund": "Der Medienweg. Ohne ihn kommt kein Bild an."})
-        raus.append({"ziel": turn,
+        raus.append({"ziel": innen,
                      "ports": f"{os.environ.get('OTA_TURN_MIN', '49160')}-"
                               f"{os.environ.get('OTA_TURN_MAX', '49260')}",
                      "protokoll": "beide", "herkunft": "OTA_TURN_MIN/MAX",
                      "grund": "Der Bereich, über den der TURN-Server vermittelt."})
+    for u in _umleitungen():
+        raus.append({"ziel": f"{u['von']} → {u['nach']}", "ports": u["ports"],
+                     "protokoll": u["protokoll"], "herkunft": "OTA_TURN_HOST → OTA_TURN_BIND",
+                     "umleitung": True,
+                     "grund": "Die veröffentlichte Adresse des TURN-Servers wird im "
+                              "Router auf die des Hosts umgebogen. Ohne das liefe "
+                              "der Arbeitsplatz über die äussere Firewall zu sich "
+                              "selbst zurück — und das kann nicht jede."})
 
     # OTA selbst. Der Browser im Arbeitsplatz muss es erreichen — die
     # Firefox-Erweiterung fuer die Zwischenablage wird von dort geladen.
     eigene = os.environ.get("OTA_SELF_ADDRESS", "").strip()
     if eigene:
         raus.append({"ziel": eigene, "ports": os.environ.get("OTA_HTTPS_PORT", "8443"),
-                     "protokoll": "tcp", "herkunft": "OTA_TURN_HOST/OTA_HTTPS_PORT",
+                     "protokoll": "tcp", "herkunft": "OTA_SELF_ADDRESS/OTA_HTTPS_PORT",
                      "grund": "OTA selbst — der Browser im Arbeitsplatz lädt von "
                               "dort die Erweiterung für die Zwischenablage."})
 
@@ -184,10 +199,48 @@ def _grundfreigaben() -> list[tuple[str, str, str]]:
     """Dieselbe Liste, wie der Router sie braucht — ohne die Begruendungen.
 
     Die beiden eingebauten Zeilen (Namensdienst, Traefik) sind hier nicht
-    dabei: Sie ergeben sich aus dem Aufbau und nicht aus einer Regel.
+    dabei: Sie ergeben sich aus dem Aufbau und nicht aus einer Regel. Die
+    Umleitung auch nicht — sie geht als eigene Liste an den Router
+    (`_umleitungen`) und steht oben nur, damit man sie sieht.
     """
     return [(r["ziel"], r["ports"], r["protokoll"])
-            for r in _grundregeln() if r["herkunft"] != "eingebaut"]
+            for r in _grundregeln()
+            if r["herkunft"] != "eingebaut" and not r.get("umleitung")]
+
+
+def _turn_adressen() -> tuple[str, str]:
+    """(veroeffentlicht, eigen) — unter welcher Adresse die Browser den
+    TURN-Dienst erreichen, und an welche er sich auf dem Host bindet.
+
+    Ohne NAT ist beides dasselbe, und `OTA_TURN_BIND` bleibt leer. Hinter
+    einer Firewall mit Portweiterleitung nicht: Dort kennt der Browser nur die
+    Adresse der Firewall, coturn kann sich aber nur an eine eigene binden.
+    Bis zum 2026-09-25 gab es dafuer nur `OTA_TURN_HOST`, und OTA liess sich
+    hinter einer NAT nicht betreiben (Kapitel 24 des Handbuchs).
+    """
+    aussen = os.environ.get("OTA_TURN_HOST", "").strip()
+    innen = os.environ.get("OTA_TURN_BIND", "").strip() or aussen
+    return aussen, innen
+
+
+def _umleitungen() -> list[dict]:
+    """Was der Router auf dem Weg aus einem Arbeitsplatz umbiegt.
+
+    Selkies im Arbeitsplatz bekommt **dieselbe** TURN-Adresse wie der Browser
+    — es ist ein Wert, den Selkies an beide Seiten verteilt. Hinter einer NAT
+    ist das die Adresse der Firewall. Ohne Umleitung ginge der Weg ueber die
+    aeussere Firewall und von dort zurueck auf diesen Host („Hairpin-NAT"),
+    was nicht jede Firewall kann und keine gern tut. Der Router ist ohnehin
+    der einzige Weg aus einem Arbeitsplatz; er biegt das Ziel gleich um.
+
+    Ein Name in `OTA_TURN_HOST` wird erst im Router aufgeloest: Dieser Dienst
+    haengt nur im internen Netz und hat keinen Namensdienst nach draussen.
+    """
+    aussen, innen = _turn_adressen()
+    if not aussen or aussen == innen:
+        return []
+    return [{"von": aussen, "nach": innen,
+             "ports": os.environ.get("OTA_TURN_PORT", "3478"), "protokoll": "beide"}]
 
 log = logging.getLogger("ota.agent")
 
@@ -772,14 +825,18 @@ def _firewall_abgleich(client=None) -> dict:
     Agents verliert damit nichts.
     """
     client = client or dc()
+    # Erst die Anbindung, dann die Regeln. Ein Router, der nicht im Netz
+    # haengt, kann noch so gute Regeln haben.
+    #
+    # Und **vor** der Frage, ob der Router antwortet: Liegt er, weil ihm
+    # jemand seine Adresse genommen hat, bringt ihn genau dieser Schritt
+    # wieder hoch (`netz.router_wiederbeleben`). Stand sie dahinter, blieb er
+    # liegen, weil er lag.
+    netz_ops.anbindung_sichern(client)
     if not fwclient.erreichbar():
         log.warning("Firewall-Dienst nicht erreichbar (%s) — Regeln unveraendert",
                     fwclient.SOCKET)
         return {"status": "kein Dienst"}
-
-    # Erst die Anbindung, dann die Regeln. Ein Router, der nicht im Netz
-    # haengt, kann noch so gute Regeln haben.
-    netz_ops.anbindung_sichern(client)
 
     sitzungen = [{
         "subnetz": n["subnetz"],
@@ -799,6 +856,9 @@ def _firewall_abgleich(client=None) -> dict:
         # Die API kennt die Sitzung, aber nicht ihre Adresse — die weiss nur
         # Docker. Hier wird aus „Sitzung X, Port 8080" ein Ziel.
         "weiterleitungen": _weiterleitungen_aufloesen(client),
+        # Adressen, die der Router auf dem Weg nach draussen umbiegt —
+        # hinter einer NAT die veroeffentlichte des TURN-Dienstes.
+        "umleitungen": _umleitungen(),
     }
     try:
         return fwclient.regelwerk_setzen(zustand)
@@ -1105,7 +1165,7 @@ def start_container(req: StartRequest) -> dict[str, Any]:
     # Traefik muss hinein, damit ein Bild ankommt — aber **nur** Traefik, und
     # nur in dieses eine Netz. Frueher hingen alle Sitzungen gemeinsam in
     # `ota_public`; genau das war Befund H2.
-    netz_ops.traefik_verbinden(client, sitzungsnetz)
+    netz_ops.traefik_verbinden(client, sitzungsnetz, subnetz)
     # Jetzt erst: Regelwerk **und** Standardroute. Vorher hatte der
     # Arbeitsplatz keinen Weg — genau so soll es sein.
     _firewall_abgleich(client)

@@ -176,6 +176,23 @@ def regelwerk(zustand: dict) -> str:
         "  chain prerouting {",
         "    type nat hook prerouting priority dstnat; policy accept;",
     ]
+    # Umleitungen aus den Arbeitsplaetzen: ein veroeffentlichtes Ziel auf ein
+    # inneres. Nur fuer Pakete **aus dem Pool** — was von aussen kommt, geht
+    # dieses Regelwerk nichts an. Der Port bleibt, es aendert sich nur die
+    # Adresse; die Freigabe im Filter muss deshalb auf `nach` lauten, denn
+    # `forward` sieht das Paket erst nach dieser Kette.
+    for u in zustand.get("umleitungen_ip", []):
+        portliste = _ports(u.get("ports", "*"))
+        for proto in _protokolle(u.get("protokoll", "beide")):
+            if portliste:
+                ports = ", ".join(portliste)
+                zeilen.append(
+                    f"    ip saddr {pool} ip daddr {u['von']} {proto} dport {{ {ports} }} "
+                    f"counter dnat ip to {u['nach']}")
+            else:
+                zeilen.append(
+                    f"    ip saddr {pool} ip daddr {u['von']} meta l4proto {proto} "
+                    f"counter dnat ip to {u['nach']}")
     for w in zustand.get("weiterleitungen", []):
         # `dnat ip to`, nicht `dnat to`: In einer `inet`-Tabelle ist beides
         # moeglich (v4 und v6), und nftables verlangt die Angabe —

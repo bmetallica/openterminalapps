@@ -38,7 +38,12 @@ alone on purpose so an existing Kasm can keep running alongside. Both are change
 `OTA_HTTPS_PORT` and `OTA_HTTP_PORT` in `deploy/.env`.
 
 Once streaming is in use, add **3478** (TURN) and **49160–49260/UDP** for the media path, plus
-**30000–30019** as the pool for published ports. And an address range for the workspace networks,
+**30000–30019** as the pool for published ports. Behind a firewall with port forwarding, only
+**443** (to the reverse proxy) and **3478/TCP** (straight to the OTA host — the media stream does
+not pass through the proxy) need to be forwarded; Keycloak needs **636** out to the directory. Set
+`OTA_TURN_HOST` to the firewall's address and `OTA_TURN_BIND` to the host's own; the workspace
+router rewrites the published address itself, so no hairpin NAT is required. Full port lists and an
+nginx example are in [handbook chapter 24](docs/wiki/24-hinter-nat.md) (German). And an address range for the workspace networks,
 `10.99.0.0/16` out of the box — it must **not** overlap with the corporate network. All of it is
 configurable and explained in [`deploy/.env.example`](deploy/.env.example).
 
@@ -240,7 +245,7 @@ the same separation applies to the host filesystem.
 
 ## Documentation
 
-- **[Handbook](docs/wiki/README.md)** — use, administration, operations, troubleshooting (23
+- **[Handbook](docs/wiki/README.md)** — use, administration, operations, troubleshooting (24
   chapters, German)
 - **[plan.md](plan.md)** — architecture **and the reasoning behind it**, dead ends included
 - **[docs/adr/](docs/adr/README.md)** — decisions that are expensive to reverse, with the
@@ -265,7 +270,7 @@ make test
 | `test-clipboard-bridge.sh` | Copying between two applications in one workspace: both directions, umlauts, an image, a megabyte, after a pause, and switched off |
 | `tests/e2e.mjs` | The interface in a real browser — down to whether the stream actually connects |
 | `test-ldap.sh` | Directory sign-in **through Keycloak** against a real OpenLDAP in a container — above all that a directory entry cannot take over a local account and an outage does not take the emergency login down |
-| `test-streaming.sh` | The media path: does the TURN server actually relay, and does a picture arrive in the browser? The probe browser runs in a network from which the session container is **not** directly reachable — like a workstation on a corporate network |
+| `test-streaming.sh` | The media path: does the TURN server actually relay, and does a picture arrive in the browser? The probe browser runs in a network from which the session container is **not** directly reachable — like a workstation on a corporate network. With `OTA_TURN_BIND` set, it emulates the firewall's port forwarding for the probe browser and checks the path through the NAT |
 | `test-firewall.sh` | The network isolation, **measured from inside**: neighbour, host, corporate network, TURN, name service, internet per level, an exception by name, a published port — and all of it again after the router restarts |
 | `test-backup.sh` | Backup and restore of profile, container and database. It stops sessions to do so — **only its own**, and it checks that explicitly |
 

@@ -321,7 +321,7 @@ niemand vorher geprüft hatte. Diesmal stehen sie vorn.
 
 **Gebaut, gemessen, in Betrieb** (2026-09-04). Der Aufbau steht so, wie er oben beschrieben ist:
 ein `internal`-Netz je Sitzung, alle enden im Router, der Router ist der einzige Weg nach draussen.
-`scripts/test-firewall.sh` prüft 19 Dinge **von innen** und läuft in `make test` mit. Bedienung und
+`scripts/test-firewall.sh` prüft 19 Dinge **von innen** (20 hinter einer NAT) und läuft in `make test` mit. Bedienung und
 Alltag stehen im Handbuch, [Kapitel 23](docs/wiki/23-netz.md).
 
 Vier Dinge sind unterwegs anders gekommen als geplant. Sie stehen hier, weil sie beim nächsten Mal
@@ -340,6 +340,30 @@ Zeit sparen:
   **und** für Traefik.
 * **`ping` ist als Probe unbrauchbar.** Ein Arbeitsplatz hat kein `NET_RAW`; `ping` scheitert dort
   immer. Eine Prüfung, die damit misst, meldet „abgeschottet", wo nichts abgeschottet ist.
+
+Drei Nachträge vom 2026-09-25, gefunden, als der Router auf der Entwicklungsmaschine seit einem
+Neustart des Wirts nicht mehr lief:
+
+* **Traefik hat jetzt eine feste Adresse — die letzte im Netz.** Vorher bekam es irgendeine. Nach
+  einem Neustart des Wirts startete Traefik vor dem Router, nahm sich `.2`, und Docker liess den
+  Router danach gar nicht mehr starten („Address already in use"). Jeder Arbeitsplatz war ohne
+  Netz, und nichts meldete es. `.3` war der erste Versuch und falsch: Die feste `.10` für den
+  Arbeitsplatz wird zwar angefordert, Docker vergibt aber trotzdem von unten — der Arbeitsplatz
+  sitzt auf `.3`. Traefik steht deshalb auf `.254`; der Agent hängt alte Anbindungen einmal um und
+  startet einen Router, der an genau diesem Fehler liegengeblieben ist, selbst wieder.
+* **`networks.list()` liefert ohne `greedy=True` keine Container.** Der Abgleich hielt deshalb jede
+  Anbindung für fehlend, und das Aufräumen verwaister Netze hielt jedes Netz für verwaist. Das
+  erste war harmlos, das zweite hätte Traefik und den Router aus laufenden Sitzungen getrennt.
+* **Ein gescheitertes Anbinden bleibt im Container stehen.** Wird das Netz danach gelöscht, startet
+  der Container nicht mehr („network … not found") — bei Traefik heisst das: OTA ist zu. Der Agent
+  nimmt einen solchen halben Eintrag jetzt sofort zurück.
+
+**Hinter einer NAT** kommt eine Regel dazu, die kein Filter ist: Der Router biegt die
+veröffentlichte Adresse des TURN-Servers (`OTA_TURN_HOST`, die der Firewall) auf die des Wirts
+(`OTA_TURN_BIND`) um — nur für Pakete aus dem Pool, in der `prerouting`-Kette. Sonst liefe der
+Bildstrom des Arbeitsplatzes über die äussere Firewall zum Wirt zurück, und das kann nicht jede.
+Die Freigabe im Filter lautet deshalb auf die Adresse des Wirts: `forward` sieht das Paket erst
+nach der Umleitung. Ausführlich im Handbuch, [Kapitel 24](docs/wiki/24-hinter-nat.md).
 
 Die drei schweren Befunde der Sicherheitsbetrachtung — Wirt und Firmennetz aus jedem Arbeitsplatz
 erreichbar, Arbeitsplätze untereinander erreichbar, der Agent aus jedem Arbeitsplatz erreichbar —

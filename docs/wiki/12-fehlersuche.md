@@ -775,6 +775,43 @@ docker exec ota-firewall nft list table inet ota | head -40
 `internal`, die Brücke des Wirts hat dort keine Adresse. Das ist kein Fehler, sondern der Aufbau.
 Wer hineinsehen will, geht über `docker exec`.
 
+## Nach einem Neustart des Hosts hat kein Arbeitsplatz Netz
+
+**Symptom.** Nach einem Neustart des Hosts läuft alles — ausser `ota-firewall`. `docker ps -a`
+zeigt ihn als `Exited (128)` oder `(255)`, `docker inspect ota-firewall -f '{{.State.Error}}'`
+sagt:
+
+```
+failed to set up container networking: Address already in use
+```
+
+**Ursache (behoben am 2026-09-25).** Router und Traefik hängen in jedem Sitzungsnetz. Der Router
+hat dort eine feste Adresse (`.2`), Traefik bekam bis dahin irgendeine. Startet Traefik nach einem
+Neustart vor dem Router, ist `.2` frei — Traefik nimmt sie, und Docker kann den Router mit seiner
+Adresse nicht mehr anbinden. Er startet dann **gar nicht**, und `restart: unless-stopped` versucht
+es nicht noch einmal. Seither hat Traefik die letzte Adresse im Netz (`.254`), der Agent hängt alte
+Anbindungen beim ersten Abgleich einmal um und startet einen so liegengebliebenen Router selbst.
+
+Von Hand, auf einer Anlage älteren Stands:
+
+```bash
+docker inspect ota-traefik -f '{{range $k,$v := .NetworkSettings.Networks}}{{$k}} {{$v.IPAddress}}{{"\n"}}{{end}}'
+docker network disconnect -f <netz mit .2> ota-traefik
+docker start ota-firewall
+```
+
+## Traefik startet nicht: „network ota-n-… not found"
+
+Ein gescheitertes `docker network connect` bleibt in der Konfiguration des Containers stehen
+(`invalid IP` in `docker inspect`). Wird das Netz danach entfernt, verweigert Docker den nächsten
+Start. Seit dem 2026-09-25 räumt der Agent einen solchen halben Eintrag sofort wieder ab. Auf einer
+betroffenen Anlage hilft, den Container neu zu erzeugen — die Sitzungsnetze hängt der Agent beim
+nächsten Abgleich wieder an:
+
+```bash
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --force-recreate traefik
+```
+
 ## Nützliche Befehle
 
 ```bash

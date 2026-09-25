@@ -302,6 +302,9 @@ services:
       # Dienst `turn` weiter oben, nicht der Session-Container. Ports
       # veröffentlicht der Agent für Selkies deshalb keine mehr.
       OTA_TURN_HOST: "${OTA_TURN_HOST:-}"
+      # Hinter einer NAT die eigene Adresse des Hosts, an die coturn sich
+      # bindet; OTA_TURN_HOST ist dann die der Firewall. Leer heisst: dieselbe.
+      OTA_TURN_BIND: "${OTA_TURN_BIND:-}"
       OTA_TURN_PORT: "${OTA_TURN_PORT:-3478}"
       OTA_TURN_SECRET: "${OTA_TURN_SECRET:-}"
       OTA_TURN_PROTOCOL: "${OTA_TURN_PROTOCOL:-udp}"
@@ -318,7 +321,12 @@ services:
       OTA_FW_SOCKET: "${OTA_RUNTIME_ROOT:-/srv/ota/runtime}/firewall.sock"
       # Damit der Browser im Arbeitsplatz OTA selbst erreicht — die
       # Firefox-Erweiterung für die Zwischenablage wird von dort geladen.
-      OTA_SELF_ADDRESS: "${OTA_TURN_HOST:-}"
+      #
+      # **Die Adresse des Hosts, nicht die veroeffentlichte.** Bis zum
+      # 2026-09-25 stand hier fest OTA_TURN_HOST. Hinter einer NAT ist das die
+      # Adresse der Firewall, und dort ist OTA_HTTPS_PORT gar nicht offen —
+      # die Regel haette auf ein Ziel gezeigt, das es nicht gibt.
+      OTA_SELF_ADDRESS: "${OTA_SELF_ADDRESS:-${OTA_TURN_BIND:-${OTA_TURN_HOST:-}}}"
       OTA_HTTPS_PORT: "${OTA_HTTPS_PORT:-8443}"
       OTA_TURN_MIN: "${OTA_TURN_MIN:-49160}"
       OTA_TURN_MAX: "${OTA_TURN_MAX:-49260}"
@@ -579,6 +587,16 @@ services:
       # Die Anmeldemaske im Gewand von OTA. Themes in diesem Verzeichnis
       # brauchen keinen Bau-Schritt — Keycloak liest sie direkt.
       - ./keycloak-theme/ota:/opt/keycloak/themes/ota:ro
+      # Wem Keycloak bei ausgehenden TLS-Verbindungen vertraut — vor allem
+      # `ldaps://` zum Verzeichnis. Keycloak liest jedes PEM-Zertifikat in
+      # `conf/truststores` von selbst; hier landet die CA, die das Zertifikat
+      # des LDAP-Servers ausgestellt hat.
+      #
+      # Ohne diese Zeile kannte Keycloak nur die oeffentlichen CAs der
+      # Java-Laufzeit, und ein Verzeichnis mit Zertifikat aus einer
+      # Firmen-CA liess sich ueberhaupt nicht verschluesselt anbinden — die
+      # Anbindung setzt `useTruststoreSpi=always` (Kapitel 18).
+      - ./keycloak-truststore:/opt/keycloak/conf/truststores:ro
     networks:
       - public
       - internal

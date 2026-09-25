@@ -36,7 +36,9 @@ muss antworten), dazu `git`, `make` und `openssl`. Die Ports **8443** und **8081
 `OTA_HTTPS_PORT` und `OTA_HTTP_PORT` in `deploy/.env` änderbar.
 
 Dazu, sobald gestreamt wird: **3478** (TURN) und **49160–49260/UDP** für den Medienweg, sowie
-**30000–30019** als Vorrat für Portfreigaben. Und ein Adressbereich für die Arbeitsplatznetze, ab
+**30000–30019** als Vorrat für Portfreigaben. Steht OTA hinter einer Firewall mit
+Portweiterleitung, reichen nach aussen **443** und **3478/TCP** — welche Ports wohin, und was dafür
+in `deploy/.env` gehört, steht in [Kapitel 24](docs/wiki/24-hinter-nat.md). Und ein Adressbereich für die Arbeitsplatznetze, ab
 Werk `10.99.0.0/16` — er darf sich **nicht** mit dem Firmennetz überschneiden. Alles einstellbar,
 alles erklärt in [`deploy/.env.example`](deploy/.env.example) und
 [Kapitel 2](docs/wiki/02-erste-schritte.md).
@@ -168,6 +170,27 @@ werden — der Proxy steckt nie im Image. Zurückstellen ist derselbe Weg.
 
 Gemessen in beide Richtungen; die Stolperstellen stehen in
 [Kapitel 21](docs/wiki/21-firmenproxy.md).
+
+### Hinter einer Firewall mit NAT
+
+Nutzer kommen von aussen über die Adresse der Firewall, OTA steht dahinter, vielleicht mit einem
+Reverse Proxy davor und dem Verzeichnis auf der anderen Seite. Nach aussen weiterzuleiten sind
+**443** (auf den Proxy) und **3478/TCP** (direkt auf den OTA-Host — der Bildstrom geht nicht durch
+den Proxy); ins äussere Netz braucht Keycloak **636** zum Verzeichnis. In `deploy/.env` kommen zwei
+TURN-Adressen, die der Firewall und die eigene:
+
+```bash
+OTA_TURN_HOST=10.50.0.33        # die Firewall — so sehen die Browser den TURN
+OTA_TURN_BIND=192.168.1.22      # der Host — daran bindet sich coturn
+OTA_TURN_PROTOCOL=tcp
+OTA_TURN_ICE_POLICY=relay
+OTA_TRUSTED_PROXIES=192.168.1.23/32
+```
+
+Eine Hairpin-NAT an der Firewall braucht es nicht: Der Router der Arbeitsplätze biegt die
+veröffentlichte Adresse selbst auf den Host um. Die CA des Verzeichnisses gehört nach
+`deploy/keycloak-truststore/`. Vollständige Portlisten, ein Beispiel für nginx und die Prüfung:
+[Kapitel 24](docs/wiki/24-hinter-nat.md).
 
 ### Wenn etwas schiefgeht
 
@@ -352,7 +375,7 @@ nicht — dieselbe Trennung gilt für das Dateisystem des Hosts.
 
 ## Dokumentation
 
-- **[Handbuch](docs/wiki/README.md)** — Bedienung, Verwaltung, Betrieb, Fehlersuche (23 Kapitel)
+- **[Handbuch](docs/wiki/README.md)** — Bedienung, Verwaltung, Betrieb, Fehlersuche (24 Kapitel)
 - **[plan.md](plan.md)** — Architektur **und die Begründungen dahinter**, samt der Sackgassen
 - **[docs/adr/](docs/adr/README.md)** — Entscheidungen, die teuer rückgängig zu machen sind, mit den
   Alternativen, die nicht getragen hätten
@@ -381,7 +404,7 @@ make test
 | `test-clipboard-bridge.sh` | Kopieren zwischen zwei Anwendungen im selben Arbeitsplatz: beide Richtungen, Umlaute, ein Bild, ein Megabyte, nach Pause, und abgeschaltet |
 | `tests/e2e.mjs` | Die Oberfläche in einem echten Browser — bis zur Frage, ob der Stream wirklich verbindet |
 | `test-ldap.sh` | Verzeichnis-Anbindung **über Keycloak** gegen ein echtes OpenLDAP im Container — vor allem, dass ein Verzeichniseintrag kein lokales Konto übernimmt und ein Ausfall den Notzugang nicht mitreisst |
-| `test-streaming.sh` | Der Medienweg: Vermittelt der TURN-Server wirklich, kommt im Browser ein Bild an, und liegt die eigene Adresse in keinem gesperrten Bereich? Der Prüfbrowser läuft in einem Netz, aus dem der Session-Container **nicht** direkt erreichbar ist — wie ein Arbeitsplatz im Firmennetz |
+| `test-streaming.sh` | Der Medienweg: Vermittelt der TURN-Server wirklich, kommt im Browser ein Bild an, und liegt die eigene Adresse in keinem gesperrten Bereich? Der Prüfbrowser läuft in einem Netz, aus dem der Session-Container **nicht** direkt erreichbar ist — wie ein Arbeitsplatz im Firmennetz. Ist `OTA_TURN_BIND` gesetzt, stellt die Reihe die Portweiterleitung der Firewall für den Prüfbrowser nach und prüft den Weg durch die NAT |
 | `test-firewall.sh` | Die Netzabsicherung, **von innen gemessen**: Nachbar, Wirt, Firmennetz, TURN, Namensdienst, Internet je Stufe, Freigabe nach Namen, Portfreigabe — und alles noch einmal nach einem Neustart des Routers |
 | `test-backup.sh` | Sicherung und Wiederherstellung von Profil, Container und Datenbank. Beendet dafür Sitzungen — **nur die eigenen**, und prüft das ausdrücklich nach |
 

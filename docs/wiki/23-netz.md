@@ -43,9 +43,10 @@ Dort steht jede Regel einzeln, mit **Ziel, Ports, Protokoll, Grund und Herkunft*
 | Traefik → Arbeitsplatz | 6901, 8080 | Die Gegenrichtung: der Bildstrom. |
 | Der Firmenproxy | wie eingestellt | Nur, wenn einer gesetzt ist. |
 | Zeitserver | 123 | Nur, wenn einer gesetzt ist. Eine falsche Uhr bricht TLS. |
+| Veröffentlichte TURN-Adresse → Host | 3478 | Nur hinter einer NAT: Der Router biegt die Adresse der Firewall auf den Host um ([Kapitel 24](24-hinter-nat.md)). |
 
 **Diese Liste ist abgeleitet, nicht eingetragen.** Die Werte kommen aus `deploy/.env`
-(`OTA_TURN_HOST`, `OTA_HTTP_PROXY`, `OTA_NTP_HOST` …) und aus dem Aufbau selbst. Deshalb ist sie in
+(`OTA_TURN_HOST`, `OTA_TURN_BIND`, `OTA_SELF_ADDRESS`, `OTA_HTTP_PROXY`, `OTA_NTP_HOST` …) und aus dem Aufbau selbst. Deshalb ist sie in
 der Oberfläche zu **sehen**, aber nicht zu ändern — geändert wird sie dort, wo sie herkommt. Zu
 sehen sein muss sie trotzdem: Sonst stünde dort eine Firewall, von der niemand weiss, was sie
 ohnehin durchlässt, und die erste Frage bei jedem Problem wäre, ob TURN überhaupt erlaubt ist.

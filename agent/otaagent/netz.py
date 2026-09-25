@@ -50,9 +50,29 @@ FIREWALL = os.environ.get("OTA_FIREWALL_CONTAINER", "ota-firewall")
 #
 #   .1   die Bruecke auf dem Wirt — ungenutzt, es gibt keinen Weg dorthin
 #   .2   der Router (ota-fw)
-#   .10  der Arbeitsplatz
+#   .10  der Arbeitsplatz — so angefordert; tatsaechlich vergibt Docker
+#        weiter von unten (gemessen am 2026-09-25: .3). Deshalb liest
+#        `_platz_adresse` die echte Adresse, statt sie anzunehmen.
+#   letzte  Traefik (.254 bei /24)
+#
+# **Auch Traefik fest.** Bis zum 2026-09-25 bekam Traefik, was Docker gerade
+# frei hatte — im Normalfall die naechste nach dem Arbeitsplatz. Nach einem
+# Neustart des Wirts aber startet Traefik vor dem Router, und dann ist .2 frei:
+# Traefik nahm sie, und der Router liess sich mit seiner festen Adresse nicht
+# mehr anbinden. Docker startete ihn daraufhin **gar nicht** („failed to set
+# up container networking: Address already in use"), und jeder Arbeitsplatz
+# war ohne Netz. Gefunden, weil der Router auf der Entwicklungsmaschine seit
+# dem letzten Neustart stand.
+#
+# **Die letzte Adresse, nicht .3.** Der erste Versuch gab Traefik .3 — genau
+# die, die Docker dem Arbeitsplatz gibt. Am oberen Ende vergibt Docker erst,
+# wenn das Netz voll ist, und ein Netz je Sitzung wird nie voll.
 ROUTER_HOST = 2
 PLATZ_HOST = 10
+
+
+def traefik_adresse(subnetz: str) -> str:
+    return str(ipaddress.ip_network(subnetz)[-2])
 
 _vergabe = threading.Lock()
 
@@ -186,6 +206,15 @@ def _verbinden(client, netzname_: str, container: str, adresse: str = "") -> Non
     except APIError as exc:
         if "already exists" not in str(exc):
             log.warning("%s nicht mit %s verbunden: %s", container, netzname_, exc)
+            # **Den halben Eintrag wieder entfernen.** Docker behaelt ein
+            # gescheitertes `connect` in der Konfiguration des Containers
+            # („invalid IP"). Wird das Netz spaeter geloescht, startet der
+            # Container nicht mehr: „network … not found". Gemessen am
+            # 2026-09-25 an Traefik — OTAs Haupteingang war danach zu.
+            try:
+                client.networks.get(netzname_).disconnect(container, force=True)
+            except (NotFound, APIError):
+                pass
 
 
 def router_verbinden(client, netzname_: str, subnetz: str) -> str:
@@ -199,7 +228,15 @@ def router_verbinden(client, netzname_: str, subnetz: str) -> str:
     return adresse
 
 
-def traefik_verbinden(client, netzname_: str) -> None:
+def _subnetz(client, netzname_: str) -> str:
+    try:
+        konfig = (client.networks.get(netzname_).attrs.get("IPAM") or {}).get("Config") or [{}]
+        return konfig[0].get("Subnet", "")
+    except (NotFound, APIError):
+        return ""
+
+
+def traefik_verbinden(client, netzname_: str, subnetz: str = "") -> None:
     """Traefik in das Sitzungsnetz holen — sonst kommt kein Bild an.
 
     Frueher hingen alle Sitzungen gemeinsam in `ota_public`, und genau das war
@@ -208,8 +245,13 @@ def traefik_verbinden(client, netzname_: str) -> None:
     Gemessen (Etappe 0): Bei `internal`-Netzen bleibt der DNAT von Traefiks
     veroeffentlichtem Port dabei stehen. In Fassung 1 hatte genau dieser
     Beitritt OTAs Haupteingang zugemacht.
+
+    Auf eine feste Adresse, die letzte im Netz — warum, steht bei
+    `ROUTER_HOST`.
     """
-    _verbinden(client, netzname_, TRAEFIK)
+    subnetz = subnetz or _subnetz(client, netzname_)
+    adresse = traefik_adresse(subnetz) if subnetz else ""
+    _verbinden(client, netzname_, TRAEFIK, adresse)
 
 
 def traefik_trennen(client, netzname_: str) -> None:
@@ -258,7 +300,14 @@ def traefik_adressen(client) -> list[str]:
 def sitzungsnetze(client) -> list[dict]:
     """Alle Sitzungsnetze samt Profil — die Wahrheit fuer den Abgleich."""
     raus = []
-    for netz in client.networks.list(filters={"label": LABEL_SITZUNG}):
+    # **`greedy=True` ist nicht Beiwerk.** Ohne liefert das Docker-SDK die
+    # Netze ohne ihre Container (`Containers` ist `None`). Bis zum 2026-09-25
+    # stand es so da, und zwei Stellen verliessen sich auf die Liste:
+    # `anbindung_sichern` hielt jede Anbindung fuer fehlend (harmlos, Docker
+    # lehnt die doppelte ab), und `waisen_aufraeumen` hielt **jedes** Netz fuer
+    # verwaist — es haette Traefik und den Router aus laufenden Sitzungen
+    # getrennt.
+    for netz in client.networks.list(filters={"label": LABEL_SITZUNG}, greedy=True):
         konfig = (netz.attrs.get("IPAM") or {}).get("Config") or [{}]
         subnetz = konfig[0].get("Subnet", "")
         if not subnetz:
@@ -315,7 +364,11 @@ def anbindung_sichern(client) -> dict[str, int]:
     getrennt. Deshalb gehoert das in **jeden** Abgleich und nicht nur in den
     Start einer Sitzung.
     """
-    nachgezogen = {"router": 0, "traefik": 0}
+    nachgezogen = {"router": 0, "traefik": 0, "traefik_fest": 0}
+    try:
+        traefik_netze = client.containers.get(TRAEFIK).attrs["NetworkSettings"]["Networks"]
+    except (NotFound, APIError, KeyError):
+        traefik_netze = {}
     for netz in sitzungsnetze(client):
         drin = set()
         for cid in netz["container"]:
@@ -327,11 +380,56 @@ def anbindung_sichern(client) -> dict[str, int]:
             router_verbinden(client, netz["name"], netz["subnetz"])
             nachgezogen["router"] += 1
         if TRAEFIK not in drin:
-            traefik_verbinden(client, netz["name"])
+            traefik_verbinden(client, netz["name"], netz["subnetz"])
             nachgezogen["traefik"] += 1
+        else:
+            # Anlagen von vor dem 2026-09-25: Traefik haengt ohne feste
+            # Adresse im Netz und nimmt dem Router beim naechsten Neustart
+            # des Wirts womoeglich die seine. Einmal umhaengen — das kostet
+            # diese Sitzung einen Augenblick Bild, und danach nie wieder.
+            soll = traefik_adresse(netz["subnetz"])
+            angaben = traefik_netze.get(netz["name"]) or {}
+            fest = (angaben.get("IPAMConfig") or {}).get("IPv4Address", "")
+            if fest != soll:
+                try:
+                    client.networks.get(netz["name"]).disconnect(TRAEFIK, force=True)
+                except (NotFound, APIError):
+                    pass
+                traefik_verbinden(client, netz["name"], netz["subnetz"])
+                nachgezogen["traefik_fest"] += 1
     if any(nachgezogen.values()):
         log.warning("Anbindung nachgezogen: %s", nachgezogen)
+    router_wiederbeleben(client)
     return nachgezogen
+
+
+def router_wiederbeleben(client) -> bool:
+    """Den Router starten, wenn Docker ihn an einer Adresse hat scheitern lassen.
+
+    Mit `restart: unless-stopped` versucht Docker es genau einmal. Scheitert
+    der Start am Netz („Address already in use"), bleibt der Container liegen
+    — und mit ihm jeder Arbeitsplatz ohne Netz, bis jemand von Hand startet.
+
+    **Nur bei genau diesem Fehler.** Ein Router, den jemand absichtlich
+    angehalten hat, bleibt angehalten; das hier ist keine Ueberwachung,
+    sondern die Nachsorge fuer einen Fehler, den `anbindung_sichern` gerade
+    behoben hat.
+    """
+    try:
+        router = client.containers.get(FIREWALL)
+    except (NotFound, APIError):
+        return False
+    zustand = router.attrs.get("State") or {}
+    if router.status == "running" or "already in use" not in (zustand.get("Error") or ""):
+        return False
+    try:
+        router.start()
+        log.warning("Router %s neu gestartet — er war an einer belegten Adresse "
+                    "gescheitert", FIREWALL)
+        return True
+    except APIError as exc:
+        log.error("Router %s laesst sich nicht starten: %s", FIREWALL, exc)
+        return False
 
 
 def waisen_aufraeumen(client) -> int:

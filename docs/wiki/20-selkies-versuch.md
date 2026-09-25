@@ -52,6 +52,11 @@ OTA_TURN_PROTOCOL=udp        # tcp bei kleiner MTU, siehe unten
 OTA_TURN_ICE_POLICY=all      # relay bei kleiner MTU, siehe unten
 ```
 
+**Hinter einer Firewall mit Portweiterleitung** sind das zwei Adressen: die der Firewall für die
+Browser (`OTA_TURN_HOST`) und die eigene des Hosts, an die coturn sich bindet (`OTA_TURN_BIND`).
+Welche Ports die Firewall weiterreichen muss und warum der Relay-Bereich dabei zu bleibt, steht in
+[Kapitel 24](24-hinter-nat.md).
+
 Dann den TURN-Dienst starten und **nachmessen**, bevor irgendetwas anderes
 probiert wird:
 

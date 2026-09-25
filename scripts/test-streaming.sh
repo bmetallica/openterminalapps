@@ -37,7 +37,12 @@ ok()   { printf '  \033[32m✓\033[0m %s\n' "$1"; pass=$((pass+1)); }
 bad()  { printf '  \033[31m✗\033[0m %s\n' "$1" >&2; fail=$((fail+1)); }
 info() { printf '    %s\n' "$1"; }
 
-aufraeumen() { docker rm -f "$CN" >/dev/null 2>&1; }
+NAT_REGEL=""
+aufraeumen() {
+  docker rm -f "$CN" >/dev/null 2>&1
+  # shellcheck disable=SC2086
+  [ -n "$NAT_REGEL" ] && iptables -t nat -D PREROUTING $NAT_REGEL 2>/dev/null
+}
 trap aufraeumen EXIT
 
 echo "Medienweg (TURN und Strom)"
@@ -78,6 +83,24 @@ if ! docker image inspect "$BROWSER_IMAGE" >/dev/null 2>&1; then
   exit $([ "$fail" = "0" ] && echo 0 || echo 1)
 fi
 
+# **Hinter einer NAT** (OTA_TURN_BIND gesetzt und verschieden) kennt der
+# Browser nur die Adresse der Firewall. Den Weg dorthin baut in Wirklichkeit
+# die Firewall; hier spielt eine DNAT-Regel auf diesem Host ihre Rolle — nur
+# fuer das Netz des Pruefbrowsers und nur fuer die Dauer dieser Reihe. Damit
+# prueft die Reihe den Aufbau aus Kapitel 24 von aussen nach innen: Browser
+# ueber die veroeffentlichte Adresse, Selkies im Arbeitsplatz ueber die
+# Umleitung im Router.
+if [ -n "${OTA_TURN_BIND:-}" ] && [ "${OTA_TURN_BIND}" != "${OTA_TURN_HOST}" ]; then
+  BRUECKE=$(docker network inspect bridge --format '{{range .IPAM.Config}}{{.Subnet}}{{end}}' 2>/dev/null)
+  if command -v iptables >/dev/null && [ -n "$BRUECKE" ]; then
+    NAT_REGEL="-s $BRUECKE -d $OTA_TURN_HOST -p tcp --dport ${OTA_TURN_PORT:-3478} -j DNAT --to-destination $OTA_TURN_BIND:${OTA_TURN_PORT:-3478}"
+    # shellcheck disable=SC2086
+    iptables -t nat -I PREROUTING 1 $NAT_REGEL \
+      && info "NAT nachgestellt: $OTA_TURN_HOST:${OTA_TURN_PORT:-3478} -> $OTA_TURN_BIND (nur fuer $BRUECKE)" \
+      || { NAT_REGEL=""; info "NAT liess sich nicht nachstellen — der Browser erreicht $OTA_TURN_HOST nur, wenn die Firewall es weiterleitet"; }
+  fi
+fi
+
 # `socat` davor, weil Chrome seine Fernsteuerung nur auf dem Rückkanal
 # anbietet und `--remote-debugging-address` in neueren Fassungen nichts mehr
 # bewirkt. Ohne diesen Umweg kommt puppeteer nicht an den Browser heran.
@@ -99,7 +122,7 @@ for _ in $(seq 1 30); do
 done
 [ "$BEREIT" = "1" ] || { bad "Der Prüfbrowser antwortet nicht"; exit 1; }
 
-AUSGABE=$(OTA_CDP="http://127.0.0.1:$CDP_PORT" OTA_SLUG="$SLUG" OTA_WARTE=45 \
+AUSGABE=$(OTA_CDP="http://127.0.0.1:$CDP_PORT" OTA_SLUG="$SLUG" OTA_WARTE="${OTA_WARTE:-45}" \
   node "$ROOT/scripts/pruef-selkies.mjs" 2>&1)
 if grep -q "Ein Bild kommt an." <<<"$AUSGABE"; then
   ok "Ein Bild kommt an ($(grep -oE '[0-9]+ Bilder' <<<"$AUSGABE" | head -1))"
@@ -125,7 +148,8 @@ if [ ! -f "$CONF" ]; then
 else
   # 1. Die eigene Adresse darf in keinem gesperrten Bereich liegen. Genau das
   #    war der Fehler, und genau das sieht man der Datei nicht an.
-  DRIN=$(python3 - "$CONF" "${OTA_TURN_HOST:-}" <<'PY'
+  EIGENE="${OTA_TURN_BIND:-${OTA_TURN_HOST:-}}"
+  DRIN=$(python3 - "$CONF" "$EIGENE" <<'PY'
 import ipaddress, re, sys
 konf, wirt = sys.argv[1], sys.argv[2].strip()
 if not wirt:
@@ -145,8 +169,8 @@ for zeile in open(konf, encoding="utf-8"):
 PY
 )
   [ -z "$DRIN" ] \
-    && ok "Die eigene Adresse ${OTA_TURN_HOST:-(keine)} steht in keinem gesperrten Bereich" \
-    || bad "Die eigene Adresse ${OTA_TURN_HOST} liegt im gesperrten Bereich $DRIN — coturn lehnt jede Erlaubnis mit 403 ab"
+    && ok "Die eigene Adresse ${EIGENE:-(keine)} steht in keinem gesperrten Bereich" \
+    || bad "Die eigene Adresse ${EIGENE} liegt im gesperrten Bereich $DRIN — coturn lehnt jede Erlaubnis mit 403 ab"
 
   # 2. Und die eigenen Netze *sind* gesperrt. Ohne diese Zeile waere die erste
   #    Prüfung auch mit einer leeren Liste zufrieden.

@@ -553,6 +553,46 @@ def verzeichnis_entfernen() -> None:
         raise KeycloakFehler("Die Anbindung liess sich nicht entfernen.")
 
 
+# Was Keycloak bei einer gescheiterten Verbindung meldet — und was es heisst.
+#
+# Bis zum 2026-09-25 stand fuer jeden Fall derselbe Satz da: „Der Server ist
+# nicht erreichbar." Bei `ldaps://` mit einem Zertifikat aus einer Firmen-CA
+# war das falsch und schickte die Suche an die Firewall, waehrend Keycloak
+# laengst antwortete: Es kannte die CA nicht (`SSLHandshakeFailed`, im
+# Protokoll „PKIX path building failed"). Keycloak liefert den Grund mit;
+# er wurde nur nie gelesen.
+_LDAP_FEHLER = {
+    "SSLHandshakeFailed":
+        "Der Server antwortet, aber die verschlüsselte Verbindung scheitert. "
+        "Meist kennt Keycloak die CA des Verzeichnisses nicht — sie gehört als "
+        "PEM-Datei nach deploy/keycloak-truststore/, danach Keycloak neu "
+        "starten. Oder das Zertifikat passt nicht zur Adresse: Wer "
+        "ldaps://<IP> einträgt, braucht ein Zertifikat mit dieser IP.",
+    "UnknownHost":
+        "Den Namen des Servers kann Keycloak nicht auflösen. Adresse prüfen, "
+        "oder den Namensdienst des Hosts.",
+    "SocketReset":
+        "Am Port antwortet kein Verzeichnis. ldaps:// gehört zu Port 636, "
+        "ldap:// zu 389.",
+    "ConnectionRefused":
+        "Der Server lehnt die Verbindung ab — stimmt der Port?",
+}
+
+
+def _verbindungsfehler(resp) -> str:
+    try:
+        code = (resp.json() or {}).get("errorMessage", "")
+    except ValueError:
+        code = ""
+    hinweis = _LDAP_FEHLER.get(code)
+    if hinweis:
+        return hinweis
+    zusatz = f" (Keycloak meldet: {code})" if code else ""
+    return ("Der Server ist nicht erreichbar. Stimmen Adresse und Port, und "
+            "kommt Keycloak überhaupt dorthin — steht eine Firewall dazwischen, "
+            f"muss sie 636 bzw. 389 vom OTA-Host zum Verzeichnis freigeben?{zusatz}")
+
+
 def verzeichnis_testen(daten: dict[str, Any], kennwort: str | None) -> dict[str, Any]:
     """Verbindung und Anmeldung des Dienstkontos prüfen, ohne etwas zu speichern.
 
@@ -570,9 +610,7 @@ def verzeichnis_testen(daten: dict[str, Any], kennwort: str | None) -> dict[str,
     resp = ruf("POST", "/testLDAPConnection", json=grund)
     ergebnis["verbindung"] = resp.status_code == 204
     if not ergebnis["verbindung"]:
-        ergebnis["hinweise"].append(
-            "Der Server ist nicht erreichbar. Stimmen Adresse und Port, und "
-            "kommt Keycloak überhaupt dorthin?")
+        ergebnis["hinweise"].append(_verbindungsfehler(resp))
         return ergebnis
 
     resp = ruf("POST", "/testLDAPConnection",

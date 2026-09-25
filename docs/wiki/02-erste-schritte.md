@@ -26,6 +26,11 @@ Arbeitsplätze erreichbar:
 | **49160–49260** (UDP) | Worüber TURN den Medienstrom vermittelt. Eine Verbindung belegt vier Ports | `OTA_TURN_MIN/MAX` |
 | **30000–30019** (TCP) | Der Vorrat für Portfreigaben („+ NAT", [Kapitel 23](23-netz.md)). Belegt wird davon nur, was jemand freigibt | `OTA_NAT_MIN/MAX` |
 
+**Steht eine Firewall mit Portweiterleitung zwischen Nutzern und OTA**, sieht es anders aus: Nach
+aussen genügen 443 (auf den Reverse Proxy) und 3478/TCP (direkt auf den OTA-Host); der
+Relay-Bereich bleibt zu. Dafür kommen zwei TURN-Adressen in `deploy/.env` —
+[Kapitel 24](24-hinter-nat.md).
+
 Dazu ein **freier Adressbereich für die Arbeitsplatznetze**: ab Werk `10.99.0.0/16`. Er darf sich
 nicht mit dem Firmennetz überschneiden — sonst gewinnt das Sitzungsnetz, und das echte Ziel ist aus
 dem Arbeitsplatz nicht mehr erreichbar. Umzustellen über `OTA_SESSION_POOL`, **bevor** die erste

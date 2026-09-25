@@ -47,3 +47,7 @@ security.md
 todo.md
 HANDOVER.md
 firewall-roadmap.md
+
+# Die CA des Verzeichnisdienstes fuer Keycloak (ldaps). Wie deploy/certs:
+# gehoert zur Anlage, nicht ins Repository.
+deploy/keycloak-truststore/

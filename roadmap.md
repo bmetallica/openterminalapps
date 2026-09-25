@@ -831,6 +831,20 @@ selbst führt der Betreiber; hier steht, was daraus gebaut wurde.
       angewendet. Damit wächst in der Anlage nichts mehr ohne Frist
 - [x] **Ungenutzten Endpunkt gelöscht**, der beliebige Befehle in beliebigen Containern ausführte
 
+**Nachtrag 2026-09-25 — Betrieb hinter einer Firewall mit NAT** ([Kapitel 24](docs/wiki/24-hinter-nat.md)):
+
+- [x] **Zwei TURN-Adressen**: `OTA_TURN_HOST` für die Browser, `OTA_TURN_BIND` für coturn. Vorher
+      liess sich Selkies hinter einer Portweiterleitung nicht betreiben
+- [x] **Umleitung im Router** der Arbeitsplätze statt Hairpin-NAT an der Firewall
+- [x] **`OTA_SELF_ADDRESS`** als eigene Einstellung statt fest an `OTA_TURN_HOST`
+- [x] **Truststore für Keycloak** (`deploy/keycloak-truststore/`) — ldaps gegen eine Firmen-CA;
+      der Verbindungstest nennt jetzt den Grund statt immer „nicht erreichbar"
+- [x] Nebenbei drei Fehler im Netz der Arbeitsplätze, die jede Anlage treffen konnten: Router
+      startete nach einem Neustart des Wirts nicht, Traefik nach einem gescheiterten Anbinden
+      nicht, und das Aufräumen verwaister Netze sah keine Container ([firewall.md](firewall.md))
+- [x] `test-streaming.sh` stellt die NAT für den Prüfbrowser nach und prüft den Weg hindurch;
+      `test-firewall.sh` prüft die Umleitung von innen
+
 **Ausdrücklich nicht gebaut**, jeweils als Entscheidung festgehalten: Verschlüsselung im
 Ruhezustand samt der TOTP-Startwerte, ein Streifen im Bild während des Aufschaltens (ein
 Administrator sieht auch ohne OTA zu — ein Signal, dessen Fehlen nichts bedeutet, wäre eine falsche

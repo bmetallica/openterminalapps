@@ -35,7 +35,11 @@ fi
 ADMIN_USER="${OTA_TEST_ADMIN:-notfall}"
 ADMIN_PW="${OTA_TEST_ADMIN_PW:?OTA_TEST_ADMIN_PW fehlt. Trag es in deploy/.env ein.}"
 POOL="${OTA_SESSION_POOL:-10.99.0.0/16}"
-TURN_HOST="${OTA_TURN_HOST:-}"
+# Die eigene Adresse des Wirts. Hinter einer NAT ist OTA_TURN_HOST die der
+# Firewall; der Wirt ist dann OTA_TURN_BIND (Kapitel 24).
+TURN_HOST="${OTA_TURN_BIND:-${OTA_TURN_HOST:-}}"
+TURN_AUSSEN="${OTA_TURN_HOST:-}"
+SELBST="${OTA_SELF_ADDRESS:-$TURN_HOST}"
 NAT_MIN="${OTA_NAT_MIN:-30000}"
 
 pass=0; fail=0
@@ -167,9 +171,17 @@ if [ -n "$TURN_HOST" ]; then
   [ "$(offen "$S_NETZ" "$TURN_HOST" 3478)" = "JA" ] \
     && ok "Der TURN-Server ist erreichbar — sonst käme kein Bild an" \
     || bad "TURN ist nicht erreichbar"
-  [ "$(offen "$S_NETZ" "$TURN_HOST" "${OTA_HTTPS_PORT:-8443}")" = "JA" ] \
+  [ "$(offen "$S_NETZ" "$SELBST" "${OTA_HTTPS_PORT:-8443}")" = "JA" ] \
     && ok "OTA selbst ist erreichbar (Zwischenablage-Erweiterung)" \
     || bad "OTA ist aus dem Arbeitsplatz nicht erreichbar"
+  # Hinter einer NAT bekommt Selkies die Adresse der Firewall. Der Router
+  # muss sie auf den Wirt umbiegen — sonst hinge das Bild an einer
+  # Hairpin-NAT der Firewall, die es nicht in jedem Haus gibt.
+  if [ -n "$TURN_AUSSEN" ] && [ "$TURN_AUSSEN" != "$TURN_HOST" ]; then
+    [ "$(offen "$S_NETZ" "$TURN_AUSSEN" 3478)" = "JA" ] \
+      && ok "Die veröffentlichte TURN-Adresse ($TURN_AUSSEN) führt zum Wirt" \
+      || bad "Die veröffentlichte TURN-Adresse $TURN_AUSSEN ist aus dem Arbeitsplatz nicht erreichbar — Umleitung im Router fehlt"
+  fi
 fi
 
 [ "$(drin "$S_NETZ" 'getent hosts example.com >/dev/null && echo JA || echo NEIN')" = "JA" ] \

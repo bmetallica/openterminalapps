@@ -574,7 +574,11 @@ try {
         for (let i = 0; i < 45; i++) {
           await new Promise((r) => setTimeout(r, 2000))
           const liste = await api('/api/sessions')
-          const meine = (liste.daten ?? []).find((x) => x.template_id === vorlage.id)
+          // Nur eine Liste zaehlt als Antwort. Gemessen am 2026-09-25: Waehrend
+          // der Tab neu laedt, kam hier einmal ein Fehlerobjekt zurueck, und
+          // `.find` brach den ganzen Lauf ab — waehrend die Session stand.
+          const meine = (Array.isArray(liste.daten) ? liste.daten : [])
+            .find((x) => x.template_id === vorlage.id)
           if (meine) {
             return { slug: vorlage.slug, ok: true, daten: meine,
                      vorlage: vorlage.id, nachgesehen: true }
