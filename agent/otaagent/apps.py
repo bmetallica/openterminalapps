@@ -108,6 +108,12 @@ fi
 
 DISPLAY=:$DISPLAY_NUM xrandr --output screen --mode "${BREITE}x${HOEHE}" 2>/dev/null || true
 
+# Das Tastaturlayout — warum, steht bei `_tastatur_setzen` im Agent.
+if [ -n "${OTA_KEYBOARD_LAYOUT:-}" ]; then
+  DISPLAY=:$DISPLAY_NUM setxkbmap -layout "$OTA_KEYBOARD_LAYOUT" \
+    ${OTA_KEYBOARD_VARIANT:+-variant "$OTA_KEYBOARD_VARIANT"} 2>/dev/null || true
+fi
+
 # Ein Fenstermanager, aber kein Schreibtisch: Eine formatfuellende Anwendung
 # braucht Rahmen und Groessenverwaltung, keine Leiste. `--compositor=off`,
 # weil ohne GPU jeder Bildaufbau in Software passiert und diese Rechenzeit dem

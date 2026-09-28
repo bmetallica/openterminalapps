@@ -845,6 +845,12 @@ selbst führt der Betreiber; hier steht, was daraus gebaut wurde.
 - [x] `test-streaming.sh` stellt die NAT für den Prüfbrowser nach und prüft den Weg hindurch;
       `test-firewall.sh` prüft die Umleitung von innen
 
+**Nachtrag 2026-09-28 — Tastaturlayout für Selkies** ([Kapitel 20](docs/wiki/20-selkies-versuch.md)):
+
+- [x] `OTA_KEYBOARD_LAYOUT` (Vorgabe `de`). Vorher lief jeder Selkies-Bildschirm mit `us`:
+      Umlaute verschwanden, `/` kam als `?`. Wirkt ohne Neubau der Images
+- [x] `scripts/pruef-tastatur.mjs` in `test-streaming.sh` — tippt deutsch und liest im Container nach
+
 **Ausdrücklich nicht gebaut**, jeweils als Entscheidung festgehalten: Verschlüsselung im
 Ruhezustand samt der TOTP-Startwerte, ein Streifen im Bild während des Aufschaltens (ein
 Administrator sieht auch ohne OTA zu — ein Signal, dessen Fehlen nichts bedeutet, wäre eine falsche

@@ -132,6 +132,24 @@ else
   sed 's/^/    /' <<<"$AUSGABE" | tail -12 >&2
 fi
 
+# ------------------------------------------------------------- Die Tastatur
+#
+# Derselbe Pruefbrowser tippt wie eine deutsche Tastatur. Das gehoert zum
+# Medienweg, weil es genau dieselbe Art Fehler ist: Im Browser sieht alles
+# richtig aus, im Container kommt etwas anderes an, und nirgends steht warum.
+if [ -n "${OTA_KEYBOARD_LAYOUT-de}" ] && [ "${OTA_KEYBOARD_LAYOUT-de}" = "de" ]; then
+  TIPP=$(OTA_CDP="http://127.0.0.1:$CDP_PORT" OTA_SLUG="$SLUG" \
+    node "$ROOT/scripts/pruef-tastatur.mjs" 2>&1)
+  if grep -q "TASTATUR STIMMT" <<<"$TIPP"; then
+    ok "Umlaute, Shift und AltGr kommen an (aäöüß/Ä@z-)"
+  else
+    bad "Die Tastatur kommt falsch an"
+    grep -E "layout|erwartet|bekommen" <<<"$TIPP" | sed 's/^/    /' >&2
+  fi
+else
+  info "(Tastatur übersprungen — die Prüfung tippt deutsch, das Layout ist ${OTA_KEYBOARD_LAYOUT:-leer})"
+fi
+
 # --------------------------------------------------- Die Sperrliste des TURN
 #
 # Sie ist der Teil des Medienwegs, der am leisesten kaputtgeht: coturn

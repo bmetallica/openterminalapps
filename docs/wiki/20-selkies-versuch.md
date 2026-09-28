@@ -410,6 +410,45 @@ und sagt, ob ein Bild ankommt. Mit einer Sperre für grosse UDP-Pakete
 (`iptables … -m length --length 1029:65535 -j DROP`) lässt sich der Fehler
 gezielt nachstellen — er verschwindet mit den beiden Zeilen oben.
 
+## Das Tastaturlayout ✅
+
+*Gefunden am 2026-09-28 auf einer frischen Anlage: In VS Code kamen keine Umlaute an, und `/` ging
+nicht.*
+
+Selkies schickt keine Tasten, sondern **Zeichen** (Keysyms), und der Container übersetzt sie über
+die Tastenbelegung seines X-Servers zurück in Tasten. Xvfb startet mit `us`. Mit einer deutschen
+Tastatur im Browser hiess das, gemessen:
+
+| getippt | angekommen mit `us` | Grund |
+|---|---|---|
+| `ä ö ü ß Ä` | nichts | Auf `us` gibt es diese Zeichen nicht — sie werden **ohne Meldung** verworfen |
+| `/` (Shift+7) | `?` | Shift bleibt gedrückt, und `/` hat auf `us` eine eigene Taste |
+| `@` (AltGr+Q) | `2` | dasselbe mit AltGr |
+
+KasmVNC hat das Problem nicht, es legt fehlende Zeichen selbst an. Deshalb fiel es auf einer
+Anlage, deren Arbeitsplätze über KasmVNC liefen, lange nicht auf.
+
+**Die Einstellung** steht in `deploy/.env` und gilt für alle Selkies-Bildschirme:
+
+```bash
+OTA_KEYBOARD_LAYOUT=de        # Vorgabe; ch, fr, us …; leer = nicht anfassen
+OTA_KEYBOARD_VARIANT=         # z. B. nodeadkeys
+```
+
+Sie wirkt beim **nächsten Start** eines Arbeitsplatzes, ein Neubau des Images ist nicht nötig. Der
+Agent setzt das Layout nach dem Start auf dem Hauptbildschirm und startet dessen Selkies danach
+einmal neu. Das ist kein Schönheitsfehler, sondern die Bedingung dafür, dass es wirkt: Selkies liest
+die Belegung beim eigenen Start einmal ein. Ein später gesetztes Layout sähe es nie. Gemessen mit
+`de`, aber ohne Neustart: `a_²yß` statt `aäöüß/Ä@z-`, aus `z` wurde `y`. Die Bildschirme der
+einzelnen Anwendungen bekommen das Layout, bevor ihr Selkies startet.
+
+**Das Layout ist eines für die ganze Anlage.** Es muss zu den Tastaturen passen, an denen die
+Menschen sitzen, nicht zum Server. Wer mit einer US-Tastatur auf einen `de`-Arbeitsplatz kommt, hat
+das Problem umgekehrt (`@` auf Shift+2 wird zu `"`).
+
+Geprüft wird es in `scripts/test-streaming.sh`: `scripts/pruef-tastatur.mjs` tippt wie eine deutsche
+Tastatur in ein Terminal im Arbeitsplatz und vergleicht, was ankommt.
+
 ## Fünf Fallen, alle beim Bauen aufgetreten
 
 1. **Der Client baut seine Adressen aus der Wurzel.** `fetch("/turn")` und

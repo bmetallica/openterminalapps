@@ -479,6 +479,22 @@ die Fensterliste des Displays, nicht über Prozessnamen. Dieselbe Falle gilt fü
 `pkill -f`: Es bringt die eigene Shell um. Deshalb wird die
 Zwischenablage-Brücke ausschliesslich über ihre PID-Datei gesteuert.
 
+## Umlaute kommen nicht an, `/` wird zu `?`
+
+Nur bei Arbeitsplätzen mit **Selkies**. Das Tastaturlayout im Container passt nicht zur Tastatur im
+Browser: Umlaute verschwinden ohne Meldung, Zeichen auf Shift oder AltGr kommen falsch an.
+
+```bash
+grep KEYBOARD deploy/.env                            # OTA_KEYBOARD_LAYOUT=de ?
+docker exec -u 1000 <ota-s-…> sh -c 'DISPLAY=:1 setxkbmap -query'   # layout: de ?
+```
+
+Fehlt die Zeile (Anlagen vor dem 2026-09-28): `git pull`, `sudo make update`, Arbeitsplatz beenden
+und neu starten. Steht das Layout richtig und es geht trotzdem nicht, wurde es gesetzt, **nachdem**
+Selkies gestartet war. Das passiert etwa, wenn jemand `setxkbmap` von Hand aufruft: Selkies liest
+die Belegung nur beim Start. Den Arbeitsplatz neu starten. Hintergrund in
+[Kapitel 20](20-selkies-versuch.md), „Das Tastaturlayout".
+
 ## Das Tastenkürzel Strg+Alt+Shift wirkt im Stream nicht
 
 Das ist so und lässt sich nicht beheben. Der ferne Desktop beansprucht die

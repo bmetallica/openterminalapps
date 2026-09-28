@@ -328,6 +328,10 @@ services:
       # die Regel haette auf ein Ziel gezeigt, das es nicht gibt.
       OTA_SELF_ADDRESS: "${OTA_SELF_ADDRESS:-${OTA_TURN_BIND:-${OTA_TURN_HOST:-}}}"
       OTA_HTTPS_PORT: "${OTA_HTTPS_PORT:-8443}"
+      # Das Tastaturlayout der Selkies-Bildschirme — das der Tastaturen, an
+      # denen die Menschen sitzen. Ohne kommen Umlaute nicht an (Kapitel 20).
+      OTA_KEYBOARD_LAYOUT: "${OTA_KEYBOARD_LAYOUT:-de}"
+      OTA_KEYBOARD_VARIANT: "${OTA_KEYBOARD_VARIANT:-}"
       OTA_TURN_MIN: "${OTA_TURN_MIN:-49160}"
       OTA_TURN_MAX: "${OTA_TURN_MAX:-49260}"
       # Dieselbe Grenze fuer die Protokolle der Sitzungscontainer wie fuer die

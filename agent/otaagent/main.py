@@ -16,6 +16,7 @@ from pathlib import Path
 import re
 import shutil
 import secrets
+import shlex
 import subprocess
 import threading
 import time
@@ -1043,6 +1044,12 @@ def start_container(req: StartRequest) -> dict[str, Any]:
         if not turn_host or not turn_secret:
             log.warning("OTA_TURN_HOST oder OTA_TURN_SECRET fehlt — der Strom "
                         "bleibt voraussichtlich schwarz")
+        # Fuer die Bildschirme je Anwendung, die das Skript aus `apps.py`
+        # im Container aufmacht (`_tastatur_setzen`).
+        if TASTATUR:
+            env.setdefault("OTA_KEYBOARD_LAYOUT", TASTATUR)
+        if TASTATUR_VARIANTE:
+            env.setdefault("OTA_KEYBOARD_VARIANT", TASTATUR_VARIANTE)
         env.setdefault("SELKIES_TURN_HOST", turn_host)
         env.setdefault("SELKIES_TURN_PORT",
                        os.environ.get("OTA_TURN_PORT", "3478"))
@@ -1178,6 +1185,8 @@ def start_container(req: StartRequest) -> dict[str, Any]:
 
     # Selkies hoert auf 8080, KasmVNC auf 6901.
     _wait_for_vnc(container, port=8080 if req.engine == "selkies" else 6901)
+    if req.engine == "selkies":
+        _tastatur_setzen(container)
 
     # Reihenfolge mit Absicht: erst das Skeleton, dann der Verweis auf die
     # Ablage, dann das Startskript. Das Skeleton legt den Grundstand; das
@@ -1410,6 +1419,98 @@ def _wait_for_vnc(container, seconds: int = VNC_BEREIT_SEKUNDEN,
             pass
         log.warning("Bereitschaft nicht pruefbar: %s", exc)
         return False
+
+
+# Das Tastaturlayout der Selkies-Bildschirme. Leer heisst: nicht anfassen.
+TASTATUR = os.environ.get("OTA_KEYBOARD_LAYOUT", "de").strip()
+TASTATUR_VARIANTE = os.environ.get("OTA_KEYBOARD_VARIANT", "").strip()
+
+
+# Setzt das Layout auf dem Hauptbildschirm und startet dessen Selkies neu —
+# aber nur, wenn das Layout nicht schon stimmt. Der Neustart ist noetig, weil
+# pynput die Belegung einmal einliest, und Selkies loest das schon beim
+# eigenen Start aus ("Resetting keyboard modifiers"). Ein spaeter gesetztes
+# Layout saehe es nie: Gemessen am 2026-09-28 kam mit `de`, aber ohne
+# Neustart `a_²yß` an — aus `z` wurde `y`, uebersetzt mit der alten
+# US-Belegung und ausgegeben auf der deutschen.
+#
+# Der Prozess wird ueber /proc gesucht und nicht mit `pgrep -f`: Das faende
+# auch dieses Skript, dessen Text den Namen enthaelt. Neu gestartet wird mit
+# genau der Kommandozeile und Umgebung des alten — beides kommt aus dem Image,
+# und so muss hier niemand wissen, wie es Selkies aufruft.
+_TASTATUR_SKRIPT = r"""
+set -u
+export DISPLAY=${DISPLAY:-:1}
+LAYOUT=@LAYOUT@
+VARIANTE=@VARIANTE@
+JETZT=$(setxkbmap -query 2>/dev/null | awk '$1=="layout:"{print $2}')
+JETZT_V=$(setxkbmap -query 2>/dev/null | awk '$1=="variant:"{print $2}')
+if [ "$JETZT" = "$LAYOUT" ] && [ "$JETZT_V" = "$VARIANTE" ]; then
+  echo "tastatur-stimmt"; exit 0
+fi
+setxkbmap -layout "$LAYOUT" ${VARIANTE:+-variant "$VARIANTE"} || exit 1
+
+PID=""
+for p in /proc/[0-9]*; do
+  n=${p#/proc/}
+  [ "$n" = "$$" ] && continue
+  c=$(tr '\0' ' ' < "$p/cmdline" 2>/dev/null) || continue
+  case "$c" in
+    *selkies-gstreamer\ *--port=8080\ *) PID=$n ;;
+  esac
+done
+if [ -z "$PID" ]; then echo "tastatur-gesetzt-ohne-selkies"; exit 0; fi
+
+mapfile -d '' ARGS < /proc/$PID/cmdline
+mapfile -d '' UMGEBUNG < /proc/$PID/environ
+kill "$PID"
+for i in $(seq 1 40); do kill -0 "$PID" 2>/dev/null || break; sleep 0.25; done
+env -i "${UMGEBUNG[@]}" nohup "${ARGS[@]}" >> /tmp/selkies.log 2>&1 < /dev/null &
+for i in $(seq 1 60); do
+  (exec 3<>/dev/tcp/127.0.0.1/8080) 2>/dev/null && { echo "tastatur-neu"; exit 0; }
+  sleep 0.5
+done
+echo "selkies-kam-nicht-wieder"; exit 1
+"""
+
+
+def _tastatur_setzen(container) -> None:
+    """Das Tastaturlayout auf dem Hauptbildschirm setzen — nur fuer Selkies.
+
+    **Warum das noetig ist.** Selkies schickt keine Tastennummern, sondern
+    Zeichen (Keysyms), und uebersetzt sie im Container ueber die Belegung des
+    X-Servers zurueck in Tasten. Xvfb startet mit `us`. Gemessen am
+    2026-09-28 mit einer deutschen Tastatur im Browser: getippt `aäöüß/Ä@z-`,
+    angekommen `a?2z-`. Umlaute gibt es auf `us` nicht, sie verschwinden
+    **ohne jede Meldung**; `/` (Shift+7) wird zu `?`, weil Shift gedrueckt
+    bleibt und `/` auf `us` eine eigene Taste hat; `@` (AltGr+Q) wird zu `2`.
+
+    KasmVNC hat das Problem nicht — es legt fehlende Zeichen selbst an. Auf
+    dieser Anlage fiel es deshalb lange nicht auf: Die benutzten Arbeitsplaetze
+    liefen ueber KasmVNC, Selkies nur in Versuchen ohne Umlaute.
+
+    Das Layout muss zu der Tastatur passen, an der die Menschen sitzen, nicht
+    zum Container — deshalb eine Einstellung der Anlage (`OTA_KEYBOARD_LAYOUT`)
+    und nicht fest im Image. Gesetzt wird es hier von aussen, damit auch schon
+    gebaute Images es bekommen, ohne dass jemand neu baut. Laeuft vor der
+    ersten Verbindung; der Neustart von Selkies (`_TASTATUR_SKRIPT`) trifft
+    also niemanden.
+    """
+    if not TASTATUR:
+        return
+    skript = (_TASTATUR_SKRIPT
+              .replace("@LAYOUT@", shlex.quote(TASTATUR))
+              .replace("@VARIANTE@", shlex.quote(TASTATUR_VARIANTE)))
+    try:
+        code, out = _run(container, ["bash", "-c", skript])
+        ergebnis = out.strip().splitlines()[-1:] or [""]
+        if code != 0:
+            log.warning("Tastaturlayout %s in %s nicht gesetzt: %s",
+                        TASTATUR, container.name, out.strip()[-300:])
+        else:
+            log.info("Tastaturlayout %s in %s: %s", TASTATUR, container.name, ergebnis[0])
+    except APIError as exc:
+        log.warning("Tastaturlayout nicht gesetzt: %s", exc)
 
 
 def _proxy_einrichten(container) -> None:

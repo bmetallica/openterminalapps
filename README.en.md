@@ -270,7 +270,7 @@ make test
 | `test-clipboard-bridge.sh` | Copying between two applications in one workspace: both directions, umlauts, an image, a megabyte, after a pause, and switched off |
 | `tests/e2e.mjs` | The interface in a real browser — down to whether the stream actually connects |
 | `test-ldap.sh` | Directory sign-in **through Keycloak** against a real OpenLDAP in a container — above all that a directory entry cannot take over a local account and an outage does not take the emergency login down |
-| `test-streaming.sh` | The media path: does the TURN server actually relay, and does a picture arrive in the browser? The probe browser runs in a network from which the session container is **not** directly reachable — like a workstation on a corporate network. With `OTA_TURN_BIND` set, it emulates the firewall's port forwarding for the probe browser and checks the path through the NAT |
+| `test-streaming.sh` | The media path: does the TURN server actually relay, does a picture arrive in the browser, and do umlauts, Shift and AltGr from a German keyboard arrive correctly (`OTA_KEYBOARD_LAYOUT`)? The probe browser runs in a network from which the session container is **not** directly reachable — like a workstation on a corporate network. With `OTA_TURN_BIND` set, it emulates the firewall's port forwarding for the probe browser and checks the path through the NAT |
 | `test-firewall.sh` | The network isolation, **measured from inside**: neighbour, host, corporate network, TURN, name service, internet per level, an exception by name, a published port — and all of it again after the router restarts |
 | `test-backup.sh` | Backup and restore of profile, container and database. It stops sessions to do so — **only its own**, and it checks that explicitly |
 
