@@ -67,7 +67,7 @@ geht nicht über die Firewall.
 | `192.168.1.22` | `10.50.0.1` | **636/TCP** | Keycloak liest das Verzeichnis (ldaps) |
 | `192.168.1.22` | DNS-Server | 53/UDP+TCP | Namensauflösung — der Name des Verzeichnisses, `*.ai.vermkv.local` |
 | `192.168.1.22` | NTP-Server | 123/UDP | Uhrzeit — eine falsche Uhr bricht TLS und die Einmalkennwörter |
-| `192.168.1.22` | Internet oder Firmenproxy | 443 bzw. Proxy-Port | Images holen und bauen ([Kapitel 21](21-firmenproxy.md)) |
+| `192.168.1.22` | Internet oder Firmenproxy | **80 und 443** bzw. Proxy-Port | Images holen und bauen ([Kapitel 21](21-firmenproxy.md)). **80 ist kein Versehen:** `apt` holt Debian-Pakete über HTTP; ohne Port 80 scheitert `make update` beim Bauen der Dienste |
 
 - **636 und nicht 389.** OTA legt die Anbindung mit `startTls: false` an; StartTLS auf 389 lässt
   sich in der Oberfläche nicht einstellen. `ldap://…:389` hiesse: das Kennwort des Dienstkontos
@@ -271,3 +271,4 @@ mit ihr gelangen Verbindung und Anmeldung des Dienstkontos.
 | `turn-config.sh` warnt „keine Adresse dieses Hosts" | `OTA_TURN_BIND` fehlt oder ist falsch |
 | Verzeichnistest: „verschlüsselte Verbindung scheitert" | CA fehlt in `deploy/keycloak-truststore/`, oder das Zertifikat passt nicht zur Adresse |
 | Verzeichnistest: „nicht erreichbar" | 636 an der Firewall zu, oder das Verzeichnis nimmt nur 389 |
+| `make update` scheitert beim Bauen: `deb.debian.org … 400 Bad Request`, danach Timeouts | Kein Weg ins Internet auf Port 80 — oder ein transparenter Proxy/Webfilter der Firewall fängt ihn ab. Port 80 freigeben und den OTA-Host vom transparenten Proxy ausnehmen, oder den Proxy ausdrücklich eintragen ([Kapitel 21](21-firmenproxy.md)). Die laufende Anlage bleibt dabei unberührt: Ersetzt wird erst, wenn alles gebaut ist |
