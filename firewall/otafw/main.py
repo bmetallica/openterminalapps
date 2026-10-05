@@ -137,6 +137,57 @@ def _umleitungen_aufloesen(liste: list[dict]) -> list[dict]:
     return raus
 
 
+def _ziel_pruefen(ziel: str) -> str:
+    """Ein Ziel, wie nftables es versteht — oder leer.
+
+    Erlaubt sind Adresse, Netz (`10.0.0.0/8`) und Bereich (`a-b`). Ein Name
+    wird aufgeloest. Alles andere faellt **einzeln** heraus, laut im
+    Protokoll: Der Satz wird atomar gesetzt, und ein einziges ungueltiges
+    Ziel liess bis zum 2026-10-05 den ganzen Satz scheitern — gemessen mit
+    `https://ota.ai.vermkv` als Ziel, jeder Abgleich endete mit 500, und
+    neue Arbeitsplaetze hatten kein Netz.
+    """
+    import ipaddress
+    import socket
+
+    ziel = (ziel or "").strip()
+    try:
+        ipaddress.ip_network(ziel, strict=False)
+        return ziel
+    except ValueError:
+        pass
+    if "-" in ziel:
+        try:
+            a, b = (ipaddress.ip_address(x.strip()) for x in ziel.split("-", 1))
+            return f"{a}-{b}"
+        except ValueError:
+            pass
+    if ziel and all(c.isalnum() or c in ".-" for c in ziel):
+        try:
+            return socket.gethostbyname(ziel)
+        except OSError:
+            pass
+    log.error("Ziel %r ist keine Adresse und kein aufloesbarer Name — "
+              "diese Zeile entfaellt", ziel)
+    return ""
+
+
+def _saetze_pruefen(zustand: dict) -> dict:
+    """Eine Kopie des Zustands, in der jedes Ziel gueltig ist."""
+    raus = dict(zustand)
+    raus["grundfreigaben"] = [
+        (z, ports, proto) for z, ports, proto in
+        ((_ziel_pruefen(z), ports, proto) for z, ports, proto in zustand.get("grundfreigaben", []))
+        if z]
+    raus["global"] = [{**f, "ziel": z} for f in zustand.get("global", [])
+                      if (z := _ziel_pruefen(f.get("ziel", "")))]
+    raus["sitzungen"] = [
+        {**s, "freigaben": [{**f, "ziel": z} for f in s.get("freigaben", [])
+                            if (z := _ziel_pruefen(f.get("ziel", "")))]}
+        for s in zustand.get("sitzungen", [])]
+    return raus
+
+
 def _speichern() -> None:
     try:
         ZUSTAND_DATEI.parent.mkdir(parents=True, exist_ok=True)
@@ -171,12 +222,13 @@ def _durchsetzen() -> dict:
         _zustand["uplink"] = nft.uplink_finden()
         _zustand["umleitungen_ip"] = _umleitungen_aufloesen(
             _zustand.get("umleitungen", []))
-        satz = nft.regelwerk(_zustand)
+        geprueft = _saetze_pruefen(_zustand)
+        satz = nft.regelwerk(geprueft)
         if satz == _letzter_satz and nft.tabelle_da():
             ergebnis = {"regelwerk": "unveraendert"}
         else:
             _summen_retten()
-            ergebnis = nft.anwenden(_zustand)
+            ergebnis = nft.anwenden(geprueft)
             _letzter_satz = satz
         ergebnis.update(resolver.anwenden(_zustand))
 

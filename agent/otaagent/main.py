@@ -111,6 +111,40 @@ def _proxy_ziel() -> tuple[str, str]:
     return teil.hostname, str(teil.port or 3128)
 
 
+def _wirt(wert: str) -> str:
+    """Aus einer Angabe in der .env den blossen Wirt machen.
+
+    Gemessen am 2026-10-05 auf der Produktivanlage: `OTA_SELF_ADDRESS` stand
+    auf `https://ota.ai.vermkv`. Das landete wortwoertlich im Regelwerk des
+    Routers, `nft` verwarf den **ganzen** Satz, und jeder Abgleich endete mit
+    500 — neue Arbeitsplaetze bekamen weder Regeln noch Route. Eine Adresse
+    mit Schema, Port oder Pfad ist ein naheliegender Tippfehler; er soll eine
+    Zeile kosten, nicht das Netz aller Arbeitsplaetze.
+    """
+    wert = (wert or "").strip()
+    if not wert:
+        return ""
+    if "://" in wert:
+        teil = urlparse(wert)
+        bereinigt = teil.hostname or ""
+    else:
+        bereinigt = wert.split("/", 1)[0] if not _ist_netz(wert) else wert
+        if bereinigt.count(":") == 1:          # Name:Port oder IPv4:Port
+            bereinigt = bereinigt.split(":", 1)[0]
+    if bereinigt != wert:
+        log.warning("Adresse %r als %r gelesen — in die .env gehoert nur der "
+                    "Wirt, ohne Schema, Port oder Pfad", wert, bereinigt)
+    return bereinigt
+
+
+def _ist_netz(wert: str) -> bool:
+    try:
+        ipaddress.ip_network(wert, strict=False)
+        return True
+    except ValueError:
+        return False
+
+
 def _grundregeln() -> list[dict]:
     """Was jede Sitzung erreichen darf, damit OTA funktioniert — **mit Grund**.
 
@@ -156,7 +190,7 @@ def _grundregeln() -> list[dict]:
 
     # OTA selbst. Der Browser im Arbeitsplatz muss es erreichen — die
     # Firefox-Erweiterung fuer die Zwischenablage wird von dort geladen.
-    eigene = os.environ.get("OTA_SELF_ADDRESS", "").strip()
+    eigene = _wirt(os.environ.get("OTA_SELF_ADDRESS", ""))
     if eigene:
         raus.append({"ziel": eigene, "ports": os.environ.get("OTA_HTTPS_PORT", "8443"),
                      "protokoll": "tcp", "herkunft": "OTA_SELF_ADDRESS/OTA_HTTPS_PORT",
@@ -174,7 +208,7 @@ def _grundregeln() -> list[dict]:
 
     # Zeit. Eine falsche Uhr bricht TLS und macht Fehler, die nach allem
     # aussehen ausser nach der Uhr.
-    ntp = os.environ.get("OTA_NTP_HOST", "").strip()
+    ntp = _wirt(os.environ.get("OTA_NTP_HOST", ""))
     if ntp:
         raus.append({"ziel": ntp, "ports": "123", "protokoll": "udp",
                      "herkunft": "OTA_NTP_HOST",
@@ -219,8 +253,8 @@ def _turn_adressen() -> tuple[str, str]:
     Bis zum 2026-09-25 gab es dafuer nur `OTA_TURN_HOST`, und OTA liess sich
     hinter einer NAT nicht betreiben (Kapitel 24 des Handbuchs).
     """
-    aussen = os.environ.get("OTA_TURN_HOST", "").strip()
-    innen = os.environ.get("OTA_TURN_BIND", "").strip() or aussen
+    aussen = _wirt(os.environ.get("OTA_TURN_HOST", ""))
+    innen = _wirt(os.environ.get("OTA_TURN_BIND", "")) or aussen
     return aussen, innen
 
 
@@ -1039,7 +1073,7 @@ def start_container(req: StartRequest) -> dict[str, Any]:
     # jetzt beliebig viele Selkies-Sitzungen je Host statt genau einer.
     ports: dict[str, Any] = {}
     if req.engine == "selkies":
-        turn_host = os.environ.get("OTA_TURN_HOST", "")
+        turn_host = _wirt(os.environ.get("OTA_TURN_HOST", ""))
         turn_secret = os.environ.get("OTA_TURN_SECRET", "")
         if not turn_host or not turn_secret:
             log.warning("OTA_TURN_HOST oder OTA_TURN_SECRET fehlt — der Strom "

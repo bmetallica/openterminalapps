@@ -109,7 +109,7 @@ geändert hat.
   Firewall auflöst. `OTA_TURN_BIND` muss eine Adresse des Hosts sein — `scripts/turn-config.sh`
   warnt, wenn nicht. Eine IP ist der robustere Weg: Den Namen löst der Router bei jedem Abgleich
   auf, und ohne Namensdienst fällt die Umleitung aus.
-- **`OTA_SELF_ADDRESS`** bleibt leer. Sie folgt `OTA_TURN_BIND` — unter dieser Adresse erreicht ein
+- **`OTA_SELF_ADDRESS`** bleibt leer — und wenn gesetzt, dann als **Adresse, nicht als URL**. Sie folgt `OTA_TURN_BIND` — unter dieser Adresse erreicht ein
   Arbeitsplatz OTA selbst auf `OTA_HTTPS_PORT`, um die Erweiterung für die Zwischenablage zu laden.
 - **`relay` und `tcp` gehören zusammen** und sind hinter einer Firewall die richtige Wahl: ein
   einziger TCP-Port, keine Fragen nach Paketgrösse ([Kapitel 20](20-selkies-versuch.md), „Netze mit
@@ -271,4 +271,5 @@ mit ihr gelangen Verbindung und Anmeldung des Dienstkontos.
 | `turn-config.sh` warnt „keine Adresse dieses Hosts" | `OTA_TURN_BIND` fehlt oder ist falsch |
 | Verzeichnistest: „verschlüsselte Verbindung scheitert" | CA fehlt in `deploy/keycloak-truststore/`, oder das Zertifikat passt nicht zur Adresse |
 | Verzeichnistest: „nicht erreichbar" | 636 an der Firewall zu, oder das Verzeichnis nimmt nur 389 |
+| Agent meldet `Firewall-Abgleich fehlgeschlagen: Firewall meldet 500`, neue Arbeitsplätze ohne Netz und ohne Bild | Eine Adresse in `deploy/.env` ist keine Adresse — gemessen mit `OTA_SELF_ADDRESS=https://…`. Nur den Wirt eintragen, oder `OTA_SELF_ADDRESS` leer lassen. Seit dem 2026-10-05 bereinigt OTA das selbst und verwirft nur noch die eine Zeile (`docker logs ota-agent \| grep gelesen`, `docker logs ota-firewall \| grep Ziel`) |
 | `make update` scheitert beim Bauen: `deb.debian.org … 400 Bad Request`, danach Timeouts | Kein Weg ins Internet auf Port 80 — oder ein transparenter Proxy/Webfilter der Firewall fängt ihn ab. Port 80 freigeben und den OTA-Host vom transparenten Proxy ausnehmen, oder den Proxy ausdrücklich eintragen ([Kapitel 21](21-firmenproxy.md)). Die laufende Anlage bleibt dabei unberührt: Ersetzt wird erst, wenn alles gebaut ist |
