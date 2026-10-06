@@ -1132,8 +1132,21 @@ def start_container(req: StartRequest) -> dict[str, Any]:
     # Container `--privileged` — deshalb wird hier abgelehnt statt
     # zurueckgefallen, wenn Sysbox fehlt.
     ist_root = req.klasse == "root"
+    start_als = None
     if ist_root:
         _sysbox_pruefen(client)
+        # **Als root starten, wenn das Image fuer diese Klasse gebaut ist.** Sein
+        # Startskript startet `dockerd` und wechselt danach selbst auf 1000.
+        # Ein Golden Image darauf trug bis zum 2026-10-07 `USER 1000` (der
+        # Bildbauer schrieb es fest ans Ende) und starb nach 30 Sekunden mit
+        # Exit 127. Das Kennzeichen erbt jedes Golden Image vom Root-Image;
+        # andere Images (ohne Kennzeichen) behalten ihren Nutzer.
+        try:
+            kennzeichen = (client.images.get(req.image).attrs.get("Config") or {}).get("Labels") or {}
+        except APIError:
+            kennzeichen = {}
+        if kennzeichen.get("ota.klasse") == "root":
+            start_als = "0"
         env["OTA_DOCKER"] = "1"
         # Images und Container des Nutzers. Ein benanntes Volume und nicht die
         # Schicht des Containers: messbar, beim Einfrieren und Sichern von
@@ -1225,6 +1238,7 @@ def start_container(req: StartRequest) -> dict[str, Any]:
             # Root-Arbeitsplaetze unter Sysbox. Die Rechte oben gelten dort im
             # eigenen Benutzer-Namensraum, nicht auf dem Wirt.
             runtime="sysbox-runc" if ist_root else None,
+            user=start_als,
             pids_limit=4096,
             restart_policy={"Name": "no"},
             # Wie viel Protokoll dieser Container behalten darf.

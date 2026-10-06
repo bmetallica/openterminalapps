@@ -60,7 +60,8 @@ _TIMEOUT = 45 * 60
 
 def render_dockerfile(base_image: str, apt_packages: list[str],
                       vscode_extensions: list[str], setup_script: str,
-                      mode: str = "workspace", start_command: str = "") -> str:
+                      mode: str = "workspace", start_command: str = "",
+                      basis_nutzer: str = "1000") -> str:
     """Erzeugt das Dockerfile aus den Angaben der Oberflaeche.
 
     Alle Eingaben werden mit shlex.quote entschaerft, bevor sie in eine
@@ -195,7 +196,15 @@ def render_dockerfile(base_image: str, apt_packages: list[str],
             "",
         ]
 
-    lines += ["USER 1000", ""]
+    # **Der Nutzer des Basisimages, nicht fest 1000.** Bis zum 2026-10-07 stand
+    # hier `USER 1000`. Fuer jedes Basisimage ausser einem war das richtig —
+    # das Root-Image (`ota/base-desktop-root`) startet aber als root, weil sein
+    # Startskript `dockerd` startet und erst danach auf 1000 wechselt. Ein
+    # Golden Image darauf lief damit als 1000: dockerd scheiterte, das Skript
+    # wartete 30 Sekunden auf den Docker-Socket, `setpriv` scheiterte, und der
+    # Container endete mit 127 — im Browser ein ausgegrauter Arbeitsplatz und
+    # danach „Internal Server Error". Gemessen auf der Produktivanlage.
+    lines += [f"USER {basis_nutzer or '1000'}", ""]
     return "\n".join(lines)
 
 
@@ -410,12 +419,30 @@ def _push(state: dict[str, Any], client: docker.DockerClient, tag: str) -> str |
         return None
 
 
+def _basis_nutzer(base_image: str) -> str:
+    """Unter welchem Nutzer das Basisimage startet (`Config.User`).
+
+    Leer heisst bei Docker root; das wird hier ausdruecklich `root`, damit es
+    nicht mit „nicht ermittelbar" verwechselt wird. Liegt das Image nicht
+    lokal, bleibt es bei 1000 — der Wert, der fuer alle Basisimages ausser dem
+    Root-Image gilt.
+    """
+    try:
+        import docker as _docker
+
+        konfig = _docker.from_env().images.get(base_image).attrs.get("Config") or {}
+    except Exception:  # noqa: BLE001 — eine fehlende Auskunft verhindert keinen Bau
+        return "1000"
+    return (konfig.get("User") or "root").strip()
+
+
 def start(tag: str, base_image: str, apt_packages: list[str],
           vscode_extensions: list[str], setup_script: str,
           pause_containers: list[str] | None = None,
           mode: str = "workspace", start_command: str = "") -> dict[str, Any]:
     dockerfile = render_dockerfile(base_image, apt_packages, vscode_extensions,
-                                   setup_script, mode, start_command)
+                                   setup_script, mode, start_command,
+                                   _basis_nutzer(base_image))
     build_id = uuid.uuid4().hex
 
     _builds[build_id] = {

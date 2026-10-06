@@ -227,6 +227,52 @@ api -H 'Content-Type: application/json' -X POST "$BASE_URL/api/sessions" -d "{\"
 [ -z "$(drin 'cat /opt/ota-pruefmarke 2>/dev/null')" ] && ok "Aus dem Image neu — Installiertes ist weg" \
   || bad "Alter Stand nach Neu aufsetzen"
 
+# ------------------------------------------------------- Golden Images
+#
+# Gemessen auf der Produktivanlage am 2026-10-07: Ein Golden Image auf dem
+# Root-Image trug `USER 1000` (der Bildbauer schrieb es fest ans Ende). Das
+# Startskript lief damit nicht als root, wartete 30 Sekunden auf dockerd und
+# starb mit Exit 127 — im Browser ein ausgegrauter Arbeitsplatz, danach
+# „Internal Server Error". Geprueft wird beides: dass ein solches (altes)
+# Image trotzdem laeuft, und dass der Bildbauer den Nutzer des Basisimages
+# uebernimmt.
+echo
+echo "Golden Images auf dem Root-Image"
+GOLD_DIR="$TMP/golden"; mkdir -p "$GOLD_DIR"
+printf 'FROM %s\nUSER root\nRUN true\nUSER 1000\n' "$IMAGE" > "$GOLD_DIR/Dockerfile"
+GOLD="ota-pruef/golden-root-user1000:1"
+if docker build -q -t "$GOLD" "$GOLD_DIR" >/dev/null 2>&1; then
+  TID2=$(api -H 'Content-Type: application/json' -X POST "$BASE_URL/api/templates" -d "{
+    \"friendly_name\": \"Prüfung Golden Root\", \"image_ref\": \"$GOLD\",
+    \"cores\": 2, \"memory_bytes\": 4294967296, \"klasse\": \"root\",
+    \"platz_grenze_gb\": 20, \"stream_engine\": \"selkies\", \"mode\": \"workspace\",
+    \"persistence_scope\": \"template\"}" | jqp "d['id']")
+  SID2=$(api -H 'Content-Type: application/json' -X POST "$BASE_URL/api/sessions" \
+    -d "{\"template_id\":\"$TID2\"}" | jqp "d['id']")
+  CN2="ota-s-${SID2:0:12}"
+  [ "$(docker inspect "$CN2" -f '{{.Config.User}}' 2>/dev/null)" = "0" ] \
+    && ok "Ein Image mit USER 1000 startet trotzdem als root (Kennzeichen ota.klasse=root)" \
+    || bad "Golden Image mit USER 1000 startet nicht als root"
+  for _ in $(seq 1 30); do docker exec -u 1000 "$CN2" docker info >/dev/null 2>&1 && break; sleep 1; done
+  docker exec -u 1000 "$CN2" docker info >/dev/null 2>&1 \
+    && ok "… und dockerd läuft darin" || bad "dockerd läuft im Golden Image nicht"
+  sleep 35
+  [ "$(docker inspect "$CN2" -f '{{.State.Status}}' 2>/dev/null)" = "running" ] \
+    && ok "… und der Container lebt nach 35 Sekunden noch (vorher: Exit 127 nach 30)" \
+    || bad "Golden Image beendet sich nach dem Start"
+  api -X DELETE "$BASE_URL/api/admin/arbeitsplaetze/$SID2" >/dev/null
+  api -X DELETE "$BASE_URL/api/templates/$TID2" >/dev/null
+  docker rmi -f "$GOLD" >/dev/null 2>&1
+else
+  bad "Prüf-Image ließ sich nicht bauen"
+fi
+NUTZER=$(docker exec ota-agent python -c "
+from otaagent.builder import _basis_nutzer
+print(_basis_nutzer('$IMAGE'), _basis_nutzer('ota/base-desktop:1'))" 2>&1)
+[ "$NUTZER" = "root 1000" ] \
+  && ok "Bildbauer übernimmt den Nutzer des Basisimages (Root-Image: root, Standard: 1000)" \
+  || bad "Bildbauer setzt den falschen Nutzer: $NUTZER"
+
 # ------------------------------------------------------------ Löschen
 echo
 echo "Löschen"

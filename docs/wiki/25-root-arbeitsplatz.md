@@ -97,6 +97,15 @@ als root, danach den Desktop als UID 1000.
 Golden Images für Root-Arbeitsplätze baut man darauf auf (Software, Rezepte — wie bei jedem anderen
 Image, [Kapitel 7](07-golden-images.md)).
 
+> **Golden Images vor dem 2026-10-07.** Der Bildbauer schrieb bis dahin fest `USER 1000` ans Ende
+> jedes Images. Auf dem Root-Image hiess das: Das Startskript lief nicht als root, wartete
+> 30 Sekunden vergeblich auf `dockerd` und beendete den Container (Exit 127) — im Browser ein
+> lange ausgegrauter Arbeitsplatz und danach „Internal Server Error". Gemessen auf der
+> Produktivanlage. Seither übernimmt der Bildbauer den Nutzer des Basisimages, und der Agent
+> startet jedes Image mit dem Kennzeichen `ota.klasse=root` ausdrücklich als root — **auch schon
+> gebaute**, ein Neubau ist nicht nötig. Ein Root-Arbeitsplatz, dessen Container noch aus der
+> Zeit davor stammt, wird einmal **neu aufgesetzt**.
+
 ### 3 · Die Vorlage
 
 **Workspaces → Workspace → Allgemein → Klasse: „Root mit Docker".**
@@ -137,6 +146,10 @@ Werkzeug für Entwickler, kein Verwaltungsrecht.
   Von ausserhalb des Arbeitsplatzes über eine befristete Portfreigabe („+ NAT", [Kapitel 23](23-netz.md)).
 - **Leerlauf:** Ein Root-Arbeitsplatz wird bei Leerlauf **angehalten**, nie gelöscht — gleich, was
   in der Vorlage unter „Was dann passiert" steht.
+- **Beendet sich der Container von selbst** (der Desktop darin ist abgestürzt), steht der
+  Arbeitsplatz danach als angehalten da und wird beim nächsten Start **fortgesetzt** — nicht durch
+  einen neuen ersetzt. Bis zum 2026-10-07 legte OTA in diesem Fall einen neuen Platz an, und was im
+  alten installiert war, war für den Nutzer nicht mehr erreichbar.
 
 ## Für die Verwaltung: Betrieb → Arbeitsplätze
 
@@ -220,15 +233,16 @@ Gemessen wird `docker ps --size` plus `docker system df` (eine Minute zwischenge
 ## Prüfen
 
 ```bash
-./scripts/test-root-arbeitsplatz.sh        # 33 Prüfungen, auch Teil von make test
+./scripts/test-root-arbeitsplatz.sh        # 37 Prüfungen, auch Teil von make test
 ```
 
 Sie legen eine Root-Vorlage an und gehen den ganzen Weg: Sysbox (UID-Abbildung), `sudo`, Rechte
 im Zuhause, Docker und Compose, Netz der inneren Container, Anhalten (Exit 0) und Fortsetzen mit
 erhaltenem Stand, Platzmessung, Anhalten/Starten durch die Verwaltung, Webterminal samt Protokoll
 und CSV, die Abweisung eines Terminals in einen Dienst des Stacks, Neu aufsetzen, Löschen samt
-Docker-Daten — und dass das Protokoll den Arbeitsplatz überdauert. Ohne Sysbox wird übersprungen
-statt rot.
+Docker-Daten — und dass das Protokoll den Arbeitsplatz überdauert. Dazu ein Golden Image mit
+`USER 1000`, das trotzdem als root startet und läuft, und der Nutzer, den der Bildbauer setzt.
+Ohne Sysbox wird übersprungen statt rot.
 
 ## Eine bestehende Anlage aktualisieren
 
@@ -240,7 +254,7 @@ sudo make update                                   # Dienste bauen und starten
 sudo scripts/sysbox-einrichten.sh --pruefen        # Voraussetzungen ansehen
 sudo scripts/sysbox-einrichten.sh --live-restore   # Sysbox einrichten (kein Container wird angefasst)
 sudo make up                                       # baut jetzt ota/base-desktop-root:1
-./scripts/test-root-arbeitsplatz.sh                # optional: der ganze Weg, 33 Prüfungen
+./scripts/test-root-arbeitsplatz.sh                # optional: der ganze Weg, 37 Prüfungen
 ```
 
 Danach: eine Vorlage der Klasse „Root mit Docker" anlegen und das Recht „Root-Arbeitsplatz nutzen"
@@ -258,6 +272,7 @@ Klasse Standard und verhalten sich wie bisher. Der Reiter „Sessions" unter Bet
 | Start: „Root-Arbeitsplätze brauchen Sysbox …" | Sysbox fehlt oder Docker kennt die Laufzeit nicht: `docker info \| grep -i runtimes` |
 | Start: „Dafür braucht es das Recht „Root-Arbeitsplatz nutzen“" | Recht der Gruppe fehlt |
 | Start: „… belegt X GB, erlaubt sind Y GB" | Platzgrenze: aufräumen (`docker system prune` im Arbeitsplatz), „Neu aufsetzen", oder Grenze der Vorlage anheben. Die Verwaltung kann ihn unter Betrieb trotzdem starten |
+| Start dauert lange, Apps bleiben ausgegraut, Klick auf eine App: „Internal Server Error", Container ist kurz danach aus | Golden Image mit `USER 1000` aus der Zeit vor dem 2026-10-07 (`docker logs ota-s-…` zeigt `setpriv: initgroups failed`). `git pull`, `make update`, dann den Arbeitsplatz **neu aufsetzen** |
 | Im Arbeitsplatz `docker: command not found` | Image ist nicht `ota/base-desktop-root:1` oder darauf gebaut |
 | `docker run …` → „bad address" | Image älter als der 2026-10-06 (ohne `--dns`): `make root-image`, dann „Neu aufsetzen" |
 | Fortsetzen: „Das Netz dieses Arbeitsplatzes gibt es nicht mehr" | Das Sitzungsnetz wurde von Hand gelöscht: „Neu aufsetzen" |

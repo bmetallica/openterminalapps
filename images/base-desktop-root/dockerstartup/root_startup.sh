@@ -13,6 +13,18 @@ if [ -r /etc/ota/umgebung.sh ]; then
   . /etc/ota/umgebung.sh
 fi
 
+# **Nicht als root gestartet?** Dann laesst sich weder `dockerd` starten noch
+# auf 1000 wechseln — und bis zum 2026-10-07 starb der Container daran: 30
+# Sekunden Warten auf den Docker-Socket, dann `setpriv: initgroups failed`,
+# Exit 127 (ein Golden Image mit `USER 1000`). Lieber ein Arbeitsplatz ohne
+# Docker, der das laut sagt, als einer, der gar nicht hochkommt.
+if [ "$(id -u)" != "0" ]; then
+  echo "root_startup: laeuft als UID $(id -u), nicht als root — Docker bleibt aus." >&2
+  echo "root_startup: Ursache meist ein Image mit USER 1000; der Agent startet" >&2
+  echo "root_startup: Images mit ota.klasse=root als root (Handbuch Kapitel 25)." >&2
+  exec /dockerstartup/desktop_startup.sh
+fi
+
 if [ "${OTA_DOCKER:-0}" = "1" ]; then
   # Das Protokoll von dockerd gedeckelt: Es liegt im Container und wüchse sonst
   # mit jeder Sitzung, ohne dass es jemand liest.

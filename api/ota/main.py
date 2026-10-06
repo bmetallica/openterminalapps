@@ -85,6 +85,13 @@ def _reap_once() -> None:
             # Eine Session ohne Container-Kennung startet gerade erst. Sie
             # hat noch keinen Container, den man vermissen koennte.
             if sess.container_id and not _container_da(sess):
+                if sess.template and sess.template.klasse == "root":
+                    from .routers.sessions import platz_ohne_lauf
+                    platz_ohne_lauf(sess, "container_beendet")
+                    log.warning("Root-Arbeitsplatz %s lief nicht mehr — angehalten "
+                                "(Protokoll: docker logs %s)", sess.id,
+                                sess.container_id[:12] if sess.container_id else "?")
+                    continue
                 sess.status = "stopped"
                 sess.ended_at = now
                 sess.end_reason = "container_weg"

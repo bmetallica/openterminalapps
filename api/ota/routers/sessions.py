@@ -439,9 +439,13 @@ def start_session(
     if existing is not None and not _really_alive(existing):
         log.info("Session %s zeigt ins Leere — wird geschlossen und neu gestartet",
                  existing.id)
-        existing.status = "stopped"
-        existing.ended_at = datetime.now(timezone.utc)
-        existing.end_reason = "container_weg"
+        if tpl.klasse == "root":
+            # Wird unten als angehaltener Platz fortgesetzt, nicht ersetzt.
+            platz_ohne_lauf(existing, "container_beendet")
+        else:
+            existing.status = "stopped"
+            existing.ended_at = datetime.now(timezone.utc)
+            existing.end_reason = "container_weg"
         db.commit()
         existing = None
     if existing:
@@ -795,6 +799,31 @@ def platz_fortsetzen(db: DbSession, sess: SessionModel, request: Request | None,
     db.commit()
     firewall_schieben(db)
     return sess
+
+
+def platz_ohne_lauf(sess: SessionModel, grund: str) -> None:
+    """Ein Root-Arbeitsplatz, dessen Container nicht mehr laeuft, wird
+    **angehalten** — nicht beendet.
+
+    Bis zum 2026-10-07 setzte der Aufraeumer ihn wie jede andere Sitzung auf
+    „stopped". Der naechste Start fand dann keinen angehaltenen Platz und
+    legte einen **neuen** an: Was der Nutzer installiert hatte, lag im alten
+    Container und war fuer ihn nicht mehr erreichbar. Ein Container, der sich
+    selbst beendet hat (der Desktop darin ist gestorben), ist bei einem
+    Root-Arbeitsplatz der Zustand des Nutzers, keine Leiche. Ist er ganz weg,
+    bleibt die Zeile als neu aufzusetzender Platz.
+    """
+    try:
+        zustand = agent_client.container_status(sess.container_id).get("status", "")
+    except HTTPException:
+        zustand = ""
+    if zustand == "gone":
+        sess.container_id = None
+    for st in sess.streams:
+        st.status = "stopped"
+    sess.status = ANGEHALTEN
+    sess.ended_at = datetime.now(timezone.utc)
+    sess.end_reason = grund
 
 
 def platz_anhalten(db: DbSession, sess: SessionModel, request: Request | None,
