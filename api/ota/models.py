@@ -46,6 +46,14 @@ PERMISSIONS = (
     # das eine bleibt auf dem Rechner, das andere leitet Identitaeten nach
     # draussen (auth-roadmap.md §5d). Deshalb ein eigenes Recht.
     "anwendungen.verwalten",
+    # Root-Arbeitsplaetze nutzen: root und Docker im Container, angehalten
+    # statt geloescht. Eigenes Recht und nicht an "admin" gebunden — es ist
+    # ein Werkzeug fuer Entwickler, kein Verwaltungsrecht (Uoktober.md §8).
+    "arbeitsplatz.root",
+    # Per Webterminal als root in laufende Arbeitsplaetze. Maechtiger als das
+    # Aufschalten auf den Bildschirm: Wer es hat, liest jede Datei im Zuhause
+    # eines Nutzers. Jede Eingabe wird protokolliert (TerminalEintrag).
+    "arbeitsplatz.terminal",
 )
 
 
@@ -209,6 +217,20 @@ class Template(Base):
                                                server_default="kasmvnc")
 
     persistence_scope: Mapped[str] = mapped_column(String(16), default="user")
+
+    # Die Arbeitsplatzklasse (Handbuch Kapitel 25).
+    #
+    #   standard  wie bisher: gehaertet, beim Beenden geloescht
+    #   root      unter Sysbox: root und Docker im Container, beim Beenden
+    #             **angehalten** — was der Nutzer installiert, bleibt
+    klasse: Mapped[str] = mapped_column(String(16), default="standard",
+                                        server_default="standard")
+    # Wie viel ein Root-Arbeitsplatz belegen darf: Schicht des Containers plus
+    # Docker-Daten. Darueber startet er nicht mehr, bis aufgeraeumt oder neu
+    # aufgesetzt ist. Je Vorlage, weil ein Arbeitsplatz fuer Datenbank-Images
+    # etwas anderes braucht als einer fuer ein kleines Web-Projekt.
+    platz_grenze_gb: Mapped[int] = mapped_column(Integer, default=50,
+                                                 server_default="50")
     idle_minutes: Mapped[int] = mapped_column(Integer, default=60)
     idle_action: Mapped[str] = mapped_column(String(16), default="stop")
     session_time_limit: Mapped[int | None] = mapped_column(Integer)
@@ -469,6 +491,36 @@ class Session(Base):
     streams: Mapped[list[AppStream]] = relationship(
         back_populates="session", cascade="all, delete-orphan", lazy="selectin"
     )
+
+
+class TerminalEintrag(Base):
+    """Was ein Administrator im Webterminal eines Arbeitsplatzes getan hat.
+
+    Je Zeile ein Ereignis: Terminal geoeffnet, eine Eingabezeile, geschlossen.
+    **Nur Eingaben, keine Ausgaben** (Betreiber, 2026-10-06): Die Ausgabe
+    enthielte jede gelesene Datei des Nutzers und wuechse ohne Mass.
+
+    Bewusst ohne Fremdschluessel auf die Sitzung: Das Protokoll muss den
+    Arbeitsplatz ueberdauern, der geloescht wird. Name des Administrators und
+    des Nutzers stehen deshalb ausgeschrieben darin.
+
+    **Nur lesbar.** Es gibt keinen Endpunkt, der Eintraege aendert oder
+    loescht; weg kommen sie ausschliesslich ueber die Frist der
+    Verwaltungsklasse (`OTA_PROTOKOLL_VERWALTUNG_TAGE`). Darauf stuetzt sich
+    die Entscheidung, dass jeder Administrator es sehen darf.
+    """
+    __tablename__ = "terminal_eintraege"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    session_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), index=True)
+    verbindung: Mapped[str] = mapped_column(String(32))
+    admin_name: Mapped[str] = mapped_column(String(128))
+    nutzer_name: Mapped[str] = mapped_column(String(128))
+    vorlage: Mapped[str] = mapped_column(String(128))
+    # "auf", "eingabe", "zu"
+    art: Mapped[str] = mapped_column(String(16))
+    text: Mapped[str] = mapped_column(Text, default="")
 
 
 class AppStream(Base):

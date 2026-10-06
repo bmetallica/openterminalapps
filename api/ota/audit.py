@@ -130,10 +130,22 @@ def aufraeumen(db: DbSession) -> dict[str, int]:
         raus["verwaltung"] = _weg(
             db, jetzt - timedelta(days=s.protokoll_verwaltung_tage), None)
 
+    # Das Terminal-Protokoll laeuft mit der Verwaltungsklasse: Was ein
+    # Administrator in fremden Arbeitsplaetzen getippt hat, muss eine Pruefung
+    # so lange finden koennen wie jeden anderen Verwaltungsvorgang — und nicht
+    # laenger. Ohne diese Zeilen waere es das einzige Protokoll ohne Frist.
+    if s.protokoll_verwaltung_tage > 0:
+        from .models import TerminalEintrag
+        from sqlalchemy import delete as _delete
+        raus["terminal"] = db.execute(_delete(TerminalEintrag).where(
+            TerminalEintrag.ts < jetzt - timedelta(days=s.protokoll_verwaltung_tage)
+        )).rowcount or 0
+        db.commit()
+
     # Dass aufgeraeumt wurde, gehoert selbst ins Protokoll — sonst sieht ein
     # Loch in den Daten spaeter aus wie ein Ausfall. Der Eintrag steht in der
     # langen Klasse und ueberlebt damit den naechsten Durchlauf.
-    if raus["verhalten"] or raus["verwaltung"]:
+    if raus["verhalten"] or raus["verwaltung"] or raus.get("terminal"):
         record(db, "protokoll.aufgeraeumt", **raus)
         db.commit()
     return raus

@@ -46,6 +46,8 @@ function toPayload(d: Draft) {
     categories: d.categories,
     mode: d.mode,
     stream_engine: d.stream_engine,
+    klasse: d.klasse ?? 'standard',
+    platz_grenze_gb: d.platz_grenze_gb ?? 50,
     net_profile_id: d.net_profile_id ?? null,
     image_ref: d.image_ref,
     cores: d.cores,
@@ -252,6 +254,42 @@ function Editor({ tpl, host, groups, images, netzprofile, onSaved, onClose, onTo
               onChange={(v) => set('stream_engine', v)} />
           </Field>
 
+          {/* Die Arbeitsplatzklasse (Handbuch Kapitel 25). Root heisst: root und
+              Docker im Container, unter Sysbox — und Beenden hält an, statt zu
+              löschen. Ohne Sysbox auf dem Host startet so ein Arbeitsplatz
+              nicht; das steht hier, statt erst beim ersten Start. */}
+          <Field label={tr('Klasse')}
+            hint={draft.klasse === 'root'
+              ? tr('root und Docker (mit Compose) im Container. Beenden hält an statt zu löschen: Was der Nutzer installiert, bleibt. Braucht das Recht „Root-Arbeitsplatz nutzen".')
+              : tr('Gehärtet, ohne root. Beim Beenden wird der Container gelöscht, das Zuhause bleibt.')}>
+            <Segmented label={tr('Klasse')} value={draft.klasse ?? 'standard'}
+              options={[
+                { value: 'standard' as const, label: tr('Standard') },
+                { value: 'root' as const, label: tr('Root mit Docker'), tone: 'halt' as const },
+              ]}
+              onChange={(v) => set('klasse', v)} />
+            {draft.klasse === 'root' && host && !host.sysbox && (
+              <p className="note-warn" style={{ marginTop: 8 }}>
+                {tr('Auf diesem Host ist Sysbox nicht eingerichtet — ein Root-Arbeitsplatz startet hier nicht. Siehe Hilfe, Kapitel 25.')}
+              </p>
+            )}
+            {draft.klasse === 'root' && !draft.image_ref.includes('base-desktop-root') && (
+              <p className="field__hint" style={{ marginTop: 8 }}>
+                {tr('Docker bringt nur ein Image mit, das darauf aufbaut: ota/base-desktop-root:1. Auf einem anderen Image gibt es root, aber kein Docker.')}
+              </p>
+            )}
+          </Field>
+
+          {draft.klasse === 'root' && (
+            <Field label={tr('Platzgrenze')}
+              hint={tr('Was ein Root-Arbeitsplatz höchstens belegen darf: Container und Docker-Daten zusammen. Darüber startet er nicht, bis aufgeräumt oder neu aufgesetzt ist.')}>
+              <input type="number" min={1} max={10000} value={draft.platz_grenze_gb ?? 50}
+                aria-label={tr('Platzgrenze in GB')} style={{ width: 120 }}
+                onChange={(e) => set('platz_grenze_gb', Math.max(1, Number(e.target.value) || 1))} />
+              <span className="silk" style={{ marginLeft: 8 }}>GB</span>
+            </Field>
+          )}
+
           <Field label={tr('Netz')}
             hint={tr('Was dieser Arbeitsplatz im Netz erreichen darf. Ohne Profil gilt die Vorgabe: Internet ja, Firmennetz nein, Nachbarsitzung nein.')}>
             <select value={draft.net_profile_id ?? ''}
@@ -373,7 +411,9 @@ function Editor({ tpl, host, groups, images, netzprofile, onSaved, onClose, onTo
           </Field>
 
           <Field label={tr('Was dann passiert')}
-            hint={draft.idle_action === 'delete'
+            hint={draft.klasse === 'root'
+              ? tr('Ein Root-Arbeitsplatz wird bei Leerlauf immer angehalten — nie gelöscht, gleich was hier steht.')
+              : draft.idle_action === 'delete'
               ? tr('Der Container wird entfernt. Das persistente Profil bleibt erhalten.')
               : draft.idle_action === 'pause'
                 ? tr('Der Container behält seinen Arbeitsspeicher und ist sofort wieder da.')
@@ -648,7 +688,10 @@ export function Workspaces({ onToast }: { onToast: (m: string, tone?: 'ok' | 'ba
    * nicht erst angelegt — der leere Zustand sagt statt dessen, was zu tun ist.
    */
   function startAbbild(): string | null {
-    const eigen = images.find((i) => i.ref.startsWith('ota/base-desktop'))
+    // Das Standard-Abbild, nicht die Root-Variante daneben — die passt nur zu
+    // Arbeitsplätzen der Klasse Root.
+    const eigen = images.find((i) => i.ref.startsWith('ota/base-desktop:'))
+      ?? images.find((i) => i.ref.startsWith('ota/base-desktop'))
     if (eigen) return eigen.ref
     const arbeitsplatz = images.find((i) =>
       /(^|\/)(kasmweb|ota)\//.test(i.ref) || /base-(desktop|xfce)/.test(i.ref))
@@ -797,7 +840,10 @@ export function Workspaces({ onToast }: { onToast: (m: string, tone?: 'ok' | 'ba
                       </div>
                     </td>
                     <td style={{ color: 'var(--label)', fontSize: 12.5 }}>
-                      {t.mode === 'workspace' ? 'Arbeitsplatz' : 'Einzelne App'}
+                      {t.mode === 'workspace' ? tr('Arbeitsplatz') : tr('Einzelne App')}
+                      {t.klasse === 'root' && (
+                        <span className="silk" style={{ marginLeft: 8, color: 'var(--halt)' }}>root</span>
+                      )}
                     </td>
                     <td className="data" style={{ color: 'var(--label)' }}>
                       {t.cores} × {gb(t.memory_bytes)} GB

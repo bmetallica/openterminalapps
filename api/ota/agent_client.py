@@ -123,8 +123,28 @@ def container_action(cid: str, action: str) -> dict[str, Any]:
     return _call("POST", f"/containers/{cid}/action/{action}")
 
 
-def remove_container(cid: str) -> dict[str, Any]:
-    return _call("DELETE", f"/containers/{cid}")
+def remove_container(cid: str, daten: bool = False) -> dict[str, Any]:
+    """Container entfernen; mit `daten` auch das Docker-Volume eines
+    Root-Arbeitsplatzes (Kapitel 25)."""
+    suffix = "?daten=true" if daten else ""
+    return _call("DELETE", f"/containers/{cid}{suffix}")
+
+
+def fortsetzen(cid: str) -> dict[str, Any]:
+    """Einen angehaltenen Root-Arbeitsplatz wieder starten."""
+    return _call("POST", f"/containers/{cid}/fortsetzen", timeout=180.0)
+
+
+def platz(cid: str) -> dict[str, Any]:
+    """Was ein Root-Arbeitsplatz belegt (Schicht + Docker-Daten), in Bytes."""
+    return _call("GET", f"/containers/{cid}/platz", timeout=60.0)
+
+
+def terminal_url(cid: str) -> tuple[str, dict[str, str]]:
+    """Adresse und Kopfzeilen fuer das Webterminal im Agent."""
+    basis = settings().agent_url.rstrip("/")
+    ws = "ws" + basis[len("http"):] if basis.startswith("http") else basis
+    return f"{ws}/containers/{cid}/terminal", _headers()
 
 
 def orphans() -> list[dict[str, Any]]:

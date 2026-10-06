@@ -14,7 +14,7 @@ from . import agent_client, migrate, recipes, schema_sync
 from .db import Base, SessionLocal, engine
 from .models import ImageBuild, Session as SessionModel
 from .routers import (
-    admin, auth, backups, branding, builds,
+    admin, arbeitsplaetze, auth, backups, branding, builds,
     firewall as firewall_router, help as help_router, netprofiles,
     identity as identity_router, internal, monitoring,
     files, groupfiles, pwa, recipes as recipes_router, webapps,
@@ -101,6 +101,17 @@ def _reap_once() -> None:
                 continue
 
             action = sess.template.idle_action if sess.template else "stop"
+            # Ein Root-Arbeitsplatz wird bei Leerlauf **angehalten**, nie
+            # geloescht und nie bloss pausiert — gleich, was die Vorlage sagt.
+            # Geloescht waere alles weg, was der Nutzer installiert hat.
+            if sess.template and sess.template.klasse == "root":
+                try:
+                    from .routers.sessions import platz_anhalten
+                    platz_anhalten(db, sess, None, None, "idle")
+                    log.info("Root-Arbeitsplatz %s wegen Leerlauf angehalten", sess.id)
+                except Exception as exc:  # noqa: BLE001 — der Reaper darf nie sterben
+                    log.warning("Anhalten von %s fehlgeschlagen: %s", sess.id, exc)
+                continue
             try:
                 if action == "delete" and sess.container_id:
                     agent_client.remove_container(sess.container_id)
@@ -130,6 +141,12 @@ def _reap_once() -> None:
                 SessionModel.status == "stopped",
                 SessionModel.end_reason == "idle",
             )).all() if s.container_id
+        }
+        # Angehaltene Root-Arbeitsplaetze: Ihr Container **ist** der Zustand.
+        # Ohne diese Zeile hielte der Aufraeumer ihn fuer eine Leiche.
+        keep_stopped |= {
+            s.container_id for s in db.scalars(select(SessionModel).where(
+                SessionModel.status == "angehalten")).all() if s.container_id
         }
         try:
             for orphan in agent_client.orphans():
@@ -297,6 +314,7 @@ app.include_router(builds.router)
 app.include_router(backups.router)
 app.include_router(sessions.router)
 app.include_router(admin.router)
+app.include_router(arbeitsplaetze.router)
 app.include_router(help_router.router)
 app.include_router(pwa.router)
 app.include_router(branding.router)

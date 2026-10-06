@@ -851,6 +851,19 @@ selbst führt der Betreiber; hier steht, was daraus gebaut wurde.
       Umlaute verschwanden, `/` kam als `?`. Wirkt ohne Neubau der Images
 - [x] `scripts/pruef-tastatur.mjs` in `test-streaming.sh` — tippt deutsch und liest im Container nach
 
+**Nachtrag 2026-10-06 — Root-Arbeitsplatz** ([Kapitel 25](docs/wiki/25-root-arbeitsplatz.md),
+[ADR-007](docs/adr/007-root-und-docker-ueber-sysbox.md)):
+
+- [x] **Klasse „Root mit Docker"** unter Sysbox: root im Container, auf dem Wirt unprivilegiert;
+      `dockerd`, Compose und buildx im Arbeitsplatz, ohne `--privileged`
+- [x] **Angehalten statt gelöscht**, feste Adresse, „Neu aufsetzen" (mit oder ohne Docker-Daten),
+      Anlagenwerte bei jedem Start frisch, Platzgrenze je Vorlage, Sicherung der Schicht nach Plan
+- [x] **Betrieb → Arbeitsplätze**: alle Arbeitsplätze, Starten/Anhalten/Löschen, **root-Webterminal**
+      mit Protokoll der Eingaben je Arbeitsplatz und Export (Text/CSV)
+- [x] `scripts/sysbox-einrichten.sh` — Sysbox ohne Neustart von Docker und ohne einen Container
+      anzufassen; `make root-image`; `scripts/test-root-arbeitsplatz.sh` (33 Prüfungen)
+- [ ] Externer Docker-Server — zurückgestellt (Uoktober.md, Teil D)
+
 **Ausdrücklich nicht gebaut**, jeweils als Entscheidung festgehalten: Verschlüsselung im
 Ruhezustand samt der TOTP-Startwerte, ein Streifen im Bild während des Aufschaltens (ein
 Administrator sieht auch ohne OTA zu — ein Signal, dessen Fehlen nichts bedeutet, wäre eine falsche

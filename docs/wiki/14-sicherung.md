@@ -43,6 +43,14 @@ Sockets und Sperrdateien. In einem echten Profil schrumpfte das Archiv dadurch v
 auf 355 Einträge — ohne dass eine Nutzerdatei fehlte. Die 306 MB Unterschied waren ein
 heruntergeladener SDK-Cache.
 
+### Root-Arbeitsplätze ✅
+
+Bei Root-Arbeitsplätzen ([Kapitel 25](25-root-arbeitsplatz.md)) ist der Container der Zustand, den
+sich ein Nutzer erarbeitet hat. Ihre Container-Schicht wird deshalb bei **jedem** geplanten Lauf
+gesichert — auch angehaltene, und auch wenn der Plan Container sonst nicht sichert. Die
+Docker-Daten darin (Images, Volumes) nicht: Sie liegen in einem eigenen Volume und lassen sich neu
+bauen und holen.
+
 ## Von Hand sichern
 
 ### Auf der Kommandozeile: der vollständige Stand

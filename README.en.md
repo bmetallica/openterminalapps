@@ -106,6 +106,12 @@ In detail in [handbook chapter 2](docs/wiki/02-erste-schritte.md) (German).
 - The remote screen **grows with the window**: no black border, no scaling
 - Clipboard in both directions, including between two applications in the same container
 - A classic XFCE desktop as an additional view
+- **Root workspace for developers**: root, **Docker and `docker compose`** inside the container —
+  under Sysbox, so without `--privileged` (root inside is an unprivileged user on the host). Ending
+  **stops** instead of deleting: whatever is installed stays, under a fixed address; “Rebuild” picks
+  up a new base image. Inner containers go through the same router and network rules. Enabling it:
+  `sudo scripts/sysbox-einrichten.sh --live-restore`, then `make up` — the script installs Sysbox
+  without touching a single running container ([handbook chapter 25](docs/wiki/25-root-arbeitsplatz.md), German)
 
 **Administration**
 - Resources **per user and workspace**: user A gets 2 cores, user B gets one
@@ -115,6 +121,9 @@ In detail in [handbook chapter 2](docs/wiki/02-erste-schritte.md) (German).
 - **Two-factor enforceable per group**, with a **passkey** (fingerprint, face, security key) or a
   one-time code — offered, not required; `/healthz` and `/metrics` for monitoring
 - Users, groups and permissions; administrators are `root` inside their own container
+- **Operations → Workspaces**: every workspace of every user, running and stopped, with space used
+  and “last active”; start, stop, delete — and a **root web terminal** in the browser whose inputs
+  are logged per workspace and can be exported
 - **Sign-in against LDAP or Active Directory**, with group mapping and a check button. Local
   accounts stay untouched — an entry of the same name cannot take one over
 - Sign-in limit configurable (30 min to 48 h), rolling — nobody working is ever signed out
@@ -245,7 +254,7 @@ the same separation applies to the host filesystem.
 
 ## Documentation
 
-- **[Handbook](docs/wiki/README.md)** — use, administration, operations, troubleshooting (24
+- **[Handbook](docs/wiki/README.md)** — use, administration, operations, troubleshooting (25
   chapters, German)
 - **[plan.md](plan.md)** — architecture **and the reasoning behind it**, dead ends included
 - **[docs/adr/](docs/adr/README.md)** — decisions that are expensive to reverse, with the
@@ -272,6 +281,7 @@ make test
 | `test-ldap.sh` | Directory sign-in **through Keycloak** against a real OpenLDAP in a container — above all that a directory entry cannot take over a local account and an outage does not take the emergency login down |
 | `test-streaming.sh` | The media path: does the TURN server actually relay, does a picture arrive in the browser, and do umlauts, Shift and AltGr from a German keyboard arrive correctly (`OTA_KEYBOARD_LAYOUT`)? The probe browser runs in a network from which the session container is **not** directly reachable — like a workstation on a corporate network. With `OTA_TURN_BIND` set, it emulates the firewall's port forwarding for the probe browser and checks the path through the NAT |
 | `test-firewall.sh` | The network isolation, **measured from inside**: neighbour, host, corporate network, TURN, name service, internet per level, an exception by name, a published port — and all of it again after the router restarts |
+| `test-root-arbeitsplatz.sh` | The root workspace: root unprivileged on the host (Sysbox), Docker and Compose inside, network rules applying to the **inner** containers too, stop and resume with state kept, rebuild, web terminal with its log and export, no terminal into stack services. Skipped without Sysbox |
 | `test-backup.sh` | Backup and restore of profile, container and database. It stops sessions to do so — **only its own**, and it checks that explicitly |
 
 The test credentials live in `deploy/.env` as `OTA_TEST_ADMIN_PW`, not in the source.

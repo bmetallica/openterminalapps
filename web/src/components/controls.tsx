@@ -277,6 +277,7 @@ const STATUS_TEXT: Record<string, string> = {
   failed: 'fehlgeschlagen',
   live: 'läuft',
   fail: 'fehlgeschlagen',
+  angehalten: 'angehalten',
 }
 
 const STATUS_CLASS: Record<string, string> = {
@@ -287,6 +288,7 @@ const STATUS_CLASS: Record<string, string> = {
   failed: 'led--fail',
   live: 'led--live',
   fail: 'led--fail',
+  angehalten: 'led--stop',
 }
 
 /** Zustandsklasse fuer die farbige Kante einer Karte. */

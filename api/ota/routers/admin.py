@@ -388,6 +388,16 @@ def delete_user(
                             "Das ist der letzte Administrator und kann nicht gelöscht werden.")
 
     name = user.username
+    # Seine Root-Arbeitsplaetze gehen mit — samt Docker-Daten. Die Zeilen
+    # verschwinden mit dem Konto; blieben die Container stehen, raeumte sie
+    # der Aufraeumer zwar weg, ihre Docker-Volumes aber nie.
+    for sess in db.scalars(select(SessionModel).where(
+            SessionModel.user_id == user.id)).all():
+        if sess.container_id and sess.template and sess.template.klasse == "root":
+            try:
+                agent_client.remove_container(sess.container_id, daten=True)
+            except HTTPException as exc:
+                log.warning("Root-Arbeitsplatz %s nicht entfernt: %s", sess.id, exc.detail)
     db.delete(user)
     audit.record(db, "user.deleted", actor=actor, object_type="user",
                  object_id=name, request=request)
@@ -537,6 +547,9 @@ def list_permissions() -> list[dict[str, str]]:
         "settings.manage": "Globale Einstellungen ändern",
         "audit.view": "Audit-Log einsehen",
         "registries.manage": "Registries einbinden",
+        "anwendungen.verwalten": "Externe Anwendungen (OIDC) anlegen",
+        "arbeitsplatz.root": "Root-Arbeitsplatz nutzen (root und Docker im Container)",
+        "arbeitsplatz.terminal": "Per Webterminal als root in laufende Arbeitsplätze",
     }
     return [{"key": k, "text": texts.get(k, k)} for k in PERMISSIONS]
 

@@ -121,7 +121,11 @@ Ehrlichkeitshalber, denn es spricht für die Anlage:
 
 * **Keine Inhaltsprotokollierung.** Das Protokoll hält Vorgänge fest, nie Inhalte
   (`audit.py`: „Inhalte werden nie erfasst, nur Vorgänge").
-* **Keine Tastatur- oder Bildschirmaufzeichnung.** Nichts im Code nimmt einen Bildschirm auf.
+* **Keine Bildschirmaufzeichnung.** Nichts im Code nimmt einen Bildschirm auf.
+* **Tastatureingaben nur an einer Stelle, und nur von Administratoren:** Seit dem 2026-10-06
+  protokolliert das Webterminal (Betrieb → Arbeitsplätze) jede Eingabezeile, die ein
+  **Administrator** in einem fremden Arbeitsplatz tippt — nicht die Ausgabe, und nie die Eingaben
+  der Nutzer selbst. Siehe Abschnitt 6, Punkt 4.
 * **Keine Telemetrie nach aussen**, mit der einen Ausnahme aus Abschnitt 7.
 * **Keine Namen in den Kennzahlen.** `/metrics` liefert Summen, keine Personen.
 * **Keycloaks Ereignisprotokoll ist aus** (`eventsEnabled: false`) — dort wächst also keine zweite
@@ -244,7 +248,7 @@ Kapitel im Handbuch (es wird in der Anwendung ausgeliefert, der Weg ist also sch
 
 ## 6 · Beschäftigtendatenschutz — was mitbestimmungspflichtig ist
 
-Drei Dinge in dieser Anlage sind geeignet, Verhalten und Leistung von Beschäftigten zu überwachen.
+Vier Dinge in dieser Anlage sind geeignet, Verhalten und Leistung von Beschäftigten zu überwachen.
 Damit sind sie nach **§ 87 Abs. 1 Nr. 6 BetrVG mitbestimmungspflichtig** — unabhängig davon, ob
 jemand sie dafür benutzen will:
 
@@ -255,11 +259,20 @@ jemand sie dafür benutzen will:
    Eigentümers); **dass jemand zusieht, merkt der Mensch davor weiterhin nicht**
    (`H4`).
 3. **Die Kennzahlen.** `/metrics` nennt keine Namen, zeigt aber, wie viele Menschen wann arbeiten.
+4. **Das Terminal-Protokoll** (seit 2026-10-06, Handbuch Kapitel 25). Jede Eingabezeile, die ein
+   Administrator per Webterminal in einem Arbeitsplatz tippt, mit Namen und Zeit — je Arbeitsplatz,
+   für jeden Administrator lesbar und exportierbar, **nicht** änderbar oder löschbar; Frist wie die
+   Verwaltungsklasse (365 Tage). Es betrifft zwei Gruppen: die **Administratoren** (ihre Tätigkeit
+   wird lückenlos festgehalten — Leistungs- und Verhaltenskontrolle) und mittelbar die **Nutzer**,
+   deren Arbeitsplatz betreten wird (der Mensch davor merkt es nicht; Entscheidung des Betreibers).
+   Die Ausgaben werden bewusst nicht mitgeschnitten; sie enthielten den Inhalt jeder gelesenen
+   Datei. Ein Kennwort, das ein Administrator auf der Kommandozeile tippt, steht allerdings darin.
 
-👉 **Empfehlung:** Eine Betriebsvereinbarung, die drei Dinge festhält — welche Daten protokolliert
-werden, wie lange sie bleiben, und unter welchen Bedingungen sich jemand aufschalten darf. Für den
-dritten Punkt ist die technische Lösung in drei Stufen beschrieben: protokollieren, sichtbar
-machen, Zustimmung einholen (`H4`). Die erste Stufe steht seit dem 2026-09-04 —
+👉 **Empfehlung:** Eine Betriebsvereinbarung, die vier Dinge festhält — welche Daten protokolliert
+werden, wie lange sie bleiben, unter welchen Bedingungen sich jemand aufschalten darf, und **wer das
+Webterminal benutzen und wer das Terminal-Protokoll auswerten darf**. Für das Aufschalten ist die
+technische Lösung in drei Stufen beschrieben: protokollieren, sichtbar machen, Zustimmung einholen
+(`H4`). Die erste Stufe steht seit dem 2026-09-04 —
 **damit ist eine Vereinbarung über das Aufschalten überhaupt erst überprüfbar.**
 
 ---

@@ -240,16 +240,22 @@ def run_scheduled(trigger: str = "schedule", actor: str | None = None) -> dict[s
                 else:
                     counts["failed"] += 1
 
-        if policy.include_containers:
-            for sess in db.scalars(select(SessionModel).where(
-                    SessionModel.status.in_(LIVE))).all():
-                if not sess.container_id:
-                    continue
-                backup = run_container_backup(db, sess, trigger, actor)
-                if backup.status == "ok":
-                    counts["containers"] += 1
-                else:
-                    counts["failed"] += 1
+        # Container: alle laufenden, wenn der Plan es sagt — Root-Arbeitsplaetze
+        # **immer**, auch angehaltene (Betreiber, 2026-10-06). Bei ihnen ist der
+        # Container der Zustand, den der Nutzer sich erarbeitet hat; bei den
+        # anderen ist er aus dem Image wiederherstellbar. Docker-Daten sind ein
+        # eigenes Volume und damit von selbst nicht dabei.
+        for sess in db.scalars(select(SessionModel).where(
+                SessionModel.status.in_(LIVE + ("angehalten",)))).all():
+            if not sess.container_id:
+                continue
+            if not (policy.include_containers or sess.template.klasse == "root"):
+                continue
+            backup = run_container_backup(db, sess, trigger, actor)
+            if backup.status == "ok":
+                counts["containers"] += 1
+            else:
+                counts["failed"] += 1
 
         if policy.include_database:
             backup = run_database_backup(db, trigger, actor)
@@ -376,9 +382,11 @@ def _backup_one(user_id: uuid.UUID, actor: str, include_container: bool) -> None
         if run_profile_backup(db, user, "manual", actor) is None:
             log.info("%s hat noch kein Profil — übersprungen", user.username)
         if include_container:
+            # Angehaltene Root-Arbeitsplaetze gehoeren dazu — wie im geplanten
+            # Lauf (run_scheduled): Ihr Container ist der Zustand des Nutzers.
             for sess in db.scalars(select(SessionModel).where(
                     SessionModel.user_id == user_id,
-                    SessionModel.status.in_(LIVE))).all():
+                    SessionModel.status.in_(LIVE + ("angehalten",)))).all():
                 if sess.container_id:
                     run_container_backup(db, sess, "manual", actor)
 

@@ -829,6 +829,15 @@ nächsten Abgleich wieder an:
 docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --force-recreate traefik
 ```
 
+## Ein Root-Arbeitsplatz startet nicht, oder Docker darin geht nicht
+
+Siehe die Tabelle am Ende von [Kapitel 25](25-root-arbeitsplatz.md). Die häufigsten Fälle: Sysbox
+fehlt (`docker info | grep -i runtimes`), das Recht „Root-Arbeitsplatz nutzen" fehlt, die
+Platzgrenze ist erreicht, oder das Image ist nicht `ota/base-desktop-root:1`.
+
+**`apt install sysbox-ce` verlangt `docker rm $(docker ps -a -q) -f`.** Nicht ausführen — das löscht
+jeden Container des Wirts. `scripts/sysbox-einrichten.sh` richtet Sysbox ohne Neustart ein.
+
 ## Nützliche Befehle
 
 ```bash

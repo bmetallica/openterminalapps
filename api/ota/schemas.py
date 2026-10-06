@@ -118,6 +118,8 @@ class SessionAdminOut(BaseModel):
     username: str
     template_name: str
     template_icon: str
+    klasse: str = "standard"
+    platz_grenze_gb: int = 0
     status: str
     cores: float
     memory_bytes: int
@@ -216,6 +218,8 @@ class TemplateOut(BaseModel):
     group_shelf: bool = True
     # "selkies" (Vorgabe) oder "kasmvnc". Siehe `Template.stream_engine`.
     stream_engine: str = "selkies"
+    klasse: str = "standard"
+    platz_grenze_gb: int = 50
     net_profile_id: uuid.UUID | None = None
     is_enabled: bool
     apps: list[AppOut] = []
@@ -252,6 +256,9 @@ class TemplateIn(BaseModel):
     # Selkies, der Agent wartete neunzig Sekunden auf einen Port, den niemand
     # oeffnet, und die Sitzung kaeme nie hoch.
     stream_engine: str | None = None
+    # Die Arbeitsplatzklasse: "standard" oder "root" (Kapitel 25).
+    klasse: str = Field("standard", pattern="^(standard|root)$")
+    platz_grenze_gb: int = Field(50, ge=1, le=10_000)
     # Welches Netzprofil gilt. `None` heisst: die Vorgabe der Anlage.
     net_profile_id: uuid.UUID | None = None
     is_enabled: bool = True
@@ -485,6 +492,8 @@ class SessionOut(BaseModel):
     # braucht das: Reconnect-Erkennung, Leerlaufuhr und Zwischenablage sind
     # gegen KasmVNCs Weboberfläche geschrieben und greifen bei Selkies nicht.
     stream_engine: str = "kasmvnc"
+    # "root" heisst: Beenden haelt an, statt zu loeschen (Kapitel 25).
+    klasse: str = "standard"
     # Welches Netzprofil fuer diese Sitzung gilt. Steht im Dashboard, weil
     # wer die Wirkung nicht kennt, sie als Fehler meldet — „das Intranet geht
     # nicht" ist sonst ein Ticket statt einer Einstellung.
@@ -638,6 +647,8 @@ class HostOut(BaseModel):
     docker_version: str = ""
     architecture: str = ""
     running_containers: int = 0
+    # Ist Sysbox eingerichtet? Ohne gibt es keine Root-Arbeitsplätze.
+    sysbox: bool = False
 
 
 class HelpChapter(BaseModel):

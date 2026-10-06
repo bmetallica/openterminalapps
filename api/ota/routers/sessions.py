@@ -26,7 +26,7 @@ from ..models import (
 )
 from ..schemas import SessionOut, SessionStartIn, StreamOut
 from ..security import (
-    effective_resources, needs_totp, owns_session, profile_path,
+    darf_root, effective_resources, needs_totp, owns_session, profile_path,
     user_can_see_app, user_can_see_template, vnc_secret,
 )
 
@@ -34,6 +34,10 @@ router = APIRouter(prefix="/api/sessions", tags=["sessions"])
 log = logging.getLogger("ota.sessions")
 
 LIVE = ("starting", "running", "paused")
+# Ein Root-Arbeitsplatz, der nicht laeuft, aber mit allem, was darin
+# installiert wurde, auf den naechsten Start wartet (Kapitel 25). Zaehlt nicht
+# als „live": Er belegt weder Speicher noch eine der Sitzungen je Nutzer.
+ANGEHALTEN = "angehalten"
 
 # Wie viele Anwendungen ein Arbeitsplatz gleichzeitig offen haben darf.
 # Jede belegt ein eigenes Display und einen eigenen Websocket-Port.
@@ -179,6 +183,7 @@ def _out(s: SessionModel) -> SessionOut:
              else f"/s/{s.id}/?path=s/{s.id}/websockify{STREAM_ARGS}"),
         streams=[_stream_out(s, x) for x in s.streams],
         stream_engine=s.template.stream_engine,
+        klasse=s.template.klasse,
     )
 
 
@@ -380,7 +385,9 @@ def list_sessions(
     user: User = Depends(current_user),
     db: DbSession = Depends(get_db),
 ) -> list[SessionOut]:
-    query = select(SessionModel).where(SessionModel.status.in_(LIVE))
+    # Angehaltene Root-Arbeitsplaetze gehoeren dazu: Sie stehen im Dashboard,
+    # damit man sieht, dass dort etwas auf einen wartet, und es fortsetzen kann.
+    query = select(SessionModel).where(SessionModel.status.in_(LIVE + (ANGEHALTEN,)))
     if not (all_users and (user.is_admin or "sessions.view_all" in user.permissions)):
         # Einschraenkung in der Abfrage, nicht im Frontend.
         query = query.where(SessionModel.user_id == user.id)
@@ -408,6 +415,13 @@ def start_session(
     if not tpl.is_enabled:
         raise HTTPException(status.HTTP_409_CONFLICT,
                             "Dieser Workspace ist derzeit abgeschaltet.")
+    ist_root = tpl.klasse == "root"
+    if ist_root and not darf_root(user):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Das ist ein Root-Arbeitsplatz. Dafür braucht es das Recht "
+            "„Root-Arbeitsplatz nutzen“ — die Verwaltung vergibt es je Gruppe.",
+        )
 
     # Laeuft schon eine? Dann diese zurueckgeben statt eine zweite zu starten.
     #
@@ -520,6 +534,21 @@ def start_session(
                 "Workspace unter Persistenz ein eigenes Profil.",
             )
 
+    # **Root-Arbeitsplatz: derselbe Platz, nicht ein neuer.** Gibt es einen
+    # angehaltenen, wird er fortgesetzt — mit allem, was darin installiert
+    # wurde, und unter derselben Adresse (`/s/<kennung>/`). Hat er keinen
+    # Container mehr (neu aufgesetzt), bekommt er einen neuen, behaelt aber
+    # seine Kennung und damit Adresse, Verknuepfungen und Protokoll.
+    platz = None
+    if ist_root:
+        platz = db.scalar(select(SessionModel).where(
+            SessionModel.user_id == user.id,
+            SessionModel.template_id == tpl.id,
+            SessionModel.status == ANGEHALTEN,
+        ).order_by(SessionModel.started_at.desc()))
+        if platz is not None and platz.container_id:
+            return _out(platz_fortsetzen(db, platz, request, user))
+
     # Der Name für die Basic-Auth zwischen Traefik und der Sitzung.
     #
     # Bei KasmVNC ist `kasm_user` **nicht** wählbar: Die Passwortdatei der
@@ -530,12 +559,21 @@ def start_session(
     # Beide Seiten lesen denselben Wert: Aus ihm baut `_traefik_labels` den
     # Header, und der Agent reicht ihn als `VNC_USER` in den Container. Vorher
     # ging er nur nach Traefik, und die Sitzung nahm an, er hiesse `kasm_user`.
-    sess = SessionModel(
-        user_id=user.id, template_id=tpl.id, cores=cores, memory_bytes=memory,
-        vnc_user="ota" if tpl.stream_engine == "selkies" else "kasm_user",
-        vnc_secret=vnc_secret(user, profile), status="starting",
-    )
-    db.add(sess)
+    if platz is not None:
+        sess = platz
+        sess.cores, sess.memory_bytes = cores, memory
+        sess.vnc_user = "ota" if tpl.stream_engine == "selkies" else "kasm_user"
+        sess.vnc_secret = vnc_secret(user, profile)
+        sess.status = "starting"
+        sess.started_at = sess.last_seen_at = datetime.now(timezone.utc)
+        sess.ended_at = sess.end_reason = sess.error = None
+    else:
+        sess = SessionModel(
+            user_id=user.id, template_id=tpl.id, cores=cores, memory_bytes=memory,
+            vnc_user="ota" if tpl.stream_engine == "selkies" else "kasm_user",
+            vnc_secret=vnc_secret(user, profile), status="starting",
+        )
+        db.add(sess)
     # **Committen, nicht nur flushen** — bevor der Container entsteht.
     #
     # Ein `flush` schreibt die Zeile nur innerhalb dieser Transaktion. Fuer
@@ -615,6 +653,8 @@ def start_session(
             # entscheidet daran, worauf er beim Start wartet und welche Ports
             # er nach aussen durchreicht.
             "engine": tpl.stream_engine,
+            # Root-Arbeitsplatz: Sysbox, Docker, angehalten statt geloescht.
+            "klasse": tpl.klasse,
         })
     except HTTPException:
         sess.status = "failed"
@@ -696,6 +736,122 @@ def heartbeat(
     return {"status": sess.status}
 
 
+# --------------------------------------------------------------------------
+# Root-Arbeitsplatz: fortsetzen, anhalten, neu aufsetzen (Kapitel 25)
+# --------------------------------------------------------------------------
+
+def _platz_pruefen(sess: SessionModel) -> None:
+    """Die Platzgrenze der Vorlage — vor dem Start, nicht danach.
+
+    Gemessen wird die Schicht des Containers plus die Docker-Daten. Darueber
+    startet der Platz nicht: Ein Arbeitsplatz, der die Platte des Wirts
+    fuellt, trifft alle anderen mit. Antwortet der Agent nicht, wird nicht
+    blockiert — eine Messung darf keinen Start verhindern.
+    """
+    grenze = (sess.template.platz_grenze_gb or 0) * 1024 ** 3
+    if not grenze or not sess.container_id:
+        return
+    try:
+        belegt = int(agent_client.platz(sess.container_id).get("gesamt", 0))
+    except HTTPException:
+        return
+    if belegt > grenze:
+        raise HTTPException(
+            status.HTTP_507_INSUFFICIENT_STORAGE,
+            f"Dieser Root-Arbeitsplatz belegt {belegt / 1024**3:.1f} GB, erlaubt "
+            f"sind {grenze / 1024**3:.0f} GB. „Neu aufsetzen“ (Docker-Daten "
+            "mitlöschen) schafft Platz, oder die Verwaltung hebt die Grenze an.",
+        )
+
+
+def platz_fortsetzen(db: DbSession, sess: SessionModel, request: Request | None,
+                     actor: User, platzgrenze: bool = True) -> SessionModel:
+    """Einen angehaltenen Root-Arbeitsplatz wieder starten — derselbe
+    Container, dieselbe Kennung, dieselbe Adresse."""
+    if platzgrenze:
+        _platz_pruefen(sess)
+    sess.status = "starting"
+    db.commit()
+    try:
+        agent_client.fortsetzen(sess.container_id)
+    except HTTPException as exc:
+        if exc.status_code == status.HTTP_404_NOT_FOUND:
+            # Der Container ist weg (von Hand geloescht, Docker zurueckgesetzt).
+            # Dann wie neu aufgesetzt: Die Zeile bleibt, der naechste Start
+            # baut neu auf.
+            sess.container_id = None
+        sess.status = ANGEHALTEN
+        db.commit()
+        raise
+    for st in sess.streams:
+        st.status = "stopped"
+    now = datetime.now(timezone.utc)
+    sess.started_at = sess.last_seen_at = now
+    sess.ended_at = sess.end_reason = sess.error = None
+    sess.status = "running" if _wait_for_route(sess.id) else "starting"
+    audit.record(db, "platz.fortgesetzt", actor=actor, object_type="session",
+                 object_id=str(sess.id), request=request,
+                 template=sess.template.slug, nutzer=sess.user.username)
+    db.commit()
+    firewall_schieben(db)
+    return sess
+
+
+def platz_anhalten(db: DbSession, sess: SessionModel, request: Request | None,
+                   actor: User | None, grund: str) -> None:
+    """Anhalten statt loeschen: Alles im Container bleibt."""
+    if sess.container_id:
+        agent_client.container_action(sess.container_id, "stop")
+    for st in sess.streams:
+        st.status = "stopped"
+    sess.status = ANGEHALTEN
+    sess.ended_at = datetime.now(timezone.utc)
+    sess.end_reason = grund
+    audit.record(db, "platz.angehalten", actor=actor, object_type="session",
+                 object_id=str(sess.id), request=request,
+                 template=sess.template.slug, nutzer=sess.user.username, grund=grund)
+    db.commit()
+    firewall_schieben(db)
+
+
+def platz_neu_aufsetzen(db: DbSession, sess: SessionModel, request: Request | None,
+                        actor: User, docker_daten: bool) -> None:
+    """Container weg, Zeile bleibt. Der naechste Start baut aus dem aktuellen
+    Image neu auf — mit derselben Kennung. Das Zuhause bleibt immer; die
+    Docker-Daten nur, wenn nicht ausdruecklich mitgeloescht."""
+    if sess.container_id:
+        agent_client.remove_container(sess.container_id, daten=docker_daten)
+    sess.container_id = None
+    for st in sess.streams:
+        st.status = "stopped"
+    sess.status = ANGEHALTEN
+    sess.ended_at = datetime.now(timezone.utc)
+    sess.end_reason = "neu_aufgesetzt"
+    audit.record(db, "platz.neu_aufgesetzt", actor=actor, object_type="session",
+                 object_id=str(sess.id), request=request,
+                 template=sess.template.slug, nutzer=sess.user.username,
+                 docker_daten=docker_daten)
+    db.commit()
+    firewall_schieben(db)
+
+
+@router.post("/{session_id}/neu-aufsetzen")
+def neu_aufsetzen(
+    session_id: uuid.UUID,
+    request: Request,
+    docker: bool = False,
+    user: User = Depends(current_user),
+    db: DbSession = Depends(get_db),
+) -> SessionOut:
+    """Root-Arbeitsplatz aus dem aktuellen Image neu aufbauen (Kapitel 25)."""
+    sess = _load(session_id, user, db)
+    if sess.template.klasse != "root":
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            "Nur Root-Arbeitsplätze lassen sich neu aufsetzen.")
+    platz_neu_aufsetzen(db, sess, request, user, docker)
+    return _out(sess)
+
+
 @router.post("/{session_id}/{action}")
 def act(
     session_id: uuid.UUID,
@@ -709,6 +865,15 @@ def act(
     sess = _load(session_id, user, db)
     if not sess.container_id:
         raise HTTPException(status.HTTP_409_CONFLICT, "Für diese Session gibt es keinen Container.")
+
+    # Root-Arbeitsplaetze: Anhalten ist ihr Beenden, und Fortsetzen geht ueber
+    # den Weg mit frischen Anlagenwerten — nicht ueber ein blankes `start`.
+    if sess.template.klasse == "root":
+        if action == "stop":
+            platz_anhalten(db, sess, request, user, "user")
+            return _out(sess)
+        if action == "unpause" and sess.status in ("stopped", ANGEHALTEN):
+            return _out(platz_fortsetzen(db, sess, request, user))
 
     # Ein pausierter Container wird fortgesetzt, ein gestoppter neu angefahren.
     # "unpause" auf einen gestoppten Container laeuft in einen Docker-Fehler.
@@ -739,6 +904,13 @@ def delete_session(
     db: DbSession = Depends(get_db),
 ) -> dict[str, str]:
     sess = _load(session_id, user, db)
+    # Beenden heisst bei einem Root-Arbeitsplatz: anhalten. Was darin
+    # installiert wurde, bleibt — das ist die Klasse (Kapitel 25).
+    if sess.template.klasse == "root" and sess.status != ANGEHALTEN:
+        platz_anhalten(db, sess, request, user, "user")
+        return {"status": "Arbeitsplatz angehalten. Alles darin bleibt erhalten."}
+    if sess.template.klasse == "root":
+        return {"status": "Arbeitsplatz ist bereits angehalten."}
     if sess.container_id:
         agent_client.remove_container(sess.container_id)
     sess.status = "stopped"

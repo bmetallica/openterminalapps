@@ -115,6 +115,13 @@ Adresse als die eingetragene, und der Zugriff scheitert scheinbar grundlos.
 bekäme Adressen, die in keiner Liste stehen — und die Namensfreigaben wären wirkungslos. (Namen über
 verschlüsseltes DNS im Browser umgehen auch das. Das ist die Grenze jeder namensbasierten Freigabe.)
 
+## Docker in Root-Arbeitsplätzen
+
+Container, die in einem Root-Arbeitsplatz laufen ([Kapitel 25](25-root-arbeitsplatz.md)), hängen
+hinter dem Arbeitsplatz und gehen **durch denselben Router** — mit demselben Profil. Gemessen: aus
+einem inneren Container Internet ja, Firmennetz nein, Wirt nein. Ihr Namensdienst ist der Router
+(der innere `dockerd` läuft mit `--dns` auf ihn); ein fremder Resolver bleibt auch für sie zu.
+
 ## Die Netzübersicht
 
 Wer arbeitet gerade unter welcher Adresse, mit welchem Profil, wie viel geht durch die Leitung —

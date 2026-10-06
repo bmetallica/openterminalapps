@@ -217,6 +217,16 @@ def user_can_see_app(app, user: User) -> bool:
     return any(str(g) in mine for g in wanted)
 
 
+def darf_root(user: User) -> bool:
+    """Darf dieser Mensch Root-Arbeitsplaetze starten (Kapitel 25)?"""
+    return user.is_admin or "arbeitsplatz.root" in user.permissions
+
+
+def darf_terminal(user: User) -> bool:
+    """Darf dieser Mensch per Webterminal in fremde Arbeitsplaetze?"""
+    return user.is_admin or "arbeitsplatz.terminal" in user.permissions
+
+
 def owns_session(sess: SessionModel, user: User) -> bool:
     """Darf dieser Nutzer diese Session *verwalten* — sehen, beenden?
 

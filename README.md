@@ -192,6 +192,22 @@ veröffentlichte Adresse selbst auf den Host um. Die CA des Verzeichnisses gehö
 `deploy/keycloak-truststore/`. Vollständige Portlisten, ein Beispiel für nginx und die Prüfung:
 [Kapitel 24](docs/wiki/24-hinter-nat.md).
 
+### Root-Arbeitsplätze freischalten
+
+Root und Docker im Arbeitsplatz brauchen **Sysbox** auf dem Host. Das Paket will bei der
+Installation Docker neu starten und schlägt vor, dafür alle Container zu löschen — das Skript
+umgeht das und fasst keinen Container an:
+
+```bash
+sudo scripts/sysbox-einrichten.sh --pruefen          # Voraussetzungen ansehen
+sudo scripts/sysbox-einrichten.sh --live-restore     # einrichten
+sudo make up                                         # baut ota/base-desktop-root:1
+```
+
+Dann eine Vorlage der Klasse „Root mit Docker" anlegen und das Recht „Root-Arbeitsplatz nutzen" an
+die Gruppen vergeben, die es bekommen sollen. Ausführlich in
+[Kapitel 25](docs/wiki/25-root-arbeitsplatz.md).
+
 ### Wenn etwas schiefgeht
 
 ```bash
@@ -216,6 +232,11 @@ dabei **nicht** zurückwandert, ist die Datenbank: Neue Spalten bleiben stehen. 
 - Der ferne Bildschirm **wächst mit dem Fenster**, kein schwarzer Rand, keine Skalierung
 - Zwischenablage in beide Richtungen, auch zwischen zwei Anwendungen im selben Container
 - Klassischer XFCE-Desktop als zusätzliche Ansicht
+- **Root-Arbeitsplatz für Entwickler**: root, **Docker und `docker compose`** im Container — unter
+  Sysbox, also ohne `--privileged` (root im Container ist auf dem Host unprivilegiert). Beenden
+  **hält an** statt zu löschen: Was installiert wird, bleibt, unter fester Adresse; „Neu aufsetzen"
+  holt ein neues Basisimage. Die inneren Container gehen durch denselben Router und dieselben
+  Netzregeln ([Kapitel 25](docs/wiki/25-root-arbeitsplatz.md))
 
 **Verwaltung**
 - Ressourcen **je Nutzer und Workspace**: Nutzer A bekommt 2 Kerne, Nutzer B einen
@@ -226,6 +247,9 @@ dabei **nicht** zurückwandert, ist die Datenbank: Neue Spalten bleiben stehen. 
   Sicherheitsschlüssel) oder Einmalkennwort — angeboten, nicht verlangt; `/healthz` und `/metrics`
   für die Überwachung
 - Nutzer, Gruppen und Rechte; Administratoren sind in ihrem eigenen Container `root`
+- **Betrieb → Arbeitsplätze**: alle Arbeitsplätze aller Nutzer, laufend und angehalten, mit Platz
+  und „zuletzt aktiv"; Starten, Anhalten, Löschen — und ein **root-Webterminal** im Browser, dessen
+  Eingaben je Arbeitsplatz protokolliert und exportierbar sind
 - **Zentrale Anmeldung über Keycloak**, mitgeliefert im Stack — oder ein vorhandenes anbinden. OTA
   ist dessen Verwalter: Konten, Gruppen und die **AD-Anbindung** richtet man in OTAs Oberfläche
   ein, die Keycloak-Konsole bleibt für den Alltag zu — **erreichbar ist sie trotzdem**
@@ -375,7 +399,7 @@ nicht — dieselbe Trennung gilt für das Dateisystem des Hosts.
 
 ## Dokumentation
 
-- **[Handbuch](docs/wiki/README.md)** — Bedienung, Verwaltung, Betrieb, Fehlersuche (24 Kapitel)
+- **[Handbuch](docs/wiki/README.md)** — Bedienung, Verwaltung, Betrieb, Fehlersuche (25 Kapitel)
 - **[plan.md](plan.md)** — Architektur **und die Begründungen dahinter**, samt der Sackgassen
 - **[docs/adr/](docs/adr/README.md)** — Entscheidungen, die teuer rückgängig zu machen sind, mit den
   Alternativen, die nicht getragen hätten
@@ -406,6 +430,7 @@ make test
 | `test-ldap.sh` | Verzeichnis-Anbindung **über Keycloak** gegen ein echtes OpenLDAP im Container — vor allem, dass ein Verzeichniseintrag kein lokales Konto übernimmt und ein Ausfall den Notzugang nicht mitreisst |
 | `test-streaming.sh` | Der Medienweg: Vermittelt der TURN-Server wirklich, kommt im Browser ein Bild an, kommen Umlaute, Shift und AltGr einer deutschen Tastatur richtig an, und liegt die eigene Adresse in keinem gesperrten Bereich? Der Prüfbrowser läuft in einem Netz, aus dem der Session-Container **nicht** direkt erreichbar ist — wie ein Arbeitsplatz im Firmennetz. Ist `OTA_TURN_BIND` gesetzt, stellt die Reihe die Portweiterleitung der Firewall für den Prüfbrowser nach und prüft den Weg durch die NAT |
 | `test-firewall.sh` | Die Netzabsicherung, **von innen gemessen**: Nachbar, Wirt, Firmennetz, TURN, Namensdienst, Internet je Stufe, Freigabe nach Namen, Portfreigabe — und alles noch einmal nach einem Neustart des Routers |
+| `test-root-arbeitsplatz.sh` | Der Root-Arbeitsplatz: root auf dem Host unprivilegiert (Sysbox), Docker und Compose im Container, Netzregeln auch für die **inneren** Container, Anhalten und Fortsetzen mit erhaltenem Stand, Neu aufsetzen, Webterminal samt Protokoll und Export, kein Terminal in Dienste des Stacks. Ohne Sysbox übersprungen |
 | `test-backup.sh` | Sicherung und Wiederherstellung von Profil, Container und Datenbank. Beendet dafür Sitzungen — **nur die eigenen**, und prüft das ausdrücklich nach |
 
 Die Zugangsdaten der Prüfung stehen in `deploy/.env` und nicht im Quelltext; die Reihen lesen sie

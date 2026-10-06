@@ -20,7 +20,9 @@ help:
 	@echo "  make ps        Zustand aller Dienste"
 	@echo "  make admin     Ersten Administrator anlegen (NAME=... setzen)"
 	@echo "  make test      Alle Prüfreihen (Rechte, Zwischenablage, Oberfläche,"
-	@echo "                 Verzeichnis, Medienweg, Netz, Sicherung)"
+	@echo "                 Verzeichnis, Medienweg, Netz, Root-Arbeitsplatz, Sicherung)"
+	@echo "  make root-image  Basisimage für Root-Arbeitsplätze bauen und prüfen"
+	@echo "                 (braucht Sysbox, Handbuch Kapitel 25)"
 	@echo "  make messung   Die beiden Streaming-Maschinen vergleichen (~12 min,"
 	@echo "                 braucht eine ruhige Maschine)"
 	@echo "  make bilder    Alle Bilder der Doku erzeugen (Diagramme + Bildschirmfotos)"
@@ -104,7 +106,22 @@ up:
 	    echo "    scripts/build-desktop-image.sh --pruefen"; \
 	  }; \
 	fi
+	@# **Das Root-Image, wenn der Host es tragen kann** (Kapitel 25). Nur mit
+	@# Sysbox: Ohne startet ein Root-Arbeitsplatz ohnehin nicht, und ein Image,
+	@# das niemand benutzen kann, kostet nur Platz. Gebaut wird nur, wenn es
+	@# fehlt — es baut auf dem Desktop-Basisimage auf und dauert eine Minute.
+	@if docker info 2>/dev/null | grep -q sysbox-runc \
+	   && docker image inspect ota/base-desktop:1 >/dev/null 2>&1 \
+	   && ! docker image inspect ota/base-desktop-root:1 >/dev/null 2>&1; then \
+	  echo "  Sysbox ist da, das Root-Image fehlt — es wird jetzt gebaut."; \
+	  ./scripts/build-root-image.sh || echo "  (Bau gescheitert — von Hand: scripts/build-root-image.sh --pruefen)"; \
+	fi
 	@echo
+
+.PHONY: root-image
+# Das Basisimage fuer Root-Arbeitsplaetze neu bauen (Kapitel 25).
+root-image:
+	@./scripts/build-root-image.sh --pruefen
 
 .PHONY: update
 update:
@@ -207,6 +224,10 @@ test:
 	@# fremde Regeln davor und liessen alles durch, und die Bruecke des
 	@# Wirts war erreichbar, obwohl das Regelwerk vollstaendig aussah.
 	@./scripts/test-firewall.sh
+	@echo
+	@# Root-Arbeitsplatz: root und Docker unter Sysbox, Anhalten statt Loeschen,
+	@# Webterminal mit Protokoll. Ohne Sysbox wird uebersprungen statt rot.
+	@./scripts/test-root-arbeitsplatz.sh
 	@echo
 	@# Zuletzt, weil dieser Test Sessions beendet, um die Wiederherstellung
 	@# überhaupt prüfen zu können — **nur die eigenen**: `/api/sessions`

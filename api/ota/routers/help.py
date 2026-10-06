@@ -59,6 +59,7 @@ SECTIONS: dict[str, tuple[str, bool]] = {
     "22": ("Für Administratoren", True),
     "23": ("Für Administratoren", True),
     "24": ("Betrieb", True),
+    "25": ("Für Administratoren", True),
 }
 
 SLUG_OK = re.compile(r"^[0-9a-z-]+$")

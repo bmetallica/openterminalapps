@@ -48,3 +48,4 @@ selbstverständlicher Schritte aus, und das war sie nie.
 | [ADR-004](004-keine-signaturpruefung-fuer-registries.md) | Registry-Signaturen werden nicht geprüft | angenommen |
 | [ADR-005](005-selkies-statt-kasmvnc.md) | Selkies überträgt das Bild, KasmVNC bleibt für fremde Images | angenommen |
 | [ADR-006](006-ein-netz-je-sitzung.md) | Jeder Arbeitsplatz bekommt ein eigenes Netz, der einzige Ausgang ist ein Router | angenommen |
+| [ADR-007](007-root-und-docker-ueber-sysbox.md) | Root und Docker im Arbeitsplatz über Sysbox, nicht über den Socket oder `--privileged` | angenommen |

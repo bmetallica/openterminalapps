@@ -283,7 +283,8 @@ export default function App() {
           <Storage onToast={toast} shelf="eigen" canWrite />
         )}
         {current === 'people' && <People onToast={toast} />}
-        {current === 'monitor' && <Monitor onToast={toast} />}
+        {current === 'monitor' && <Monitor onToast={toast}
+          darfTerminal={!!me && (me.is_admin || me.permissions.includes('arbeitsplatz.terminal'))} />}
         {current === 'netz' && <Netz onToast={toast} />}
         {current === 'settings' && <Settings onToast={toast} />}
         {current === 'account' && <Account me={me} onMe={setMe} onToast={toast} />}

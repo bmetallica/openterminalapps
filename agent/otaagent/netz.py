@@ -441,6 +441,18 @@ def waisen_aufraeumen(client) -> int:
     """
     weg = 0
     for netz in sitzungsnetze(client):
+        # **Auch angehaltene Container zaehlen.** `Containers` am Netz nennt nur
+        # laufende. Ein angehaltener Root-Arbeitsplatz haengt aber weiter an
+        # seinem Netz — loeschte man es hier, liesse er sich nie wieder
+        # starten („network … not found"). Gefragt wird deshalb Docker selbst,
+        # nach jedem Container dieser Sitzung in jedem Zustand.
+        if netz["session_id"]:
+            try:
+                if client.containers.list(all=True, filters={
+                        "label": f"ota.session_id={netz['session_id']}"}):
+                    continue
+            except APIError:
+                continue
         eigene = [c for c in netz["container"]]
         # Traefik und der Router zaehlen nicht: Die haengen in jedem Sitzungsnetz.
         richtige = []

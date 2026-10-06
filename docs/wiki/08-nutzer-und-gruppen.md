@@ -62,7 +62,21 @@ einzelnen Rechte (*Nutzer anlegen und ändern*, *Workspaces anlegen und ändern*
 
 Änderungen an `/etc` und nachinstallierte Pakete überleben den Container nicht — sie liegen
 ausserhalb von `/home`. Was dauerhaft dabei sein soll, gehört ins Golden Image
-([Kapitel 7](07-golden-images.md)).
+([Kapitel 7](07-golden-images.md)) — oder der Arbeitsplatz ist ein **Root-Arbeitsplatz**: Dort ist
+root auf dem Wirt unprivilegiert (Sysbox), und was installiert wird, bleibt
+([Kapitel 25](25-root-arbeitsplatz.md)).
+
+## Zwei Rechte für Root-Arbeitsplätze ✅
+
+*Seit dem 2026-10-06* ([Kapitel 25](25-root-arbeitsplatz.md)).
+
+| Recht | Bedeutet |
+|---|---|
+| **Root-Arbeitsplatz nutzen** (`arbeitsplatz.root`) | Vorlagen der Klasse „Root mit Docker" starten: root und Docker im Container, angehalten statt gelöscht. Ohne das Recht wird der Start mit einer Erklärung abgelehnt |
+| **Per Webterminal als root in laufende Arbeitsplätze** (`arbeitsplatz.terminal`) | Unter Betrieb → Arbeitsplätze eine root-Shell im Browser öffnen — in jedem laufenden Arbeitsplatz, auch fremden. Jede Eingabe wird mit Namen protokolliert |
+
+Administratoren haben beide. Das zweite ist mächtiger als das Aufschalten auf den Bildschirm: Wer es
+hat, liest jede Datei im Zuhause eines Nutzers. Vergeben wie den Zugang zum Docker-Host.
 
 ## Was ein Recht bedeutet — und was nicht
 

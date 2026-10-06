@@ -64,6 +64,13 @@ export type Template = {
    * schwarz.
    */
   stream_engine: 'kasmvnc' | 'selkies'
+  /**
+   * Die Arbeitsplatzklasse (Handbuch Kapitel 25). `root` heisst: root und
+   * Docker im Container (unter Sysbox), und Beenden hält an, statt zu löschen.
+   */
+  klasse: 'standard' | 'root'
+  /** Wie viel ein Root-Arbeitsplatz belegen darf (Container + Docker-Daten). */
+  platz_grenze_gb: number
   mode: 'workspace' | 'single_app'
   image_ref: string
   cores: number
@@ -102,13 +109,15 @@ export type Session = {
   template_icon: string
   template_mode: string
   username: string
-  status: 'starting' | 'running' | 'paused' | 'stopped' | 'failed'
+  /** `angehalten`: ein Root-Arbeitsplatz, der mit allem darin auf den nächsten Start wartet. */
+  status: 'starting' | 'running' | 'paused' | 'stopped' | 'failed' | 'angehalten'
   cores: number
   memory_bytes: number
   started_at: string
   last_seen_at: string
   error: string | null
   url: string
+  klasse: 'standard' | 'root'
   streams: Stream[]
   /**
    * Welche Streaming-Maschine überträgt: `kasmvnc` oder `selkies`.
@@ -490,6 +499,29 @@ export type AdminSession = {
   app_count: number
 }
 
+/** Ein Arbeitsplatz in der Liste unter Betrieb — laufend oder angehalten. */
+export type Arbeitsplatz = {
+  id: string
+  username: string
+  display_name: string
+  template_name: string
+  template_icon: string
+  template_slug: string
+  klasse: 'standard' | 'root'
+  platz_grenze_gb: number
+  status: string
+  hat_container: boolean
+  started_at: string
+  last_seen_at: string
+  ended_at: string | null
+  end_reason: string | null
+  cores: number
+  memory_bytes: number
+  app_count: number
+}
+
+export type Platz = { schicht?: number; docker?: number; gesamt: number | null }
+
 export type AuditEntry = {
   ts: string
   actor: string | null
@@ -551,6 +583,8 @@ export type Host = {
   docker_version: string
   architecture: string
   running_containers: number
+  /** Ist Sysbox eingerichtet? Ohne gibt es keine Root-Arbeitsplätze. */
+  sysbox: boolean
 }
 
 export type Allocation = {
@@ -901,6 +935,20 @@ export const api = {
   },
   clearLogo: () => call<Marke>('/branding/logo', { method: 'DELETE' }),
   adminSessions: () => call<AdminSession[]>('/admin/sessions'),
+  neuAufsetzen: (id: string, dockerDaten: boolean) =>
+    call<Session>(`/sessions/${id}/neu-aufsetzen${dockerDaten ? '?docker=true' : ''}`,
+      { method: 'POST' }),
+  arbeitsplaetze: () => call<Arbeitsplatz[]>('/admin/arbeitsplaetze'),
+  arbeitsplatzPlatz: (id: string) => call<Platz>(`/admin/arbeitsplaetze/${id}/platz`),
+  arbeitsplatzStarten: (id: string) =>
+    call<{ status: string }>(`/admin/arbeitsplaetze/${id}/starten`, { method: 'POST' }),
+  arbeitsplatzAnhalten: (id: string) =>
+    call<{ status: string }>(`/admin/arbeitsplaetze/${id}/anhalten`, { method: 'POST' }),
+  arbeitsplatzLoeschen: (id: string) =>
+    call<{ status: string }>(`/admin/arbeitsplaetze/${id}`, { method: 'DELETE' }),
+  /** Kein `call`: Die Antwort ist eine Datei, kein JSON. */
+  terminalProtokollUrl: (id: string, format: 'txt' | 'csv') =>
+    `/api/admin/arbeitsplaetze/${id}/terminal-protokoll?format=${format}`,
 
   backups: () => call<Backup[]>('/backups'),
   backupStorage: () => call<BackupStorage>('/backups/storage'),

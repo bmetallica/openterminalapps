@@ -7,6 +7,7 @@ was darf. Das passiert in der API.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import ipaddress
 import json
@@ -26,7 +27,8 @@ from urllib.parse import urlparse
 import docker
 from docker.errors import APIError, ImageNotFound, NotFound
 from fastapi import (
-    Depends, FastAPI, File, Form, Header, HTTPException, Response, UploadFile, status,
+    Depends, FastAPI, File, Form, Header, HTTPException, Response, UploadFile,
+    WebSocket, status,
 )
 from pydantic import BaseModel, Field
 
@@ -423,6 +425,9 @@ class StartRequest(BaseModel):
     # API fuer Administratoren. Siehe `_elevate()` — das ist eine bewusste
     # Lockerung, keine Nebenwirkung.
     elevated: bool = False
+    # Die Arbeitsplatzklasse. `root` heisst: Sysbox, root und Docker im
+    # Container, angehalten statt geloescht (Handbuch Kapitel 25, ADR-007).
+    klasse: str = "standard"
     # Wem die eigene Ablage gehoert, die eingehaengt werden soll. Leer heisst:
     # keine. Die Vorlage kann das abschalten, und die API entscheidet es —
     # der Agent haengt nur ein, was ihm gesagt wird.
@@ -480,6 +485,9 @@ def host_info() -> dict[str, Any]:
         "architecture": info.get("Architecture", ""),
         "docker_version": info.get("ServerVersion", ""),
         "running_containers": info.get("ContainersRunning", 0),
+        # Ob Root-Arbeitsplaetze moeglich sind. Die Oberflaeche graut die
+        # Klasse sonst aus, statt einen Start scheitern zu lassen.
+        "sysbox": "sysbox-runc" in (info.get("Runtimes") or {}),
     }
 
 
@@ -1116,6 +1124,30 @@ def start_container(req: StartRequest) -> dict[str, Any]:
         env.setdefault("SELKIES_STUN_PORT",
                        os.environ.get("OTA_TURN_PORT", "3478"))
 
+    # --- Root-Arbeitsplatz -------------------------------------------------
+    #
+    # Nur unter Sysbox. Dort ist root im Container auf dem Wirt ein
+    # unprivilegierter Nutzer (gemessen am 2026-10-06: UID 0 -> 296608), und
+    # `dockerd` laeuft ohne `--privileged`. Unter `runc` braeuchte derselbe
+    # Container `--privileged` — deshalb wird hier abgelehnt statt
+    # zurueckgefallen, wenn Sysbox fehlt.
+    ist_root = req.klasse == "root"
+    if ist_root:
+        _sysbox_pruefen(client)
+        env["OTA_DOCKER"] = "1"
+        # Images und Container des Nutzers. Ein benanntes Volume und nicht die
+        # Schicht des Containers: messbar, beim Einfrieren und Sichern von
+        # selbst aussen vor, und beim Loeschen gezielt mit weg.
+        mounts.append(docker.types.Mount(
+            target="/var/lib/docker", source=_docker_volume(client, req.session_id),
+            type="volume",
+        ))
+        # Die Anlagenwerte von jetzt — beim Fortsetzen neu geschrieben.
+        mounts.append(docker.types.Mount(
+            target="/etc/ota/umgebung.sh", source=_umgebung_schreiben(req.session_id),
+            type="bind", read_only=True,
+        ))
+
     # **Erst das Netz, dann die Regeln, dann der Container.** Die Reihenfolge
     # ist nicht beliebig: Die Grundsperre im Firewall-Dienst gilt fuer den
     # ganzen Bereich, ein neues Netz ist also von seiner ersten Sekunde an
@@ -1126,6 +1158,11 @@ def start_container(req: StartRequest) -> dict[str, Any]:
     sitzungsnetz, subnetz = netz_ops.netz_anlegen(
         client, req.session_id, req.netzprofil, req.subnetz)
     router = netz_ops.router_verbinden(client, sitzungsnetz, subnetz)
+    if ist_root:
+        # Fuer den `dockerd` im Arbeitsplatz: Seine Container fragen den Router
+        # als DNS (root_startup.sh). Die Standardroute, aus der er ihn sonst
+        # laese, setzt der Router erst nach dem Start.
+        env["OTA_ROUTER"] = router
     platz = netz_ops.platz_adresse(subnetz)
     log.info("Sitzungsnetz %s (%s): Router %s, Arbeitsplatz %s, Profil %s",
              sitzungsnetz, subnetz, router, platz,
@@ -1143,6 +1180,7 @@ def start_container(req: StartRequest) -> dict[str, Any]:
     # haengt in vielen und wuerde sonst irgendeines nehmen.
     beschriftung = dict(req.labels)
     beschriftung["traefik.docker.network"] = sitzungsnetz
+    beschriftung["ota.klasse"] = req.klasse
 
     try:
         container = client.containers.run(
@@ -1182,8 +1220,11 @@ def start_container(req: StartRequest) -> dict[str, Any]:
             # Widerspruch. Der Verdacht war, dass Chrome und Electron sie fuer
             # ihre Sandbox brauchen; das stimmt nicht — die laufen ueber
             # `--no-sandbox`, erkannt an `chrome-sandbox` neben dem Programm.
-            security_opt=[] if req.elevated else ["no-new-privileges:true"],
-            cap_drop=[] if req.elevated else ["ALL"],
+            security_opt=[] if (req.elevated or ist_root) else ["no-new-privileges:true"],
+            cap_drop=[] if (req.elevated or ist_root) else ["ALL"],
+            # Root-Arbeitsplaetze unter Sysbox. Die Rechte oben gelten dort im
+            # eigenen Benutzer-Namensraum, nicht auf dem Wirt.
+            runtime="sysbox-runc" if ist_root else None,
             pids_limit=4096,
             restart_policy={"Name": "no"},
             # Wie viel Protokoll dieser Container behalten darf.
@@ -1547,6 +1588,103 @@ def _tastatur_setzen(container) -> None:
         log.warning("Tastaturlayout nicht gesetzt: %s", exc)
 
 
+# --------------------------------------------------------------------------
+# Root-Arbeitsplatz (Handbuch Kapitel 25, ADR-007)
+# --------------------------------------------------------------------------
+
+def _sysbox_pruefen(client) -> None:
+    """Ohne Sysbox kein Root-Arbeitsplatz — und kein Rueckfall auf `runc`.
+
+    Unter `runc` braeuchte `dockerd` im Container `--privileged`, und root im
+    Container waere root auf dem Wirt. Lieber eine klare Ablehnung als ein
+    stiller Rueckfall auf genau das, was diese Klasse vermeiden soll.
+    """
+    try:
+        laufzeiten = (client.info() or {}).get("Runtimes") or {}
+    except APIError:
+        laufzeiten = {}
+    if "sysbox-runc" not in laufzeiten:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Root-Arbeitsplätze brauchen Sysbox auf diesem Host, und es ist nicht "
+            "eingerichtet. Siehe Handbuch, Kapitel 25 („Sysbox einrichten“).",
+        )
+
+
+def docker_volume_name(session_id: str) -> str:
+    return f"ota-platz-docker-{session_id}"
+
+
+def _docker_volume(client, session_id: str) -> str:
+    """Das Volume fuer `/var/lib/docker` — einmal je Platz, mit Kennzeichnung."""
+    name = docker_volume_name(session_id)
+    try:
+        client.volumes.get(name)
+    except NotFound:
+        client.volumes.create(name=name, labels={"ota.session_id": session_id,
+                                                 "ota.zweck": "docker"})
+    return name
+
+
+def _anlagen_umgebung() -> dict[str, str]:
+    """Was sich an der Anlage aendern kann, waehrend ein Platz angehalten ist.
+
+    Ein Root-Arbeitsplatz wird nicht neu erzeugt, sondern fortgesetzt — seine
+    Umgebung stammt vom ersten Start. Diese Werte bekommt er bei jedem Start
+    frisch (`root_startup.sh` liest sie), damit eine neue TURN-Adresse, ein
+    neuer Proxy oder ein anderes Tastaturlayout auch dort ankommen.
+    """
+    werte: dict[str, str] = {}
+    for name, wert in (("HTTP_PROXY", PROXY_HTTP), ("HTTPS_PROXY", PROXY_HTTPS),
+                       ("NO_PROXY", PROXY_OHNE)):
+        werte[name] = wert
+        werte[name.lower()] = wert
+    turn = _wirt(os.environ.get("OTA_TURN_HOST", ""))
+    port = os.environ.get("OTA_TURN_PORT", "3478")
+    werte.update({
+        "SELKIES_TURN_HOST": turn,
+        "SELKIES_TURN_PORT": port,
+        "SELKIES_TURN_SHARED_SECRET": os.environ.get("OTA_TURN_SECRET", ""),
+        "SELKIES_TURN_PROTOCOL": os.environ.get("OTA_TURN_PROTOCOL", "udp"),
+        "SELKIES_ICE_TRANSPORT_POLICY": os.environ.get("OTA_TURN_ICE_POLICY", "all"),
+        "SELKIES_STUN_HOST": turn,
+        "SELKIES_STUN_PORT": port,
+        "OTA_KEYBOARD_LAYOUT": TASTATUR,
+        "OTA_KEYBOARD_VARIANT": TASTATUR_VARIANTE,
+    })
+    return werte
+
+
+def _umgebung_datei(session_id: str) -> Path:
+    if not re.fullmatch(r"[0-9a-f-]{36}", session_id or ""):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Ungültige Kennung")
+    return Path(RUNTIME_ROOT) / "plaetze" / session_id / "umgebung.sh"
+
+
+def _umgebung_schreiben(session_id: str) -> str:
+    """Die Anlagenwerte als Shell-Datei, eingehaengt nach /etc/ota/umgebung.sh.
+
+    **An Ort und Stelle ueberschreiben**, nicht ersetzen: Ein Bind-Mount haengt
+    an der Datei (dem Inode). Eine neue Datei unter demselben Namen saehe der
+    Container nie.
+    """
+    datei = _umgebung_datei(session_id)
+    datei.parent.mkdir(parents=True, exist_ok=True)
+    zeilen = ["# Erzeugt vom OTA-Agent bei jedem Start. Nicht von Hand aendern."]
+    for name, wert in _anlagen_umgebung().items():
+        if wert:
+            zeilen.append(f"export {name}={shlex.quote(wert)}")
+        else:
+            zeilen.append(f"unset {name}")
+    with open(datei, "w", encoding="utf-8") as fh:
+        fh.write("\n".join(zeilen) + "\n")
+    # Der Container liest sie als root und als 1000; der Wirt sieht sie nur
+    # unter OTA_RUNTIME_ROOT, das 0700 ist.
+    os.chmod(datei, 0o644)
+    return str(datei)
+
+
+
 def _proxy_einrichten(container) -> None:
     """Den Firmenproxy auch dort hinterlegen, wo keine Umgebungsvariable hinreicht.
 
@@ -1697,7 +1835,14 @@ def container_action(cid: str, action: str) -> dict[str, str]:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Unbekannte Aktion")
     try:
         c = dc().containers.get(cid)
-        getattr(c, action)()
+        if action == "stop" and (c.labels or {}).get("ota.klasse") == "root":
+            # Ein Root-Arbeitsplatz faehrt beim Anhalten seinen eigenen
+            # `dockerd` samt innerer Container herunter. Zehn Sekunden (Dockers
+            # Vorgabe) reichen dafuer nicht — danach kaeme SIGKILL, und die
+            # inneren Container staenden mitten im Schreiben still.
+            c.stop(timeout=45)
+        else:
+            getattr(c, action)()
     except NotFound:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Container nicht gefunden")
     except APIError as exc:
@@ -1706,7 +1851,10 @@ def container_action(cid: str, action: str) -> dict[str, str]:
 
 
 @app.delete("/containers/{cid}", dependencies=[Depends(require_token)])
-def remove_container(cid: str) -> dict[str, str]:
+def remove_container(cid: str, daten: bool = False) -> dict[str, str]:
+    """Container entfernen. Mit `daten` auch das Docker-Volume eines
+    Root-Arbeitsplatzes — sonst bleibt es fuer den naechsten Aufbau stehen
+    („Neu aufsetzen" behaelt die Images des Nutzers)."""
     client = dc()
     session_id = ""
     try:
@@ -1718,6 +1866,20 @@ def remove_container(cid: str) -> dict[str, str]:
     except APIError as exc:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
 
+    if daten and session_id:
+        try:
+            client.volumes.get(docker_volume_name(session_id)).remove(force=True)
+        except NotFound:
+            pass
+        except APIError as exc:
+            log.warning("Docker-Volume von %s bleibt: %s", session_id, exc)
+        try:
+            datei = _umgebung_datei(session_id)
+            datei.unlink(missing_ok=True)
+            datei.parent.rmdir()
+        except (OSError, HTTPException):
+            pass
+
     # Das Netz geht mit. Bleibt es stehen, bleibt sein Subnetz vergeben — und
     # nach genug Waisen ist der Bereich voll, mit einer Fehlermeldung, die nach
     # einem Docker-Problem aussieht und keines ist.
@@ -1728,6 +1890,193 @@ def remove_container(cid: str) -> dict[str, str]:
         netz_ops.waisen_aufraeumen(client)
     _firewall_abgleich(client)
     return {"status": "removed"}
+
+
+# --------------------------------------------------------------------------
+# Root-Arbeitsplatz: fortsetzen, messen
+# --------------------------------------------------------------------------
+
+def _root_container(client, cid: str):
+    try:
+        c = client.containers.get(cid)
+    except NotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Container nicht gefunden")
+    if (c.labels or {}).get("ota.klasse") != "root":
+        raise HTTPException(status.HTTP_409_CONFLICT, "Kein Root-Arbeitsplatz")
+    return c
+
+
+@app.post("/containers/{cid}/fortsetzen", dependencies=[Depends(require_token)])
+def fortsetzen(cid: str) -> dict[str, Any]:
+    """Einen angehaltenen Root-Arbeitsplatz wieder starten.
+
+    Derselbe Container, dieselbe Kennung, dasselbe Netz — nur die
+    Anlagenwerte werden vorher frisch geschrieben. Ein neu gestartetes Netz
+    eines Containers ist dabei nicht garantiert dasselbe wie vorher: Router
+    und Traefik werden nachgezogen, die Regeln danach gesetzt.
+    """
+    client = dc()
+    _sysbox_pruefen(client)
+    c = _root_container(client, cid)
+    sid = (c.labels or {}).get("ota.session_id", "")
+    _umgebung_schreiben(sid)
+    try:
+        client.networks.get(netz_ops.netzname(sid))
+    except NotFound:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Das Netz dieses Arbeitsplatzes gibt es nicht mehr. „Neu aufsetzen“ "
+            "baut ihn mit neuem Netz auf; das Zuhause bleibt.",
+        )
+    netz_ops.anbindung_sichern(client)
+    try:
+        if c.status == "paused":
+            c.unpause()
+        elif c.status != "running":
+            c.start()
+    except APIError as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Docker meldet: {exc}") from exc
+    # Erst der Container, dann die Regeln und die Standardroute: Den
+    # Namensraum, in den die Route gehoert, gibt es erst jetzt.
+    _firewall_abgleich(client)
+    _proxy_einrichten(c)
+    _wait_for_vnc(c, port=8080)
+    _tastatur_setzen(c)
+    c.reload()
+    return {"container_id": c.id, "status": c.status}
+
+
+_df_zwischen: dict[str, Any] = {"zeit": 0.0, "volumes": {}}
+
+
+def _volume_groessen(client) -> dict[str, int]:
+    """Groesse aller Volumes — `docker system df`, eine Minute zwischengespeichert.
+
+    Die Abfrage rechnet ueber alle Volumes des Wirts und dauert entsprechend.
+    Fuer eine Liste in der Oberflaeche genuegt der Stand von vor einer Minute.
+    """
+    if time.time() - _df_zwischen["zeit"] > 60:
+        try:
+            daten = client.api.df()
+            _df_zwischen["volumes"] = {
+                v["Name"]: int((v.get("UsageData") or {}).get("Size") or 0)
+                for v in daten.get("Volumes") or []
+            }
+            _df_zwischen["zeit"] = time.time()
+        except APIError as exc:
+            log.warning("Volume-Groessen nicht ermittelbar: %s", exc)
+    return _df_zwischen["volumes"]
+
+
+@app.get("/containers/{cid}/platz", dependencies=[Depends(require_token)])
+def platz(cid: str) -> dict[str, int]:
+    """Was ein Root-Arbeitsplatz belegt: Schicht des Containers + Docker-Daten."""
+    client = dc()
+    c = _root_container(client, cid)
+    # Die Groesse der Schicht liefert nur die Liste (`docker ps --size`); das
+    # SDK reicht `size` an `inspect_container` nicht durch.
+    try:
+        eintraege = client.api.containers(all=True, size=True, filters={"id": c.id})
+        schicht = int((eintraege[0] if eintraege else {}).get("SizeRw") or 0)
+    except APIError:
+        schicht = 0
+    sid = (c.labels or {}).get("ota.session_id", "")
+    docker_bytes = _volume_groessen(client).get(docker_volume_name(sid), 0)
+    return {"schicht": schicht, "docker": docker_bytes, "gesamt": schicht + docker_bytes}
+
+
+# --------------------------------------------------------------------------
+# Webterminal fuer Administratoren
+# --------------------------------------------------------------------------
+#
+# Eine root-Shell in einem **Arbeitsplatz** — nie in einem Dienst des Stacks.
+# Der Agent ist der einzige mit dem Docker-Socket; ein Terminal, das jeden
+# Container nimmt, waere ein Weg zu root auf dem Wirt ueber genau diesen
+# Dienst. Angenommen werden deshalb nur Container mit `ota.session_id`.
+#
+# Protokolliert wird **nicht hier**, sondern in der API: Dort ist bekannt,
+# wer am anderen Ende sitzt.
+
+@app.websocket("/containers/{cid}/terminal")
+async def terminal(ws: WebSocket, cid: str) -> None:
+    if not AGENT_TOKEN or not secrets.compare_digest(ws.headers.get("x-agent-token", ""), AGENT_TOKEN):
+        await ws.close(code=4403)
+        return
+    client = dc()
+    try:
+        c = client.containers.get(cid)
+    except NotFound:
+        await ws.close(code=4404)
+        return
+    if "ota.session_id" not in (c.labels or {}) or c.status != "running":
+        await ws.close(code=4409)
+        return
+    await ws.accept()
+
+    exec_id = client.api.exec_create(
+        c.id,
+        # **Ohne `2>/dev/null` hinter bash**: Bash schreibt seinen Prompt auf
+        # stderr. Mit der Umleitung stand im Terminal kein einziger Prompt
+        # (gemessen 2026-10-06), und man tippte ins Leere.
+        ["/bin/sh", "-c", "cd /root 2>/dev/null || cd /; "
+                          "if command -v bash >/dev/null; then exec bash -l; fi; exec sh -l"],
+        tty=True, stdin=True, user="0",
+        environment={"TERM": "xterm-256color", "LANG": "C.UTF-8"},
+    )["Id"]
+    stream = client.api.exec_start(exec_id, tty=True, socket=True)
+    roh = getattr(stream, "_sock", stream)
+    loop = asyncio.get_running_loop()
+
+    async def ausgabe() -> None:
+        while True:
+            try:
+                daten = await loop.run_in_executor(None, roh.recv, 65536)
+            except OSError:
+                break
+            if not daten:
+                break
+            try:
+                await ws.send_bytes(daten)
+            except Exception:  # noqa: BLE001 — Gegenseite weg
+                break
+
+    leser = asyncio.create_task(ausgabe())
+    try:
+        while not leser.done():
+            empfang = asyncio.create_task(ws.receive())
+            fertig, _ = await asyncio.wait({empfang, leser},
+                                           return_when=asyncio.FIRST_COMPLETED)
+            if empfang not in fertig:
+                empfang.cancel()
+                break
+            nachricht = empfang.result()
+            if nachricht.get("type") == "websocket.disconnect":
+                break
+            if nachricht.get("bytes"):
+                await loop.run_in_executor(None, roh.sendall, nachricht["bytes"])
+            elif nachricht.get("text"):
+                try:
+                    groesse = json.loads(nachricht["text"]).get("r")
+                    if groesse:
+                        client.api.exec_resize(exec_id, height=int(groesse[1]),
+                                               width=int(groesse[0]))
+                except (ValueError, TypeError, APIError):
+                    pass
+    finally:
+        leser.cancel()
+        try:
+            import socket as _socket
+            roh.shutdown(_socket.SHUT_RDWR)
+        except OSError:
+            pass
+        try:
+            roh.close()
+        except OSError:
+            pass
+        try:
+            await ws.close()
+        except Exception:  # noqa: BLE001
+            pass
 
 
 @app.get("/orphans", dependencies=[Depends(require_token)])

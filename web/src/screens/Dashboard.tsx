@@ -18,16 +18,23 @@ function greeting(): string {
   return tr('Guten Abend')
 }
 
-function Bay({ session, template, onOpen, onAct, onApp, busy, busyApp }: {
+function Bay({ session, template, onOpen, onAct, onApp, onResume, onReset, busy, busyApp }: {
   session: Session
   template: Template | undefined
   onOpen: (s: Session, stream?: Stream) => void
   onAct: (s: Session, a: 'pause' | 'unpause' | 'stop') => void
   onApp: (s: Session, slug: string) => void
+  onResume: (s: Session) => void
+  onReset: (s: Session, dockerDaten: boolean) => void
   busy: boolean
   busyApp: string | null
 }) {
   const running = session.status === 'running'
+  // Ein Root-Arbeitsplatz hält beim Beenden an, statt zu verschwinden — und
+  // steht dann hier mit allem, was darin installiert ist (Kapitel 25).
+  const root = session.klasse === 'root'
+  const angehalten = session.status === 'angehalten'
+  const [neuFragen, setNeuFragen] = useState(false)
   const started = new Date(session.started_at).getTime()
   const isWorkspace = session.template_mode === 'workspace'
   const apps = (template?.apps ?? []).filter((a) => a.is_enabled && !a.blocked_reason)
@@ -36,7 +43,9 @@ function Bay({ session, template, onOpen, onAct, onApp, busy, busyApp }: {
   return (
     <article className={`panel panel--state panel--${stateClass(session.status)} bay`}>
       <div className={`bay__screen${running ? ' bay__screen--on' : ''}`}>
-        <span className="bay__screen-tag data">{running ? tr('bereit') : tr('eingefroren')}</span>
+        <span className="bay__screen-tag data">
+          {running ? tr('bereit') : angehalten ? tr('angehalten') : tr('eingefroren')}
+        </span>
       </div>
 
       <div className="bay__meta">
@@ -68,9 +77,19 @@ function Bay({ session, template, onOpen, onAct, onApp, busy, busyApp }: {
           </div>
         )}
 
+        {angehalten && (
+          <p className="field__hint" style={{ marginTop: 8 }}>
+            {tr('Angehalten. Alles darin — Pakete, Einstellungen, Docker-Images — wartet auf den nächsten Start.')}
+          </p>
+        )}
+
         <div className="bay__facts">
-          <span className="bay__fact"><span className="silk">{tr('Laufzeit')}</span>
-            <b>{duration(Date.now() - started)}</b></span>
+          {root && (
+            <span className="bay__fact"><span className="silk">{tr('Klasse')}</span>
+              <b>{tr('Root mit Docker')}</b></span>
+          )}
+          <span className="bay__fact"><span className="silk">{angehalten ? tr('Zuletzt gestartet') : tr('Laufzeit')}</span>
+            <b>{angehalten ? ago(started) : duration(Date.now() - started)}</b></span>
           <span className="bay__fact"><span className="silk">{tr('Zuletzt aktiv')}</span>
             <b>{ago(new Date(session.last_seen_at).getTime())}</b></span>
           <span className="bay__fact"><span className="silk">{tr('Zugeteilt')}</span>
@@ -91,18 +110,45 @@ function Bay({ session, template, onOpen, onAct, onApp, busy, busyApp }: {
         </div>
       </div>
 
-      <div className="bay__actions">
-        <button className="btn btn--primary" disabled={busy}
-          onClick={() => (running ? onOpen(session) : onAct(session, 'unpause'))}>
-          {running ? (isWorkspace ? tr('Desktop öffnen') : tr('Weiter arbeiten')) : tr('Fortsetzen')}
-        </button>
-        {running && (
-          <button className="btn" disabled={busy} onClick={() => onAct(session, 'pause')}>{tr('Pause')}</button>
-        )}
-        <button className="btn btn--halt btn--icon" disabled={busy}
-          aria-label={tr('{name} beenden', { name: session.template_name })}
-          onClick={() => onAct(session, 'stop')}>■</button>
-      </div>
+      {neuFragen ? (
+        <div className="bay__actions" style={{ flexWrap: 'wrap', gap: 8 }}>
+          <p className="field__hint" style={{ width: '100%', margin: 0 }}>
+            {tr('Neu aufsetzen baut den Arbeitsplatz aus dem aktuellen Image neu. Was ausserhalb des Zuhauses installiert wurde, ist danach weg — das Zuhause bleibt.')}
+          </p>
+          <button className="btn btn--halt" disabled={busy}
+            onClick={() => { setNeuFragen(false); onReset(session, false) }}>
+            {tr('Neu aufsetzen, Docker-Images behalten')}
+          </button>
+          <button className="btn btn--halt" disabled={busy}
+            onClick={() => { setNeuFragen(false); onReset(session, true) }}>
+            {tr('Neu aufsetzen, auch Docker-Daten löschen')}
+          </button>
+          <button className="btn btn--ghost" onClick={() => setNeuFragen(false)}>{tr('Abbrechen')}</button>
+        </div>
+      ) : (
+        <div className="bay__actions">
+          <button className="btn btn--primary" disabled={busy}
+            onClick={() => (running ? onOpen(session)
+              : angehalten ? onResume(session) : onAct(session, 'unpause'))}>
+            {running ? (isWorkspace ? tr('Desktop öffnen') : tr('Weiter arbeiten')) : tr('Fortsetzen')}
+          </button>
+          {running && !root && (
+            <button className="btn" disabled={busy} onClick={() => onAct(session, 'pause')}>{tr('Pause')}</button>
+          )}
+          {root && (
+            <button className="btn" disabled={busy} onClick={() => setNeuFragen(true)}>
+              {tr('Neu aufsetzen')}
+            </button>
+          )}
+          {!angehalten && (
+            <button className="btn btn--halt btn--icon" disabled={busy}
+              aria-label={root ? tr('{name} anhalten', { name: session.template_name })
+                : tr('{name} beenden', { name: session.template_name })}
+              title={root ? tr('Anhalten — alles darin bleibt erhalten') : undefined}
+              onClick={() => onAct(session, 'stop')}>■</button>
+          )}
+        </div>
+      )}
     </article>
   )
 }
@@ -311,8 +357,39 @@ export function Dashboard({ me, onOpen, onToast }: {
     setBusy(s.id)
     try {
       await api.sessionAction(s.id, action)
-      onToast(tr({ pause: 'Pausiert', unpause: 'Fortgesetzt',
-                   stop: 'Beendet — dein Profil bleibt erhalten' }[action]))
+      onToast(action === 'stop' && s.klasse === 'root'
+        ? tr('Angehalten — alles darin bleibt erhalten')
+        : tr({ pause: 'Pausiert', unpause: 'Fortgesetzt',
+               stop: 'Beendet — dein Profil bleibt erhalten' }[action]))
+      await load()
+    } catch (err) {
+      onToast(err instanceof ApiError ? err.message : tr('Aktion fehlgeschlagen'), 'bad')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  /** Einen angehaltenen Root-Arbeitsplatz fortsetzen — über den normalen Start,
+   *  der denselben Platz wieder aufnimmt (oder einen neu aufgesetzten aufbaut). */
+  async function resume(s: Session) {
+    setBusy(s.id)
+    try {
+      await api.startSession(s.template_id)
+      onToast(tr('{name} läuft wieder — alles ist, wie du es verlassen hast.',
+        { name: s.template_name }))
+      await load()
+    } catch (err) {
+      onToast(err instanceof ApiError ? err.message : tr('Start fehlgeschlagen'), 'bad')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function reset(s: Session, dockerDaten: boolean) {
+    setBusy(s.id)
+    try {
+      await api.neuAufsetzen(s.id, dockerDaten)
+      onToast(tr('Neu aufgesetzt. Der nächste Start baut den Arbeitsplatz aus dem aktuellen Image.'))
       await load()
     } catch (err) {
       onToast(err instanceof ApiError ? err.message : tr('Aktion fehlgeschlagen'), 'bad')
@@ -337,7 +414,10 @@ export function Dashboard({ me, onOpen, onToast }: {
     return <div className="wrap"><p className="sub">{tr('Wird geladen…')}</p></div>
   }
 
-  const busyTemplates = new Set(sessions.map((s) => s.template_id))
+  // Ein angehaltener Platz belegt die Kachel nicht: Ein Klick darauf setzt
+  // ihn fort — derselbe Weg wie „Fortsetzen" oben.
+  const busyTemplates = new Set(sessions.filter((s) => s.status !== 'angehalten')
+    .map((s) => s.template_id))
   const available = templates.filter((t) => t.is_enabled)
 
   return (
@@ -383,6 +463,7 @@ export function Dashboard({ me, onOpen, onToast }: {
               <Bay key={s.id} session={s}
                 template={templates.find((t) => t.id === s.template_id)}
                 onOpen={onOpen} onAct={act} onApp={openApp}
+                onResume={(x) => void resume(x)} onReset={(x, dd) => void reset(x, dd)}
                 busy={busy === s.id} busyApp={busyApp} />
             ))}
           </div>

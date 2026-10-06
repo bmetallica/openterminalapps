@@ -43,6 +43,7 @@ heute schon funktioniert.
 21. [Betrieb hinter einem Firmenproxy](21-firmenproxy.md)
 22. [Die eigene Marke — Name, Farbe, Zeichen](22-marke.md)
 23. [Das Netz der Arbeitsplätze](23-netz.md)
+25. [Root-Arbeitsplatz — root und Docker im Container](25-root-arbeitsplatz.md)
 
 **Betrieb**
 10. [Zertifikate und HTTPS](10-zertifikate-und-https.md)

@@ -215,6 +215,21 @@ def delete_template(
             f"Hier läuft noch etwas: {who}. Beende die Sessions unter "
             "Betrieb, dann lässt sich der Workspace löschen.",
         )
+    # Angehaltene Root-Arbeitsplaetze sind keine Leichen, sondern der Zustand,
+    # den sich jemand erarbeitet hat. Sie mit der Vorlage still zu loeschen
+    # waere der teuerste Klick der ganzen Oberflaeche — erst einzeln loeschen.
+    geparkt = db.scalars(select(SessionModel).where(
+        SessionModel.template_id == tpl.id,
+        SessionModel.status == "angehalten",
+    )).all()
+    if geparkt:
+        who = ", ".join(sorted({s.user.username for s in geparkt}))
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"An diesem Workspace hängen angehaltene Root-Arbeitsplätze: {who}. "
+            "Lösche sie unter Betrieb → Arbeitsplätze, dann lässt sich der "
+            "Workspace löschen.",
+        )
 
     name = tpl.friendly_name
     db.delete(tpl)
