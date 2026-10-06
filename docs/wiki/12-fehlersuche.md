@@ -782,6 +782,7 @@ docker exec ota-firewall nft list table inet ota | head -40
 | Nur ein bestimmtes Ziel geht nicht | Vorgabe: Das Firmennetz ist zu. Freigabe eintragen, global oder im Profil ([Kapitel 23](23-netz.md)) |
 | Ein freigegebener **Name** geht nicht | Die Anwendung fragt über verschlüsseltes DNS (DoH) und damit nicht den Namensdienst des Routers. Adresse statt Name freigeben |
 | Gar nichts geht, auch nicht die Namensauflösung | Profil steht auf **abgeschottet**. Steht so auch im Dashboard des Nutzers |
+| Keine Namensauflösung, obwohl alles freigegeben ist | Der Router fragt den falschen Server: `docker exec ota-firewall grep ^server= /etc/dnsmasq.d/ota.conf`. Steht dort `9.9.9.9`, ist die Anlage älter als der 2026-10-06 (der Router las nicht die Server des Wirts) — `git pull`, `make update`, oder sofort `OTA_FW_DNS_UPSTREAM` setzen. **Freigaben ändern daran nichts**: Die Namensauflösung läuft immer über den Router |
 
 > **Wo ein Paket endet, und warum** — dafür stehen in [Kapitel 23](23-netz.md) fünf Diagramme, je
 > eines für die drei Stufen, eine Freigabe nach Namen und eine Portfreigabe. Sie beantworten die

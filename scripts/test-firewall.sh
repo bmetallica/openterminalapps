@@ -187,6 +187,17 @@ fi
 [ "$(drin "$S_NETZ" 'getent hosts example.com >/dev/null && echo JA || echo NEIN')" = "JA" ] \
   && ok "Namensauflösung funktioniert" || bad "Keine Namensauflösung"
 
+# Und **wen** der Router fragt. Die Zeile darueber war auch gruen, als er
+# still Quad9 statt der Server des Wirts fragte (bis 2026-10-06) — hier ist
+# 9.9.9.9 erreichbar, hinter einer Firewall mit internem DNS nicht.
+if [ -z "${OTA_FW_DNS_UPSTREAM:-}" ]; then
+  WIRT_NS=$(awk '$1=="nameserver" && $2 !~ /^127\./ {print $2}' /etc/resolv.conf /run/systemd/resolve/resolv.conf 2>/dev/null | sort -u | head -1)
+  ROUTER_NS=$(docker exec ota-firewall sh -c "grep '^server=' /etc/dnsmasq.d/ota.conf | head -1 | cut -d= -f2" 2>/dev/null)
+  [ -n "$WIRT_NS" ] && [ "$ROUTER_NS" = "$WIRT_NS" ] \
+    && ok "Der Router fragt den Nameserver des Wirts ($WIRT_NS)" \
+    || bad "Der Router fragt ${ROUTER_NS:-niemanden}, der Wirt ${WIRT_NS:-?}"
+fi
+
 FREMD=$(drin "$S_NETZ" 'timeout 4 python3 -c "
 import socket
 s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.settimeout(3)

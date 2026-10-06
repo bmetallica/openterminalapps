@@ -35,20 +35,48 @@ _prozess: subprocess.Popen | None = None
 _pruefsumme = ""
 
 
-def _upstream() -> list[str]:
-    """Wen dieser Resolver fragt. Aus der Umgebung, sonst aus der resolv.conf."""
-    gesetzt = os.environ.get("OTA_FW_DNS_UPSTREAM", "").strip()
-    if gesetzt:
-        return [t.strip() for t in gesetzt.split(",") if t.strip()]
+# Wo die Nameserver des **Wirts** stehen — eingehaengt von docker-compose.yml.
+#
+# Bis zum 2026-10-06 las dieser Dienst seine **eigene** /etc/resolv.conf. In
+# einem Docker-Netz wie `ota_uplink` steht dort aber nur Dockers eingebauter
+# Resolver 127.0.0.11; der wurde (zu Recht) verworfen, und uebrig blieb der
+# Notbehelf 9.9.9.9. Dokumentiert war „die Nameserver des Wirts". Auf der
+# Entwicklungsmaschine fiel es nicht auf, weil Quad9 von dort erreichbar ist.
+# Auf der Produktivanlage hinter einer Firewall, die DNS nur intern erlaubt,
+# loeste kein Arbeitsplatz mehr einen einzigen Namen auf — und interne Namen
+# haette Quad9 ohnehin nicht gekannt.
+#
+# Die zweite Datei ist die von systemd-resolved: Dort steht in
+# /etc/resolv.conf nur der Stub 127.0.0.53, die echten Server stehen hier.
+WIRT_RESOLV = (Path("/etc/ota-wirt/resolv.conf"),
+               Path("/etc/ota-wirt/systemd/resolv.conf"))
+
+
+def _nameserver(datei: Path) -> list[str]:
     server = []
     try:
-        for zeile in Path("/etc/resolv.conf").read_text().splitlines():
+        for zeile in datei.read_text().splitlines():
             teile = zeile.split()
             if len(teile) >= 2 and teile[0] == "nameserver" and not teile[1].startswith("127."):
                 server.append(teile[1])
     except OSError:
         pass
-    return server or ["9.9.9.9"]
+    return server
+
+
+def _upstream() -> list[str]:
+    """Wen dieser Resolver fragt: die Einstellung, sonst die Server des Wirts."""
+    gesetzt = os.environ.get("OTA_FW_DNS_UPSTREAM", "").strip()
+    if gesetzt:
+        return [t.strip() for t in gesetzt.split(",") if t.strip()]
+    for datei in WIRT_RESOLV:
+        server = _nameserver(datei)
+        if server:
+            return server
+    log.error("Keine Nameserver des Wirts gefunden — Notbehelf 9.9.9.9. Hinter "
+              "einer Firewall, die DNS nur intern erlaubt, loest damit kein "
+              "Arbeitsplatz etwas auf: OTA_FW_DNS_UPSTREAM setzen.")
+    return ["9.9.9.9"]
 
 
 def _konfiguration(zustand: dict) -> str:

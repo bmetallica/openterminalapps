@@ -39,7 +39,7 @@ Dort steht jede Regel einzeln, mit **Ziel, Ports, Protokoll, Grund und Herkunft*
 |---|---|---|
 | Der TURN-Server | 3478 und der Relay-Bereich | Der Medienweg. Ohne ihn kommt kein Bild an. |
 | OTA selbst | 8443 | Der Browser im Arbeitsplatz lädt von dort die Erweiterung für die Zwischenablage. |
-| Der Router selbst | 53 | Namensauflösung. Ein anderer Namensdienst ist nicht erreichbar. |
+| Der Router selbst | 53 | Namensauflösung. Ein anderer Namensdienst ist nicht erreichbar. Der Router fragt seinerseits die Nameserver des Wirts oder `OTA_FW_DNS_UPSTREAM` — **das** muss die äussere Firewall durchlassen, nicht die Freigaben hier. |
 | Traefik → Arbeitsplatz | 6901, 8080 | Die Gegenrichtung: der Bildstrom. |
 | Der Firmenproxy | wie eingestellt | Nur, wenn einer gesetzt ist. |
 | Zeitserver | 123 | Nur, wenn einer gesetzt ist. Eine falsche Uhr bricht TLS. |
