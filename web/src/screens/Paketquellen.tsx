@@ -23,13 +23,16 @@ import { t as tr, useLang } from '../lib/i18n'
 type Tab = 'Spiegel' | 'Eigene Pakete' | 'Snapshots' | 'Dateien'
 type Toast = (m: string, tone?: 'ok' | 'bad') => void
 
+// Die Betriebsart betrifft nur den Spiegel. Die eigene Quelle (ota-selkies,
+// eigene Pakete) wird in Debian-13-Arbeitsplätzen immer eingetragen —
+// Betreiber, 2026-10-08. Bis dahin trug „Aus" auch sie aus.
 const MODI: { value: RepoModus; label: string; note: string }[] = [
-  { value: 'zuerst', label: 'Eigene zuerst',
-    note: 'Arbeitsplätze nehmen Pakete von hier; was hier fehlt, kommt wie bisher aus dem Internet.' },
-  { value: 'nur', label: 'Nur eigene',
-    note: 'Die Internetquellen im Arbeitsplatz werden abgeschaltet. Was hier fehlt, lässt sich nicht installieren.' },
-  { value: 'aus', label: 'Aus',
-    note: 'Nichts wird eingetragen. Der Spiegel bleibt, wie er ist.' },
+  { value: 'zuerst', label: 'Spiegel zuerst',
+    note: 'Debian-Pakete kommen aus dem Spiegel; was dort fehlt, wie bisher aus dem Internet.' },
+  { value: 'nur', label: 'Nur Spiegel',
+    note: 'Die Internetquellen im Arbeitsplatz werden abgeschaltet. Was im Spiegel fehlt, lässt sich nicht installieren.' },
+  { value: 'aus', label: 'Spiegel nicht benutzen',
+    note: 'Debian-Pakete kommen wie bisher aus dem Internet. Der Spiegel bleibt, wie er ist.' },
 ]
 
 function zeit(iso?: string | null): string {
@@ -198,14 +201,19 @@ export function Paketquellen({ onToast }: { onToast: Toast }) {
       </div>
 
       <div className="panel" style={{ padding: '18px 20px', marginBottom: 22 }}>
-        <Field label={tr('Arbeitsplätze und Bildbauer')}
-          hint={tr(MODI.find((m) => m.value === ein.modus)?.note ?? '') + ' '
-            + tr('Gilt für Debian-13-Images ab dem nächsten Start; andere Images bleiben unberührt.')}>
-          <Segmented value={ein.modus} label={tr('Betriebsart')}
-            options={MODI.filter((m) => spiegel || m.value !== 'nur').map((m) => ({ value: m.value, label: tr(m.label),
-              tone: m.value === 'nur' ? 'halt' as const : undefined }))}
-            onChange={(v) => void speichern({ modus: v })} />
-        </Field>
+        <p className="sub" style={{ marginBottom: spiegel ? 14 : 0 }}>
+          {tr('Die eigene Paketquelle — mit ota-selkies und den eigenen Paketen — wird in jeden Debian-13-Arbeitsplatz und in jeden Bau eingetragen. Root-Arbeitsplätze heben Selkies beim Fortsetzen daraus an. Andere Images bleiben unberührt.')}
+        </p>
+        {spiegel && (
+          <Field label={tr('Spiegel in Arbeitsplätzen und Bildbauer')}
+            hint={tr(MODI.find((m) => m.value === ein.modus)?.note ?? '') + ' '
+              + tr('Gilt ab dem nächsten Start eines Arbeitsplatzes.')}>
+            <Segmented value={ein.modus} label={tr('Betriebsart')}
+              options={MODI.map((m) => ({ value: m.value, label: tr(m.label),
+                tone: m.value === 'nur' ? 'halt' as const : undefined }))}
+              onChange={(v) => void speichern({ modus: v })} />
+          </Field>
+        )}
       </div>
 
       {/* Läuft ein Auftrag, steht sein Protokoll offen da. Danach klappt es

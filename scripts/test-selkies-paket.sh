@@ -38,8 +38,13 @@ api() { curl -sk -b "$TMP/jar" -c "$TMP/jar" "$@"; }
 jqp() { python3 -c "import sys,json;d=json.load(sys.stdin);print($1)" 2>/dev/null; }
 im()  { docker exec -u 0 "$1" sh -c "$2" 2>&1; }
 
-TID=""; SID=""; RTID=""; RSID=""; PRUEF_DA=""
+TID=""; SID=""; RTID=""; RSID=""; PRUEF_DA=""; VORHER=""
+einstellen() {
+  api -X PUT -H 'Content-Type: application/json' "$BASE_URL/api/paketquellen/einstellungen" \
+    -d "$1" -o /dev/null -w '%{http_code}'
+}
 aufraeumen() {
+  [ -n "$VORHER" ] && einstellen "$VORHER" >/dev/null
   [ -n "$SID" ] && api -X DELETE "$BASE_URL/api/sessions/$SID" >/dev/null 2>&1
   [ -n "$RSID" ] && api -X DELETE "$BASE_URL/api/admin/arbeitsplaetze/$RSID" >/dev/null 2>&1
   if [ -n "$TID" ]; then
@@ -162,17 +167,22 @@ else
   if [ -n "$PRUEF_DA" ]; then
     RTID=$(neu_vorlage "Prüfung Selkies-Paket Root" "$ROOT_IMAGE" root)
     START=$(starten "$RTID"); RSID=$(jqp "d['id']" <<<"$START"); RCN="ota-s-${RSID:0:12}"
-    VORHER=$(im "$RCN" "dpkg-query -W -f='\${Version}' ota-selkies")
-    info "beim Start: $VORHER"
+    FASSUNG_VORHER=$(im "$RCN" "dpkg-query -W -f='\${Version}' ota-selkies")
+    info "beim Start: $FASSUNG_VORHER"
     # Was jemand ausserhalb des Zuhauses angelegt hat, muss das Anheben
     # ueberstehen — genau dafuer gibt es das Paket statt „Neu aufsetzen".
     im "$RCN" 'echo bleibt > /opt/ota-pruefmarke' >/dev/null
     api -X DELETE "$BASE_URL/api/sessions/$RSID" >/dev/null           # anhalten
+    # Und zwar bei Betriebsart "aus": Sie betrifft nur den Spiegel. Bis zum
+    # 2026-10-08 trug "aus" auch die eigene Quelle aus, und ein Root-
+    # Arbeitsplatz hob sich nie an — so auf der Produktivanlage gefunden.
+    VORHER=$(api "$BASE_URL/api/paketquellen" | jqp "__import__('json').dumps(d['einstellungen'])")
+    einstellen '{"modus":"aus","bau_snapshot":"","alter_gelb":7,"alter_rot":30}' >/dev/null
     START2=$(starten "$RTID")                                           # fortsetzen
     [ "$(jqp "d['status']" <<<"$START2")" = "running" ] && ok "Fortgesetzt" \
       || bad "Fortsetzen: $(jqp "d.get('detail')" <<<"$START2")"
     [ "$(im "$RCN" "dpkg-query -W -f='\${Version}' ota-selkies")" = "$PRUEF" ] \
-      && ok "Beim Fortsetzen gehoben: $VORHER → $PRUEF" || bad "Nicht gehoben (noch $(im "$RCN" "dpkg-query -W -f='\${Version}' ota-selkies"))"
+      && ok "Beim Fortsetzen gehoben, auch bei Betriebsart „aus“: → $PRUEF" || bad "Nicht gehoben (noch $(im "$RCN" "dpkg-query -W -f='\${Version}' ota-selkies"))"
     [ "$(im "$RCN" 'curl -s -o /dev/null -w %{http_code} http://127.0.0.1:8080/')" = "401" ] \
       && ok "Nach dem Neustart antwortet Selkies wieder (401 ohne Anmeldung)" \
       || bad "Selkies antwortet nach dem Neustart nicht"

@@ -260,8 +260,8 @@ dabei **nicht** zurückwandert, ist die Datenbank: Neue Spalten bleiben stehen. 
   Stände** mit Zurückdrehen und reproduzierbaren Images, und das Paket **`ota-selkies`**, das den
   Streaming-Server in Images bringt und Root-Arbeitsplätze beim Fortsetzen anhebt. Ein **Spiegel**
   von Debian 13 samt Sicherheitsupdates und Dockers Quelle ist ein Zusatz (ab Werk aus):
-  Arbeitsplätze installieren dann auch, wenn draussen etwas fehlt — Betriebsart „Eigene zuerst"
-  oder „Nur eigene". Abgeglichen wird von Hand; das Alter des Spiegels wird gelb und rot
+  Arbeitsplätze installieren dann auch, wenn draussen etwas fehlt — Betriebsart „Spiegel zuerst"
+  oder „Nur Spiegel". Abgeglichen wird von Hand; das Alter des Spiegels wird gelb und rot
   ([Kapitel 26](docs/wiki/26-paketquellen.md))
 
 **Verwaltung**
@@ -459,7 +459,7 @@ make test
 | `test-streaming.sh` | Der Medienweg mit einer eigenen Vorlage auf dem aktuellen Basisimage: Ein Browser in einem fremden Netz zählt die **dekodierten Bilder** — auf dem Arbeitsplatz und auf dem Bildschirm einer Anwendung (Selkies 2.0, WebSockets durch Traefik); Umlaute, Shift und AltGr einer deutschen Tastatur kommen richtig an. Ist TURN eingerichtet (nur noch für Golden Images mit Selkies 1.6.2), wird er mitgeprüft, samt Sperrliste und NAT |
 | `test-firewall.sh` | Die Netzabsicherung, **von innen gemessen**: Nachbar, Wirt, Firmennetz, TURN, Namensdienst, Internet je Stufe, Freigabe nach Namen, Portfreigabe — und alles noch einmal nach einem Neustart des Routers |
 | `test-root-arbeitsplatz.sh` | Der Root-Arbeitsplatz: root auf dem Host unprivilegiert (Sysbox), Docker und Compose im Container, Netzregeln auch für die **inneren** Container, Anhalten und Fortsetzen mit erhaltenem Stand, Neu aufsetzen, Webterminal samt Protokoll und Export, kein Terminal in Dienste des Stacks, Golden Images mit `USER 1000`. Ohne Sysbox übersprungen |
-| `test-repo.sh` | Die eigene Paketquelle: Signatur, Hochladen (doppelt 409, kaputt 422), Snapshots samt Schutz vor dem Löschen, ein Debian-13-Arbeitsplatz installiert ein eigenes Paket **von hier**, „Nur eigene" ruft `deb.debian.org` nicht mehr, der Bildbauer trägt ein und wieder aus, ein Ubuntu-Image bleibt unberührt, ein Root-Arbeitsplatz übernimmt beim Fortsetzen die aktuelle Einstellung. Die Spiegelteile nur mit Spiegel |
+| `test-repo.sh` | Die eigene Paketquelle: Signatur, Hochladen (doppelt 409, kaputt 422), Snapshots samt Schutz vor dem Löschen, ein Debian-13-Arbeitsplatz installiert ein eigenes Paket **von hier**, „Nur Spiegel" ruft `deb.debian.org` nicht mehr, der Bildbauer trägt ein und wieder aus, ein Ubuntu-Image bleibt unberührt, ein Root-Arbeitsplatz übernimmt beim Fortsetzen die aktuelle Einstellung. Die Spiegelteile nur mit Spiegel |
 | `test-selkies-paket.sh` | Das Paket `ota-selkies`: liegt in der Paketquelle, hebt einen Arbeitsplatz auf einem alten Golden Image mit Selkies 1.6.2 an, der Bildbauer hebt ein Golden Image an, ein Root-Arbeitsplatz hebt sich beim Fortsetzen an und behält, was darin installiert war |
 | `test-backup.sh` | Sicherung und Wiederherstellung von Profil, Container und Datenbank. Beendet dafür Sitzungen — **nur die eigenen**, und prüft das ausdrücklich nach |
 

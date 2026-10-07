@@ -391,7 +391,7 @@ def selkies_fassung(template_id: uuid.UUID, db: DbSession = Depends(get_db)) -> 
     repo = paketquellen.fuer_container(db)
     return {"im_image": im_image, "in_quelle": repo.get("selkies", ""), "fehler": fehler,
             "modus": repo.get("modus", ""),
-            "anwendbar": repo.get("modus") not in (None, "aus") and bool(repo.get("selkies"))}
+            "anwendbar": bool(repo.get("selkies"))}
 
 
 @router.post("/{template_id}/builds", dependencies=[Depends(manage)],

@@ -74,10 +74,13 @@ def fuer_container(db: DbSession) -> dict[str, Any]:
     Dienst nicht erreichbar, startet der Arbeitsplatz trotzdem — mit den
     Quellen seines Images.
     """
+    # **Die eigene Quelle wird immer eingetragen** — ueber sie kommt
+    # ota-selkies, und ueber sie heben sich Root-Arbeitsplaetze an. Die
+    # Betriebsart betrifft nur den Spiegel (Betreiber, 2026-10-08): "aus"
+    # heisst "den Spiegel nicht benutzen", nicht "nichts eintragen". Bis dahin
+    # trug "aus" auch die eigene Quelle aus, und ein Root-Arbeitsplatz hob
+    # sich nie an.
     modus = settings_store.get(db, settings_store.REPO_MODUS) or "zuerst"
-    if modus == "aus":
-        log.info("Paketquelle: Betriebsart Aus — nichts eintragen, Selkies nicht anheben")
-        return {"modus": "aus"}
     # "Nur eigene" ohne Spiegel hiesse: gar keine Debian-Pakete mehr. Die
     # Oberflaeche bietet es dann nicht an; steht es von frueher noch so da,
     # gilt "zuerst".
@@ -99,7 +102,13 @@ def fuer_container(db: DbSession) -> dict[str, Any]:
     except OSError:
         ca = ""
     daten = _zwischen["daten"] or {}
-    return {"modus": modus, "quellen": daten.get("quellen", []),
+    quellen = daten.get("quellen", [])
+    if modus == "aus" or not spiegel_aktiv():
+        # Nur die eigene Quelle: keine Debian-Pakete von hier, nichts
+        # abschalten. Der Agent kennt dafuer die Betriebsart "eigen".
+        quellen = [q for q in quellen if q["prefix"].split("/")[-1] == "ota"]
+        modus = "eigen"
+    return {"modus": modus, "quellen": quellen,
             "schluessel": daten.get("schluessel", ""), "ca": ca,
             # Die Fassung, auf die der Agent einen Root-Arbeitsplatz hebt.
             "selkies": daten.get("selkies", "")}

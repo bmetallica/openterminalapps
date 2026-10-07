@@ -80,7 +80,7 @@ def einstellungen(body: EinstellungenIn, request: Request,
                   db: DbSession = Depends(get_db)) -> dict:
     if body.modus == "nur" and not paketquellen.spiegel_aktiv():
         raise HTTPException(status.HTTP_409_CONFLICT,
-                            "„Nur eigene“ braucht den Spiegel — sonst gäbe es in den "
+                            "„Nur Spiegel“ braucht den Spiegel — sonst gäbe es in den "
                             "Arbeitsplätzen keine Debian-Pakete mehr (OTA_REPO_SPIEGEL=1).")
     alt = settings_store.get(db, settings_store.REPO_MODUS)
     settings_store.put(db, settings_store.REPO_MODUS, body.modus)

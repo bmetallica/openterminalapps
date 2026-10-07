@@ -91,22 +91,33 @@ Eingetragen wird:
 | `/etc/apt/sources.list.d/00-ota-repo.sources` | die Quellen, mit `Signed-By` |
 | `/etc/apt/keyrings/ota-repo.asc` | OTAs öffentlicher Schlüssel |
 | `/etc/apt/ota-repo-ca.crt` + `/etc/apt/apt.conf.d/50ota-repo` | OTAs CA — **nur für apt** und nur für diese Adresse |
-| `/etc/apt/preferences.d/ota-repo` | Vorrang (Betriebsart „Eigene zuerst") |
+| `/etc/apt/preferences.d/ota-repo` | Vorrang (Betriebsart „Spiegel zuerst") |
 
 Die CA gilt nur für apt und nur für OTAs Adresse. Der Arbeitsplatz vertraut ihr sonst nicht.
 
-### Die Betriebsart
+### Die eigene Quelle — immer
 
-Eine Einstellung für die ganze Anlage, unter **Paketquellen** ganz oben. Sie gilt ab dem nächsten
-Start eines Arbeitsplatzes.
+In jeden Debian-13-Arbeitsplatz und in jeden Bau wird die **eigene Quelle** eingetragen
+(`ota-selkies`, eigene Pakete), mit Vorrang 900. Daraus heben sich Root-Arbeitsplätze beim
+Fortsetzen an. Das lässt sich nicht abschalten — Selkies ohne Quelle hiesse, dass sich kein Platz
+mehr aktualisieren kann.
+
+### Die Betriebsart — nur für den Spiegel
+
+Mit eingeschaltetem Spiegel eine Einstellung für die ganze Anlage, unter **Paketquellen** ganz
+oben. Sie gilt ab dem nächsten Start eines Arbeitsplatzes. Ohne Spiegel gibt es sie nicht.
 
 | Betriebsart | Was passiert |
 |---|---|
-| **Eigene zuerst** (Vorgabe) | Pakete kommen von hier. Was hier fehlt, kommt wie bisher aus dem Internet. |
-| **Nur eigene** | Die Internetquellen im Arbeitsplatz werden abgeschaltet (`*.ota-aus`). Was hier fehlt, lässt sich nicht installieren. |
-| **Aus** | Nichts wird eingetragen. Schon Eingetragenes wird beim nächsten Start entfernt. |
+| **Spiegel zuerst** (Vorgabe) | Debian-Pakete kommen aus dem Spiegel. Was dort fehlt, kommt wie bisher aus dem Internet. |
+| **Nur Spiegel** | Die Internetquellen im Arbeitsplatz werden abgeschaltet (`*.ota-aus`). Was im Spiegel fehlt, lässt sich nicht installieren. |
+| **Spiegel nicht benutzen** | Debian-Pakete kommen aus dem Internet. Die eigene Quelle bleibt eingetragen. |
 
-> **Wichtig zu „Eigene zuerst":** Der Vorrang ist ein *Vorrang*, kein Rückfall nur bei Fehlen.
+Bis zum 2026-10-08 hiessen sie „Eigene zuerst", „Nur eigene" und „Aus", und **„Aus" trug auch die
+eigene Quelle aus** — ein Root-Arbeitsplatz hob Selkies dann nie an. Gefunden auf der
+Produktivanlage; seitdem betrifft die Einstellung nur den Spiegel.
+
+> **Wichtig zu „Spiegel zuerst":** Der Vorrang ist ein *Vorrang*, kein Rückfall nur bei Fehlen.
 > Gibt es ein Paket hier in einer älteren Fassung und draussen in einer neueren, nimmt apt
 > **die von hier**. Ein Sicherheitsupdate kommt also erst in die Arbeitsplätze, wenn der Spiegel
 > abgeglichen ist. Genau dafür steht das Alter des Spiegels oben auf der Seite und im Dashboard.
@@ -195,7 +206,7 @@ Fassung, die es bei GitHub nicht mehr gibt — als Archiv; gebraucht werden sie 
 
 | | ohne Internet |
 |---|---|
-| `apt install` in Debian-13-Arbeitsplätzen | ✅ mit „Nur eigene" (Vollspiegel vorausgesetzt) |
+| `apt install` in Debian-13-Arbeitsplätzen | ✅ mit „Nur Spiegel" (Vollspiegel vorausgesetzt) |
 | Docker-Pakete in Root-Arbeitsplätzen | ✅ |
 | Bildbauer (apt-Pakete) | ✅ |
 | Selkies (aus OTAs Repository), seine Abhängigkeiten, clipnotify im Basisimage | ✅ aus dem Vorrat |
@@ -255,13 +266,12 @@ Wirts mitnehmen.
 ## Den Spiegel ausschalten
 
 `OTA_REPO_SPIEGEL=0` und `make update`. Die Arbeitsplätze bekommen ab dem nächsten Start nur noch
-das eigene Repository eingetragen; Debian-Pakete kommen wieder aus dem Internet. „Nur eigene" lässt
+das eigene Repository eingetragen; Debian-Pakete kommen wieder aus dem Internet. „Nur Spiegel" lässt
 sich ohne Spiegel nicht einstellen — es gäbe sonst keine Debian-Pakete mehr. Der gespiegelte
 Bestand bleibt unter `OTA_REPO_ROOT` liegen, bis man ihn löscht.
 
-Die eigene Paketquelle selbst lässt sich nicht abschalten. Wer gar nichts in die Arbeitsplätze
-eingetragen haben will, stellt die Betriebsart auf **Aus** — dann heben sich Root-Arbeitsplätze
-aber auch nicht mehr selbst an.
+Die eigene Paketquelle selbst lässt sich nicht abschalten; sie bleibt in jedem Debian-13-
+Arbeitsplatz eingetragen.
 
 ## Prüfen
 
@@ -280,12 +290,12 @@ bleibt unberührt, und ein Root-Arbeitsplatz übernimmt beim Fortsetzen die aktu
 | Zeichen | Ursache | Abhilfe |
 |---|---|---|
 | Reiter Spiegel sagt „nicht eingeschaltet" | `OTA_REPO_SPIEGEL` nicht `1` | `.env`, dann `make update` |
-| Root-Arbeitsplatz hebt Selkies nicht an | Betriebsart **Aus**, oder `ota-selkies` fehlt in der Paketquelle | Betriebsart, sonst `scripts/build-selkies-deb.sh --hochladen` |
+| Root-Arbeitsplatz hebt Selkies nicht an | `ota-selkies` fehlt in der Paketquelle, oder die API erreicht den Repo-Dienst nicht | `scripts/build-selkies-deb.sh --hochladen`; `docker logs ota-api \| grep -i paketquelle` |
 | „Der Dienst der Paketquelle antwortet nicht" | `ota-repo` läuft nicht | `docker logs ota-repo` |
 | Abgleich: `NO_PUBKEY` / Signatur | Schlüssel von Debian/Docker fehlt oder Spiegel manipuliert | Protokoll lesen; **nicht** mit `-ignore-signatures` umgehen |
 | Abgleich hängt im Zeitablauf | kein Weg nach draussen | Proxy ([Kapitel 21](21-firmenproxy.md)), Firewall (oben) |
 | Arbeitsplatz kennt die eigenen Pakete nicht | vor dem Einschalten oder vor dem Wechsel der Betriebsart gestartet | Arbeitsplatz neu starten (Root: anhalten, fortsetzen) |
-| apt lädt trotz „Eigene zuerst" von `deb.debian.org` | das Paket fehlt hier (Filter?) | Filter prüfen, abgleichen |
+| apt lädt trotz „Spiegel zuerst" von `deb.debian.org` | das Paket fehlt hier (Filter?) | Filter prüfen, abgleichen |
 | Eigenes Paket: „schon im Repository" | dieselbe Fassung gibt es | Versionsnummer erhöhen |
 | `.env`: `Syntaxfehler beim unerwarteten Symbol „("` | Filter ohne Anführungszeichen | `OTA_REPO_FILTER="…"` |
 

@@ -915,7 +915,6 @@ function SelkiesStand({ tpl, onToast, running, onGestartet }: {
       <span style={{ flex: 1, minWidth: 260 }}>
         {tr('In diesem Image steckt Selkies {alt}, die Paketquelle bietet {neu}. Ein Neubau allein ändert daran nichts — anheben baut das Paket ota-selkies hinein; alles andere im Image bleibt.',
           { alt: stand.im_image, neu: stand.in_quelle })}
-        {!stand.anwendbar && <><br />{tr('Die Paketquelle ist für Arbeitsplätze ausgeschaltet (Paketquellen → Aus).')}</>}
       </span>
       <button className="btn btn--primary btn--sm" disabled={busy || running || !stand.anwendbar}
         onClick={() => void anheben()}>

@@ -252,9 +252,12 @@ else
   api -X DELETE "$BASE_URL/api/sessions/$RSID" >/dev/null   # = anhalten
   einstellen "{\"modus\":\"aus\",\"bau_snapshot\":\"\",\"alter_gelb\":7,\"alter_rot\":30}" >/dev/null
   starten "$RTID" >/dev/null                                   # = fortsetzen
-  als_root "$RCN" 'test -e /etc/apt/sources.list.d/00-ota-repo.sources || echo WEG' | grep -q WEG \
-    && ok "Fortsetzen nimmt die aktuelle Einstellung (aus → ausgetragen)" \
-    || bad "Fortsetzen hat die alte Quelle stehen lassen"
+  # Seit 2026-10-08 betrifft die Betriebsart nur den Spiegel: Die eigene
+  # Quelle bleibt bei "aus" eingetragen (ota-selkies), der Spiegel nicht.
+  QUELLEN=$(als_root "$RCN" 'cat /etc/apt/sources.list.d/00-ota-repo.sources 2>/dev/null')
+  grep -q "/repo/ota" <<<"$QUELLEN" && ! grep -q "/repo/debian" <<<"$QUELLEN" \
+    && ok "Fortsetzen nimmt die aktuelle Einstellung (aus → nur noch die eigene Quelle)" \
+    || bad "Nach „aus“ beim Fortsetzen: $(tr '\n' ' ' <<<"$QUELLEN" | head -c 200)"
   einstellen "$VORHER" >/dev/null
 fi
 

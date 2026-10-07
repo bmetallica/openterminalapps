@@ -15,7 +15,11 @@ systemweit einzutragen hiesse, ihr fuer alles zu vertrauen. Statt dessen
 
 Die drei Betriebsarten:
 
-  aus      nichts eingetragen (und was frueher eingetragen war, entfernt)
+  aus      nichts eingetragen (und was frueher eingetragen war, entfernt) —
+           die API schickt das seit 2026-10-08 nicht mehr, siehe `eigen`
+  eigen    nur die eigene Quelle (ota-selkies, eigene Pakete) mit Vorrang
+           900; Debian-Pakete wie bisher aus den Quellen des Images.
+           Betriebsart "aus" der Oberflaeche oder kein Spiegel
   zuerst   eigene Quellen mit Vorrang 900, die des Images bleiben als
            Rueckfall — das Internet wird nur fuer Fehlendes benutzt
   nur      nur die eigenen; die des Images werden stillgelegt (umbenannt,
@@ -65,8 +69,10 @@ def einrichten_skript(repo: dict[str, Any], snapshot: str = "") -> str:
         bloecke.append(f"Types: deb\nURIs: {url}/{prefix}\nSuites: {suiten}\n"
                        f"Components: {komp}\nSigned-By: /etc/apt/keyrings/ota-repo.asc\n")
     sources = "\n".join(bloecke)
+    # Vorrang fuer alles von hier — bei "zuerst" fuer den Spiegel, bei "eigen"
+    # (nur die eigene Quelle, Kapitel 26) fuer die eigenen Pakete.
     praefs = (f"Package: *\nPin: origin \"{host}\"\nPin-Priority: 900\n"
-              if modus == "zuerst" else "")
+              if modus in ("zuerst", "eigen") else "")
     aptconf = f'Acquire::https::{host}::CaInfo "/etc/apt/ota-repo-ca.crt";\n'
     # Ohne Umweg ueber einen Firmenproxy: Die Paketquelle ist OTA selbst. Der
     # Agent traegt fuer apt nur http-Ausnahmen ein; ueber https lief die
@@ -75,6 +81,11 @@ def einrichten_skript(repo: dict[str, Any], snapshot: str = "") -> str:
     aptconf += (f'Acquire::https::Proxy::{host} "DIRECT";\n'
                 f'Acquire::http::Proxy::{host} "DIRECT";\n')
 
+    # Der Vorrang entscheidet Python, nicht das Skript: Bis zum 2026-10-08
+    # fragte das Skript noch einmal nach "zuerst" und liess den Vorrang bei
+    # "eigen" stillschweigend weg.
+    praefs_zeile = (f"printf '%s' {shlex.quote(_b64(praefs))} | base64 -d > /etc/apt/preferences.d/ota-repo\n"
+                    if praefs else "")
     return f"""set -e
 [ -r /etc/os-release ] || exit 0
 . /etc/os-release
@@ -96,10 +107,7 @@ printf '%s' {shlex.quote(_b64(aptconf))} | base64 -d > /etc/apt/apt.conf.d/50ota
 printf '%s' {shlex.quote(_b64(sources))} | base64 -d > /etc/apt/sources.list.d/00-ota-repo.sources
 chmod 644 /etc/apt/keyrings/ota-repo.asc /etc/apt/ota-repo-ca.crt \\
           /etc/apt/apt.conf.d/50ota-repo /etc/apt/sources.list.d/00-ota-repo.sources
-if [ "$MODUS" = "zuerst" ]; then
-  printf '%s' {shlex.quote(_b64(praefs))} | base64 -d > /etc/apt/preferences.d/ota-repo
-fi
-if [ "$MODUS" = "nur" ]; then
+{praefs_zeile}if [ "$MODUS" = "nur" ]; then
   for f in /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources; do
     if [ ! -e "$f" ] || [ "$f" = /etc/apt/sources.list.d/00-ota-repo.sources ]; then continue; fi
     mv -f "$f" "$f{ENDUNG}"

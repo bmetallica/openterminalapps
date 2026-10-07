@@ -1462,4 +1462,13 @@ export const EN: Record<string, string> = {
   'Welches Selkies in diesem Image steckt, liess sich nicht ermitteln: {f}': 'Which Selkies this image carries could not be determined: {f}',
   'In diesem Image ist kein Selkies zu finden. Steht die Vorlage unter „Allgemein“ trotzdem auf Selkies, startet sie nicht — dann auf KasmVNC stellen.': 'No Selkies found in this image. If the template is still set to Selkies under “General”, it will not start — switch it to KasmVNC.',
   'In diesem Image steckt Selkies {alt}. Das Paket ota-selkies fehlt aber in der eigenen Paketquelle — ohne es lässt sich nichts anheben. Auf dem Wirt: scripts/build-selkies-deb.sh --hochladen': 'This image carries Selkies {alt}. The ota-selkies package is missing from the own package source, though — without it nothing can be upgraded. On the host: scripts/build-selkies-deb.sh --hochladen',
+  'Spiegel zuerst': 'Mirror first',
+  'Nur Spiegel': 'Mirror only',
+  'Spiegel nicht benutzen': 'Do not use the mirror',
+  'Debian-Pakete kommen aus dem Spiegel; was dort fehlt, wie bisher aus dem Internet.': 'Debian packages come from the mirror; whatever is missing there still comes from the Internet.',
+  'Die Internetquellen im Arbeitsplatz werden abgeschaltet. Was im Spiegel fehlt, lässt sich nicht installieren.': 'The Internet sources in the workspace are switched off. Whatever is missing in the mirror cannot be installed.',
+  'Debian-Pakete kommen wie bisher aus dem Internet. Der Spiegel bleibt, wie er ist.': 'Debian packages still come from the Internet. The mirror stays as it is.',
+  'Die eigene Paketquelle — mit ota-selkies und den eigenen Paketen — wird in jeden Debian-13-Arbeitsplatz und in jeden Bau eingetragen. Root-Arbeitsplätze heben Selkies beim Fortsetzen daraus an. Andere Images bleiben unberührt.': 'The own package source — with ota-selkies and your own packages — is added to every Debian 13 workspace and every build. Root workspaces upgrade Selkies from it when they resume. Other images are left alone.',
+  'Spiegel in Arbeitsplätzen und Bildbauer': 'Mirror in workspaces and image builder',
+  'Gilt ab dem nächsten Start eines Arbeitsplatzes.': 'Applies from the next workspace start.',
 }
