@@ -889,7 +889,8 @@ selbst führt der Betreiber; hier steht, was daraus gebaut wurde.
 - [x] Tastaturlayout vor dem Start, ohne Neustart; Agent bedient 1.6.2-Images weiter
 - [x] `test-streaming.sh` mit eigener Vorlage, Arbeitsplatz und Anwendungsbildschirm
 - [ ] `make messung` für 2.0 (misst noch den WebRTC-Weg); Kosten von 2.0 messen
-- [ ] TURN aus dem Stack nehmen, sobald keine Golden Images mit 1.6.2 mehr laufen
+- [ ] TURN aus dem Stack nehmen, sobald keine Golden Images mit 1.6.2 mehr laufen — dabei bedenken:
+      `OTA_SELF_ADDRESS` fällt heute auf `OTA_TURN_BIND`/`OTA_TURN_HOST` zurück (Paketquelle, Grundregeln)
 
 **Ausdrücklich nicht gebaut**, jeweils als Entscheidung festgehalten: Verschlüsselung im
 Ruhezustand samt der TOTP-Startwerte, ein Streifen im Bild während des Aufschaltens (ein

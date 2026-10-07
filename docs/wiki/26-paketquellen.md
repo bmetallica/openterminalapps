@@ -198,6 +198,18 @@ herunterladen. Debian und Docker sind ohnehin öffentlich. Liegt in einem eigene
 Vertrauliches, gehört es nicht hierher, oder OTAs Port gehört hinter eine Firewall (siehe
 [Kapitel 24](24-hinter-nat.md)).
 
+**Einschränken lässt es sich am Reverse Proxy**, ohne OTA anzufassen: Die Arbeitsplätze holen ihre
+Pakete über OTAs **eigene** Adresse (`OTA_SELF_ADDRESS`), nicht über den Proxy. Der Proxy kann
+`/repo/` also für alle sperren — oder auf die Netze beschränken, die es brauchen. Für nginx etwa:
+
+```nginx
+location /repo/ {
+    allow 10.50.0.0/24;      # wer Pakete von aussen holen darf (Beispiel)
+    deny  all;
+    proxy_pass https://192.168.1.22:8443;
+}
+```
+
 Hochladen, Löschen, Abgleichen und alle Einstellungen gehen nur über die API und nur für
 Administratoren.
 
