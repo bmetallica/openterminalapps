@@ -10,7 +10,8 @@ import jwt
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse
-from sqlalchemy import select
+from pydantic import BaseModel
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session as DbSession
 
 from .. import agent_client, audit, kcidentity, keycloak
@@ -282,6 +283,129 @@ def logout(response: Response) -> dict[str, str]:
     return {"status": "abgemeldet"}
 
 
+# --- Ein Eingang: die zentrale Anmeldung (2026-10-08) ---------------------
+#
+# Lokal meldet sich nur noch das Notfallkonto an (/notfall). Konten, die noch
+# lokal sind — aus der Zeit vor Keycloak —, ziehen beim naechsten Anmelden
+# unter /login mit **ihrem** Passwort nach Keycloak um: Die Anmeldeseite
+# meldet lokal an und ruft dann /umziehen. Kein Einmal-Passwort, kein Import
+# von Hashes. Ein eigener Schritt und nicht Teil von /login, damit dieser
+# Weg fuer sich bleibt, was er ist — die Pruefreihen messen an ihm Sperre,
+# Zeitverhalten und zweiten Faktor.
+
+@router.get("/anmeldung")
+def anmeldung(db: DbSession = Depends(get_db)) -> dict[str, bool]:
+    """Fuer /login: Gibt es noch lokale Konten ausser dem Notfallkonto?
+
+    Nein — dann leitet die Seite gleich zur zentralen Anmeldung weiter. Ja —
+    dann zeigt sie die Maske, damit diese Konten umziehen koennen. Verraten
+    wird nur diese eine Ja/Nein-Auskunft, kein Name.
+    """
+    notfall = settings_store.breakglass(db)
+    offen = db.scalar(select(func.count()).select_from(User).where(
+        User.auth_provider == "local", User.username != notfall,
+        User.is_active.is_(True))) or 0
+    return {"lokale_konten": offen > 0}
+
+
+class UmzugIn(BaseModel):
+    password: str
+
+
+@router.post("/umziehen")
+def umziehen(body: UmzugIn, request: Request, response: Response,
+             user: User = Depends(current_user),
+             db: DbSession = Depends(get_db)) -> dict[str, str]:
+    """Ein lokales Konto zieht mit seinem Passwort nach Keycloak um.
+
+    Danach gibt es hier keinen Hash mehr, die lokale Sitzung endet, und die
+    Antwort sagt, wohin der Browser weiter soll: zur zentralen Anmeldung, mit
+    vorausgefuelltem Namen. Scheitert etwas, bleibt alles, wie es war.
+    """
+    if user.auth_provider != "local":
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            "Dieses Konto meldet sich schon über die zentrale Anmeldung an.")
+    if user.username == settings_store.breakglass(db):
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            "Das Notfallkonto bleibt lokal — es ist der Weg, wenn die "
+                            "zentrale Anmeldung ausfällt.")
+    if not verify_password(body.password, user.password_hash):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Das Passwort stimmt nicht.")
+
+    gruppen = sorted(g.name for g in user.groups)
+    try:
+        vorhanden = keycloak.konto_finden(user.username)
+        if vorhanden is not None and not vorhanden.get("enabled", True):
+            # Gesperrt — meist, weil es hier einmal geloescht wurde. Es von hier
+            # aus zu entsperren, waere Sache der Verwaltung, nicht des Umzugs.
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "In der zentralen Anmeldung gibt es ein gesperrtes Konto dieses Namens. "
+                "Bis die Verwaltung das klärt, meldest du dich weiter hier an.")
+        if vorhanden is not None:
+            # Ein Konto dieses Namens gibt es dort schon (aus dem Verzeichnis
+            # oder angelegt). Verknuepft wird, sein Passwort bleibt, wie es ist:
+            # Es von hier aus zu ueberschreiben, hiesse, ein fremdes Konto mit
+            # einem lokalen Passwort zu uebernehmen.
+            sub = str(vorhanden["id"])
+            hinweis = ("In der zentralen Anmeldung gab es dein Konto schon. Melde dich "
+                       "dort mit dessen Passwort an.")
+        else:
+            sub = keycloak.konto_anlegen(
+                user.username, email=user.email, anzeigename=user.display_name,
+                passwort=body.password, wechseln=bool(user.must_change_password))
+            hinweis = "Melde dich dort mit demselben Passwort an."
+        keycloak.gruppen_setzen(sub, gruppen)
+        keycloak.rolle_setzen(sub, "zweiter-faktor",
+                              any(getattr(g, "require_totp", False) for g in user.groups))
+    except keycloak.KeycloakFehler as exc:
+        log.warning("Konto %s nicht umgezogen: %s", user.username, exc)
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            f"Der Umzug zur zentralen Anmeldung hat nicht geklappt: {exc}") from exc
+
+    user.auth_provider = "keycloak"
+    user.external_id = sub
+    user.password_hash = None
+    user.must_change_password = False
+    user.totp_secret = None
+    user.totp_recovery = []
+    user.token_epoch = (user.token_epoch or 0) + 1
+    audit.record(db, "konto.umgezogen", actor=user, request=request, keycloak=sub[:8])
+    db.commit()
+    response.delete_cookie(settings().cookie_name, path="/")
+    from urllib.parse import quote
+    return {
+        "status": f"Dein Konto meldet sich ab jetzt über die zentrale Anmeldung an. {hinweis}",
+        "weiter": f"/api/auth/oidc/start?next=/&login_hint={quote(user.username)}",
+    }
+
+
+@router.get("/konto")
+def konto(user: User = Depends(current_user),
+          db: DbSession = Depends(get_db)) -> dict:
+    """Was fuer ein Konto das ist — fuer Mein Konto.
+
+    `lokal`: Passwort und zweiter Faktor hier (das Notfallkonto).
+    `zentral`: in Keycloak; Mein Konto fuehrt fuer beides dorthin.
+    `verzeichnis`: in Keycloak, aber aus AD/LDAP — das Passwort gehoert dem
+    Verzeichnis, der zweite Faktor Keycloak.
+    """
+    notfall = user.username == settings_store.breakglass(db)
+    if user.auth_provider != "keycloak" or not user.external_id:
+        return {"art": "lokal", "notfall": notfall}
+    art = "zentral"
+    try:
+        if keycloak.aus_verzeichnis(keycloak.konto_lesen(user.external_id)):
+            art = "verzeichnis"
+    except keycloak.KeycloakFehler as exc:
+        log.info("Kontoart von %s nicht lesbar: %s", user.username, exc)
+    return {"art": art, "notfall": notfall,
+            # Keycloaks eigene Kontoverwaltung: dort stehen Passkeys und
+            # Einmalkennwoerter, und dort lassen sie sich auch entfernen.
+            "verwaltung": f"/auth/realms/{settings().keycloak_realm}/account/"}
+
+
 def _me(user: User) -> MeOut:
     return MeOut(
         id=user.id,
@@ -311,6 +435,7 @@ def change_password(
     user: User = Depends(current_user),
     db: DbSession = Depends(get_db),
 ) -> dict[str, str]:
+    _nur_lokal(user)
     if not verify_password(body.current_password, user.password_hash):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Das aktuelle Passwort stimmt nicht.")
 
@@ -334,8 +459,21 @@ def change_password(
 # Zweiter Faktor (siehe ota/totp.py)
 # --------------------------------------------------------------------------
 
+def _nur_lokal(user: User) -> None:
+    """Passwort und zweiter Faktor **hier** gibt es nur fuer lokale Konten —
+    das Notfallkonto. Ein Keycloak-Konto aendert beides in Keycloak (Mein
+    Konto fuehrt dorthin); hier gesetzt, wirkte es an der zentralen Anmeldung
+    nicht und oeffnete einen Weg an ihr vorbei."""
+    if user.auth_provider != "local":
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Dieses Konto meldet sich über die zentrale Anmeldung an. Passwort und "
+            "zweiter Faktor werden dort geändert — unter Mein Konto geht es dorthin.")
+
+
 @router.post("/totp/setup", response_model=TotpSetupOut)
 def totp_setup(user: User = Depends(current_user)) -> TotpSetupOut:
+    _nur_lokal(user)
     """Erzeugt ein Geheimnis und zeigt es als Code zum Abscannen.
 
     Gespeichert wird hier noch **nichts**. Erst der naechste Schritt beweist
@@ -357,6 +495,7 @@ def totp_activate(body: TotpActivateIn, request: Request,
                   user: User = Depends(current_user),
                   db: DbSession = Depends(get_db)) -> TotpCodesOut:
     """Schaltet den zweiten Faktor ein — nach bestandener Probe."""
+    _nur_lokal(user)
     if user.totp_secret:
         raise HTTPException(status.HTTP_409_CONFLICT,
                             "Der zweite Faktor ist schon eingerichtet.")
@@ -380,6 +519,7 @@ def totp_new_codes(body: PasswordIn, request: Request,
                    user: User = Depends(current_user),
                    db: DbSession = Depends(get_db)) -> TotpCodesOut:
     """Erzeugt neue Rueckfallcodes. Die alten gelten danach nicht mehr."""
+    _nur_lokal(user)
     if not user.totp_secret:
         raise HTTPException(status.HTTP_409_CONFLICT,
                             "Der zweite Faktor ist nicht eingerichtet.")
@@ -404,6 +544,7 @@ def totp_disable(body: TotpDisableIn, request: Request,
     etwa an einem unbeaufsichtigten Rechner —, soll den zweiten Faktor nicht
     entfernen koennen; sonst waere er keiner.
     """
+    _nur_lokal(user)
     if not user.totp_secret:
         return {"status": "war nicht eingerichtet"}
     if not verify_password(body.password, user.password_hash):
@@ -551,8 +692,17 @@ def _sicheres_ziel(next_: str | None) -> str:
 
 
 @router.get("/oidc/start")
-def oidc_start(request: Request, next: str = "/") -> Response:
-    """Schickt den Browser zur Anmeldung bei Keycloak."""
+def oidc_start(request: Request, next: str = "/", aktion: str = "",
+               login_hint: str = "") -> Response:
+    """Schickt den Browser zur Anmeldung bei Keycloak.
+
+    `aktion` laesst Keycloak dabei etwas ausfuehren — Passwort aendern,
+    Einmalkennwort oder Passkey einrichten (Mein Konto, 2026-10-08).
+    `login_hint` fuellt den Namen vor, wenn er schon bekannt ist.
+    """
+    if aktion and aktion not in keycloak.AKTIONEN:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Unbekannte Aktion.")
+    login_hint = login_hint.strip()[:128]
     import base64
     import hashlib
 
@@ -573,7 +723,8 @@ def oidc_start(request: Request, next: str = "/") -> Response:
     )
 
     antwort = RedirectResponse(
-        keycloak.authorize_url(redirect_uri, state, challenge, f"{basis}/auth"),
+        keycloak.authorize_url(redirect_uri, state, challenge, f"{basis}/auth",
+                               aktion=aktion, login_hint=login_hint),
         status_code=status.HTTP_303_SEE_OTHER,
     )
     antwort.set_cookie(

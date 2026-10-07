@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Field, Segmented } from '../components/controls'
-import { ApiError, api, type Me, type TotpSetup } from '../lib/api'
+import { ApiError, api, type KontoArt, type Me, type TotpSetup } from '../lib/api'
 import { getLang, setLang, t as tr, useLang, type Lang } from '../lib/i18n'
 
 /**
@@ -21,6 +21,12 @@ export function Account({ me, onMe, onToast }: {
 }) {
   useLang()
   const [tab, setTab] = useState<'Passwort' | 'Zwei-Faktor' | 'Sprache'>('Passwort')
+  // Ein Konto der zentralen Anmeldung ändert Passwort und zweiten Faktor dort
+  // (Betreiber, 2026-10-08) — hier gesetzt, wirkte es an der Anmeldung nicht.
+  // Lokal bleibt nur das Notfallkonto.
+  const [konto, setKonto] = useState<KontoArt | null>(null)
+  useEffect(() => { api.konto().then(setKonto).catch(() => setKonto(null)) }, [])
+  const zentral = konto !== null && konto.art !== 'lokal'
 
   return (
     <div className="wrap">
@@ -41,10 +47,69 @@ export function Account({ me, onMe, onToast }: {
       </nav>
 
       <div className="wb__body">
-        {tab === 'Passwort' && <PasswordPart onToast={onToast} />}
-        {tab === 'Zwei-Faktor' && <TotpPart me={me} onMe={onMe} onToast={onToast} />}
+        {tab === 'Passwort' && (zentral ? <ZentralPasswort konto={konto!} /> : <PasswordPart onToast={onToast} />)}
+        {tab === 'Zwei-Faktor' && (zentral ? <ZentralFaktor konto={konto!} />
+          : <TotpPart me={me} onMe={onMe} onToast={onToast} />)}
         {tab === 'Sprache' && <LanguagePart onMe={onMe} onToast={onToast} />}
       </div>
+    </div>
+  )
+}
+
+// ------------------------------------------------- Zentrale Anmeldung
+//
+// Keycloak führt die Aktion aus und schickt zurück (Application-Initiated
+// Action). OTA sieht dabei kein Passwort, und Keycloaks Passwortregel und
+// zweite Stufe gelten wie beim Anmelden.
+
+function zuKeycloak(aktion: string) {
+  window.location.href = `/api/auth/oidc/start?next=/&aktion=${encodeURIComponent(aktion)}`
+}
+
+function ZentralPasswort({ konto }: { konto: KontoArt }) {
+  if (konto.art === 'verzeichnis') {
+    return (
+      <div className="panel" style={{ padding: '18px 20px', maxWidth: 620 }}>
+        <p className="sub">
+          {tr('Dein Konto kommt aus dem Firmenverzeichnis (AD/LDAP). Dein Passwort änderst du dort — so, wie es in deiner Firma üblich ist. Hier und in der zentralen Anmeldung gilt dann das neue.')}
+        </p>
+      </div>
+    )
+  }
+  return (
+    <div className="panel" style={{ padding: '18px 20px', maxWidth: 620 }}>
+      <p className="sub" style={{ marginBottom: 14 }}>
+        {tr('Dein Konto meldet sich über die zentrale Anmeldung an. Dort änderst du auch dein Passwort — OTA schickt dich hin und holt dich danach zurück.')}
+      </p>
+      <button className="btn btn--primary" onClick={() => zuKeycloak('UPDATE_PASSWORD')}>
+        {tr('Passwort ändern')}
+      </button>
+    </div>
+  )
+}
+
+function ZentralFaktor({ konto }: { konto: KontoArt }) {
+  return (
+    <div className="panel" style={{ padding: '18px 20px', maxWidth: 620 }}>
+      <p className="sub" style={{ marginBottom: 14 }}>
+        {tr('Der zweite Faktor gehört zur zentralen Anmeldung. Richte dort ein Einmalkennwort aus einer Authenticator-App ein oder einen Passkey (Fingerabdruck, Gesicht, Sicherheitsschlüssel).')}
+      </p>
+      <div className="row-item" style={{ gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
+        <button className="btn btn--primary" onClick={() => zuKeycloak('CONFIGURE_TOTP')}>
+          {tr('Authenticator-App einrichten')}
+        </button>
+        <button className="btn" onClick={() => zuKeycloak('webauthn-register')}>
+          {tr('Passkey hinzufügen')}
+        </button>
+      </div>
+      {konto.verwaltung && (
+        <p className="field__hint">
+          {tr('Was eingerichtet ist — und zum Entfernen —:')}{' '}
+          <a className="repo-link" href={konto.verwaltung} target="_blank" rel="noreferrer">
+            {tr('Konto in der zentralen Anmeldung')}
+          </a>
+        </p>
+      )}
     </div>
   )
 }

@@ -19,7 +19,7 @@ help:
 	@echo "  make logs      Logs aller Dienste mitlesen"
 	@echo "  make ps        Zustand aller Dienste"
 	@echo "  make admin     Ersten Administrator anlegen (NAME=... setzen)"
-	@echo "  make test      Alle Prüfreihen (Rechte, Zwischenablage, Oberfläche,"
+	@echo "  make test      Alle Prüfreihen (Rechte, Konten, Zwischenablage, Oberfläche,"
 	@echo "                 Verzeichnis, Medienweg, Netz, Root-Arbeitsplatz, Paketquelle,"
 	@echo "                 Selkies-Paket, Sicherung)"
 	@echo "  make root-image  Basisimage für Root-Arbeitsplätze bauen und prüfen"
@@ -209,6 +209,10 @@ export OTA_KEYCLOAK_SECRET
 
 test:
 	@./scripts/test-authz.sh
+	@echo
+	@# Konten der zentralen Anmeldung: Anlegen in Keycloak, Mein Konto ueber
+	@# Keycloak, Umzug lokaler Bestandskonten mit ihrem Passwort.
+	@./scripts/test-konten.sh
 	@echo
 	@./scripts/test-clipboard-bridge.sh || \
 	  echo "  (übersprungen — dafür muss ein Arbeitsplatz mit zwei Apps laufen)"

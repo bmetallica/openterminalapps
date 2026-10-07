@@ -97,14 +97,15 @@ try {
 
   // ------------------------------------------------------------ Anmeldung
   console.log('Anmeldung')
-  // Ausdrücklich `/login` und nicht die Wurzel.
+  // Ausdrücklich `/notfall` und nicht die Wurzel.
   //
   // Seit der Umstellung auf Keycloak (auth-roadmap.md, Etappe B) leitet jede
   // geschützte Adresse einen Nichtangemeldeten zur zentralen Anmeldung weiter.
-  // Diese Reihe prüft OTA und nicht Keycloak — und `bmetallica` ist bis zur
-  // Übernahme der Bestandskonten (§5.1) ein lokales Konto. `/login` ist der
-  // Weg, der beides bedient: Landeplatz für Fehler und lokale Maske.
-  await page.goto(BASE + '/login', { waitUntil: 'networkidle2', timeout: 30000 })
+  // Diese Reihe prüft OTA und nicht Keycloak, und sie meldet sich mit dem
+  // lokalen Notfallkonto an. Seit dem 2026-10-08 hat nur noch `/notfall` eine
+  // lokale Maske für jedes lokale Konto; `/login` leitet zur zentralen
+  // Anmeldung weiter, sobald es keine Konten mehr gibt, die umziehen müssen.
+  await page.goto(BASE + '/notfall', { waitUntil: 'networkidle2', timeout: 30000 })
   await shot(page, '01-login')
 
   check(await page.evaluate(() => window.isSecureContext),

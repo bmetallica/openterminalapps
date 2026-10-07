@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 
+import httpx
+
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -180,20 +182,66 @@ def create_user(
         if problem:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, problem)
 
+    # **Das Konto entsteht in Keycloak** (Betreiber, 2026-10-08). Bis dahin
+    # entstand hier ein lokales Konto: Es meldete sich nur unter /login an,
+    # an der zentralen Anmeldung — und an ihrer zweiten Stufe — vorbei, und
+    # Keycloak kannte es nicht. Lokal bleibt nur das Notfallkonto.
+    sub, verknuepft = _in_keycloak_anlegen(body)
+
     user = User(
-        username=body.username,
+        username=body.username.strip().lower(),
         display_name=body.display_name,
         email=body.email,
         is_active=body.is_active,
-        password_hash=hash_password(body.password) if body.password else None,
-        must_change_password=bool(body.password),
+        password_hash=None,
+        must_change_password=False,
+        auth_provider="keycloak",
+        external_id=sub,
     )
     user.groups = list(db.scalars(select(Group).where(Group.id.in_(body.group_ids))).all())
     db.add(user)
+    db.flush()
+    _nach_keycloak(user)
     audit.record(db, "user.created", actor=actor, object_type="user",
-                 object_id=body.username, request=request)
+                 object_id=user.username, request=request,
+                 keycloak="verknüpft" if verknuepft else "angelegt")
     db.commit()
     return _user_out(user)
+
+
+def _in_keycloak_anlegen(body: UserIn) -> tuple[str, bool]:
+    """Legt das Konto in Keycloak an — oder verknuepft ein vorhandenes.
+
+    Vorhanden kann es sein, weil es aus einem Verzeichnis kommt, weil es frueher
+    hier angelegt und wieder geloescht (in Keycloak also nur gesperrt) wurde,
+    oder weil es jemand in Keycloak angelegt hat. Ein Verzeichniskonto bekommt
+    kein Passwort von hier; ein anderes, wenn eines angegeben ist.
+    """
+    name = body.username.strip().lower()
+    try:
+        vorhanden = keycloak.konto_finden(name)
+        if vorhanden is not None:
+            sub = str(vorhanden["id"])
+            verzeichnis = keycloak.aus_verzeichnis(vorhanden)
+            keycloak.konto_profil(sub, anzeigename=body.display_name, email=body.email,
+                                  aktiv=body.is_active, verzeichnis=verzeichnis)
+            if body.password and not verzeichnis:
+                keycloak.konto_passwort(sub, body.password, body.passwort_wechseln)
+            return sub, True
+        if not body.password:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                                "Ein Startpasswort ist nötig — das Konto entsteht in der "
+                                "zentralen Anmeldung und hat sonst keines.")
+        sub = keycloak.konto_anlegen(name, email=body.email, anzeigename=body.display_name,
+                                     passwort=body.password, wechseln=body.passwort_wechseln)
+        return sub, False
+    except keycloak.KeycloakFehler as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "Die zentrale Anmeldung antwortet nicht — das Konto wurde nicht angelegt.",
+        ) from exc
 
 
 @router.put("/users/{user_id}", dependencies=[Depends(manage_users)])
@@ -228,8 +276,23 @@ def update_user(
         problem = password_problem(body.password)
         if problem:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, problem)
-        user.password_hash = hash_password(body.password)
-        user.must_change_password = True
+        if user.auth_provider == "keycloak" and user.external_id:
+            # Das Passwort eines Keycloak-Kontos steht in Keycloak. Bis zum
+            # 2026-10-08 landete es hier als lokaler Hash — wirkungslos fuer die
+            # zentrale Anmeldung, und ein offener Weg an ihr vorbei.
+            try:
+                konto = keycloak.konto_lesen(user.external_id)
+                if keycloak.aus_verzeichnis(konto):
+                    raise HTTPException(
+                        status.HTTP_409_CONFLICT,
+                        "Dieses Konto kommt aus dem Verzeichnis (AD/LDAP). Sein Passwort "
+                        "wird dort geändert, nicht hier.")
+                keycloak.konto_passwort(user.external_id, body.password, body.passwort_wechseln)
+            except keycloak.KeycloakFehler as exc:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+        else:
+            user.password_hash = hash_password(body.password)
+            user.must_change_password = True
         user.token_epoch += 1
 
     _nach_keycloak(user)
@@ -261,17 +324,17 @@ def _nach_keycloak(user: User) -> None:
         return
 
     try:
-        keycloak.ruf("PUT", f"/users/{user.external_id}", json={
-            "email": user.email or None,
-            "emailVerified": bool(user.email),
-            "enabled": bool(user.is_active) and not user.is_locked,
-        })
+        konto = keycloak.konto_lesen(user.external_id)
+        keycloak.konto_profil(user.external_id, anzeigename=user.display_name,
+                              email=user.email,
+                              aktiv=bool(user.is_active) and not user.is_locked,
+                              verzeichnis=keycloak.aus_verzeichnis(konto))
         keycloak.gruppen_setzen(user.external_id, sorted(g.name for g in user.groups))
         # Die zweite Stufe haengt an einer Rolle (auth-roadmap.md §5.3).
         keycloak.rolle_setzen(
             user.external_id, "zweiter-faktor",
             any(getattr(g, "require_totp", False) for g in user.groups))
-    except keycloak.KeycloakFehler as exc:
+    except (keycloak.KeycloakFehler, httpx.HTTPError) as exc:
         log.warning("Konto %s nicht nach Keycloak nachgetragen: %s",
                     user.username, exc)
 
@@ -328,6 +391,20 @@ def reset_totp(
     user = db.get(User, user_id)
     if not user:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Nutzer nicht gefunden")
+    if user.auth_provider == "keycloak" and user.external_id:
+        # Die zweite Stufe eines Keycloak-Kontos steht in Keycloak.
+        try:
+            weg = keycloak.zweiten_faktor_entfernen(user.external_id)
+        except (keycloak.KeycloakFehler, httpx.HTTPError) as exc:
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+        user.token_epoch = (user.token_epoch or 0) + 1
+        audit.record(db, "user.totp_reset", actor=actor, object_type="user",
+                     object_id=user.username, request=request, keycloak=weg)
+        db.commit()
+        if not weg:
+            return {"status": f"{user.username} hat keinen zweiten Faktor eingerichtet."}
+        return {"status": (f"Der zweite Faktor von {user.username} ist in der zentralen "
+                           "Anmeldung entfernt. Das steht im Protokoll.")}
     if not user.totp_secret:
         return {"status": f"{user.username} hat keinen zweiten Faktor eingerichtet."}
 
@@ -398,11 +475,22 @@ def delete_user(
                 agent_client.remove_container(sess.container_id, daten=True)
             except HTTPException as exc:
                 log.warning("Root-Arbeitsplatz %s nicht entfernt: %s", sess.id, exc.detail)
+    # In Keycloak wird gesperrt, nicht geloescht (keycloak.py: „Nichts
+    # loeschen"). Ohne die Sperre legte die naechste Anmeldung das Konto hier
+    # einfach wieder an.
+    gesperrt = ""
+    if user.auth_provider == "keycloak" and user.external_id:
+        try:
+            keycloak.konto_sperren(user.external_id, True)
+            gesperrt = " In der zentralen Anmeldung ist es gesperrt."
+        except (keycloak.KeycloakFehler, httpx.HTTPError) as exc:
+            log.warning("Konto %s in Keycloak nicht gesperrt: %s", name, exc)
+            gesperrt = " Achtung: In der zentralen Anmeldung liess es sich nicht sperren."
     db.delete(user)
     audit.record(db, "user.deleted", actor=actor, object_type="user",
                  object_id=name, request=request)
     db.commit()
-    return {"status": f"{name} gelöscht. Das Profil auf der Platte bleibt bestehen."}
+    return {"status": f"{name} gelöscht.{gesperrt} Das Profil auf der Platte bleibt bestehen."}
 
 
 # --------------------------------------------------------------------------

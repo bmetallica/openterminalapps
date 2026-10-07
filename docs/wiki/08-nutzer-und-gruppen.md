@@ -1,9 +1,10 @@
 # 8 · Nutzer, Gruppen und Rechte
 
 > **Seit dem 2026-08-28 kommen die Konten aus Keycloak.** OTA führt sie weiter als Projektion —
-> Gruppen, Rechte und Zuteilungen bleiben hier —, aber angelegt und geprüft werden sie dort.
-> Wie das zusammenhängt und was der Notzugang ist, steht in
-> [Kapitel 18](18-zentrale-anmeldung.md).
+> Gruppen, Rechte und Zuteilungen bleiben hier —, aber geprüft werden sie dort. **Seit dem
+> 2026-10-08 entstehen sie auch dort:** Ein Konto, das hier angelegt wird, legt OTA in Keycloak an;
+> Passwort und zweiter Faktor ändert man unter Mein Konto über Keycloak. Lokal ist nur das
+> Notfallkonto. Wie das zusammenhängt, steht in [Kapitel 18](18-zentrale-anmeldung.md).
 >
 > **Die E-Mail ist Pflichtfeld.** Sie war es lange nicht; seit sie an angebundene Anwendungen
 > weitergereicht wird, ist ein Konto ohne Adresse eines, das sich dort nicht anmelden kann. Interne
@@ -172,8 +173,8 @@ braucht keine Verwaltungsrechte — es geht um die eigene Person.
 
 | Reiter | Was dort geht |
 |---|---|
-| **Passwort** | Selbst ändern. Der Wechsel meldet alle *anderen* Sitzungen ab, die eigene bleibt |
-| **Zwei-Faktor** | Einrichten, Rückfallcodes erneuern, abschalten |
+| **Passwort** | Bei Konten der zentralen Anmeldung: Knopf, der zu Keycloak führt und zurück. Bei Konten aus dem Verzeichnis: Hinweis, dass es dort geändert wird. Beim Notfallkonto: selbst ändern; der Wechsel meldet alle *anderen* Sitzungen ab |
+| **Zwei-Faktor** | Bei Konten der zentralen Anmeldung: Authenticator-App oder Passkey in Keycloak einrichten. Beim Notfallkonto: OTAs eigener (unten) |
 | **Sprache** | Deutsch oder Englisch, am Konto gemerkt statt nur im Browser |
 
 Daneben, unten in der Leiste und **auch schon auf der Anmeldemaske**: die Sprache und das
@@ -188,6 +189,9 @@ umschaltet. Wer sich festlegt, überschreibt das dauerhaft.
 > der Grösse des Browserfensters ([Kapitel 3](03-arbeitsplatz.md)).
 
 ## Zwei-Faktor ✅
+
+> **Was folgt, gilt für lokale Konten — also das Notfallkonto.** Konten der zentralen Anmeldung
+> haben ihren zweiten Faktor in Keycloak ([Kapitel 18](18-zentrale-anmeldung.md#mein-konto-bei-der-zentralen-anmeldung-)).
 
 **Mein Konto → Zwei-Faktor.** Einrichten mit einer Authenticator-App: Code abscannen, sechs Ziffern
 zur Probe eintippen, fertig. Wer nicht scannen kann, trägt das Geheimnis von Hand ein — es steht

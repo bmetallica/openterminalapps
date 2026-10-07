@@ -23,7 +23,7 @@ const SLUG = process.env.OTA_SLUG ?? ''
 
 const browser = await puppeteer.connect({ browserURL: process.env.OTA_CDP, defaultViewport: { width: 1440, height: 900 } })
 const page = (await browser.pages())[0] ?? await browser.newPage()
-await page.goto(BASE + '/login', { waitUntil: 'networkidle2' })
+await page.goto(BASE + '/notfall', { waitUntil: 'networkidle2' })
 if (!(await page.$('.rail'))) {
   await page.waitForSelector('input[autocomplete="username"]')
   await page.type('input[autocomplete="username"]', env.OTA_TEST_ADMIN)

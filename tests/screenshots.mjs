@@ -71,7 +71,7 @@ const zu = async (kapitel) => {
 
 console.log(`Bilder nach ${ZIEL}`)
 
-await page.goto(BASE + '/login', { waitUntil: 'networkidle2', timeout: 30000 })
+await page.goto(BASE + '/notfall', { waitUntil: 'networkidle2', timeout: 30000 })
 await page.waitForSelector('input[autocomplete="username"]', { timeout: 10000 })
 await page.type('input[autocomplete="username"]', USER)
 await page.type('input[autocomplete="current-password"]', PW)

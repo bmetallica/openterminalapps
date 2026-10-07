@@ -1024,3 +1024,16 @@ Firmen-CA, und OTAs eigene CA bleibt für den direkten Weg und für angebundene 
 **Nicht als Nächstes**: M10. Er ist sauber beschrieben und wartet auf eine zweite Maschine. M9 ist
 zu; was dort noch offen stand — die Guacamole-Engine und code-server — ist am 2026-09-03
 gestrichen. Nichts davon fehlt heute jemandem.
+
+**Nachtrag 2026-10-08 — Ein Eingang: Konten entstehen in Keycloak** ([Kapitel 18](docs/wiki/18-zentrale-anmeldung.md)):
+
+- [x] Anlegen, Ändern, Passwort, zweiten Faktor zurücksetzen, Sperren und Löschen in OTA wirken in
+      Keycloak; Löschen sperrt dort, erneutes Anlegen verknüpft. Startpasswort von der Verwaltung,
+      „beim ersten Anmelden ändern" wählbar. Verzeichniskonten bekommen kein Passwort von hier
+- [x] `/login` leitet zur zentralen Anmeldung weiter; lokale Bestandskonten ziehen dort beim
+      Anmelden mit ihrem Passwort um. Lokal bleibt nur das Notfallkonto (`/notfall`)
+- [x] Mein Konto: Passwort, Einmalkennwort und Passkey über Keycloak (Application-Initiated
+      Actions); Verzeichniskonten: Hinweis aufs Verzeichnis
+- [x] `scripts/test-konten.sh` (29), Verzeichnisfall in `test-ldap.sh`; `scripts/kc_anmelden.py`
+      meldet Prüfreihen über die Keycloak-Maske an
+

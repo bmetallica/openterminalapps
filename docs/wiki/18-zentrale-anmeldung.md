@@ -42,6 +42,71 @@ blockiert. Ohne ihn wäre eine Anlage nach einem solchen Fehler nicht mehr zu be
 Er ist bewusst genau **einer**, unter einer eigenen Adresse, und jede Anmeldung darüber steht im
 Protokoll. Die Übernahme (unten) lässt ihn unangetastet.
 
+## Die Eingänge ✅
+
+*Seit dem 2026-10-08.* Es gibt zwei Eingänge, und nur zwei:
+
+| Adresse | Für wen | Was passiert |
+|---|---|---|
+| **`/`** (jede Adresse) | alle | weiter zur zentralen Anmeldung (Keycloak) |
+| **`/notfall`** | das Notfallkonto | lokale Maske, an Keycloak vorbei — für den Fall, dass es ausfällt |
+
+**`/login`** ist kein dritter Eingang mehr, sondern ein Übergang:
+
+- Gibt es **keine lokalen Konten** ausser dem Notfallkonto mehr, leitet `/login` sofort zur
+  zentralen Anmeldung weiter.
+- Gibt es noch welche (Bestandskonten aus der Zeit vor Keycloak), zeigt es die Maske. Meldet sich
+  ein solches Konto dort an, **zieht es um** (unten) und wird zur zentralen Anmeldung weitergeleitet.
+- Wer dort den Namen eines Kontos der zentralen Anmeldung eingibt, landet bei Keycloak — mit dem
+  Namen schon im Feld.
+- Mit `?fehler=…` (wenn bei Keycloak etwas schiefging) bleibt die Seite stehen und sagt, was war.
+  Sonst liefe der Browser in eine Schleife.
+
+Bis zum 2026-10-08 zeigte `/login` jedem eine lokale Maske. Ein Konto, das in OTA angelegt wurde,
+kam **nur** dort herein — an der zentralen Anmeldung und ihrer zweiten Stufe vorbei. Gefunden auf
+der Produktivanlage.
+
+## Konten anlegen und pflegen ✅
+
+*Seit dem 2026-10-08.* **Verwaltung → Nutzer → anlegen** legt das Konto **in Keycloak** an:
+
+- **Das Startpasswort vergibt die Verwaltung.** Ob es beim ersten Anmelden geändert werden muss,
+  auch (Schalter „Beim ersten Anmelden ändern", Vorgabe: ja). Es muss die Passwortregel von Keycloak
+  erfüllen; eine Ablehnung kommt mit Keycloaks Begründung zurück.
+- **Name, E-Mail, Gruppen, aktiv/gesperrt** und die Rolle für die zweite Stufe hält OTA in Keycloak
+  nach, bei jeder Änderung. Die Gruppen sind Pflicht dort: Keycloak gibt sie bei jedem Anmelden mit,
+  und OTA übernimmt sie — eine Gruppe, die nur in OTA stünde, wäre beim nächsten Anmelden weg.
+- **Ein neues Passwort** aus der Verwaltung gilt in Keycloak, wieder wahlweise zum Ändern beim
+  nächsten Anmelden.
+- **Zweiten Faktor zurücksetzen** entfernt Einmalkennwort und Passkeys in Keycloak.
+- **Löschen** entfernt das Konto aus OTA und **sperrt** es in Keycloak; gelöscht wird dort nie
+  (ein Keycloak gehört womöglich noch anderen Anwendungen). Ohne die Sperre legte die nächste
+  Anmeldung das Konto in OTA einfach wieder an. Wird derselbe Name später wieder angelegt, verknüpft
+  OTA das gesperrte Konto und schaltet es wieder frei.
+- **Ein Konto aus dem Verzeichnis** (AD/LDAP über die Föderation) gehört dem Verzeichnis: Name,
+  Adresse und Passwort kommen von dort. Die Verwaltung setzt ihm kein Passwort (409); Gruppen und
+  aktiv/gesperrt gehen trotzdem.
+
+**Lokale Konten** entstehen über die Verwaltung nicht mehr. Lokal ist nur das Notfallkonto
+(`make admin`, Einstellungen → Notfallkonto).
+
+## Mein Konto bei der zentralen Anmeldung ✅
+
+*Seit dem 2026-10-08.* Passwort und zweiter Faktor eines Kontos der zentralen Anmeldung stehen in
+Keycloak, und dort werden sie geändert. **Mein Konto** führt hin und holt zurück (Keycloaks
+„Application-Initiated Actions"): OTA sieht dabei kein Passwort, Keycloaks Passwortregel und zweite
+Stufe gelten wie beim Anmelden.
+
+| | Konto der zentralen Anmeldung | aus dem Verzeichnis | Notfallkonto |
+|---|---|---|---|
+| Passwort ändern | Knopf → Keycloak | **im Verzeichnis**, wie in der Firma üblich | Formular in OTA |
+| Einmalkennwort | Knopf → Keycloak (`CONFIGURE_TOTP`) | Knopf → Keycloak | OTAs eigenes |
+| Passkey | Knopf → Keycloak (`webauthn-register`) | Knopf → Keycloak | — |
+| Ansehen, entfernen | Keycloaks Kontoseite (verlinkt) | dito | in OTA |
+
+Die lokalen Wege (`/api/auth/password`, `/api/auth/totp/…`) lehnen ein solches Konto ab (409) —
+dort gesetzt, wirkte es an der Anmeldung nicht und öffnete einen Weg an ihr vorbei.
+
 ## Ein Active Directory anbinden
 
 **Einstellungen → Verzeichnis in Keycloak.**
@@ -186,6 +251,18 @@ Zum Zertifikat — die Stelle, an der die erste Anbindung verlässlich scheitert
 [Kapitel 10](10-zertifikate-und-https.md).
 
 ## Bestandskonten übernehmen
+
+**Am einfachsten zieht ein Konto selbst um — beim nächsten Anmelden** (*seit dem 2026-10-08*):
+Meldet es sich unter `/login` mit seinem lokalen Passwort an, legt OTA es in Keycloak an, **mit
+genau diesem Passwort**, löscht den lokalen Hash und leitet zur zentralen Anmeldung weiter. Kein
+Einmal-Passwort, kein Import von Hashes — OTA kennt das Passwort in diesem Moment ohnehin. Gibt es
+in Keycloak schon ein Konto dieses Namens, wird verknüpft und dessen Passwort nicht angefasst. Ist
+jenes Konto dort **gesperrt** (meist, weil es in OTA einmal gelöscht wurde), zieht nichts um: Das
+Konto meldet sich weiter lokal an, bis die Verwaltung es klärt — etwa, indem sie das lokale Konto
+löscht und neu anlegt; das verknüpft das gesperrte und entsperrt es mit dem vergebenen Passwort.
+Antwortet Keycloak nicht, kommt das Konto lokal herein und zieht beim nächsten Mal um.
+
+Für Konten, die sich lange nicht anmelden, gibt es den Lauf von Hand:
 
 **Einstellungen → Übernahme.** Sie holt lokale Konten nach Keycloak: Name, E-Mail, Gruppen und die
 Rolle für die zweite Stufe wandern mit, das Passwort wird **einmalig neu** vergeben und muss beim

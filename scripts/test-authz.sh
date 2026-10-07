@@ -126,16 +126,11 @@ echo "Testnutzer vorbereiten"
 USERS_GID=$(api "$TMP/admin.jar" "$BASE/api/admin/groups" \
   | python3 -c 'import sys,json;print([g["id"] for g in json.load(sys.stdin) if g["slug"]=="users"][0])')
 
-EXISTING=$(api "$TMP/admin.jar" "$BASE/api/admin/users" \
-  | python3 -c "import sys,json;m=[u['id'] for u in json.load(sys.stdin) if u['username']=='$TEST_USER'];print(m[0] if m else '')")
-
-if [ -n "$EXISTING" ]; then
-  api "$TMP/admin.jar" -X PUT "$BASE/api/admin/users/$EXISTING" -H 'Content-Type: application/json' \
-    -d "{\"username\":\"$TEST_USER\",\"email\":\"$TEST_USER@ota.invalid\",\"password\":\"$TEST_PW\",\"group_ids\":[\"$USERS_GID\"]}" >/dev/null
-else
-  api "$TMP/admin.jar" -X POST "$BASE/api/admin/users" -H 'Content-Type: application/json' \
-    -d "{\"username\":\"$TEST_USER\",\"email\":\"$TEST_USER@ota.invalid\",\"password\":\"$TEST_PW\",\"group_ids\":[\"$USERS_GID\"]}" >/dev/null
-fi
+# **Ein lokales Konto**, und zwar mit Absicht: Diese Reihe misst an ihm, was
+# nur fuer lokale Konten gilt — Sperre, Zeitverhalten, OTAs eigener zweiter
+# Faktor. Die Verwaltung legt seit dem 2026-10-08 Konten in Keycloak an;
+# deshalb kommt dieses direkt in die Datenbank (scripts/lokales-testkonto.sh).
+"$ROOT/scripts/lokales-testkonto.sh" "$TEST_USER" "$TEST_PW" "$TEST_USER@ota.invalid" users >/dev/null
 # Ein zweiter Faktor aus einem frueheren Lauf wuerde die Anmeldung mit blossem
 # Passwort abweisen — und der ganze Rest scheiterte an einem 401, das nichts
 # mit dem zu tun haette, was gerade geprueft wird. Der Test stellt seinen
@@ -199,9 +194,11 @@ if [ -n "$SID" ]; then
     -d '{"name":"OTA-Prüfung Support","permissions":["sessions.view_all"]}' \
     | jqp "d.get('id','')")
   if [ -n "$SUP_GID" ]; then
+    # Dieses Konto geht den gewoehnlichen Weg: angelegt von der Verwaltung,
+    # also in Keycloak, und angemeldet ueber Keycloaks Maske.
     api "$TMP/admin.jar" -X POST "$BASE/api/admin/users" -H 'Content-Type: application/json' \
-      -d "{\"username\":\"$SUP\",\"email\":\"$SUP@ota.invalid\",\"password\":\"$TEST_PW\",\"group_ids\":[\"$SUP_GID\"]}" >/dev/null
-    login "$TMP/sup.jar" "$SUP" "$TEST_PW"
+      -d "{\"username\":\"$SUP\",\"email\":\"$SUP@ota.invalid\",\"password\":\"$TEST_PW\",\"passwort_wechseln\":false,\"group_ids\":[\"$SUP_GID\"]}" >/dev/null
+    python3 "$ROOT/scripts/kc_anmelden.py" "$BASE" "$SUP" "$TEST_PW" "$TMP/sup.jar" >/dev/null
 
     SEEN=$(api "$TMP/sup.jar" "$BASE/api/sessions?all_users=true" | jqp "len(d)")
     [ "${SEEN:-0}" -gt 0 ] && ok "Support sieht fremde Sessions in der Liste ($SEEN)" \
@@ -2061,9 +2058,9 @@ api "$TMP/admin.jar" -X PUT "$BASE/api/admin/groups/$USERS_GID_2" \
 
 # Ein zweiter Testnutzer ohne zweiten Faktor — der erste hat gerade einen.
 ZWANG="ota-pruef-zwang"
-api "$TMP/admin.jar" -X POST "$BASE/api/admin/users" -H 'Content-Type: application/json' \
-  -d "{\"username\":\"$ZWANG\",\"email\":\"$ZWANG@ota.invalid\",\"password\":\"$TEST_PW\",\"group_ids\":[\"$USERS_GID_2\"]}" \
-  >/dev/null
+# Lokal, denn geprueft wird OTAs eigene Pflicht zum zweiten Faktor — bei
+# Konten der zentralen Anmeldung setzt Keycloak sie durch.
+"$ROOT/scripts/lokales-testkonto.sh" "$ZWANG" "$TEST_PW" "$ZWANG@ota.invalid" users >/dev/null
 login "$TMP/zwang.jar" "$ZWANG" "$TEST_PW"
 
 FLAG=$(api "$TMP/zwang.jar" "$BASE/api/auth/me" | jqp "d.get('must_setup_totp')")

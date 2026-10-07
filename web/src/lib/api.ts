@@ -598,6 +598,9 @@ export type Allocation = {
 }
 
 // ------------------------------------------------- Paketquellen (Kapitel 26)
+export type KontoArt = {
+  art: 'lokal' | 'zentral' | 'verzeichnis'; notfall: boolean; verwaltung?: string
+}
 export type RepoModus = 'aus' | 'zuerst' | 'nur'
 export type SelkiesStand = {
   im_image: string; in_quelle: string; anwendbar: boolean; fehler?: string; modus?: string
@@ -680,6 +683,15 @@ export const api = {
   login: (username: string, password: string, totp?: string) =>
     call<Me>('/auth/login', { method: 'POST', body: JSON.stringify({ username, password, totp }) }),
   logout: () => call<void>('/auth/logout', { method: 'POST' }),
+  /** Für /login: Gibt es noch lokale Konten außer dem Notfallkonto? */
+  anmeldung: () => call<{ lokale_konten: boolean }>('/auth/anmeldung'),
+  /** Ein lokales Konto zieht mit seinem Passwort zur zentralen Anmeldung um. */
+  umziehen: (password: string) =>
+    call<{ status: string; weiter: string }>('/auth/umziehen', {
+      method: 'POST', body: JSON.stringify({ password }),
+    }),
+  /** Was für ein Konto: lokal (Notfallkonto), zentral oder aus dem Verzeichnis. */
+  konto: () => call<KontoArt>('/auth/konto'),
   me: () => call<Me>('/auth/me'),
   setLocale: (locale: string) =>
     call<Me>('/auth/locale', { method: 'PUT', body: JSON.stringify({ locale }) }),

@@ -166,6 +166,11 @@ is *dropped* on the way to the neighbour, because there is no line there at all.
 wrong; a missing path cannot. Four more diagrams (isolated, off, an exception by name, and an
 inbound published port) are in [handbook chapter 23](docs/wiki/23-netz.md).*
 
+> Accounts created in OTA are created in Keycloak, with the password the administration sets
+> (optionally to be changed at first sign-in); password and second factor are changed under **My
+> account**, which hands over to Keycloak. Legacy local accounts move over at their next sign-in at
+> `/login`, **with their own password**. Only the emergency account stays local.
+>
 > The local sign-in at `/api/auth/login` is the emergency door, not the main one — Keycloak
 > accounts are turned away there. It is rate-limited to ten attempts per minute and sender, and the
 > lockout after failed attempts applies per **(account, sender)**: it cannot be aimed at a
@@ -285,6 +290,7 @@ make test
 | Suite | Checks |
 |---|---|
 | `test-authz.sh` | An ordinary user provably cannot do anything administrative and cannot sit at anyone else's screen; plus container hardening, metrics, quotas and two-factor |
+| `test-konten.sh` | Central sign-in accounts: creating one in OTA creates it in Keycloak (including the forced password change) and it cannot sign in locally; edits, password, second factor, disabling and deletion take effect in Keycloak; My account goes through Keycloak; a legacy local account moves over with its own password, the emergency account does not |
 | `test-clipboard-bridge.sh` | Copying between two applications in one workspace: both directions, umlauts, an image, a megabyte, after a pause, and switched off |
 | `tests/e2e.mjs` | The interface in a real browser — down to whether the stream actually connects |
 | `test-ldap.sh` | Directory sign-in **through Keycloak** against a real OpenLDAP in a container — above all that a directory entry cannot take over a local account and an outage does not take the emergency login down |

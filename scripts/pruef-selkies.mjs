@@ -59,7 +59,7 @@ await page.evaluateOnNewDocument(() => {
   window.RTCPeerConnection.prototype = Echt.prototype
 })
 
-await page.goto(BASE + '/login', { waitUntil: 'networkidle2', timeout: 30000 })
+await page.goto(BASE + '/notfall', { waitUntil: 'networkidle2', timeout: 30000 })
 
 // Der Browser laeuft ueber mehrere Laeufe hinweg weiter und bringt seine
 // Anmeldung mit. Dann gibt es kein Anmeldefeld, und darauf zu warten ist ein

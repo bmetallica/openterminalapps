@@ -281,6 +281,10 @@ dabei **nicht** zurückwandert, ist die Datenbank: Neue Spalten bleiben stehen. 
   ein, die Keycloak-Konsole bleibt für den Alltag zu — **erreichbar ist sie trotzdem**
   (`/auth/admin/`), und das mit Absicht: Wer sie zumauert, sperrt sich im Fehlerfall selbst aus.
   Was der Betrieb dafür schuldet, steht in [Kapitel 18](docs/wiki/18-zentrale-anmeldung.md)
+- **Ein Eingang für alle:** Ein Konto, das in OTA angelegt wird, entsteht in Keycloak — mit dem
+  Passwort, das die Verwaltung vergibt. Passwort und zweiter Faktor ändert jeder unter **Mein
+  Konto**, das dafür zu Keycloak führt (bei Verzeichniskonten: im Verzeichnis). Alte lokale Konten
+  ziehen beim nächsten Anmelden **mit ihrem Passwort** um; lokal bleibt nur das Notfallkonto
 - **Notzugang** unter `/notfall`: ein lokales Konto, das ohne Keycloak funktioniert. Ohne ihn wäre
   eine Anlage nach einer kaputten Anmeldekonfiguration nicht mehr zu betreten. Davor eine Bremse
   (zehn Versuche je Minute und Absender), und die Sperre nach Fehlversuchen gilt je **(Konto,
@@ -453,6 +457,7 @@ make test
 | Suite | Prüft |
 |---|---|
 | `test-authz.sh` | Ein normaler Nutzer kann beweisbar nichts Administratives tun und an keinem fremden Bildschirm sitzen; dazu Container-Härtung, Kennzahlen, Kontingente und zweiter Faktor |
+| `test-konten.sh` | Konten der zentralen Anmeldung: Anlegen in OTA legt in Keycloak an (samt Pflicht zum Passwortwechsel), lokal kommt es nicht herein; Ändern, Passwort, zweiter Faktor, Sperren und Löschen wirken in Keycloak; Mein Konto führt über Keycloak; ein lokales Bestandskonto zieht mit seinem Passwort um, das Notfallkonto nicht |
 | `test-clipboard-bridge.sh` | Kopieren zwischen zwei Anwendungen im selben Arbeitsplatz: beide Richtungen, Umlaute, ein Bild, ein Megabyte, nach Pause, und abgeschaltet |
 | `tests/e2e.mjs` | Die Oberfläche in einem echten Browser — bis zur Frage, ob der Stream wirklich verbindet |
 | `test-ldap.sh` | Verzeichnis-Anbindung **über Keycloak** gegen ein echtes OpenLDAP im Container — vor allem, dass ein Verzeichniseintrag kein lokales Konto übernimmt und ein Ausfall den Notzugang nicht mitreisst |

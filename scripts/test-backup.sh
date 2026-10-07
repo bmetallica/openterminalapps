@@ -40,11 +40,10 @@ echo "$ST" | jqp "d['path']" | grep -q . && ok "Ablage: $(echo "$ST" | jqp "d['p
 TEST_USER="ota-testnutzer"
 TEST_PW="TestNutzer2026!ab"
 UJAR="$(mktemp)"
-api "$BASE/api/admin/users" | grep -q "$TEST_USER" || {
-  GID=$(api "$BASE/api/admin/groups" | jqp "[g['id'] for g in d if g['slug']=='users'][0]")
-  api -X POST "$BASE/api/admin/users" -H 'Content-Type: application/json' \
-      -d "{\"username\":\"$TEST_USER\",\"email\":\"$TEST_USER@ota.invalid\",\"password\":\"$TEST_PW\",\"group_ids\":[\"$GID\"]}" >/dev/null
-}
+# Ein lokales Testkonto (scripts/lokales-testkonto.sh): Diese Reihe meldet es
+# ueber /api/auth/login an. Die Verwaltung legt seit dem 2026-10-08 Konten in
+# Keycloak an.
+"$(dirname "$0")/lokales-testkonto.sh" "$TEST_USER" "$TEST_PW" "$TEST_USER@ota.invalid" users >/dev/null
 curl -s --cacert "$CA" -c "$UJAR" -X POST "$BASE/api/auth/login" \
      -H 'Content-Type: application/json' \
      -d "{\"username\":\"$TEST_USER\",\"password\":\"$TEST_PW\"}" >/dev/null

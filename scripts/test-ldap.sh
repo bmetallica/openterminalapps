@@ -149,6 +149,24 @@ GEHOLT=$(jqp "str(d.get('added', 0) + d.get('updated', 0))" <<<"$ABGLEICH")
 [ "${GEHOLT:-0}" -ge 2 ] && ok "Konten aus dem Verzeichnis geholt oder aufgefrischt ($GEHOLT)" \
                          || bad "Es kamen keine Konten an: $ABGLEICH"
 
+# --- Ein Konto aus dem Verzeichnis in OTA (2026-10-08) ---------------------
+#
+# Es meldet sich ueber die zentrale Anmeldung an, mit dem Passwort aus dem
+# Verzeichnis. Mein Konto bietet ihm kein „Passwort aendern“ an, und die
+# Verwaltung setzt ihm keines: Das Passwort gehoert dem Verzeichnis.
+if python3 "$ROOT/scripts/kc_anmelden.py" "$BASE_URL" lena.brandt 'Lena-Pruef-2026!' "$TMP/lena.jar" >/dev/null; then
+  ok "Verzeichniskonto meldet sich über die zentrale Anmeldung an"
+  ART=$(curl -s --cacert "$CA" -b "$TMP/lena.jar" "$BASE_URL/api/auth/konto" | jqp "d.get('art')")
+  expect "verzeichnis" "$ART" "Mein Konto erkennt es als Verzeichniskonto"
+  LUID=$(api "$BASE_URL/api/admin/users" | jqp "next((u['id'] for u in d if u['username'] == 'lena.brandt'), '')")
+  CODE=$(curl -s --cacert "$CA" -b "$TMP/admin.jar" -o /dev/null -w '%{http_code}' -X PUT \
+    "$BASE_URL/api/admin/users/$LUID" -H 'Content-Type: application/json' \
+    -d '{"username":"lena.brandt","email":"lena.brandt@ota.test","password":"Gesetzt-Von-OTA-2026!","group_ids":[]}')
+  expect "409" "$CODE" "Die Verwaltung setzt einem Verzeichniskonto kein Passwort"
+else
+  bad "Verzeichniskonto kam über die zentrale Anmeldung nicht herein"
+fi
+
 # Dass dabei etwas scheitert, ist erwartet und wird hier festgehalten statt
 # übergangen — sonst sucht später jemand nach einem Fehler, der keiner ist:
 #

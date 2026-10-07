@@ -533,6 +533,9 @@ class UserIn(BaseModel):
     display_name: str | None = None
     email: Adresse
     password: str | None = None
+    # Seit 2026-10-08 entsteht ein Konto in Keycloak. Das Passwort vergibt die
+    # Verwaltung; ob es beim ersten Anmelden geaendert werden muss, auch.
+    passwort_wechseln: bool = True
     is_active: bool = True
     group_ids: list[uuid.UUID] = []
 

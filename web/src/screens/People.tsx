@@ -22,6 +22,10 @@ function UserEditor({ user, groups, onSaved, onClose, onToast }: {
   const [displayName, setDisplayName] = useState(user?.display_name ?? '')
   const [email, setEmail] = useState(user?.email ?? '')
   const [password, setPassword] = useState('')
+  // Seit 2026-10-08 entsteht ein Konto in der zentralen Anmeldung (Keycloak).
+  // Ob das Passwort beim ersten Anmelden gewechselt werden muss, entscheidet
+  // die Verwaltung — Vorgabe: ja.
+  const [wechseln, setWechseln] = useState(true)
   const [isActive, setIsActive] = useState(user?.is_active ?? true)
   const [groupIds, setGroupIds] = useState<string[]>(user?.group_ids ?? [])
   const [busy, setBusy] = useState(false)
@@ -43,6 +47,7 @@ function UserEditor({ user, groups, onSaved, onClose, onToast }: {
         display_name: displayName || null,
         email: email.trim(),
         password: password || null,
+        passwort_wechseln: wechseln,
         is_active: isActive,
         group_ids: groupIds,
       }
@@ -88,7 +93,8 @@ function UserEditor({ user, groups, onSaved, onClose, onToast }: {
     <Drawer
       title={isNew ? tr('Nutzer anlegen') : username}
       subtitle={isNew ? undefined
-        : user?.auth_provider === 'local' ? tr('Lokales Konto') : user?.auth_provider}
+        : user?.auth_provider === 'local' ? tr('Lokales Konto')
+          : user?.auth_provider === 'keycloak' ? tr('Zentrale Anmeldung') : user?.auth_provider}
       onClose={onClose}
       footer={
         <>
@@ -128,13 +134,21 @@ function UserEditor({ user, groups, onSaved, onClose, onToast }: {
       </Field>
 
       <Field label={isNew ? tr('Startpasswort') : tr('Neues Passwort')}
-        hint={tr('Mindestens 12 Zeichen. Der Nutzer muss es bei der ersten Anmeldung wechseln.')}>
+        hint={user?.auth_provider === 'local'
+          ? tr('Mindestens 12 Zeichen. Gilt nur hier — dies ist ein lokales Konto.')
+          : tr('Mindestens 12 Zeichen. Es gilt in der zentralen Anmeldung. Bei einem Konto aus dem Firmenverzeichnis (AD/LDAP) wird das Passwort dort geändert, nicht hier.')}>
         <div className="row-item">
           <input value={password} type="text" autoComplete="new-password"
             placeholder={isNew ? '' : tr('leer lassen, um es nicht zu ändern')}
             aria-label={tr('Passwort')}
             onChange={(e) => setPassword(e.target.value)} />
         </div>
+        {(isNew || password) && user?.auth_provider !== 'local' && (
+          <Toggle on={wechseln} name={tr('Beim ersten Anmelden ändern')}
+            note={wechseln ? tr('Der Mensch vergibt danach sein eigenes Passwort.')
+              : tr('Das Passwort bleibt, wie es hier steht.')}
+            onChange={setWechseln} />
+        )}
       </Field>
 
       <Field label={tr('Gruppen')} hint={tr('Bestimmt, welche Workspaces der Nutzer sieht und was er darf.')}>

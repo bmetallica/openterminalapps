@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ApiError, api, type Me } from '../lib/api'
 import { useMarke } from '../lib/branding'
 import { setLang, t, useLang, type Lang } from '../lib/i18n'
@@ -21,13 +21,52 @@ export function Login({ onDone, notfall = false, fehler }: {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
+  // Unter /login: Gibt es noch lokale Konten, die umziehen müssen? Nein —
+  // dann gleich weiter zur zentralen Anmeldung (Betreiber, 2026-10-08). Bis
+  // dahin bot diese Seite jedem eine lokale Maske an, und ein in OTA
+  // angelegtes Konto kam nur hier herein, an Keycloak vorbei.
+  const [lokale, setLokale] = useState<boolean | null>(notfall ? true : null)
+  const [umzug, setUmzug] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (notfall) return
+    api.anmeldung()
+      .then((a) => {
+        setLokale(a.lokale_konten)
+        // Ein Fehler der zentralen Anmeldung bleibt stehen — sonst liefe der
+        // Browser in eine Schleife: weiterleiten, scheitern, weiterleiten.
+        if (!a.lokale_konten && !fehler) zentral()
+      })
+      .catch(() => setLokale(true))
+  }, [notfall, fehler])
+
+  function zentral(name = '') {
+    const hint = name ? `&login_hint=${encodeURIComponent(name)}` : ''
+    window.location.replace(`/api/auth/oidc/start?next=/${hint}`)
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault()
     setBusy(true)
     setError(null)
     try {
-      onDone(await api.login(username, password, totp || undefined))
+      const me = await api.login(username, password, totp || undefined)
+      if (notfall) { onDone(me); return }
+      // Ein lokales Konto zieht jetzt um — mit diesem Passwort. Das
+      // Notfallkonto bleibt lokal (409) und meldet sich einfach an.
+      try {
+        const u = await api.umziehen(password)
+        setUmzug(u.status)
+        setTimeout(() => window.location.replace(u.weiter), 2500)
+      } catch {
+        // Keycloak antwortet nicht o. ä.: Lieber lokal herein als gar nicht.
+        // Der Umzug kommt beim nächsten Anmelden wieder.
+        onDone(me)
+      }
     } catch (err) {
+      // Ein Konto der zentralen Anmeldung am falschen Eingang: hinüber, mit
+      // dem schon getippten Namen.
+      if (!notfall && err instanceof ApiError && err.status === 409) { zentral(username); return }
       const msg = err instanceof ApiError ? err.message : t('Anmeldung fehlgeschlagen')
       // Die API verlangt den zweiten Faktor erst, wenn Name und Passwort stimmen.
       if (msg.includes(t('Code aus deiner App'))) setNeedsTotp(true)
@@ -36,6 +75,12 @@ export function Login({ onDone, notfall = false, fehler }: {
       setBusy(false)
     }
   }
+
+  // Weiterleitung läuft — nichts zeigen, was gleich wieder verschwindet.
+  if (!notfall && (lokale === null || (lokale === false && !fehler))) {
+    return <div className="login"><p className="sub">{t('Anmeldung wird geöffnet…')}</p></div>
+  }
+  const formZeigen = notfall || lokale === true
 
   return (
     <div className="login">
@@ -48,7 +93,9 @@ export function Login({ onDone, notfall = false, fehler }: {
         <p className="sub" style={{ marginBottom: notfall ? 12 : 22 }}>
           {notfall
             ? t('Notzugang mit lokalem Konto. Er umgeht die zentrale Anmeldung und wird protokolliert.')
-            : t('Melde dich an, um deinen Arbeitsplatz zu öffnen.')}
+            : formZeigen
+              ? t('Hier melden sich nur noch Konten an, die noch nicht zur zentralen Anmeldung umgezogen sind. Beim Anmelden ziehen sie um — mit demselben Passwort.')
+              : t('Melde dich an, um deinen Arbeitsplatz zu öffnen.')}
         </p>
 
         {notfall && (
@@ -70,15 +117,19 @@ export function Login({ onDone, notfall = false, fehler }: {
           </p>
         )}
 
+        {umzug && <p className="note-info" style={{ marginBottom: 18 }}>{umzug}</p>}
+
         {!notfall && (
           <div className="viewer__row" style={{ marginBottom: 18 }}>
-            <button type="button" className="btn"
-              onClick={() => { window.location.href = '/api/auth/oidc/start?next=/' }}>
+            <button type="button" className={formZeigen ? 'btn' : 'btn btn--primary'}
+              style={formZeigen ? undefined : { width: '100%', height: 40 }}
+              onClick={() => zentral()}>
               {t('Über die zentrale Anmeldung')}
             </button>
           </div>
         )}
 
+        {formZeigen && !umzug && <>
         <label className="field">
           <span className="field__label" style={{ display: 'block', marginBottom: 8 }}>{t('Benutzername')}</span>
           <div className="row-item">
@@ -119,6 +170,7 @@ export function Login({ onDone, notfall = false, fehler }: {
         <button className="btn btn--primary" style={{ width: '100%', height: 40 }} disabled={busy}>
           {busy ? t('Wird geprüft…') : t('Anmelden')}
         </button>
+        </>}
 
         {/* Die Sprache muss schon vor der Anmeldung wählbar sein — sonst
             steht wer kein Deutsch liest vor einer deutschen Anmeldemaske. */}

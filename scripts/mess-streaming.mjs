@@ -163,7 +163,7 @@ const browser = await puppeteer.connect({
   browserURL: CDP, defaultViewport: { width: BREITE, height: HOEHE } })
 const page = (await browser.pages())[0] ?? await browser.newPage()
 
-await page.goto(BASE + '/login', { waitUntil: 'networkidle2', timeout: 30000 })
+await page.goto(BASE + '/notfall', { waitUntil: 'networkidle2', timeout: 30000 })
 if (!(await page.$('.rail'))) {
   await page.waitForSelector('input[autocomplete="username"]', { timeout: 15000 })
   await page.type('input[autocomplete="username"]', USER)

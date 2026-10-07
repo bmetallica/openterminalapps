@@ -325,8 +325,15 @@ def angaben(daten: dict[str, Any]) -> dict[str, Any]:
 
 # --- Der Weg im Browser -------------------------------------------------
 
+# Aktionen, die OTA bei Keycloak anstossen darf (Application-Initiated
+# Actions). Nur diese: Der Name kommt aus einer Adresse, und Keycloak kennt
+# noch andere, die hier niemand ausloesen soll.
+AKTIONEN = ("UPDATE_PASSWORD", "CONFIGURE_TOTP", "webauthn-register")
+
+
 def authorize_url(redirect_uri: str, state: str, challenge: str,
-                  oeffentlich: str | None = None) -> str:
+                  oeffentlich: str | None = None, *, aktion: str = "",
+                  login_hint: str = "") -> str:
     """Wohin der Browser geschickt wird, um sich anzumelden.
 
     `oeffentlich` ist die Adresse, unter der **der Browser** Keycloak sieht.
@@ -347,6 +354,11 @@ def authorize_url(redirect_uri: str, state: str, challenge: str,
         "state": state,
         "code_challenge": challenge,
         "code_challenge_method": "S256",
+        # Passwort aendern, zweiten Faktor einrichten — Keycloak fuehrt die
+        # Aktion aus und schickt zurueck. OTA sieht dabei kein Passwort.
+        **({"kc_action": aktion} if aktion in AKTIONEN else {}),
+        # Der Name ist schon bekannt (etwa von /login): nicht zweimal tippen.
+        **({"login_hint": login_hint} if login_hint else {}),
     })
     return f"{basis}/realms/{_realm()}/protocol/openid-connect/auth?{frage}"
 
@@ -837,3 +849,72 @@ def rolle_setzen(sub: str, rolle: str, an: bool) -> None:
     resp = ruf(weg, f"/users/{sub}/role-mappings/realm", json=korpus)
     if resp.status_code not in (204, 200):
         raise KeycloakFehler(f"Rolle {rolle} setzen: {resp.text[:150]}")
+
+
+# --- Konten, die OTA in Keycloak verwaltet (2026-10-08) -------------------
+#
+# Seit dem 2026-10-08 entsteht ein Konto, das in OTA angelegt wird, direkt in
+# Keycloak — lokal bleibt nur das Notfallkonto (Betreiber). Was dafuer noch
+# fehlte: ein Konto lesen, sein Passwort setzen, sein Profil pflegen, seinen
+# zweiten Faktor zuruecksetzen.
+
+def konto_lesen(sub: str) -> dict[str, Any] | None:
+    resp = ruf("GET", f"/users/{sub}")
+    if resp.status_code == 404:
+        return None
+    if resp.status_code != 200:
+        raise KeycloakFehler(f"Das Konto liess sich nicht lesen: {resp.text[:150]}")
+    return resp.json()
+
+
+def aus_verzeichnis(konto: dict[str, Any] | None) -> bool:
+    """Gehoert das Konto einem Verzeichnis (AD/LDAP ueber die Foederation)?
+    Dann gehoeren ihm auch Passwort, Name und Adresse — nicht OTA."""
+    return bool(konto and konto.get("federationLink"))
+
+
+def konto_passwort(sub: str, passwort: str, wechseln: bool) -> None:
+    """Setzt das Passwort. `wechseln` heisst: beim naechsten Anmelden aendern."""
+    resp = ruf("PUT", f"/users/{sub}/reset-password",
+               json={"type": "password", "value": passwort, "temporary": bool(wechseln)})
+    if resp.status_code not in (200, 204):
+        # Keycloaks Meldung zur Passwortregel ist das, was der Mensch wissen muss.
+        try:
+            grund = resp.json().get("error_description") or resp.json().get("errorMessage") \
+                or resp.text
+        except ValueError:
+            grund = resp.text
+        raise KeycloakFehler(f"Keycloak nimmt das Passwort nicht an: {str(grund)[:200]}")
+
+
+def konto_profil(sub: str, *, anzeigename: str | None, email: str | None,
+                 aktiv: bool, verzeichnis: bool) -> None:
+    """Name, Adresse und aktiv/gesperrt. Bei einem Verzeichniskonto nur der
+    Schalter — Name und Adresse kommen dort aus dem Verzeichnis, und ein
+    nur lesend angebundenes laesst sie sich nicht ueberschreiben."""
+    korpus: dict[str, Any] = {"enabled": bool(aktiv)}
+    if not verzeichnis:
+        teile = (anzeigename or "").split(" ", 1)
+        if anzeigename:
+            korpus["firstName"] = teile[0][:64]
+            korpus["lastName"] = (teile[1] if len(teile) > 1 else teile[0])[:64]
+        korpus["email"] = email or None
+        korpus["emailVerified"] = bool(email)
+    resp = ruf("PUT", f"/users/{sub}", json=korpus)
+    if resp.status_code not in (200, 204):
+        raise KeycloakFehler(f"Das Konto liess sich nicht ändern: {resp.text[:150]}")
+
+
+def zweiten_faktor_entfernen(sub: str) -> int:
+    """Entfernt Einmalkennwort und Passkeys eines Kontos. Gibt die Anzahl zurueck.
+    Das Passwort bleibt."""
+    resp = ruf("GET", f"/users/{sub}/credentials")
+    if resp.status_code != 200:
+        raise KeycloakFehler("Die Anmeldemittel des Kontos liessen sich nicht lesen.")
+    weg = 0
+    for c in resp.json():
+        if c.get("type") in ("otp", "webauthn", "webauthn-passwordless"):
+            r = ruf("DELETE", f"/users/{sub}/credentials/{c['id']}")
+            if r.status_code in (200, 204):
+                weg += 1
+    return weg
