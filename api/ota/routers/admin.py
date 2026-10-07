@@ -568,7 +568,7 @@ def all_sessions(db: DbSession = Depends(get_db)) -> list[SessionAdminOut]:
         template_name=s.template.friendly_name, template_icon=s.template.icon,
         status=s.status, cores=s.cores, memory_bytes=s.memory_bytes,
         started_at=s.started_at, last_seen_at=s.last_seen_at,
-        app_count=len(s.streams),
+        app_count=sum(1 for x in s.streams if x.status == "running"),
     ) for s in rows]
 
 

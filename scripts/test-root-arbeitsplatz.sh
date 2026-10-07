@@ -88,6 +88,11 @@ print(darf_root(ohne), darf_root(mit), darf_terminal(mit))" 2>&1)
   && ok "Ohne das Recht „Root-Arbeitsplatz nutzen“ kein Start; das Recht gibt kein Terminal" \
   || bad "Rechteprüfung unerwartet: $RECHT"
 
+# Eine Anwendung im Katalog — fuer die Pruefung, dass sie das Anhalten
+# richtig uebersteht (unten).
+api -X PUT -H 'Content-Type: application/json' "$BASE_URL/api/templates/$TID/apps" \
+  -d '[{"slug":"terminal","name":"Terminal","exec_cmd":"xfce4-terminal"}]' >/dev/null
+
 START=$(api -H 'Content-Type: application/json' -X POST "$BASE_URL/api/sessions" \
   -d "{\"template_id\":\"$TID\"}")
 SID=$(jqp "d['id']" <<<"$START")
@@ -136,6 +141,8 @@ grep -q "W:NEIN" <<<"$INNEN" && ok "Innerer Container: SSH des Wirts zu" || bad 
 echo
 echo "Anhalten statt Löschen"
 drin 'sudo sh -c "echo bleibt > /opt/ota-pruefmarke"' >/dev/null
+[ "$(api -X POST "$BASE_URL/api/sessions/$SID/apps/terminal" -o /dev/null -w '%{http_code}')" = "200" ] \
+  && ok "Anwendung im Arbeitsplatz gestartet" || bad "Anwendung startet nicht"
 api -X DELETE "$BASE_URL/api/sessions/$SID" >/dev/null
 ZUSTAND=$(api "$BASE_URL/api/sessions" | jqp "next((s['status'] for s in d if s['id']=='$SID'), '')")
 [ "$ZUSTAND" = "angehalten" ] && ok "Beenden hält an (Status angehalten)" || bad "Status nach Beenden: $ZUSTAND"
@@ -150,6 +157,17 @@ START2=$(api -H 'Content-Type: application/json' -X POST "$BASE_URL/api/sessions
 for _ in $(seq 1 30); do drin 'docker info >/dev/null' >/dev/null && break; sleep 1; done
 drin 'docker images --format "{{.Repository}}"' | grep -q '^nginx$' \
   && ok "Docker-Images überleben das Anhalten" || bad "Docker-Images sind weg"
+
+# Gemeldet am 2026-10-07: Nach dem Fortsetzen stand die vorher offene
+# Anwendung weiter als „läuft" da, ihr Bildschirm existierte aber nicht
+# mehr — ein Klick ergab eine schwarze Seite.
+OFFEN=$(api "$BASE_URL/api/sessions" | jqp "len([x for s in d if s['id']=='$SID' for x in s['streams']])")
+[ "$OFFEN" = "0" ] && ok "Nach dem Fortsetzen gilt keine Anwendung mehr als offen" \
+  || bad "Nach dem Fortsetzen stehen $OFFEN Anwendungen als offen da (schwarze Seite)"
+[ "$(api -X POST "$BASE_URL/api/sessions/$SID/apps/terminal" -o /dev/null -w '%{http_code}')" = "200" ] \
+  && drin 'ls /tmp/.X11-unix' | grep -q X2 \
+  && ok "Die Anwendung startet nach dem Fortsetzen wirklich (eigener Bildschirm da)" \
+  || bad "Anwendung startet nach dem Fortsetzen nicht"
 
 # ------------------------------------------------------------ Verwaltung
 echo

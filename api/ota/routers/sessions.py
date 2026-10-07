@@ -181,7 +181,15 @@ def _out(s: SessionModel) -> SessionOut:
         # sondern irrefuehrend — sie wuerden aussehen, als taeten sie etwas.
         url=(f"/s/{s.id}/" if s.template.stream_engine == "selkies"
              else f"/s/{s.id}/?path=s/{s.id}/websockify{STREAM_ARGS}"),
-        streams=[_stream_out(s, x) for x in s.streams],
+        # **Nur laufende.** Beendete Eintraege bleiben in der Tabelle stehen,
+        # damit ein erneuter Start Display und Port wiederfindet — nach aussen
+        # sind sie keine offene Anwendung. Bei einem normalen Arbeitsplatz
+        # fiel das nie auf, weil jede Sitzung leer anfaengt. Ein
+        # Root-Arbeitsplatz behaelt seine Sitzung ueber das Anhalten hinweg:
+        # Nach dem Fortsetzen stand VS Code deshalb als „laeuft" da, sein
+        # Bildschirm existierte aber nicht mehr — schwarze Seite (gemessen
+        # 2026-10-07).
+        streams=[_stream_out(s, x) for x in s.streams if x.status == "running"],
         stream_engine=s.template.stream_engine,
         klasse=s.template.klasse,
     )

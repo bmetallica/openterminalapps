@@ -79,7 +79,7 @@ def liste(db: DbSession = Depends(get_db)) -> list[dict]:
         "end_reason": s.end_reason,
         "cores": s.cores,
         "memory_bytes": s.memory_bytes,
-        "app_count": len(s.streams),
+        "app_count": sum(1 for x in s.streams if x.status == "running"),
     } for s in rows]
 
 

@@ -38,7 +38,9 @@ function Bay({ session, template, onOpen, onAct, onApp, onResume, onReset, busy,
   const started = new Date(session.started_at).getTime()
   const isWorkspace = session.template_mode === 'workspace'
   const apps = (template?.apps ?? []).filter((a) => a.is_enabled && !a.blocked_reason)
-  const openSlugs = new Set(session.streams.map((s) => s.app_slug))
+  // Nur laufende — die API liefert nichts anderes, aber ein Eintrag, der hier
+  // fälschlich als offen gilt, ergibt eine schwarze Seite statt eines Starts.
+  const openSlugs = new Set(session.streams.filter((s) => s.status === 'running').map((s) => s.app_slug))
 
   return (
     <article className={`panel panel--state panel--${stateClass(session.status)} bay`}>
@@ -59,7 +61,7 @@ function Bay({ session, template, onOpen, onAct, onApp, onResume, onReset, busy,
         {isWorkspace && apps.length > 0 && (
           <div className="strip">
             {apps.map((a) => {
-              const stream = session.streams.find((s) => s.app_slug === a.slug)
+              const stream = session.streams.find((s) => s.app_slug === a.slug && s.status === 'running')
               const on = openSlugs.has(a.slug)
               return (
                 <button key={a.slug} className={`strip__app${on ? ' is-on' : ''}`}
@@ -97,7 +99,7 @@ function Bay({ session, template, onOpen, onAct, onApp, onResume, onReset, busy,
           {isWorkspace && (
             <span className="bay__fact"><span className="silk">{tr('Apps offen')}</span>
               <b>{tr('{open} von {total}',
-                { open: session.streams.length, total: apps.length })}</b></span>
+                { open: openSlugs.size, total: apps.length })}</b></span>
           )}
           {/* Was im Netz gilt. Steht hier, weil sonst „das Intranet geht
               nicht" als Störung gemeldet wird, wo eine Einstellung greift. */}
