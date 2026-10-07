@@ -599,6 +599,9 @@ export type Allocation = {
 
 // ------------------------------------------------- Paketquellen (Kapitel 26)
 export type RepoModus = 'aus' | 'zuerst' | 'nur'
+export type SelkiesStand = {
+  im_image: string; in_quelle: string; anwendbar: boolean; fehler?: string; modus?: string
+}
 export type RepoEinstellungen = {
   modus: RepoModus; bau_snapshot: string; alter_gelb: number; alter_rot: number
 }
@@ -896,7 +899,7 @@ export const api = {
     call<Build>(`/templates/${templateId}/builds/${id}`),
   /** Welches Selkies im Image der Vorlage steckt und welches die Paketquelle anbietet. */
   templateSelkies: (templateId: string) =>
-    call<{ im_image: string; in_quelle: string; anwendbar: boolean }>(`/templates/${templateId}/selkies`),
+    call<SelkiesStand>(`/templates/${templateId}/selkies`),
   startBuild: (templateId: string, body: {
     apt_packages: string[]; vscode_extensions?: string[]
     setup_script?: string; start_command?: string; comment?: string

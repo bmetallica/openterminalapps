@@ -4,7 +4,7 @@ import { Field, Toggle } from '../components/controls'
 import {
   ApiError, api,
   type Build, type DiscoveredApp, type FreezePreview, type Group,
-  type PackageCheck, type Recipe, type Template,
+  type PackageCheck, type Recipe, type SelkiesStand as SelkiesStandT, type Template,
 } from '../lib/api'
 import { RecipeBuilder } from './RecipeBuilder'
 import { ago, gb } from '../lib/format'
@@ -856,15 +856,39 @@ function SelkiesStand({ tpl, onToast, running, onGestartet }: {
   running: boolean
   onGestartet: (b: Build) => void
 }) {
-  const [stand, setStand] = useState<{ im_image: string; in_quelle: string; anwendbar: boolean } | null>(null)
+  const [stand, setStand] = useState<SelkiesStandT | null>(null)
   const [busy, setBusy] = useState(false)
   useEffect(() => {
     if (tpl.stream_engine !== 'selkies') return
-    api.templateSelkies(tpl.id).then(setStand).catch(() => setStand(null))
+    api.templateSelkies(tpl.id).then(setStand)
+      .catch((err) => setStand({ im_image: '', in_quelle: '', anwendbar: false,
+        fehler: err instanceof ApiError ? err.message : String(err) }))
   }, [tpl.id, tpl.image_ref, tpl.stream_engine])
 
-  if (!stand || !stand.im_image) return null
-  const aktuell = stand.im_image === stand.in_quelle || !stand.in_quelle
+  // Jeder Zustand sagt etwas. Bis zum 2026-10-08 blieb die Fläche leer, wenn
+  // die Fassung nicht zu ermitteln war, und meldete „auf dem Stand", wenn das
+  // Paket in der Paketquelle fehlte — beides sah aus wie „nichts zu tun".
+  if (tpl.stream_engine !== 'selkies' || !stand) return null
+  const hinweis = (text: string) => (
+    <p className="note-warn" style={{ marginBottom: 18 }}>{text}</p>
+  )
+  if (stand.fehler) {
+    return hinweis(tr('Welches Selkies in diesem Image steckt, liess sich nicht ermitteln: {f}', { f: stand.fehler }))
+  }
+  if (!stand.im_image) {
+    return <p className="sub" style={{ marginBottom: 14 }}>
+      {tr('In diesem Image ist kein Selkies zu finden. Steht die Vorlage unter „Allgemein“ trotzdem auf Selkies, startet sie nicht — dann auf KasmVNC stellen.')}
+    </p>
+  }
+  if (!stand.in_quelle) {
+    return hinweis(tr('In diesem Image steckt Selkies {alt}. Das Paket ota-selkies fehlt aber in der eigenen Paketquelle — ohne es lässt sich nichts anheben. Auf dem Wirt: scripts/build-selkies-deb.sh --hochladen',
+      { alt: stand.im_image }))
+  }
+  if (stand.im_image === stand.in_quelle) {
+    return <p className="sub" style={{ marginBottom: 14 }}>
+      {tr('Selkies im Image: {v} — auf dem Stand der Paketquelle.', { v: stand.im_image })}
+    </p>
+  }
 
   async function anheben() {
     if (!stand) return
@@ -886,19 +910,14 @@ function SelkiesStand({ tpl, onToast, running, onGestartet }: {
     }
   }
 
-  if (aktuell) {
-    return <p className="sub" style={{ marginBottom: 14 }}>
-      {tr('Selkies im Image: {v} — auf dem Stand der Paketquelle.', { v: stand.im_image })}
-    </p>
-  }
   return (
     <div className="note-warn" style={{ marginBottom: 18, display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
       <span style={{ flex: 1, minWidth: 260 }}>
         {tr('In diesem Image steckt Selkies {alt}, die Paketquelle bietet {neu}. Ein Neubau allein ändert daran nichts — anheben baut das Paket ota-selkies hinein; alles andere im Image bleibt.',
           { alt: stand.im_image, neu: stand.in_quelle })}
+        {!stand.anwendbar && <><br />{tr('Die Paketquelle ist für Arbeitsplätze ausgeschaltet (Paketquellen → Aus).')}</>}
       </span>
       <button className="btn btn--primary btn--sm" disabled={busy || running || !stand.anwendbar}
-        title={stand.anwendbar ? undefined : tr('Die Paketquelle ist für Arbeitsplätze ausgeschaltet (Paketquellen → Aus).')}
         onClick={() => void anheben()}>
         {tr('Auf {neu} anheben', { neu: stand.in_quelle })}
       </button>

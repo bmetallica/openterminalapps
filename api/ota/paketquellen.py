@@ -13,12 +13,16 @@ import time
 from pathlib import Path
 from typing import Any
 
+import logging
+
 import httpx
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session as DbSession
 
 from . import settings_store
 from .config import settings
+
+log = logging.getLogger("ota.paketquellen")
 
 REPO_URL = os.environ.get("OTA_REPO_URL", "http://repo:8200").rstrip("/")
 CA_DATEI = Path("/app/certs/ota-ca.crt")
@@ -41,7 +45,10 @@ def spiegel_aktiv() -> bool:
 def aufruf(methode: str, pfad: str, **kw: Any) -> Any:
     zeit = kw.pop("timeout", 60.0)
     try:
-        with httpx.Client(timeout=zeit) as client:
+        # `trust_env=False`: Der Repo-Dienst ist ein Dienst des Stacks. Mit
+        # einem Firmenproxy in der Umgebung ging der Aufruf sonst an den
+        # Proxy — `repo` steht in keiner gewachsenen NO_PROXY-Liste.
+        with httpx.Client(timeout=zeit, trust_env=False) as client:
             antwort = client.request(methode, f"{REPO_URL}{pfad}",
                                      headers={"X-Agent-Token": settings().agent_token}, **kw)
     except httpx.HTTPError as exc:
@@ -69,6 +76,7 @@ def fuer_container(db: DbSession) -> dict[str, Any]:
     """
     modus = settings_store.get(db, settings_store.REPO_MODUS) or "zuerst"
     if modus == "aus":
+        log.info("Paketquelle: Betriebsart Aus — nichts eintragen, Selkies nicht anheben")
         return {"modus": "aus"}
     # "Nur eigene" ohne Spiegel hiesse: gar keine Debian-Pakete mehr. Die
     # Oberflaeche bietet es dann nicht an; steht es von frueher noch so da,
@@ -79,7 +87,12 @@ def fuer_container(db: DbSession) -> dict[str, Any]:
         try:
             _zwischen["daten"] = aufruf("GET", "/quellen", timeout=10.0)
             _zwischen["zeit"] = time.monotonic()
-        except HTTPException:
+        except HTTPException as exc:
+            # Laut, nicht still: Ein leeres Ergebnis heisst fuer den Agent
+            # "nichts eintragen, nichts anheben" — und im Arbeitsplatz sah man
+            # nur, dass die Quelle fehlte (gemeldet 2026-10-08).
+            log.warning("Paketquelle nicht erreichbar, Container bekommen nichts "
+                        "eingetragen: %s", exc.detail)
             return {}
     try:
         ca = CA_DATEI.read_text(encoding="utf-8")

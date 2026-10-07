@@ -1459,4 +1459,7 @@ export const EN: Record<string, string> = {
   'Eigene Pakete und Snapshots': 'Own packages and snapshots',
   'Der Spiegel ist nicht eingeschaltet': 'The mirror is not enabled',
   'Die eigene Paketquelle läuft immer — für ota-selkies, eigene Pakete und Snapshots. Ein Spiegel von Debian 13 und Dockers Quelle ist ein Zusatz: in deploy/.env': 'The own package source always runs — for ota-selkies, own packages and snapshots. A mirror of Debian 13 and Docker’s repository is an add-on: set',
+  'Welches Selkies in diesem Image steckt, liess sich nicht ermitteln: {f}': 'Which Selkies this image carries could not be determined: {f}',
+  'In diesem Image ist kein Selkies zu finden. Steht die Vorlage unter „Allgemein“ trotzdem auf Selkies, startet sie nicht — dann auf KasmVNC stellen.': 'No Selkies found in this image. If the template is still set to Selkies under “General”, it will not start — switch it to KasmVNC.',
+  'In diesem Image steckt Selkies {alt}. Das Paket ota-selkies fehlt aber in der eigenen Paketquelle — ohne es lässt sich nichts anheben. Auf dem Wirt: scripts/build-selkies-deb.sh --hochladen': 'This image carries Selkies {alt}. The ota-selkies package is missing from the own package source, though — without it nothing can be upgraded. On the host: scripts/build-selkies-deb.sh --hochladen',
 }

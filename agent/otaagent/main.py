@@ -1754,6 +1754,8 @@ def _repo_einrichten(container, repo: dict[str, Any]) -> None:
     wie das Image ihn mitbringt. Scheitert es, startet der Arbeitsplatz
     trotzdem — dann eben mit den Quellen des Images."""
     if not repo:
+        log.info("Paketquelle in %s: nichts eingetragen — die API gab keine Angaben mit "
+                 "(Repo-Dienst nicht erreichbar? Protokoll von ota-api)", container.name)
         return
     from . import paketquelle
 
@@ -1802,6 +1804,9 @@ def _selkies_heben(container, repo: dict[str, Any]) -> bool:
     """
     soll = str(repo.get("selkies") or "")
     if not soll or repo.get("modus") == "aus" or not re.fullmatch(r"[0-9A-Za-z.+~:-]+", soll):
+        log.info("Selkies in %s nicht angehoben: %s", container.name,
+                 "Betriebsart Aus" if repo.get("modus") == "aus"
+                 else "keine Fassung von ota-selkies in der Paketquelle gemeldet")
         return False
     try:
         code, out = _run_as_root(container, ["sh", "-c", _SELKIES_HEBEN.replace("@SOLL@", soll)])

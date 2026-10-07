@@ -68,6 +68,12 @@ def einrichten_skript(repo: dict[str, Any], snapshot: str = "") -> str:
     praefs = (f"Package: *\nPin: origin \"{host}\"\nPin-Priority: 900\n"
               if modus == "zuerst" else "")
     aptconf = f'Acquire::https::{host}::CaInfo "/etc/apt/ota-repo-ca.crt";\n'
+    # Ohne Umweg ueber einen Firmenproxy: Die Paketquelle ist OTA selbst. Der
+    # Agent traegt fuer apt nur http-Ausnahmen ein; ueber https lief die
+    # eigene Quelle sonst an den Proxy, und der kennt sie nicht (gefunden
+    # 2026-10-08 auf einer Anlage hinter einem Proxy).
+    aptconf += (f'Acquire::https::Proxy::{host} "DIRECT";\n'
+                f'Acquire::http::Proxy::{host} "DIRECT";\n')
 
     return f"""set -e
 [ -r /etc/os-release ] || exit 0
