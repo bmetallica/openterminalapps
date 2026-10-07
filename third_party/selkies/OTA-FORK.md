@@ -41,6 +41,22 @@ Am Programm selbst ist **nichts** geändert. OTA stellt Selkies über seine Eins
 (`SELKIES_*`, siehe `images/base-desktop/dockerstartup/desktop_startup.sh`); die fünf Eingriffe,
 die 1.6.2 brauchte, entfallen.
 
+## Wie es ins Image kommt: das Paket `ota-selkies`
+
+Aus diesen Quellen baut `scripts/build-selkies-deb.sh` das Debian-Paket `ota-selkies`
+(Steuerdateien unter `packaging/ota-selkies/`): Selkies samt Abhängigkeiten unter `/opt/selkies`
+und OTAs Startskripte. Das Basisimage installiert es, der Bildbauer hebt alte Golden Images damit
+an, und Root-Arbeitsplätze heben sich beim Fortsetzen daraus an (Handbuch Kapitel 20).
+
+Fassung: `<upstream>-ota<revision>`, die Revision steht in `packaging/ota-selkies/revision`.
+**Jede Änderung hier oder an den Startskripten braucht eine neue Revision** — dieselbe Fassung
+nimmt die Paketquelle kein zweites Mal an.
+
+```bash
+echo 2 > packaging/ota-selkies/revision
+scripts/build-selkies-deb.sh --hochladen
+```
+
 ## Die Abhängigkeiten
 
 `ota-abhaengigkeiten.txt` nennt **alle** Pakete, die Selkies braucht, transitiv, mit Fassung und
@@ -75,5 +91,7 @@ python3 -m venv /v && /v/bin/pip download --dest /raeder --only-binary=:all: set
 1. Tag auschecken, Inhalt hierher kopieren (ohne die oben weggelassenen Teile).
 2. Den gebauten Client aus dem Release-Quellarchiv nach `src/selkies/selkies_web/`.
 3. Die Tabelle oben und `ota-abhaengigkeiten.txt` erneuern.
-4. `scripts/build-desktop-image.sh --pruefen` und `scripts/test-streaming.sh`.
+4. `packaging/ota-selkies/revision` auf 1 zurück (neue Upstream-Fassung), dann
+   `scripts/build-desktop-image.sh --pruefen`, `scripts/test-streaming.sh` und
+   `scripts/test-selkies-paket.sh`.
 5. Als **eigener Commit**, damit ein Rückweg ein `git revert` ist.

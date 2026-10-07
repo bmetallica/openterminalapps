@@ -43,9 +43,9 @@
 # jeder Schritt wie bisher aus dem Internet.
 FROM scratch AS ota-dateien
 
-# Die Quellen von Selkies — OTAs Fork unter third_party/selkies. Auch diese
-# Stufe ist leer; das Bauskript ersetzt sie (`--build-context selkies-quelle=…`).
-FROM scratch AS selkies-quelle
+# Das Paket ota-selkies (scripts/build-selkies-deb.sh). Auch diese Stufe ist
+# leer; das Bauskript ersetzt sie (`--build-context ota-pakete=…`).
+FROM scratch AS ota-pakete
 
 FROM debian:13
 
@@ -161,69 +161,37 @@ RUN --mount=type=bind,from=ota-dateien,target=/mnt/ota-dateien \
  && apt-get autoremove -y \
  && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# --- Was Selkies vom System braucht --------------------------------------
-#
-# `Xvfb` liefert das Display, `pulseaudio` den Ton. Der Rest sind die
-# Bibliotheken, gegen die `pixelflux` und `pcmflux` gebaut sind — dieselbe
-# Liste, die upstream seinem Debian-Paket mitgibt
-# (`third_party/selkies/infra/packaging/deb.sh`).
-#
-# **Kein GStreamer mehr.** Selkies 2.0 nimmt Bild und Ton mit eigenen
-# Erweiterungen auf (pixelflux, pcmflux) und kodiert dort auch. Damit fallen
-# rund 40 Pakete weg, darunter `gstreamer1.0-plugins-bad` mit seinen CUDA-,
-# Vulkan- und Wayland-Anteilen.
-RUN apt-get update && apt-get install -y --no-install-recommends \
-      xvfb pulseaudio pulseaudio-utils python3-venv \
-      libpulse0 libxcb1 libxkbcommon0 libx11-xcb1 \
-      libva2 libva-drm2 libva-x11-2 libdrm2 libgbm1 libegl1 \
-      libwayland-server0 libglib2.0-0 libpixman-1-0 \
-      libxcb-render0 libxcb-shm0 libxcb-dri3-0 libxfixes3 libxext6 libice6 libsm6 \
- && apt-get clean && rm -rf /var/lib/apt/lists/*
-
 # --- Selkies -------------------------------------------------------------
 #
-# **Aus unserem Fork** (`third_party/selkies`, siehe OTA-FORK.md dort), nicht
-# aus einem Release im Internet. Die Fassung davor, 1.6.2, war am 2026-10-07
-# bei GitHub verschwunden, und das Basisimage liess sich nirgends mehr bauen.
-# Das Bauskript reicht die Quellen als eigenen Baukontext herein
-# (`--build-context selkies-quelle=…`); ohne ihn bricht der Bau hier ab.
+# **Über das Paket ota-selkies**, und nur darüber: Selkies 2.0 aus OTAs Fork
+# (`third_party/selkies`, OTA-FORK.md) samt Abhängigkeiten unter /opt/selkies,
+# dazu `desktop_startup.sh` und `selkies-starten.sh`. Dasselbe Paket hebt alte
+# Golden Images an und aktualisiert Root-Arbeitsplätze beim Fortsetzen
+# (Kapitel 20) — ein Weg statt zweier, die auseinanderlaufen.
 #
-# Die Abhängigkeiten kommen aus `ota-abhaengigkeiten.txt` — vollständig, mit
-# Prüfsumme, `--no-deps`: Was dort nicht steht oder anders aussieht, bricht
-# den Bau. Liegen sie im Datei-Vorrat der eigenen Paketquelle (Kapitel 26),
-# geht das ohne Internet; sonst von PyPI, gegen dieselben Prüfsummen.
+# Die Bibliotheken, die pixelflux und pcmflux brauchen (`libgbm`, `libva` …),
+# zieht apt als Abhängigkeiten des Pakets herein. **Kein GStreamer mehr**:
+# Selkies 2.0 nimmt Bild und Ton mit eigenen Erweiterungen auf.
 #
-# Ein eigenes Verzeichnis statt des System-Pythons: Debian verwaltet das selbst
-# (PEP 668). **Kein `|| true` in dieser Kette** — das hat einmal einen
-# gescheiterten Install in einen grünen Build verwandelt.
-ARG SELKIES_VERSION=2.0.0
+# Bauen mit `scripts/build-desktop-image.sh`; es baut das Paket bei Bedarf
+# und reicht es herein. Ohne Paket bricht der Bau hier ab.
+RUN --mount=type=bind,from=ota-pakete,target=/mnt/ota-pakete \
+    PAKET=$(ls /mnt/ota-pakete/ota-selkies_*_amd64.deb 2>/dev/null | head -1); \
+    if [ -z "$PAKET" ]; then \
+      echo "Das Paket ota-selkies fehlt. Bauen mit scripts/build-desktop-image.sh —" \
+           "das baut es (scripts/build-selkies-deb.sh) und reicht es herein." >&2; exit 1; \
+    fi \
+ && cp "$PAKET" /tmp/ \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends "/tmp/$(basename "$PAKET")" \
+ && rm -f /tmp/ota-selkies_*.deb \
+ && apt-get clean && rm -rf /var/lib/apt/lists/* \
+ # Nicht nur "es ist installiert", sondern "es laedt": die beiden Rust-
+ # Erweiterungen mit den Bibliotheken des Systems. Ein Fehler hier faellt sonst
+ # erst in der ersten Sitzung auf, als schwarzer Bildschirm.
+ && /opt/selkies/bin/python -c "import pixelflux, pcmflux, selkies.settings, selkies.websockets_mode, selkies.stream_server; from importlib.metadata import version; print('Selkies', version('selkies'), 'laedt')" \
+ && dpkg-query -W ota-selkies
 ENV SELKIES_HOME=/opt/selkies
-RUN --mount=type=bind,from=ota-dateien,target=/mnt/ota-dateien \
-    --mount=type=bind,from=selkies-quelle,target=/mnt/selkies-quelle \
-    if [ ! -f /mnt/selkies-quelle/pyproject.toml ]; then \
-      echo "Die Selkies-Quellen fehlen. Bauen mit scripts/build-desktop-image.sh," \
-           "das reicht third_party/selkies als Baukontext herein." >&2; exit 1; \
-    fi \
- && RAEDER="/mnt/ota-dateien/selkies/${SELKIES_VERSION}/raeder" \
- && if [ -d "$RAEDER" ]; then \
-      echo "Abhängigkeiten aus dem Datei-Vorrat, ohne Internet"; \
-      QUELLE="--no-index --find-links $RAEDER"; \
-    else \
-      echo "Abhängigkeiten von PyPI, geprüft gegen ota-abhaengigkeiten.txt"; \
-      QUELLE=""; \
-    fi \
- && python3 -m venv "$SELKIES_HOME" \
- && "$SELKIES_HOME/bin/pip" install --no-cache-dir $QUELLE --require-hashes --no-deps \
-      -r /mnt/selkies-quelle/ota-abhaengigkeiten.txt \
- && cp -r /mnt/selkies-quelle /tmp/selkies-quelle \
- && "$SELKIES_HOME/bin/pip" install --no-cache-dir --no-index --no-deps --no-build-isolation \
-      /tmp/selkies-quelle \
- && rm -rf /tmp/selkies-quelle \
- && for b in selkies selkies-resize; do ln -sf "$SELKIES_HOME/bin/$b" "/usr/local/bin/$b"; done \
- # Nicht nur "die Datei ist da", sondern "es laedt": die beiden Rust-
- # Erweiterungen und die Transporte. Ein Fehler hier faellt sonst erst in der
- # ersten Sitzung auf, als schwarzer Bildschirm.
- && "$SELKIES_HOME/bin/python" -c "import pixelflux, pcmflux, selkies.settings, selkies.websockets_mode, selkies.stream_server; from importlib.metadata import version; print('Selkies', version('selkies'), 'laedt')"
 
 # `cvt` rechnet eine Modeline aus. Selkies 2.0 stellt die Auflösung zuerst
 # selbst über RandR um und greift nur im Rückfall zu `xrandr`/`cvt` — und
@@ -255,7 +223,9 @@ RUN groupadd -g 1000 ota \
  && chown -R 1000:1000 /home/ota \
  && chgrp 1000 /home && chmod 775 /home
 
-COPY dockerstartup/ /dockerstartup/
+# Die beiden Startskripte für Selkies bringt das Paket ota-selkies mit; hier
+# nur das, was ein abgeleitetes Image überschreibt.
+COPY dockerstartup/custom_startup.sh /dockerstartup/custom_startup.sh
 RUN chmod +x /dockerstartup/*.sh
 
 # Derselbe Port nach aussen wie beim Selkies-Versuch — für Traefik ist es

@@ -56,6 +56,17 @@ for zeile in io.open(vorlage, encoding="utf8").read().splitlines():
     else:
         puffer.append(zeile)
 
+# Umbenannte Schalter: Steht der alte in der .env, übernimmt der neue dessen
+# Wert statt der Vorgabe. Sonst schaltete das Nachtragen still ab, was jemand
+# eingeschaltet hatte — `OTA_REPO_SPIEGEL=0` überdeckte ein `OTA_REPO=1`.
+UMBENANNT = {"OTA_REPO_SPIEGEL": "OTA_REPO"}
+werte = dict(re.findall(r"^([A-Za-z_][A-Za-z_0-9]*)=(.*)$", alt, flags=re.M))
+for i, (name, block) in enumerate(bloecke):
+    vorher = UMBENANNT.get(name)
+    if name not in da and vorher in werte:
+        bloecke[i] = (name, [z if not z.startswith(f"{name}=") else f"{name}={werte[vorher]}"
+                             for z in block])
+
 neu = [b for name, b in bloecke if name not in da]
 if not neu:
     print("  keine neuen Einstellungen")

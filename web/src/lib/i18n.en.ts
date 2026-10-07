@@ -1450,4 +1450,13 @@ export const EN: Record<string, string> = {
   'Der Spiegel der Paketquelle ist {n} Tage alt.': 'The package mirror is {n} days old.',
   'Sicherheitsupdates fehlen seitdem in den Arbeitsplätzen.': 'Workspaces have been missing security updates since then.',
   'Abgleichen unter Paketquellen.': 'Sync under Package sources.',
+  'Selkies {alt} → {neu}': 'Selkies {alt} → {neu}',
+  'Selkies im Image: {v} — auf dem Stand der Paketquelle.': 'Selkies in the image: {v} — up to date with the package source.',
+  'In diesem Image steckt Selkies {alt}, die Paketquelle bietet {neu}. Ein Neubau allein ändert daran nichts — anheben baut das Paket ota-selkies hinein; alles andere im Image bleibt.': 'This image carries Selkies {alt}; the package source offers {neu}. A rebuild alone does not change that — upgrading builds the ota-selkies package in; everything else in the image stays.',
+  'Die Paketquelle ist für Arbeitsplätze ausgeschaltet (Paketquellen → Aus).': 'The package source is switched off for workspaces (Package sources → Off).',
+  'Auf {neu} anheben': 'Upgrade to {neu}',
+  'Debian-Pakete kommen wie bisher aus dem Internet. Einschalten mit OTA_REPO_SPIEGEL=1.': 'Debian packages still come from the Internet. Enable with OTA_REPO_SPIEGEL=1.',
+  'Eigene Pakete und Snapshots': 'Own packages and snapshots',
+  'Der Spiegel ist nicht eingeschaltet': 'The mirror is not enabled',
+  'Die eigene Paketquelle läuft immer — für ota-selkies, eigene Pakete und Snapshots. Ein Spiegel von Debian 13 und Dockers Quelle ist ein Zusatz: in deploy/.env': 'The own package source always runs — for ota-selkies, own packages and snapshots. A mirror of Debian 13 and Docker’s repository is an add-on: set',
 }

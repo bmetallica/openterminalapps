@@ -151,6 +151,7 @@ export function Paketquellen({ onToast }: { onToast: Toast }) {
 
   const st = data.status
   const ein = data.einstellungen
+  const spiegel = !!data.spiegel
   const alter = data.alter_tage
   const ton = alter == null ? 'halt'
     : alter >= ein.alter_rot ? 'halt' : alter >= ein.alter_gelb ? 'caution' : undefined
@@ -162,7 +163,7 @@ export function Paketquellen({ onToast }: { onToast: Toast }) {
       {kopf}
 
       <div className="meters" style={{ marginBottom: 20 }}>
-        <div className="panel meter">
+        {spiegel ? <div className="panel meter">
           <div className="meter__top"><span className="silk">{tr('Stand des Spiegels')}</span>
             <span className={`meter__val${ton ? ' is-warn' : ''}`}
               style={ton === 'halt' ? { color: 'var(--halt)' } : undefined}>
@@ -177,12 +178,16 @@ export function Paketquellen({ onToast }: { onToast: Toast }) {
             {tr('Gelb ab {g}, rot ab {r} Tagen. Abgeglichen wird nur von Hand.',
               { g: ein.alter_gelb, r: ein.alter_rot })}
           </p>
-        </div>
+        </div> : <div className="panel meter">
+          <div className="meter__top"><span className="silk">{tr('Spiegel')}</span>
+            <span className="meter__val">{tr('aus')}</span></div>
+          <p className="meter__note">{tr('Debian-Pakete kommen wie bisher aus dem Internet. Einschalten mit OTA_REPO_SPIEGEL=1.')}</p>
+        </div>}
         <div className="panel meter">
           <div className="meter__top"><span className="silk">{tr('Belegt')}</span>
             <span className="meter__val">{gb(st.belegt)} GB</span></div>
           <p className="meter__note">
-            {st.vollspiegel ? tr('Vollspiegel') : tr('Gefiltert: {f}', { f: st.filter })}
+            {!spiegel ? tr('Eigene Pakete und Snapshots') : st.vollspiegel ? tr('Vollspiegel') : tr('Gefiltert: {f}', { f: st.filter })}
           </p>
         </div>
         <div className="panel meter">
@@ -197,7 +202,7 @@ export function Paketquellen({ onToast }: { onToast: Toast }) {
           hint={tr(MODI.find((m) => m.value === ein.modus)?.note ?? '') + ' '
             + tr('Gilt für Debian-13-Images ab dem nächsten Start; andere Images bleiben unberührt.')}>
           <Segmented value={ein.modus} label={tr('Betriebsart')}
-            options={MODI.map((m) => ({ value: m.value, label: tr(m.label),
+            options={MODI.filter((m) => spiegel || m.value !== 'nur').map((m) => ({ value: m.value, label: tr(m.label),
               tone: m.value === 'nur' ? 'halt' as const : undefined }))}
             onChange={(v) => void speichern({ modus: v })} />
         </Field>
@@ -232,7 +237,19 @@ export function Paketquellen({ onToast }: { onToast: Toast }) {
         ))}
       </div>
 
-      {tab === 'Spiegel' && (
+      {tab === 'Spiegel' && !spiegel && (
+        <div className="empty">
+          <p className="empty__title">{tr('Der Spiegel ist nicht eingeschaltet')}</p>
+          <p className="empty__body">
+            {tr('Die eigene Paketquelle läuft immer — für ota-selkies, eigene Pakete und Snapshots. Ein Spiegel von Debian 13 und Dockers Quelle ist ein Zusatz: in deploy/.env')}{' '}
+            <code className="data">OTA_REPO_SPIEGEL=1</code>{' '}{tr('setzen und')}{' '}
+            <code className="data">make update</code>{' '}
+            {tr('ausführen. Ein Vollspiegel braucht grob 100 bis 130 GB — Handbuch Kapitel 26.')}
+          </p>
+        </div>
+      )}
+
+      {tab === 'Spiegel' && spiegel && (
         <>
           <div className="row-item" style={{ marginBottom: 14, gap: 10 }}>
             <button className="btn btn--primary" disabled={laeuft} onClick={() => void anstossen('abgleich')}>

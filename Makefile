@@ -20,7 +20,8 @@ help:
 	@echo "  make ps        Zustand aller Dienste"
 	@echo "  make admin     Ersten Administrator anlegen (NAME=... setzen)"
 	@echo "  make test      Alle Prüfreihen (Rechte, Zwischenablage, Oberfläche,"
-	@echo "                 Verzeichnis, Medienweg, Netz, Root-Arbeitsplatz, Sicherung)"
+	@echo "                 Verzeichnis, Medienweg, Netz, Root-Arbeitsplatz, Paketquelle,"
+	@echo "                 Selkies-Paket, Sicherung)"
 	@echo "  make root-image  Basisimage für Root-Arbeitsplätze bauen und prüfen"
 	@echo "                 (braucht Sysbox, Handbuch Kapitel 25)"
 	@echo "  make messung   Die beiden Streaming-Maschinen vergleichen (~12 min,"
@@ -106,6 +107,12 @@ up:
 	    echo "    scripts/build-desktop-image.sh --pruefen"; \
 	  }; \
 	fi
+	@# **Das Paket ota-selkies in die eigene Paketquelle** (Kapitel 20), falls
+	@# diese Fassung dort fehlt. Aus ihr heben sich Root-Arbeitsplaetze beim
+	@# Fortsetzen an, und der Bildbauer hebt alte Golden Images damit an. Ohne
+	@# diesen Schritt fehlte es nach einem Update ohne Neubau des Basisimages.
+	@./scripts/build-selkies-deb.sh --hochladen --wenn-noetig || \
+	  echo "  (ota-selkies nicht in der Paketquelle — von Hand: scripts/build-selkies-deb.sh --hochladen)"
 	@# **Das Root-Image, wenn der Host es tragen kann** (Kapitel 25). Nur mit
 	@# Sysbox: Ohne startet ein Root-Arbeitsplatz ohnehin nicht, und ein Image,
 	@# das niemand benutzen kann, kostet nur Platz. Gebaut wird nur, wenn es
@@ -194,14 +201,6 @@ cert:
 # ergibt statt eines Make-Fehlers.
 -include deploy/.env
 export OTA_TEST_ADMIN_PW
-# Die Paketquellen (Kapitel 26) sind ein Compose-Profil. Mit OTA_REPO=1 in
-# deploy/.env starten `make up`/`make update` die Dienste `repo` und `repo-web`
-# mit; sonst bleiben sie aus, und nichts aendert sich.
-# `default` mit, weil `keycloak-db-init` dieses Profil traegt: Sobald ueberhaupt
-# ein Profil gesetzt ist, faellt er sonst weg, und Compose verweigert den Stack
-# („keycloak depends on undefined service").
-komma := ,
-export COMPOSE_PROFILES := $(if $(filter 1,$(OTA_REPO)),default$(komma)repo,)
 # Und das Geheimnis des Dienstkontos: Ohne das ueberspringt die Rechtepruefung
 # ihre Keycloak- und Passkey-Abschnitte — und zwar rot, nicht still. Es stand
 # lange nicht hier, und ein `make test` war deshalb nur dann vollstaendig, wenn
@@ -237,8 +236,12 @@ test:
 	@# Webterminal mit Protokoll. Ohne Sysbox wird uebersprungen statt rot.
 	@./scripts/test-root-arbeitsplatz.sh
 	@echo
-	@# Eigene Paketquelle (Kapitel 26). Ohne OTA_REPO=1 uebersprungen statt rot.
+	@# Eigene Paketquelle (Kapitel 26); der Spiegel nur mit OTA_REPO_SPIEGEL=1.
 	@./scripts/test-repo.sh
+	@echo
+	@# Das Paket ota-selkies: alte Golden Images anheben, Root-Arbeitsplaetze
+	@# beim Fortsetzen. Legt kurz eine Pruef-Fassung in die Paketquelle.
+	@./scripts/test-selkies-paket.sh
 	@echo
 	@# Zuletzt, weil dieser Test Sessions beendet, um die Wiederherstellung
 	@# überhaupt prüfen zu können — **nur die eigenen**: `/api/sessions`

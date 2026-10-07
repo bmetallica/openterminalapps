@@ -203,9 +203,10 @@ services:
       OTA_KEYCLOAK_URL: "${OTA_KEYCLOAK_URL:-}"
       OTA_KEYCLOAK_REALM: "${OTA_KEYCLOAK_REALM:-ota}"
       OTA_KEYCLOAK_SECRET: "${OTA_KEYCLOAK_SECRET:-}"
-      # Paketquellen (Kapitel 26). Aus heisst: nichts wird in Container
-      # eingetragen; der Menuepunkt sagt dann, wie man sie einschaltet.
-      OTA_REPO: "${OTA_REPO:-0}"
+      # Paketquellen (Kapitel 26): Das eigene Repository laeuft immer, der
+      # Spiegel ist ein Zusatz. OTA_REPO=1 war bis zum 2026-10-08 der Schalter
+      # fuer beides und gilt weiter als Spiegel.
+      OTA_REPO_SPIEGEL: "${OTA_REPO_SPIEGEL:-${OTA_REPO:-0}}"
       OTA_REPO_URL: "http://repo:8200"
     volumes:
       # Das Handbuch wird eingehaengt statt ins Abbild kopiert: So laesst es
@@ -635,11 +636,12 @@ services:
       - "traefik.http.services.ota-keycloak.loadbalancer.server.port=8080"
 
   # ------------------------------------------------------------------
-  # Paketquellen (Handbuch Kapitel 26) — optional, Profil `repo`.
+  # Paketquellen (Handbuch Kapitel 26).
   #
-  # Laeuft nur mit OTA_REPO=1 in deploy/.env (`make up` setzt dann das
-  # Profil). `repo` ist aptly samt Steuerdienst: Spiegel von Debian 13 und
-  # Dockers Quelle, eigenes Repository, Snapshots. `repo-web` liefert die
+  # **Das eigene Repository laeuft immer** — ueber es kommt `ota-selkies`,
+  # der Streaming-Server, in Basisimage, Golden Images und Root-Arbeitsplaetze
+  # (Kapitel 20). Der Spiegel von Debian 13 und Dockers Quelle ist ein Zusatz
+  # (OTA_REPO_SPIEGEL=1). `repo` ist aptly samt Steuerdienst. `repo-web` liefert die
   # veroeffentlichten Staende unter /repo aus — nur lesend, ohne Anmeldung,
   # weil apt in den Arbeitsplaetzen keine hat. Was dort liegt, ist signiert.
   # ------------------------------------------------------------------
@@ -656,12 +658,12 @@ services:
         NO_PROXY: "${OTA_NO_PROXY:-}"
     image: ota/repo:${OTA_VERSION:-dev}
     container_name: ota-repo
-    profiles: ["repo"]
     logging: *protokoll
     restart: unless-stopped
     environment:
       OTA_AGENT_TOKEN: "${OTA_AGENT_TOKEN}"
       OTA_REPO_ROOT: /srv/ota/repo
+      OTA_REPO_SPIEGEL: "${OTA_REPO_SPIEGEL:-${OTA_REPO:-0}}"
       # Leer = Vollspiegel. Ein aptly-Filter spiegelt nur diese Pakete samt
       # Abhaengigkeiten (zum Ausprobieren ohne 100 GB frei).
       OTA_REPO_FILTER: "${OTA_REPO_FILTER:-}"
@@ -685,7 +687,6 @@ services:
     # festgelegt und nicht auf `latest`.
     image: nginx:1.30-alpine
     container_name: ota-repo-web
-    profiles: ["repo"]
     logging: *protokoll
     restart: unless-stopped
     volumes:

@@ -1,0 +1,16 @@
+Package: ota-selkies
+Version: @VERSION@
+Architecture: amd64
+Maintainer: OpenTerminalApps <ota@ota.invalid>
+Installed-Size: @GROESSE@
+Depends: python3 (>= 3.13), python3 (<< 3.14), xvfb, pulseaudio, x11-xkb-utils, x11-xserver-utils, libpulse0, libxcb1, libxkbcommon0, libx11-xcb1, libva2, libva-drm2, libva-x11-2, libdrm2, libgbm1, libegl1, libwayland-server0, libglib2.0-0, libpixman-1-0, libxcb-render0, libxcb-shm0, libxcb-dri3-0, libxfixes3, libxext6, libice6, libsm6
+Section: x11
+Priority: optional
+Homepage: https://github.com/selkies-project/selkies
+Description: Selkies 2.0 für OpenTerminalApps-Arbeitsplätze
+ Der Streaming-Server der Arbeitsplätze, gebaut aus OTAs Fork
+ (third_party/selkies), samt seinen Abhängigkeiten unter /opt/selkies und
+ OTAs Startskripten unter /dockerstartup.
+ .
+ Ersetzt beim Installieren ein von Hand eingerichtetes Selkies 1.6.2
+ (Basisimages vor dem 2026-10-07).

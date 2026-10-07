@@ -75,16 +75,28 @@ vorrat_argumente() {
 
 bauen() {
   echo "Baue $TAG …"
-  # Selkies aus unserem Fork (third_party/selkies/OTA-FORK.md) — immer, nicht
-  # nur auf Wunsch: Das Dockerfile bricht ohne diese Quellen ab.
+  # Selkies kommt als Paket ota-selkies ins Image (Kapitel 20). Es wird hier
+  # gebaut, falls diese Fassung noch fehlt, und in die eigene Paketquelle
+  # gelegt — von dort heben sich Root-Arbeitsplätze beim Fortsetzen an.
+  "$ROOT/scripts/build-selkies-deb.sh" --wenn-noetig || return 1
+  if docker inspect ota-repo >/dev/null 2>&1; then
+    "$ROOT/scripts/build-selkies-deb.sh" --hochladen --wenn-noetig || return 1
+  else
+    echo "  (ota-repo läuft nicht — das Paket kommt erst mit dem nächsten 'make up' in die Paketquelle)"
+  fi
+  local version paket
+  version="$(grep -oP '^version = "\K[^"]+' "$ROOT/third_party/selkies/pyproject.toml")-ota$(tr -d ' \n' < "$ROOT/packaging/ota-selkies/revision")"
+  paket="$(mktemp -d)"
+  cp "$ROOT/dist/pakete/ota-selkies_${version}_amd64.deb" "$paket/" || return 1
   if [ -n "$(vorrat_argumente)" ]; then
     echo "  Datei-Vorrat: $DATEIEN"
   else
     echo "  Ohne Datei-Vorrat — alles aus dem Internet."
   fi
   docker build $(proxy_argumente) $(vorrat_argumente) \
-    --build-context selkies-quelle="$ROOT/third_party/selkies" \
-    -t "$TAG" "$ROOT/images/base-desktop" || return 1
+    --build-context ota-pakete="$paket" \
+    -t "$TAG" "$ROOT/images/base-desktop" || { rm -rf "$paket"; return 1; }
+  rm -rf "$paket"
   # `:test` bleibt als Zweitname, damit die Testvorlagen weiterlaufen.
   docker tag "$TAG" ota/base-desktop:test
   echo
@@ -153,8 +165,8 @@ print(c.XcursorGetDefaultSize(x.XOpenDisplay(b\":1\")))"')
                       || bad "Zeigergroesse haengt an der Bildschirmgroesse ($GROESSE)"
 
   # --- Selkies 2.0 -------------------------------------------------------
-  V=$(imc '/opt/selkies/bin/python -c "from importlib.metadata import version; print(version(\"selkies\"))"')
-  [ "$V" = "2.0.0" ] && ok "Selkies $V aus OTAs Fork" || bad "Selkies-Fassung ist '$V', erwartet 2.0.0"
+  V=$(imc 'dpkg-query -W -f="\${Version}" ota-selkies')
+  [ -n "$V" ] && ok "Selkies aus dem Paket ota-selkies $V" || bad "Das Paket ota-selkies ist nicht installiert"
   imc 'grep -q "websockets transport" /tmp/selkies.log' \
     && ok "Streamt über WebSockets (durch Traefik, ohne TURN)" \
     || bad "Kein WebSocket-Transport im Protokoll: $(imc 'grep -m1 starting /tmp/selkies.log')"

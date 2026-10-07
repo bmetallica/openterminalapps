@@ -49,7 +49,7 @@ trap aufraeumen EXIT
 
 echo "Root-Arbeitsplatz (Sysbox, Docker, Anhalten statt Löschen)"
 
-if ! docker info 2>/dev/null | grep -q sysbox-runc; then
+if ! docker info 2>/dev/null | grep sysbox-runc >/dev/null; then
   echo "  (übersprungen — Sysbox ist auf diesem Wirt nicht eingerichtet, Kapitel 25)"
   exit 0
 fi

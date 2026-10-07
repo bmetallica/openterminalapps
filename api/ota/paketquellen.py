@@ -27,15 +27,18 @@ MODI = ("aus", "zuerst", "nur")
 _zwischen: dict[str, Any] = {"zeit": 0.0, "daten": None}
 
 
-def aktiv() -> bool:
-    """Ist das Modul eingeschaltet (OTA_REPO=1 in deploy/.env)?"""
-    return os.environ.get("OTA_REPO", "0").strip() == "1"
+def spiegel_aktiv() -> bool:
+    """Ist der Spiegel von Debian und Docker eingeschaltet?
+
+    Das eigene Repository laeuft immer — ueber es kommt ota-selkies in die
+    Arbeitsplaetze. Der Spiegel ist ein Zusatz (`OTA_REPO_SPIEGEL=1`).
+    `OTA_REPO=1` war bis zum 2026-10-08 der Schalter fuer beides und wird
+    in deploy/docker-compose.yml weiter als Spiegel gelesen.
+    """
+    return os.environ.get("OTA_REPO_SPIEGEL", "0").strip() == "1"
 
 
 def aufruf(methode: str, pfad: str, **kw: Any) -> Any:
-    if not aktiv():
-        raise HTTPException(status.HTTP_404_NOT_FOUND,
-                            "Paketquellen sind nicht eingeschaltet (OTA_REPO=1, Kapitel 26).")
     zeit = kw.pop("timeout", 60.0)
     try:
         with httpx.Client(timeout=zeit) as client:
@@ -64,11 +67,14 @@ def fuer_container(db: DbSession) -> dict[str, Any]:
     Dienst nicht erreichbar, startet der Arbeitsplatz trotzdem — mit den
     Quellen seines Images.
     """
-    if not aktiv():
-        return {}
     modus = settings_store.get(db, settings_store.REPO_MODUS) or "zuerst"
     if modus == "aus":
         return {"modus": "aus"}
+    # "Nur eigene" ohne Spiegel hiesse: gar keine Debian-Pakete mehr. Die
+    # Oberflaeche bietet es dann nicht an; steht es von frueher noch so da,
+    # gilt "zuerst".
+    if modus == "nur" and not spiegel_aktiv():
+        modus = "zuerst"
     if time.monotonic() - _zwischen["zeit"] > 60 or _zwischen["daten"] is None:
         try:
             _zwischen["daten"] = aufruf("GET", "/quellen", timeout=10.0)
@@ -81,7 +87,9 @@ def fuer_container(db: DbSession) -> dict[str, Any]:
         ca = ""
     daten = _zwischen["daten"] or {}
     return {"modus": modus, "quellen": daten.get("quellen", []),
-            "schluessel": daten.get("schluessel", ""), "ca": ca}
+            "schluessel": daten.get("schluessel", ""), "ca": ca,
+            # Die Fassung, auf die der Agent einen Root-Arbeitsplatz hebt.
+            "selkies": daten.get("selkies", "")}
 
 
 def zwischenspeicher_leeren() -> None:

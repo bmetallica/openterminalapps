@@ -1,0 +1,14 @@
+#!/bin/sh
+# Nach dem Auspacken: die Befehle dorthin, wo Basisimage und Agent sie suchen.
+# Wirksam wird das neue Selkies beim nächsten Start des Containers — der Agent
+# startet einen Root-Arbeitsplatz nach einem Update dafür einmal neu.
+set -e
+case "$1" in
+  configure)
+    for b in selkies selkies-resize; do
+      ln -sf "/opt/selkies/bin/$b" "/usr/local/bin/$b"
+    done
+    chmod 0755 /dockerstartup/desktop_startup.sh /dockerstartup/selkies-starten.sh
+    ;;
+esac
+exit 0

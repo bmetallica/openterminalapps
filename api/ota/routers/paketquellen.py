@@ -36,14 +36,14 @@ def _alter_tage(status_: dict) -> float | None:
 
 @router.get("/kurz", dependencies=[Depends(require_permission("admin", "sessions.view_all"))])
 def kurz(db: DbSession = Depends(get_db)) -> dict:
-    """Für das Dashboard der Verwaltung: an? wie alt ist der Spiegel?"""
-    if not paketquellen.aktiv():
-        return {"aktiv": False}
+    """Für das Dashboard der Verwaltung: erreichbar? wie alt ist der Spiegel?"""
+    spiegel = paketquellen.spiegel_aktiv()
     try:
         st = paketquellen.aufruf("GET", "/status", timeout=30.0)
     except HTTPException:
-        return {"aktiv": True, "erreichbar": False}
-    return {"aktiv": True, "erreichbar": True, "alter_tage": _alter_tage(st),
+        return {"aktiv": True, "spiegel": spiegel, "erreichbar": False}
+    return {"aktiv": True, "spiegel": spiegel, "erreichbar": True,
+            "alter_tage": _alter_tage(st) if spiegel else None,
             "gelb": settings_store.get(db, settings_store.REPO_ALTER_GELB),
             "rot": settings_store.get(db, settings_store.REPO_ALTER_ROT)}
 
@@ -56,14 +56,14 @@ def uebersicht(db: DbSession = Depends(get_db)) -> dict:
         "alter_gelb": settings_store.get(db, settings_store.REPO_ALTER_GELB),
         "alter_rot": settings_store.get(db, settings_store.REPO_ALTER_ROT),
     }
-    if not paketquellen.aktiv():
-        return {"aktiv": False, "einstellungen": einstellungen}
+    spiegel = paketquellen.spiegel_aktiv()
     try:
         st = paketquellen.aufruf("GET", "/status", timeout=120.0)
     except HTTPException as exc:
-        return {"aktiv": True, "erreichbar": False, "fehler": str(exc.detail),
-                "einstellungen": einstellungen}
-    return {"aktiv": True, "erreichbar": True, "status": st, "alter_tage": _alter_tage(st),
+        return {"aktiv": True, "spiegel": spiegel, "erreichbar": False,
+                "fehler": str(exc.detail), "einstellungen": einstellungen}
+    return {"aktiv": True, "spiegel": spiegel, "erreichbar": True, "status": st,
+            "alter_tage": _alter_tage(st) if spiegel else None,
             "einstellungen": einstellungen}
 
 
@@ -78,6 +78,10 @@ class EinstellungenIn(BaseModel):
 def einstellungen(body: EinstellungenIn, request: Request,
                   actor: User = Depends(current_user),
                   db: DbSession = Depends(get_db)) -> dict:
+    if body.modus == "nur" and not paketquellen.spiegel_aktiv():
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            "„Nur eigene“ braucht den Spiegel — sonst gäbe es in den "
+                            "Arbeitsplätzen keine Debian-Pakete mehr (OTA_REPO_SPIEGEL=1).")
     alt = settings_store.get(db, settings_store.REPO_MODUS)
     settings_store.put(db, settings_store.REPO_MODUS, body.modus)
     settings_store.put(db, settings_store.REPO_BAU_SNAPSHOT, body.bau_snapshot)

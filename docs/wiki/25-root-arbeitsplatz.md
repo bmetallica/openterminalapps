@@ -141,7 +141,10 @@ Werkzeug für Entwickler, kein Verwaltungsrecht.
   - *auch Docker-Daten löschen* — alles ausser dem Zuhause ist weg.
 
   Ein neues Basisimage kommt **nur** über „Neu aufsetzen" in einen bestehenden Root-Arbeitsplatz
-  (Entscheidung des Betreibers, 2026-10-06).
+  (Entscheidung des Betreibers, 2026-10-06). **Ausgenommen ist Selkies:** Beim **Fortsetzen** hebt
+  der Agent das Paket `ota-selkies` auf die Fassung der eigenen Paketquelle und startet den Platz
+  dafür einmal neu — alles andere im Platz bleibt (Entscheidung des Betreibers, 2026-10-08;
+  [Kapitel 20](20-selkies-versuch.md#auf-20-anheben)).
 - **Docker:** `docker`, `docker compose`, `docker buildx` ohne `sudo`. Ein veröffentlichter Port
   (`ports: ["8080:80"]`) ist im Browser des Arbeitsplatzes unter `http://localhost:8080` erreichbar.
   Von ausserhalb des Arbeitsplatzes über eine befristete Portfreigabe („+ NAT", [Kapitel 23](23-netz.md)).

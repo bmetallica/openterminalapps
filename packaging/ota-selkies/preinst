@@ -1,0 +1,21 @@
+#!/bin/sh
+# Vor dem Auspacken: ein Selkies 1.6.2 wegräumen, das ein Basisimage vor dem
+# 2026-10-07 von Hand (pip) nach /opt/selkies gelegt hat. dpkg weiss nichts
+# davon und würde seine Dateien neben die neuen legen — ein Gemisch aus zwei
+# Fassungen in einem Verzeichnis.
+#
+# Erkannt wird es daran, dass /opt/selkies existiert, aber keinem Paket
+# gehört. Gehört es schon ota-selkies (ein Update), bleibt es dpkg überlassen.
+set -e
+case "$1" in
+  install|upgrade)
+    if [ -d /opt/selkies ] && ! dpkg-query -S /opt/selkies/bin/python3 >/dev/null 2>&1; then
+      echo "ota-selkies: ersetze das von Hand eingerichtete Selkies unter /opt/selkies"
+      rm -rf /opt/selkies
+    fi
+    # Reste von 1.6.2, die niemand mehr aufruft.
+    rm -rf /opt/gst-web
+    rm -f /usr/local/bin/selkies-gstreamer /usr/local/bin/selkies-gstreamer-resize
+    ;;
+esac
+exit 0

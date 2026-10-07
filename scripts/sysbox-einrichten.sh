@@ -52,7 +52,7 @@ info() { printf '    %s\n' "$1"; }
 echo "Sysbox ${VERSION} für Root-Arbeitsplätze"
 echo
 
-if docker info 2>/dev/null | grep -q 'sysbox-runc'; then
+if docker info 2>/dev/null | grep 'sysbox-runc' >/dev/null; then
   ok "Sysbox ist bereits eingerichtet — nichts zu tun."
   systemctl is-active --quiet sysbox && ok "Dienst sysbox läuft" || halt "Dienst sysbox läuft nicht: systemctl status sysbox"
   exit 0
@@ -175,11 +175,11 @@ if [ "$NACHHER" = "$VORHER" ]; then
 else
   halt "Vorher $VORHER, jetzt $NACHHER laufende Container. Bitte sofort prüfen: docker ps -a"
 fi
-docker info 2>/dev/null | grep -q 'sysbox-runc' && ok "Docker kennt die Runtime sysbox-runc" \
+docker info 2>/dev/null | grep 'sysbox-runc' >/dev/null && ok "Docker kennt die Runtime sysbox-runc" \
   || halt "Docker kennt sysbox-runc nicht — kill -HUP \$(pidof dockerd) und erneut prüfen"
 systemctl is-active --quiet sysbox && ok "Dienst sysbox läuft" || halt "Dienst sysbox läuft nicht"
 if [ "$LIVE_RESTORE" = "1" ]; then
-  docker info 2>/dev/null | grep -q 'Live Restore Enabled: true' && ok "live-restore ist aktiv" \
+  docker info 2>/dev/null | grep 'Live Restore Enabled: true' >/dev/null && ok "live-restore ist aktiv" \
     || info "live-restore greift nach dem nächsten Neuladen von Docker"
 fi
 

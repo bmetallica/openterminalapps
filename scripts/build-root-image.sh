@@ -47,7 +47,7 @@ docker build $(proxy_argumente) --build-arg BASIS="$BASIS" -t "$TAG" \
 
 echo
 echo "Prüfe unter Sysbox …"
-if ! docker info 2>/dev/null | grep -q sysbox-runc; then
+if ! docker info 2>/dev/null | grep sysbox-runc >/dev/null; then
   echo "  Sysbox fehlt auf diesem Wirt — Prüfung übersprungen (Kapitel 25)." >&2
   exit 0
 fi

@@ -889,6 +889,10 @@ selbst führt der Betreiber; hier steht, was daraus gebaut wurde.
 - [x] Tastaturlayout vor dem Start, ohne Neustart; Agent bedient 1.6.2-Images weiter
 - [x] `test-streaming.sh` mit eigener Vorlage, Arbeitsplatz und Anwendungsbildschirm
 - [ ] `make messung` für 2.0 (misst noch den WebRTC-Weg); Kosten von 2.0 messen
+- [x] **Paket `ota-selkies`** (2026-10-08): Basisimage installiert es, Software hebt alte Golden
+      Images an, Root-Arbeitsplätze heben sich beim Fortsetzen an; `scripts/build-selkies-deb.sh`,
+      `scripts/test-selkies-paket.sh` (15). Eigene Paketquelle immer an, der Spiegel bleibt Zusatz
+      (`OTA_REPO_SPIEGEL`)
 - [ ] TURN aus dem Stack nehmen, sobald keine Golden Images mit 1.6.2 mehr laufen — dabei bedenken:
       `OTA_SELF_ADDRESS` fällt heute auf `OTA_TURN_BIND`/`OTA_TURN_HOST` zurück (Paketquelle, Grundregeln)
 

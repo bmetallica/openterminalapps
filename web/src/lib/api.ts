@@ -619,7 +619,7 @@ export type RepoStatus = {
   dateien: { pfad: string; groesse: number }[]
 }
 export type RepoUebersicht = {
-  aktiv: boolean; erreichbar?: boolean; fehler?: string
+  aktiv: boolean; spiegel?: boolean; erreichbar?: boolean; fehler?: string
   status?: RepoStatus; alter_tage?: number | null
   einstellungen: RepoEinstellungen
 }
@@ -628,7 +628,7 @@ export type RepoPaket = {
   groesse?: number; sha256?: string; von?: string; zeit?: string
 }
 export type RepoKurz = {
-  aktiv: boolean; erreichbar?: boolean; alter_tage?: number | null; gelb?: number; rot?: number
+  aktiv: boolean; spiegel?: boolean; erreichbar?: boolean; alter_tage?: number | null; gelb?: number; rot?: number
 }
 
 /** Fehler mit der Meldung, die die API geliefert hat — nicht "Fehler 500". */
@@ -894,6 +894,9 @@ export const api = {
     }),
   build: (templateId: string, id: string) =>
     call<Build>(`/templates/${templateId}/builds/${id}`),
+  /** Welches Selkies im Image der Vorlage steckt und welches die Paketquelle anbietet. */
+  templateSelkies: (templateId: string) =>
+    call<{ im_image: string; in_quelle: string; anwendbar: boolean }>(`/templates/${templateId}/selkies`),
   startBuild: (templateId: string, body: {
     apt_packages: string[]; vscode_extensions?: string[]
     setup_script?: string; start_command?: string; comment?: string

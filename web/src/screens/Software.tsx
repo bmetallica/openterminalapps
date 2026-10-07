@@ -366,6 +366,9 @@ export function Software({ tpl, onToast, onChanged }: {
 
   return (
     <>
+      <SelkiesStand tpl={tpl} onToast={onToast} running={!!running}
+        onGestartet={async (b) => { setWatching(b); setBuilds(await api.builds(tpl.id)) }} />
+
       {/* ---------------------------------------------- 1. Einbauen */}
       <div className="section__head" style={{ marginBottom: 10 }}>
         <span className="silk">{tr('Software einbauen')}</span>
@@ -835,4 +838,70 @@ const GLYPHS = ['▢', '◎', '◈', '⌨', '▤', '▶', '▦', '⚙', '◍', '
 function nextGlyph(current: string): string {
   const i = GLYPHS.indexOf(current)
   return GLYPHS[(i + 1) % GLYPHS.length]
+}
+
+
+/**
+ * Welches Selkies im Image steckt — und das Anheben, wenn es ein älteres ist.
+ *
+ * Ein Golden Image auf dem alten Basisimage trägt Selkies 1.6.2, auch nach
+ * jedem Neubau: Der Bildbauer baut auf dem Image auf, worauf die Vorlage zeigt.
+ * Anheben heisst, das Paket ota-selkies hineinzubauen; es ersetzt ein altes
+ * Selkies selbst (Handbuch Kapitel 20). Gefragt wird das Image einmal beim
+ * Öffnen — beim ersten Mal startet dafür kurz ein Container.
+ */
+function SelkiesStand({ tpl, onToast, running, onGestartet }: {
+  tpl: Template
+  onToast: (m: string, tone?: 'ok' | 'bad') => void
+  running: boolean
+  onGestartet: (b: Build) => void
+}) {
+  const [stand, setStand] = useState<{ im_image: string; in_quelle: string; anwendbar: boolean } | null>(null)
+  const [busy, setBusy] = useState(false)
+  useEffect(() => {
+    if (tpl.stream_engine !== 'selkies') return
+    api.templateSelkies(tpl.id).then(setStand).catch(() => setStand(null))
+  }, [tpl.id, tpl.image_ref, tpl.stream_engine])
+
+  if (!stand || !stand.im_image) return null
+  const aktuell = stand.im_image === stand.in_quelle || !stand.in_quelle
+
+  async function anheben() {
+    if (!stand) return
+    setBusy(true)
+    try {
+      const b = await api.startBuild(tpl.id, {
+        apt_packages: ['ota-selkies'],
+        vscode_extensions: [],
+        setup_script: '',
+        start_command: '',
+        comment: tr('Selkies {alt} → {neu}', { alt: stand.im_image, neu: stand.in_quelle }),
+      })
+      onGestartet(b)
+      onToast(tr('Der Build läuft. Das dauert ein paar Minuten.'))
+    } catch (err) {
+      onToast(err instanceof ApiError ? err.message : tr('Start fehlgeschlagen'), 'bad')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (aktuell) {
+    return <p className="sub" style={{ marginBottom: 14 }}>
+      {tr('Selkies im Image: {v} — auf dem Stand der Paketquelle.', { v: stand.im_image })}
+    </p>
+  }
+  return (
+    <div className="note-warn" style={{ marginBottom: 18, display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
+      <span style={{ flex: 1, minWidth: 260 }}>
+        {tr('In diesem Image steckt Selkies {alt}, die Paketquelle bietet {neu}. Ein Neubau allein ändert daran nichts — anheben baut das Paket ota-selkies hinein; alles andere im Image bleibt.',
+          { alt: stand.im_image, neu: stand.in_quelle })}
+      </span>
+      <button className="btn btn--primary btn--sm" disabled={busy || running || !stand.anwendbar}
+        title={stand.anwendbar ? undefined : tr('Die Paketquelle ist für Arbeitsplätze ausgeschaltet (Paketquellen → Aus).')}
+        onClick={() => void anheben()}>
+        {tr('Auf {neu} anheben', { neu: stand.in_quelle })}
+      </button>
+    </div>
+  )
 }

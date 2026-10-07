@@ -366,6 +366,30 @@ def _own_session(template_id: uuid.UUID, user: User, db: DbSession):
     return sess
 
 
+@router.get("/{template_id}/selkies", dependencies=[Depends(manage)])
+def selkies_fassung(template_id: uuid.UUID, db: DbSession = Depends(get_db)) -> dict:
+    """Welches Selkies im Image dieser Vorlage steckt — und welches die eigene
+    Paketquelle anbietet (Kapitel 20).
+
+    Ein Golden Image auf dem alten Basisimage traegt Selkies 1.6.2, auch nach
+    jedem Neubau: Der Bildbauer baut auf dem Image auf, worauf die Vorlage
+    zeigt. Anheben heisst deshalb, `ota-selkies` hineinzubauen — die Oberflaeche
+    bietet das an, wenn die beiden Fassungen auseinanderliegen.
+    """
+    tpl = db.get(Template, template_id)
+    if not tpl:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Workspace nicht gefunden")
+    if tpl.stream_engine != "selkies":
+        return {"im_image": "", "in_quelle": "", "anwendbar": False}
+    try:
+        im_image = agent_client.image_selkies(tpl.image_ref).get("fassung", "")
+    except HTTPException:
+        im_image = ""
+    repo = paketquellen.fuer_container(db)
+    return {"im_image": im_image, "in_quelle": repo.get("selkies", ""),
+            "anwendbar": repo.get("modus") not in (None, "aus") and bool(repo.get("selkies"))}
+
+
 @router.post("/{template_id}/builds", dependencies=[Depends(manage)],
              status_code=status.HTTP_202_ACCEPTED)
 async def start_build(

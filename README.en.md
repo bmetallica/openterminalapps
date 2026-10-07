@@ -113,12 +113,13 @@ In detail in [handbook chapter 2](docs/wiki/02-erste-schritte.md) (German).
   up a new base image. Inner containers go through the same router and network rules. Enabling it:
   `sudo scripts/sysbox-einrichten.sh --live-restore`, then `make up` — the script installs Sysbox
   without touching a single running container ([handbook chapter 25](docs/wiki/25-root-arbeitsplatz.md), German)
-- **Own package source** (add-on, off by default): a mirror of Debian 13 including security
-  updates and Docker's repository, **your own `.deb` packages** by drag and drop, and **frozen
-  states** with roll-back and reproducible images. Workspaces keep installing when something
-  outside is gone — mode “own first” or “own only”. Syncing is manual; the mirror's age turns
-  yellow and red. Enable with `OTA_REPO=1` in `deploy/.env` and `make update`; a full mirror needs
-  roughly 100 to 130 GB ([handbook chapter 26](docs/wiki/26-paketquellen.md), German)
+- **Own package source** (always on): **your own `.deb` packages** by drag and drop, **frozen
+  states** with roll-back and reproducible images, and the **`ota-selkies` package** that brings the
+  streaming server into images and lifts root workspaces when they resume. A **mirror** of Debian 13
+  including security updates and Docker's repository is an add-on (off by default): workspaces then
+  keep installing when something outside is gone — mode “own first” or “own only”. Syncing is
+  manual; the mirror's age turns yellow and red. Enable with `OTA_REPO_SPIEGEL=1` in `deploy/.env`
+  and `make update`; a full mirror needs roughly 100 to 130 GB ([handbook chapter 26](docs/wiki/26-paketquellen.md), German)
 
 **Administration**
 - Resources **per user and workspace**: user A gets 2 cores, user B gets one
@@ -290,7 +291,8 @@ make test
 | `test-streaming.sh` | The media path with its own template on the current base image: a browser in a foreign network counts the **decoded frames** — on the workspace and on an application's own screen (Selkies 2.0, WebSockets through Traefik); umlauts, Shift and AltGr from a German keyboard arrive correctly. If TURN is set up (only still needed for golden images with Selkies 1.6.2) it is checked too, with its deny list and NAT |
 | `test-firewall.sh` | The network isolation, **measured from inside**: neighbour, host, corporate network, TURN, name service, internet per level, an exception by name, a published port — and all of it again after the router restarts |
 | `test-root-arbeitsplatz.sh` | The root workspace: root unprivileged on the host (Sysbox), Docker and Compose inside, network rules applying to the **inner** containers too, stop and resume with state kept, rebuild, web terminal with its log and export, no terminal into stack services. Skipped without Sysbox |
-| `test-repo.sh` | The own package source: signature, upload (duplicate 409, broken 422), snapshots and their delete protection, a Debian 13 workspace installs an own package **from here**, “own only” no longer calls `deb.debian.org`, the image builder adds and removes the source, an Ubuntu image is left alone, a root workspace picks up the current setting when resumed. Skipped without `OTA_REPO=1` |
+| `test-repo.sh` | The own package source: signature, upload (duplicate 409, broken 422), snapshots and their delete protection, a Debian 13 workspace installs an own package **from here**, “own only” no longer calls `deb.debian.org`, the image builder adds and removes the source, an Ubuntu image is left alone, a root workspace picks up the current setting when resumed. Mirror parts only with the mirror on |
+| `test-selkies-paket.sh` | The `ota-selkies` package: it is in the package source, it lifts a workspace on an old golden image with Selkies 1.6.2, the image builder lifts a golden image, and a root workspace lifts itself on resume while keeping what was installed in it |
 | `test-backup.sh` | Backup and restore of profile, container and database. It stops sessions to do so — **only its own**, and it checks that explicitly |
 
 The test credentials live in `deploy/.env` as `OTA_TEST_ADMIN_PW`, not in the source.

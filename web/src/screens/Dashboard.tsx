@@ -461,7 +461,7 @@ export function Dashboard({ me, onOpen, onToast }: {
       )}
 
       {repo?.aktiv && (repo.erreichbar === false
-        || repo.alter_tage == null || repo.alter_tage >= (repo.gelb ?? 7)) && (
+        || (repo.spiegel && (repo.alter_tage == null || repo.alter_tage >= (repo.gelb ?? 7)))) && (
         <div className="gate-note" role="status">
           <b>
             {repo.erreichbar === false ? tr('Die eigene Paketquelle antwortet nicht.')

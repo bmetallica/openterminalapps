@@ -725,6 +725,39 @@ def image_engine(ref: str) -> dict[str, str]:
     return {"engine": "keine"}
 
 
+_selkies_fassungen: dict[str, str] = {}
+
+
+@app.get("/images/selkies", dependencies=[Depends(require_token)])
+def image_selkies(ref: str) -> dict[str, str]:
+    """Welches Selkies steckt in diesem Image? (Kapitel 20)
+
+    `2.0.0-ota1` und so weiter, wenn das Paket ota-selkies installiert ist;
+    `1.6.2` fuer ein von Hand eingerichtetes Selkies aus einem Basisimage vor
+    dem 2026-10-07; leer, wenn keines da ist. Gefragt wird ein Wegwerf-Container
+    ohne Netz, je Image nur einmal — ein Image aendert sich nicht.
+    """
+    client = dc()
+    try:
+        bild = client.images.get(ref)
+    except APIError:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Image {ref} gibt es hier nicht")
+    if bild.id in _selkies_fassungen:
+        return {"fassung": _selkies_fassungen[bild.id]}
+    try:
+        aus = client.containers.run(
+            bild.id, entrypoint=["sh", "-c",
+                "dpkg-query -W -f='${Version}' ota-selkies 2>/dev/null"
+                " || { [ -x /opt/selkies/bin/selkies-gstreamer ] && echo 1.6.2; } || true"],
+            user="0", network_disabled=True, remove=True, stdout=True, stderr=False)
+        fassung = aus.decode(errors="replace").strip()
+    except (APIError, docker.errors.ContainerError) as exc:
+        log.warning("Selkies-Fassung von %s nicht lesbar: %s", ref, exc)
+        return {"fassung": ""}
+    _selkies_fassungen[bild.id] = fassung
+    return {"fassung": fassung}
+
+
 @app.get("/images", dependencies=[Depends(require_token)])
 def list_images() -> list[dict[str, Any]]:
     out = []
@@ -1735,6 +1768,55 @@ def _repo_einrichten(container, repo: dict[str, Any]) -> None:
         log.warning("Paketquelle nicht eingetragen: %s", exc)
 
 
+# Hebt Selkies in einem Container auf die Fassung der eigenen Paketquelle —
+# auch ein Selkies 1.6.2, das ein altes Basisimage von Hand eingerichtet hat;
+# das ersetzt das Paket selbst (packaging/ota-selkies/preinst). Nur in
+# Debian 13 und nur, wo ueberhaupt ein Selkies liegt: Ein Image von Kasm
+# bekommt keins untergeschoben.
+_SELKIES_HEBEN = r"""
+SOLL=@SOLL@
+[ -d /opt/selkies ] || { echo "kein-selkies"; exit 0; }
+grep -q '^VERSION_CODENAME=trixie' /etc/os-release 2>/dev/null || { echo "kein-debian13"; exit 0; }
+IST=$(dpkg-query -W -f='${Version}' ota-selkies 2>/dev/null || true)
+[ "$IST" = "$SOLL" ] && { echo "selkies-aktuell $IST"; exit 0; }
+if [ -n "$IST" ] && dpkg --compare-versions "$IST" gt "$SOLL"; then
+  echo "selkies-neuer $IST"; exit 0
+fi
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -q > /tmp/ota-selkies-heben.log 2>&1 || true
+if apt-get install -y -q --no-install-recommends "ota-selkies=$SOLL" >> /tmp/ota-selkies-heben.log 2>&1; then
+  echo "selkies-gehoben ${IST:-1.6.2} -> $SOLL"
+else
+  echo "selkies-fehlgeschlagen"; tail -5 /tmp/ota-selkies-heben.log
+fi
+"""
+
+
+def _selkies_heben(container, repo: dict[str, Any]) -> bool:
+    """True, wenn Selkies gerade angehoben wurde und der Container neu starten muss.
+
+    Die Fassung kommt von der API (`repo["selkies"]`, aus der Paketquelle).
+    Fehlt sie oder ist die Paketquelle fuer diesen Container aus, passiert
+    nichts. Scheitert die Installation, laeuft der Arbeitsplatz mit dem
+    bisherigen Selkies weiter — lieber alt als gar nicht.
+    """
+    soll = str(repo.get("selkies") or "")
+    if not soll or repo.get("modus") == "aus" or not re.fullmatch(r"[0-9A-Za-z.+~:-]+", soll):
+        return False
+    try:
+        code, out = _run_as_root(container, ["sh", "-c", _SELKIES_HEBEN.replace("@SOLL@", soll)])
+    except APIError as exc:
+        log.warning("Selkies in %s nicht gehoben: %s", container.name, exc)
+        return False
+    zeile = (out.strip().splitlines() or [""])[0]
+    if zeile.startswith("selkies-gehoben"):
+        log.info("%s: %s", container.name, zeile)
+        return True
+    if zeile.startswith("selkies-fehlgeschlagen"):
+        log.warning("Selkies in %s nicht gehoben: %s", container.name, out.strip()[-400:])
+    return False
+
+
 def _proxy_einrichten(container) -> None:
     """Den Firmenproxy auch dort hinterlegen, wo keine Umgebungsvariable hinreicht.
 
@@ -1992,7 +2074,18 @@ def fortsetzen(cid: str, body: "FortsetzenRequest | None" = None) -> dict[str, A
     _proxy_einrichten(c)
     # Auch beim Fortsetzen: Der Modus der Paketquellen kann sich geaendert
     # haben, waehrend der Platz angehalten war.
-    _repo_einrichten(c, (body.repo if body else {}))
+    repo = body.repo if body else {}
+    _repo_einrichten(c, repo)
+    # Und Selkies auf den Stand der Paketquelle heben (Kapitel 20). Hat sich
+    # etwas geaendert, einmal neu starten: Das laufende Selkies ist noch das
+    # alte, und das Startskript liest die neuen Dateien nur beim Start. Der
+    # Namensraum entsteht dabei neu — Regeln und Route also noch einmal.
+    if _selkies_heben(c, repo):
+        try:
+            c.restart(timeout=30)
+        except APIError as exc:
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Docker meldet: {exc}") from exc
+        _firewall_abgleich(client)
     _wait_for_vnc(c, port=8080)
     _tastatur_setzen(c)
     c.reload()

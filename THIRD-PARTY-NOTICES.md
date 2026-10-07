@@ -145,6 +145,11 @@ Quelltext verfügbar zu machen und den Lizenztext beizulegen. Beides liegt mit
 dem Fork vor: `LICENSE` im Verzeichnis, die Quellen daneben. Das mitgelieferte
 `src/selkies/Xlib` steht unter LGPL-3.0 (eigene `LICENSE` dort).
 
+In die Images kommt Selkies als Debian-Paket `ota-selkies` (gebaut mit
+`scripts/build-selkies-deb.sh`), das auch aus OTAs Paketquelle verteilt wird.
+Für das Paket gilt dasselbe wie für das Image: Es enthält Selkies (MPL-2.0),
+`pixelflux`/`pcmflux` (MPL-2.0) und deren GPL-Bibliotheken (unten).
+
 Bis zum 2026-10-07 lief Selkies 1.6.2, und OTA änderte es beim Bauen mit fünf
 Patches (`images/base-desktop/patches/`). Die gibt es nicht mehr; Golden
 Images, die noch auf dem alten Basisimage gebaut sind, tragen sie weiter in

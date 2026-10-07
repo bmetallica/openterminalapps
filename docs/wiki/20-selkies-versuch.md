@@ -52,15 +52,19 @@ dem Image. Alles andere bleibt wie bei jedem Arbeitsplatz: Zuhause, Ablagen,
 Skeleton, Startskript, Rechte.
 
 **Golden Images**, die auf dem alten Basisimage gebaut sind, tragen weiter
-Selkies 1.6.2 und laufen weiter — über TURN, wie im Anhang beschrieben. Unter
-**Verwaltung → Software** einmal neu gebaut, kommen sie auf 2.0. Der Agent
-erkennt die Fassung selbst (an `/dockerstartup/selkies-starten.sh`).
+Selkies 1.6.2 und laufen weiter — über TURN, wie im Anhang beschrieben. Auf
+2.0 kommen sie über das Paket `ota-selkies` ([unten](#auf-20-anheben)).
+**Ein gewöhnlicher Neubau tut das nicht:** Der Bildbauer baut auf dem Image
+auf, auf das die Vorlage zeigt — nach einer Aktivierung ist das das vorige
+Golden Image samt seinem Selkies. Der Agent erkennt die Fassung selbst (an
+`/dockerstartup/selkies-starten.sh`).
 
 ## OTAs Fork
 
 Selkies liegt **als Quellcode in OTAs Repository** (`third_party/selkies/`),
 mit Herkunft, Prüfsumme des Releases und jeder eigenen Änderung in
-`third_party/selkies/OTA-FORK.md`. Das Basisimage wird nur daraus gebaut.
+`third_party/selkies/OTA-FORK.md`. Daraus entsteht das Paket `ota-selkies`,
+und nur über dieses Paket kommt Selkies in ein Image.
 
 Der Grund ist ein Erlebnis: Am 2026-10-07 waren die Release-Dateien von
 Selkies 1.6.2 bei GitHub verschwunden — das Projekt war umbenannt, die alten
@@ -72,6 +76,77 @@ Die Abhängigkeiten stehen vollständig und mit Prüfsumme in
 Rust-Erweiterungen `pixelflux` (Bild) und `pcmflux` (Ton). Mit der eigenen
 Paketquelle liegen sie im Datei-Vorrat, und der Bau braucht kein Internet
 ([Kapitel 26](26-paketquellen.md#der-datei-vorrat)).
+
+## Das Paket `ota-selkies`
+
+Selkies aus dem Fork, seine Abhängigkeiten unter `/opt/selkies` und OTAs
+beide Startskripte (`desktop_startup.sh`, `selkies-starten.sh`) in **einem**
+Debian-Paket. Es liegt in der eigenen Paketquelle, die immer läuft
+([Kapitel 26](26-paketquellen.md)), und hat drei Abnehmer:
+
+| Wer | Wie |
+|---|---|
+| das Basisimage | `scripts/build-desktop-image.sh` baut das Paket bei Bedarf und installiert es |
+| ein Golden Image | **Software → „Auf … anheben“** (siehe unten) |
+| ein Root-Arbeitsplatz | **von selbst beim Fortsetzen** |
+
+Die Fassung heisst `2.0.0-ota1`: die von Selkies, dahinter OTAs Revision.
+
+### Auf 2.0 anheben
+
+Das Paket ersetzt beim Installieren ein Selkies 1.6.2, das ein altes
+Basisimage von Hand eingerichtet hat, und räumt dessen Reste weg
+(`packaging/ota-selkies/preinst`). Gemessen am 2026-10-08: ein Golden Image
+von vor dem Umstieg, mit `apt install ota-selkies` angehoben, besteht alle 18
+Prüfungen des neuen Basisimages.
+
+- **Gewöhnliche Arbeitsplätze** werden bei jedem Start aus ihrem Image neu
+  gebaut. Zeigt die Vorlage auf `ota/base-desktop:1`, genügt der Neubau des
+  Basisimages. Zeigt sie auf ein Golden Image, zeigt **Verwaltung → Workspaces
+  → (Vorlage) → Software**, welches Selkies darin steckt, und bietet
+  **„Auf 2.0.0-ota1 anheben“** an: ein Bau, der nur `ota-selkies` hineinlegt.
+  Alles andere im Image bleibt. Danach die neue Version aktivieren.
+- **Root-Arbeitsplätze** behalten ihren Container. Beim **Fortsetzen**
+  vergleicht der Agent die installierte Fassung mit der in der Paketquelle,
+  hebt bei Bedarf an (auch von 1.6.2) und startet den Platz einmal neu.
+  Was jemand im Platz installiert hat, bleibt — gemessen, samt einer Datei
+  unter `/opt`. „Neu aufsetzen“ braucht es dafür nicht mehr.
+- **Laufende Sitzungen** bleiben, wie sie sind, bis sie enden.
+
+Welche Fassung gerade läuft:
+
+```bash
+for c in $(docker ps --filter name=ota-s- --format '{{.Names}}'); do
+  echo "$c $(docker exec $c dpkg-query -W -f='${Version}' ota-selkies 2>/dev/null || echo 1.6.2)"
+done
+```
+
+### Selbst ändern und neu bauen
+
+Am Fork (`third_party/selkies/`), an den Startskripten
+(`images/base-desktop/dockerstartup/`) oder an `packaging/ota-selkies/` ändern,
+dann:
+
+```bash
+echo 2 > packaging/ota-selkies/revision          # neue Revision — Pflicht
+scripts/build-selkies-deb.sh --hochladen          # bauen und in die Paketquelle
+```
+
+Gebaut wird im Image des Repo-Dienstes (Debian 13, Python 3.13), die
+Abhängigkeiten kommen mit Prüfsumme aus dem Datei-Vorrat oder von PyPI. Dauer:
+rund eine halbe Minute. **Dieselbe Fassung zweimal nimmt die Paketquelle nicht
+an** — sonst hätten zwei Arbeitsplätze unter derselben Fassung verschiedenes.
+Ab dann heben sich Root-Arbeitsplätze beim nächsten Fortsetzen an; das
+Basisimage nimmt die neue Fassung beim nächsten `build-desktop-image.sh`, und
+Golden Images zeigen unter Software wieder „anheben“ an.
+
+Zurück auf eine ältere Fassung: das neuere Paket unter **Paketquellen →
+Eigene Pakete** entfernen. Arbeitsplätze, die es schon haben, behalten es; der
+Agent hebt nur an, nie ab.
+
+`make update` legt das Paket in die Paketquelle, falls diese Fassung dort noch
+fehlt. Geprüft wird alles mit `scripts/test-selkies-paket.sh` (läuft in
+`make test` mit).
 
 ## Was OTA an Selkies einstellt — und abschaltet
 

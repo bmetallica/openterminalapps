@@ -12,8 +12,10 @@
 #   * Kein Debian 13 (Ubuntu): es wird nichts eingetragen
 #   * Root-Arbeitsplatz: Fortsetzen trägt die Quelle neu ein (falls Sysbox)
 #
-# Ohne OTA_REPO=1 wird übersprungen statt rot. Ein Vollspiegel ist nicht
-# nötig — ein kleiner OTA_REPO_FILTER mit `hello` reicht.
+# Die eigene Paketquelle läuft immer. Was den Spiegel braucht (Debian-Pakete
+# von hier, Betriebsart „nur"), läuft nur mit OTA_REPO_SPIEGEL=1 — ein
+# Vollspiegel ist dafür nicht nötig, ein kleiner OTA_REPO_FILTER mit `hello`
+# reicht.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -38,10 +40,7 @@ jqp()  { python3 -c "import sys,json;d=json.load(sys.stdin);print($1)" 2>/dev/nu
 als_root() { docker exec -u 0 "$1" sh -c "$2" 2>&1; }
 
 echo "Eigene Paketquelle (Kapitel 26)"
-if [ "${OTA_REPO:-0}" != "1" ]; then
-  echo "  (übersprungen — OTA_REPO ist nicht 1)"
-  exit 0
-fi
+SPIEGEL="${OTA_REPO_SPIEGEL:-${OTA_REPO:-0}}"
 
 TID=""; SID=""; RTID=""; RSID=""; VORHER=""
 einstellen() {
@@ -197,11 +196,19 @@ else
     || bad "apt-get update: $(grep -E '^(E|W):' <<<"$UPD" | head -2)"
   INST=$(als_root "$CN" "DEBIAN_FRONTEND=noninteractive apt-get install -y $PAKET 2>&1; cat /usr/share/$PAKET/marke")
   grep -q "von-hier-$$" <<<"$INST" && ok "Eigenes Paket installiert" || bad "Eigenes Paket fehlt: $(tail -2 <<<"$INST")"
-  grep -q "/repo/" <<<"$(als_root "$CN" "apt-get install --reinstall -y --print-uris hello 2>&1")" \
-    && ok "Debian-Paket kommt aus dem Spiegel, nicht von deb.debian.org" \
-    || info "hello nicht im Spiegel (OTA_REPO_FILTER?) — übersprungen"
+  if [ "$SPIEGEL" = "1" ]; then
+    grep -q "/repo/" <<<"$(als_root "$CN" "apt-get install --reinstall -y --print-uris hello 2>&1")" \
+      && ok "Debian-Paket kommt aus dem Spiegel, nicht von deb.debian.org" \
+      || info "hello nicht im Spiegel (OTA_REPO_FILTER?) — übersprungen"
+  fi
   api -X DELETE "$BASE_URL/api/sessions/$SID" >/dev/null; SID=""
+fi
 
+if [ -n "$SID$TID" ] && [ "$SPIEGEL" != "1" ]; then
+  [ "$(einstellen '{"modus":"nur","bau_snapshot":"","alter_gelb":7,"alter_rot":30}')" = "409" ] \
+    && ok "Ohne Spiegel lässt sich „Nur eigene“ nicht einstellen (409)" \
+    || bad "„Nur eigene“ ohne Spiegel angenommen"
+elif [ -n "$TID" ]; then
   einstellen "{\"modus\":\"nur\",\"bau_snapshot\":\"\",\"alter_gelb\":7,\"alter_rot\":30}" >/dev/null
   START=$(starten "$TID"); SID=$(jqp "d['id']" <<<"$START"); CN="ota-s-${SID:0:12}"
   NUR=$(als_root "$CN" 'ls /etc/apt/sources.list.d/; apt-get update 2>&1 | grep -c deb.debian.org')
@@ -235,7 +242,7 @@ fi
 # ---------------------------------------------------------- Root-Fortsetzen
 echo
 echo "Root-Arbeitsplatz: Fortsetzen"
-if ! docker info 2>/dev/null | grep -q sysbox-runc || ! docker image inspect "$ROOT_IMAGE" >/dev/null 2>&1; then
+if ! docker info 2>/dev/null | grep sysbox-runc >/dev/null || ! docker image inspect "$ROOT_IMAGE" >/dev/null 2>&1; then
   info "Sysbox oder $ROOT_IMAGE fehlt — übersprungen"
 else
   RTID=$(neu_vorlage "Prüfung Paketquelle Root" "$ROOT_IMAGE" root)

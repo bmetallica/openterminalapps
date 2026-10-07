@@ -11,7 +11,7 @@
 | `ota-db` | PostgreSQL 16 | ✅ |
 | `ota-firewall` | **Der Router aller Arbeitsplätze**: nftables, NAT, Namensdienst, Portfreigaben. Ohne ihn hat kein Arbeitsplatz Netz | ✅ |
 | `ota-turn` | Vermittelt den Medienstrom für Golden Images mit Selkies 1.6.2 (WebRTC). Selkies 2.0 braucht ihn nicht | ✅ |
-| `ota-repo`, `ota-repo-web` | Die eigene Paketquelle, nur mit `OTA_REPO=1` ([Kapitel 26](26-paketquellen.md)) | ✅ |
+| `ota-repo`, `ota-repo-web` | Die eigene Paketquelle, mit `ota-selkies`; der Spiegel darin nur mit `OTA_REPO_SPIEGEL=1` ([Kapitel 26](26-paketquellen.md)) | ✅ |
 | `ota-registry` | Eigene Registry für die gebauten Images | ✅ |
 | `ota-keycloak` | Identitätsanbieter, mitgeliefert oder abgeschaltet | ✅ |
 | `ota-worker` | Leerlauf- und Waisen-Aufräumer laufen derzeit in `ota-api` mit | ✅ teilweise |

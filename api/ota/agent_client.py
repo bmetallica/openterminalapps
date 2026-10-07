@@ -326,6 +326,12 @@ def image_exists(ref: str) -> dict[str, Any]:
     return _call("GET", f"/images/exists/{ref}")
 
 
+def image_selkies(ref: str) -> dict[str, Any]:
+    """Welches Selkies im Image steckt (Kapitel 20). Startet beim ersten Mal
+    einen Wegwerf-Container, deshalb mit Zeit."""
+    return _call("GET", "/images/selkies", params={"ref": ref}, timeout=120.0)
+
+
 # --- Sicherung ---------------------------------------------------------
 
 def backup_root() -> dict[str, Any]:

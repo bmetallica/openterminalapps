@@ -1,10 +1,19 @@
 # 26 · Die eigene Paketquelle ✅
 
-*Für Administratoren. Seit dem 2026-10-07. Ein Zusatz — ab Werk aus.*
+*Für Administratoren. Seit dem 2026-10-07. Die eigene Paketquelle läuft immer, der Spiegel ist ein
+Zusatz — ab Werk aus.*
 
-OTA kann eine **eigene Paketquelle für Debian 13** mitbringen: einen Spiegel der offiziellen
-Debian-Quellen und von Dockers Paketquelle, dazu **eigene `.deb`-Pakete** und **festgehaltene
-Stände**. Arbeitsplätze und Bildbauer installieren dann von hier.
+OTA bringt eine **eigene Paketquelle für Debian 13** mit:
+
+- **Immer:** eigene `.deb`-Pakete, festgehaltene Stände, und darin das Paket **`ota-selkies`** —
+  der Streaming-Server der Arbeitsplätze. Über sie kommt er ins Basisimage, in angehobene Golden
+  Images und, beim Fortsetzen, in Root-Arbeitsplätze ([Kapitel 20](20-selkies-versuch.md#das-paket-ota-selkies)).
+  Sie braucht kaum Platz.
+- **Als Zusatz:** einen **Spiegel** der offiziellen Debian-Quellen und von Dockers Paketquelle
+  (`OTA_REPO_SPIEGEL=1`). Arbeitsplätze und Bildbauer installieren dann auch Debian-Pakete von hier.
+
+Bis zum 2026-10-08 war beides ein Zusatz hinter `OTA_REPO=1`. Seit `ota-selkies` gehört die
+eigene Paketquelle zum Betrieb; `OTA_REPO=1` gilt weiter als Schalter für den Spiegel.
 
 Zwei Gründe stehen dahinter:
 
@@ -16,7 +25,7 @@ Zwei Gründe stehen dahinter:
 - **Eigene Pakete.** Ein selbst gebautes `.deb` hochladen, und jeder Arbeitsplatz installiert es
   mit `apt install` — ohne eigenen Server und ohne `curl | sh`.
 
-## Was gespiegelt wird
+## Was gespiegelt wird (nur mit Spiegel)
 
 | Quelle | Inhalt | Adresse in OTA |
 |---|---|---|
@@ -33,19 +42,23 @@ Alles ist mit einem **eigenen Schlüssel** signiert, den OTA beim ersten Start e
 Signaturen von Debian und Docker werden **beim Abgleich geprüft** — was nicht stimmt, kommt nicht
 in den Spiegel.
 
-## Einschalten
+## Die Dienste
+
+Zwei Dienste, die mit jedem `make up` laufen: `ota-repo` (der Steuerdienst mit
+[aptly](https://www.aptly.info/)) und `ota-repo-web` (liefert `/repo/` aus). Ihre Daten liegen
+unter `OTA_REPO_ROOT` (Vorgabe `/srv/ota/repo`).
+
+## Den Spiegel einschalten
 
 In `deploy/.env`:
 
 ```bash
-OTA_REPO=1
+OTA_REPO_SPIEGEL=1
 OTA_REPO_ROOT=/srv/ota/repo      # Spiegel, eigene Pakete, Schlüssel
 OTA_REPO_FILTER=                 # leer = Vollspiegel
 ```
 
-Danach `make update`. Es kommen zwei Dienste dazu: `ota-repo` (der Steuerdienst mit
-[aptly](https://www.aptly.info/)) und `ota-repo-web` (liefert `/repo/` aus). Ohne `OTA_REPO=1`
-startet keiner von beiden — `make` setzt dafür das Compose-Profil `repo`.
+Danach `make update`.
 
 **Platz.** Ein Vollspiegel braucht grob **100 bis 130 GB**. Ein Abgleich räumt alte Fassungen
 weg; was wächst, sind die festgehaltenen Stände, weil jeder seine Fassungen behält. Eine eigene
@@ -239,24 +252,22 @@ OTAs eingebaute Sicherung (Kapitel 14) erfasst `OTA_REPO_ROOT` **nicht**. Am ein
 `gpg/`, `meta.json`, `aptly/db`, `aptly/pool` und `aptly/public/dateien` mit der Sicherung des
 Wirts mitnehmen.
 
-## Ausschalten
+## Den Spiegel ausschalten
 
-`OTA_REPO=0` und `make update`. Die Arbeitsplätze tragen beim nächsten Start nichts mehr ein — **aber
-was schon eingetragen ist, bleibt in laufenden Root-Arbeitsplätzen stehen**, bis sie fortgesetzt
-werden. Wer sauber aussteigen will, stellt vorher die Betriebsart auf **Aus**, setzt die
-Root-Arbeitsplätze einmal fort und schaltet dann ab. Die beiden Dienste laufen nach dem Ausschalten
-weiter, bis sie gestoppt werden:
+`OTA_REPO_SPIEGEL=0` und `make update`. Die Arbeitsplätze bekommen ab dem nächsten Start nur noch
+das eigene Repository eingetragen; Debian-Pakete kommen wieder aus dem Internet. „Nur eigene" lässt
+sich ohne Spiegel nicht einstellen — es gäbe sonst keine Debian-Pakete mehr. Der gespiegelte
+Bestand bleibt unter `OTA_REPO_ROOT` liegen, bis man ihn löscht.
 
-```bash
-docker compose -f deploy/docker-compose.yml --profile repo stop repo repo-web
-```
-
-Das Verzeichnis `OTA_REPO_ROOT` bleibt stehen.
+Die eigene Paketquelle selbst lässt sich nicht abschalten. Wer gar nichts in die Arbeitsplätze
+eingetragen haben will, stellt die Betriebsart auf **Aus** — dann heben sich Root-Arbeitsplätze
+aber auch nicht mehr selbst an.
 
 ## Prüfen
 
 ```bash
-scripts/test-repo.sh       # läuft auch in `make test` mit; ohne OTA_REPO=1 übersprungen
+scripts/test-repo.sh           # läuft in `make test` mit; Spiegelteile nur mit Spiegel
+scripts/test-selkies-paket.sh  # das Paket ota-selkies, Kapitel 20
 ```
 
 28 Prüfungen: Dienst und Signatur, Hochladen (doppelt 409, kaputt 422, präparierte Namen), Snapshots samt Schutz vor
@@ -268,7 +279,8 @@ bleibt unberührt, und ein Root-Arbeitsplatz übernimmt beim Fortsetzen die aktu
 
 | Zeichen | Ursache | Abhilfe |
 |---|---|---|
-| Menüpunkt sagt „nicht eingeschaltet" | `OTA_REPO` nicht `1` | `.env`, dann `make update` |
+| Reiter Spiegel sagt „nicht eingeschaltet" | `OTA_REPO_SPIEGEL` nicht `1` | `.env`, dann `make update` |
+| Root-Arbeitsplatz hebt Selkies nicht an | Betriebsart **Aus**, oder `ota-selkies` fehlt in der Paketquelle | Betriebsart, sonst `scripts/build-selkies-deb.sh --hochladen` |
 | „Der Dienst der Paketquelle antwortet nicht" | `ota-repo` läuft nicht | `docker logs ota-repo` |
 | Abgleich: `NO_PUBKEY` / Signatur | Schlüssel von Debian/Docker fehlt oder Spiegel manipuliert | Protokoll lesen; **nicht** mit `-ignore-signatures` umgehen |
 | Abgleich hängt im Zeitablauf | kein Weg nach draussen | Proxy ([Kapitel 21](21-firmenproxy.md)), Firewall (oben) |

@@ -57,6 +57,10 @@ EINGANG = ROOT / "eingang"
 # nur diese Pakete samt Abhängigkeiten — zum Ausprobieren auf einer Maschine
 # ohne 100 GB frei, oder für einen bewusst kleinen Spiegel.
 FILTER = os.environ.get("OTA_REPO_FILTER", "").strip()
+# Der Spiegel von Debian und Docker ist ein Zusatz (OTA_REPO_SPIEGEL=1). Das
+# eigene Repository läuft immer: Über es kommt ota-selkies in die
+# Arbeitsplätze (Kapitel 20 und 26).
+SPIEGEL_AN = os.environ.get("OTA_REPO_SPIEGEL", "0").strip() == "1"
 
 SELKIES_VERSION = os.environ.get("OTA_REPO_SELKIES_VERSION", "2.0.0")
 SELKIES_LISTE = Path(os.environ.get("OTA_REPO_SELKIES_LISTE", "/app/selkies-abhaengigkeiten.txt"))
@@ -297,6 +301,7 @@ def status_() -> dict[str, Any]:
     eigen = _lauf(["aptly", "repo", "show", "ota"], pruefen=False)
     plattenplatz = shutil.disk_usage(ROOT)
     return {
+        "spiegel_an": SPIEGEL_AN,
         "filter": FILTER,
         "vollspiegel": not FILTER,
         "spiegel": spiegel,
@@ -327,8 +332,26 @@ def quellen() -> dict[str, Any]:
     raus = []
     for prefix, dist in sorted(_veroeffentlicht()):
         basis = prefix.split("/")[-1]
+        # Ohne Spiegel nur das eigene Repository — auch wenn von einer früheren
+        # Zeit mit Spiegel noch Veröffentlichungen liegen.
+        if not SPIEGEL_AN and basis != EIGEN["prefix"]:
+            continue
         raus.append({"prefix": prefix, "dist": dist, "comp": komps.get(basis, "main")})
-    return {"quellen": raus, "schluessel": schluessel()}
+    return {"quellen": raus, "schluessel": schluessel(), "selkies": _selkies_fassung()}
+
+
+def _selkies_fassung() -> str:
+    """Die neueste Fassung von ota-selkies im eigenen Repository, oder "".
+    Der Agent hebt Root-Arbeitsplätze beim Fortsetzen darauf an."""
+    aus = _lauf(["aptly", "repo", "search", "ota", "Name (= ota-selkies)"], pruefen=False)
+    beste = ""
+    for zeile in aus.splitlines():
+        teile = zeile.strip().split("_")
+        if len(teile) != 3 or teile[0] != "ota-selkies":
+            continue
+        if not beste or subprocess.run(["dpkg", "--compare-versions", teile[1], "gt", beste]).returncode == 0:
+            beste = teile[1]
+    return beste
 
 
 @app.get("/schluessel", response_class=PlainTextResponse)
@@ -443,6 +466,10 @@ def _abgleich() -> None:
 
 @app.post("/abgleich", dependencies=[Depends(require_token)])
 def abgleich() -> dict[str, str]:
+    if not SPIEGEL_AN:
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            "Der Spiegel ist nicht eingeschaltet (OTA_REPO_SPIEGEL=1 in "
+                            "deploy/.env, dann make update).")
     return _im_hintergrund("Abgleich", _abgleich)
 
 
