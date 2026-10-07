@@ -1,0 +1,42 @@
+{
+  "a": {
+    "type": "button",
+    "index": 1
+  },
+  "b": {
+    "type": "button",
+    "index": 0
+  },
+  "back": {
+    "type": "button",
+    "index": 6
+  },
+  "leftshoulder": {
+    "type": "button",
+    "index": 4
+  },
+  "leftx": {
+    "type": "axis",
+    "index": 0
+  },
+  "lefty": {
+    "type": "axis",
+    "index": 1
+  },
+  "rightshoulder": {
+    "type": "button",
+    "index": 5
+  },
+  "start": {
+    "type": "button",
+    "index": 7
+  },
+  "x": {
+    "type": "button",
+    "index": 3
+  },
+  "y": {
+    "type": "button",
+    "index": 2
+  }
+}

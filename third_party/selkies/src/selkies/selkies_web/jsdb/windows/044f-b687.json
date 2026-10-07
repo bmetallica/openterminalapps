@@ -1,0 +1,30 @@
+{
+  "dpdown": {
+    "type": "button",
+    "index": 8
+  },
+  "dpleft": {
+    "type": "button",
+    "index": 9
+  },
+  "dpright": {
+    "type": "button",
+    "index": 7
+  },
+  "dpup": {
+    "type": "button",
+    "index": 6
+  },
+  "leftstick": {
+    "type": "button",
+    "index": 5
+  },
+  "leftx": {
+    "type": "axis",
+    "index": 0
+  },
+  "lefty": {
+    "type": "axis",
+    "index": 1
+  }
+}

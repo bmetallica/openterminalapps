@@ -1,0 +1,14 @@
+{
+  "a": {
+    "type": "button",
+    "index": 0
+  },
+  "leftx": {
+    "type": "axis",
+    "index": 0
+  },
+  "lefty": {
+    "type": "axis",
+    "index": 1
+  }
+}

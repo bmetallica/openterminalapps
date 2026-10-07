@@ -1,0 +1,292 @@
+name: Packages
+
+# Native packages: .deb (Ubuntu/Debian), .rpm (Fedora/EL), .apk (Alpine),
+# .pkg.tar.zst (Arch), and .AppImage (x86_64 + aarch64, via rattler-build +
+# linuxdeploy-plugin-conda). Everything is assembled inside a container of the
+# target distribution; only apt/apt-get, dnf, apk, or pacman are ever invoked.
+
+# Triggered by ci.yaml on pushes to main and by release.yaml for releases;
+# can also be run standalone via the Actions tab, in which case it builds
+# the wheel itself unless `wheel_artifact` names an existing artifact.
+
+on:
+  workflow_dispatch:
+    inputs:
+      package_version:
+        description: Version string stamped into the packages
+        type: string
+        default: 0.0.0.dev0
+      wheel_artifact:
+        description: Artifact name of a prebuilt wheel (skips the wheel build when set)
+        type: string
+        default: ""
+      capture_stack_published:
+        description: Resolve the pinned pixelflux/pcmflux from PyPI, an explicit choice for a build made after they were published there
+        type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      package_version:
+        description: Version string stamped into the packages
+        type: string
+        default: 0.0.0.dev0
+      wheel_artifact:
+        description: Artifact name of a prebuilt wheel (skips the wheel build when set)
+        type: string
+        default: ""
+      capture_stack_published:
+        description: Resolve the pinned pixelflux/pcmflux from PyPI, an explicit choice for a build made after they were published there
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  wheel:
+    name: Build wheel for the packages
+    if: ${{ inputs.wheel_artifact == '' }}
+    permissions:
+      contents: read
+    uses: ./.github/workflows/build-wheel.yaml
+    with:
+      package_version: ${{ inputs.package_version }}
+
+  package:
+    name: ${{ matrix.kind.name }} (${{ matrix.arch.name }})
+    needs: wheel
+    if: ${{ !cancelled() && contains(fromJSON('["success", "skipped"]'), needs.wheel.result) }}
+    runs-on: ${{ matrix.arch.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - name: amd64
+            runner: ubuntu-latest
+          - name: arm64
+            runner: ubuntu-24.04-arm
+        kind:
+          - name: deb-ubuntu24.04
+            tag: ubuntu24.04
+            image: ubuntu:24.04
+            script: infra/packaging/deb.sh
+            install: apt-get update -qq && apt-get install -y -qq /out/*.deb
+          - name: deb-ubuntu26.04
+            tag: ubuntu26.04
+            image: ubuntu:26.04
+            script: infra/packaging/deb.sh
+            install: apt-get update -qq && apt-get install -y -qq /out/*.deb
+          - name: deb-bookworm
+            tag: bookworm
+            image: debian:bookworm
+            script: infra/packaging/deb.sh
+            install: apt-get update -qq && apt-get install -y -qq /out/*.deb
+          - name: deb-trixie
+            tag: trixie
+            image: debian:trixie
+            script: infra/packaging/deb.sh
+            install: apt-get update -qq && apt-get install -y -qq /out/*.deb
+          - name: rpm-fedora
+            tag: fc
+            # The oldest Fedora still supported, not the newest: the venv the
+            # package carries is tied to the interpreter it was built with, so
+            # building on the oldest is what makes one package cover every
+            # release that is maintained. Bumped when Fedora retires it.
+            image: fedora:43
+            script: infra/packaging/rpm.sh
+            install: dnf install -y -q /out/*.rpm
+          - name: rpm-el9
+            tag: el9
+            image: almalinux:9
+            script: infra/packaging/rpm.sh
+            install: dnf install -y -q /out/*.rpm
+          - name: apk
+            image: alpine:latest
+            script: infra/packaging/apk.sh
+            install: apk add --quiet --allow-untrusted /out/*.apk
+          - name: arch
+            image: archlinux:base-devel
+            script: infra/packaging/arch.sh
+            install: pacman -Sy --noconfirm > /dev/null && pacman -U --noconfirm /out/*.pkg.tar.zst
+        exclude:
+          # Arch Linux publishes an x86_64-only image
+          - arch:
+              name: arm64
+              runner: ubuntu-24.04-arm
+            kind:
+              name: arch
+              image: archlinux:base-devel
+              script: infra/packaging/arch.sh
+    steps:
+      - uses: actions/checkout@v7
+      - name: Free disk space
+        # The tool cache is kept: setup-python and setup-node resolve from it
+        uses: endersonmenezes/free-disk-space@2a22f8c59cae9cddae7194b33e6b92d023b2b4b8 # v4
+        with:
+          remove_android: true
+          remove_dotnet: true
+          remove_haskell: true
+          remove_tool_cache: false
+          remove_packages: azure-cli google-cloud-cli microsoft-edge-stable google-chrome-stable firefox postgresql* temurin-* mysql* mongodb*
+          remove_packages_one_command: true
+          remove_folders: /usr/share/swift /usr/share/miniconda /usr/share/az* /usr/local/lib/node_modules /usr/local/share/chromium /usr/local/share/powershell /usr/local/julia /usr/local/aws-cli /usr/local/aws-sam-cli /usr/share/gradle /usr/local/share/vcpkg
+      - name: Download the wheel
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ inputs.wheel_artifact || 'selkies-wheel' }}
+          path: dist/
+      # The pixelflux/pcmflux wheels the orchestrating run resolved: each
+      # project's main HEAD, or the pinned release at a release. Absence is
+      # tolerated (standalone dispatch) and mkvenv.sh leaves them to the index
+      - name: Download the pixelflux wheels
+        if: ${{ !inputs.capture_stack_published }}
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          pattern: pixelflux-wheels-*
+          path: dist/
+          merge-multiple: true
+      - name: Download the pcmflux wheels
+        if: ${{ !inputs.capture_stack_published }}
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          pattern: pcmflux-wheels-*
+          path: dist/
+          merge-multiple: true
+      - name: Check the capture stack this build carries
+        env:
+          PUBLISHED: ${{ inputs.capture_stack_published }}
+        run: |
+          if [ "${PUBLISHED}" = "true" ]; then
+            echo "capture stack: the pinned releases, resolved from PyPI"
+            exit 0
+          fi
+          for project in pixelflux pcmflux; do
+            # What ships has to be the capture stack this run resolved, which
+            # exists nowhere else, so the wheels are required rather than
+            # preferred: the orchestrating workflow puts them here before
+            # calling, and a standalone dispatch has to supply them the same way.
+            if ! ls "dist/${project}"-*.whl > /dev/null 2>&1; then
+              echo "::error::No ${project} wheel in dist/; run this through ci.yaml or release.yaml, which resolve the capture stack first"
+              exit 1
+            fi
+            echo "${project}: wheel from this run"
+          done
+      - name: Build the package inside the target distro container
+        env:
+          SELKIES_VERSION: ${{ inputs.package_version }}
+          DISTRO_TAG: ${{ matrix.kind.tag }}
+          IMAGE: ${{ matrix.kind.image }}
+          SCRIPT: ${{ matrix.kind.script }}
+        run: |
+          set -e
+          mkdir -p out
+          # /repo is read-only: the scripts stage everything under /pkg-root and
+          # /build inside the container and only write their artifacts to /out
+          docker run --rm \
+            -v "${GITHUB_WORKSPACE}:/repo:ro" \
+            -v "${GITHUB_WORKSPACE}/dist:/dist:ro" \
+            -v "${GITHUB_WORKSPACE}/out:/out" \
+            -e SELKIES_VERSION \
+            -e DISTRO_TAG \
+            "${IMAGE}" \
+            sh "/repo/${SCRIPT}"
+          ls -la out/
+      - name: Install the package in a pristine container of the same distro
+        env:
+          IMAGE: ${{ matrix.kind.image }}
+          INSTALL: ${{ matrix.kind.install }}
+        run: |
+          set -e
+          # Nothing but what the package itself declares: an undeclared
+          # runtime library shows up here and nowhere else, because the build
+          # container has the whole toolchain installed.
+          docker run --rm -v "${GITHUB_WORKSPACE}/out:/out:ro" \
+            -e INSTALL -e SELKIES_PACKAGE_VERIFY=1 \
+            -v "${GITHUB_WORKSPACE}/scripts/ci/verify-package.sh:/verify.sh:ro" \
+            "${IMAGE}" sh /verify.sh
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.kind.name }}-${{ matrix.arch.name }}
+          path: out/*
+          # Already-compressed payloads: the artifact is a zip either way, and
+          # re-deflating them spends CPU for a size that does not move.
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 14
+
+  appimage:
+    name: AppImage (${{ matrix.arch.name }})
+    # The AppImage builds selkies from this checkout with rattler-build, so it
+    # needs no prebuilt wheel
+    runs-on: ${{ matrix.arch.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - name: x86_64
+            runner: ubuntu-latest
+          - name: aarch64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v7
+      - name: Free disk space
+        # The tool cache is kept: setup-python and setup-node resolve from it
+        uses: endersonmenezes/free-disk-space@2a22f8c59cae9cddae7194b33e6b92d023b2b4b8 # v4
+        with:
+          remove_android: true
+          remove_dotnet: true
+          remove_haskell: true
+          remove_tool_cache: false
+          remove_packages: azure-cli google-cloud-cli microsoft-edge-stable google-chrome-stable firefox postgresql* temurin-* mysql* mongodb*
+          remove_packages_one_command: true
+          remove_folders: /usr/share/swift /usr/share/miniconda /usr/share/az* /usr/local/lib/node_modules /usr/local/share/chromium /usr/local/share/powershell /usr/local/julia /usr/local/aws-cli /usr/local/aws-sam-cli /usr/share/gradle /usr/local/share/vcpkg
+      # The same wheels the packages above carry, required for the same reason
+      - name: Download the pixelflux wheels
+        if: ${{ !inputs.capture_stack_published }}
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          pattern: pixelflux-wheels-*
+          path: pixelflux-pcmflux-wheels/
+          merge-multiple: true
+      - name: Download the pcmflux wheels
+        if: ${{ !inputs.capture_stack_published }}
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          pattern: pcmflux-wheels-*
+          path: pixelflux-pcmflux-wheels/
+          merge-multiple: true
+      - name: Check the capture stack the AppImage carries
+        env:
+          PUBLISHED: ${{ inputs.capture_stack_published }}
+        run: |
+          if [ "${PUBLISHED}" = "true" ]; then
+            echo "capture stack: the pinned releases, resolved from PyPI"
+            exit 0
+          fi
+          for project in pixelflux pcmflux; do
+            if ! ls "pixelflux-pcmflux-wheels/${project}"-*.whl > /dev/null 2>&1; then
+              echo "::error::No ${project} wheel; run this through ci.yaml or release.yaml, which resolve the capture stack first"
+              exit 1
+            fi
+            echo "${project}: wheel from this run"
+          done
+      - name: Build the AppImage (rattler-build + linuxdeploy-plugin-conda)
+        env:
+          SELKIES_VERSION: ${{ inputs.package_version }}
+          # Left unset where the run resolves the capture stack from PyPI:
+          # appimage.sh then names the projects rather than wheel paths.
+          PIXELFLUX_PCMFLUX_WHEELS_DIR: ${{ inputs.capture_stack_published && '' || format('{0}/pixelflux-pcmflux-wheels', github.workspace) }}
+        run: ./scripts/ci/appimage.sh "${{ matrix.arch.name }}"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: appimage-${{ matrix.arch.name }}
+          path: out/*
+          # Already-compressed payloads: the artifact is a zip either way, and
+          # re-deflating them spends CPU for a size that does not move.
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 14

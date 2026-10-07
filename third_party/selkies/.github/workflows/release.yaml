@@ -1,0 +1,227 @@
+name: Release
+
+# Maintainer-triggered release: builds the wheel ONCE at the release version,
+# then builds multi-arch images, native packages and AppImages around it, and
+# assembles a DRAFT GitHub release with every build artifact attached. The
+# draft is finalized and published manually.
+#
+# The `latest` input decides whether the release is designated as the latest
+# everywhere at once: the floating `latest` image tags and the "Latest" badge of
+# the published release. A release is by default, a pre-release is not, and a
+# run can force either way. GitHub gives the badge to no release marked as a
+# pre-release, so a designated pre-release is marked as a release, and it
+# decides the badge when the draft is published, from the publisher's checkbox
+# rather than from the draft, so the run's decision is written into the draft's
+# notes and release-published.yaml applies it at publication, then rebuilds the
+# docs site, whose `latest` follows the badge.
+#
+# The `pypi` input decides whether the wheel and the sdist go to PyPI once the
+# draft is published: auto sends a release designated as the latest and no
+# pre-release. The decision rides in the draft's notes beside the latest one,
+# and release-published.yaml carries it out from the release's own assets,
+# through the trusted publisher registered on PyPI for that workflow file and
+# the `pypi` environment. PyPI keeps the first upload of a version, so a
+# re-release of one it holds fails there and changes the GitHub release alone.
+#
+# The pinned pixelflux and pcmflux come from the release each project cut for
+# that version: the smoke test, the images, the packages and the AppImages all
+# install the wheels those projects published. `capture_stack: pypi` is the
+# explicit choice to resolve them from PyPI instead, for a release made after
+# the two were published there; nothing takes that road on its own.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag (e.g. 1.2.3 or 2.0.0rc0)
+        type: string
+        required: true
+      latest:
+        description: Designate this release as the latest (floating `latest` image tags and the release badge); auto does so for a release and not for a pre-release
+        type: choice
+        options:
+          - auto
+          - always
+          - never
+        default: auto
+      pypi:
+        description: Publish the wheel to PyPI once the draft is published; auto does so for a release designated as the latest and not for a pre-release
+        type: choice
+        options:
+          - auto
+          - always
+          - never
+        default: auto
+      capture_stack:
+        description: Where the pinned pixelflux and pcmflux come from; pypi only once they are published there
+        type: choice
+        options:
+          - releases
+          - pypi
+        default: releases
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate release inputs
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+      prerelease: ${{ steps.ver.outputs.prerelease }}
+      latest: ${{ steps.ver.outputs.latest }}
+      pypi: ${{ steps.ver.outputs.pypi }}
+    steps:
+      - id: ver
+        env:
+          TAG: ${{ inputs.tag }}
+          LATEST: ${{ inputs.latest }}
+          PYPI: ${{ inputs.pypi }}
+        run: |
+          set -e
+          [ "${GITHUB_REF}" = refs/heads/main ] || { echo "a release is cut from main; this run started from ${GITHUB_REF_NAME}" >&2; exit 1; }
+          ver="${TAG#v}"
+          # The tag becomes the wheel version, so it is PEP 440: X.Y.Z with an
+          # optional pre-release, post-release, or dev suffix
+          echo "${ver}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+((a|b|rc)[0-9]+|\.post[0-9]+|\.dev[0-9]+)?$' \
+            || { echo "tag must be a PEP 440 version (e.g. 1.2.3 or 2.0.0rc0)" >&2; exit 1; }
+          is_prerelease() { echo "$1" | grep -qE '((a|b|rc)|\.dev)[0-9]+$'; }
+          # A release is designated as the latest and a pre-release is not,
+          # unless the run says otherwise; the floating `latest` image tags
+          # follow that, and so does the "Latest" badge, which GitHub gives no
+          # pre-release, so a designated pre-release is marked as a release
+          case "${LATEST:-auto}" in
+            always) latest=true ;;
+            never) latest=false ;;
+            *) if is_prerelease "${ver}"; then latest=false; else latest=true; fi ;;
+          esac
+          prerelease=false
+          if [ "${latest}" = false ] && is_prerelease "${ver}"; then prerelease=true; fi
+          # The wheel goes to PyPI for a designated release that is no
+          # pre-release, again unless the run says otherwise
+          case "${PYPI:-auto}" in
+            always) pypi=true ;;
+            never) pypi=false ;;
+            *) if [ "${latest}" = true ] && ! is_prerelease "${ver}"; then pypi=true; else pypi=false; fi ;;
+          esac
+          {
+            echo "version=${ver}"
+            echo "prerelease=${prerelease}"
+            echo "latest=${latest}"
+            echo "pypi=${pypi}"
+          } >> "${GITHUB_OUTPUT}"
+
+  wheel:
+    name: Build wheel
+    needs: validate
+    permissions:
+      contents: read
+    uses: ./.github/workflows/build-wheel.yaml
+    with:
+      package_version: ${{ needs.validate.outputs.version }}
+
+  capture-stack:
+    name: Capture stack (pinned releases)
+    needs: validate
+    # The wheels pixelflux and pcmflux released for the pinned versions, which
+    # everything below installs. A run resolving them from PyPI skips this.
+    if: ${{ inputs.capture_stack != 'pypi' }}
+    permissions:
+      contents: read
+    uses: ./.github/workflows/build-pixelflux-pcmflux-wheels.yaml
+    with:
+      pinned: true
+
+  wheel-smoke:
+    name: Smoke test the wheel
+    needs: [validate, wheel, capture-stack]
+    if: >-
+      ${{ !cancelled() && needs.wheel.result == 'success'
+          && contains(fromJSON('["success", "skipped"]'), needs.capture-stack.result) }}
+    permissions:
+      contents: read
+    uses: ./.github/workflows/smoke-wheel.yaml
+    with:
+      # What the smoke test proves installable is what the release ships: the
+      # capture stack this run fetched, or PyPI's copy of the same versions. A
+      # pin that is published in neither place fails here, which is the release
+      # being cut too early.
+      wheels_ready: ${{ inputs.capture_stack != 'pypi' }}
+      capture_stack_published: ${{ inputs.capture_stack == 'pypi' }}
+
+  images:
+    name: Build and publish multi-arch images
+    needs: [validate, wheel, wheel-smoke]
+    # A called workflow can only narrow the caller's token, so the GHCR push
+    # scope has to be granted here
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/images.yaml
+    with:
+      tag_prefix: ${{ needs.validate.outputs.version }}
+      floating_tags: ${{ needs.validate.outputs.latest == 'true' }}
+      wheel_artifact: selkies-wheel
+      capture_stack_published: ${{ inputs.capture_stack == 'pypi' }}
+
+  packages:
+    name: Build native packages
+    needs: [validate, wheel, wheel-smoke]
+    permissions:
+      contents: read
+    uses: ./.github/workflows/packages.yaml
+    with:
+      package_version: ${{ needs.validate.outputs.version }}
+      wheel_artifact: selkies-wheel
+      capture_stack_published: ${{ inputs.capture_stack == 'pypi' }}
+
+  draft-release:
+    name: Assemble draft release
+    needs: [validate, wheel, wheel-smoke, images, packages]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: "*"
+          path: release-artifacts/
+          merge-multiple: true
+      - name: Collect release files
+        run: |
+          set -e
+          mkdir -p release
+          # Drop the empty image-digest placeholder files (64-hex filenames);
+          # they only exist for the multi-arch manifest merge
+          find release-artifacts -type f -regextype posix-extended -regex '.*/[0-9a-f]{64}' -delete
+          # The capture stack rides inside the images and packages; its wheels
+          # stay on the pixelflux and pcmflux releases this run took them from
+          find release-artifacts -type f \( -name 'pixelflux-*.whl' -o -name 'pcmflux-*.whl' \) -delete
+          # Artifacts of the run rather than of the release: the build record
+          # docker/build-push-action uploads per image, and the conda package
+          # the AppImage is assembled from
+          find release-artifacts -type f \( -name '*.dockerbuild' -o -name '*.conda' \) -delete
+          find release-artifacts -type f -exec mv {} release/ \;
+          ls -la release/
+      # The run's latest and PyPI decisions ride ahead of the generated notes
+      # as the markers release-published.yaml reads, where they render as
+      # nothing
+      - name: Create draft release
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
+        with:
+          tag_name: ${{ needs.validate.outputs.version }}
+          name: ${{ needs.validate.outputs.version }}
+          # The tag is created when the draft is published, at this commit
+          # rather than at the default branch's head by then
+          target_commitish: ${{ github.sha }}
+          draft: true
+          prerelease: ${{ needs.validate.outputs.prerelease == 'true' }}
+          body: "<!-- selkies-release: latest=${{ needs.validate.outputs.latest }} --><!-- selkies-release: pypi=${{ needs.validate.outputs.pypi }} -->"
+          generate_release_notes: true
+          files: release/*

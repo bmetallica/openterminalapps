@@ -1,0 +1,134 @@
+---
+title: Usage
+description: Keyboard shortcuts, clipboard, file transfers, the microphone and webcam uplinks, and the command-line options and environment variables.
+---
+
+## Shortcuts
+
+**Fullscreen: `Control + Shift + F` or the Fullscreen Button**
+
+**Gaming Mode (fullscreen with the pointer and keyboard held): `Control + Shift + X` or the Gaming Mode Button**
+
+**Remote (Game) Cursor Lock: `Control + Shift + Left Click`**
+
+**Open Side Menu: `Control + Shift + M` or the Side Menu Button**
+
+**On-Screen Touch Gamepad: `Control + Shift + G`**
+
+Fullscreen mode is available with the shortcut `Control + Shift + F`, or by pressing the fullscreen button in the side menu. It leaves the pointer and the keyboard to the browser, so the side menu and its button stay usable, and `Escape` leaves it.
+
+Gaming mode, on `Control + Shift + X` or the gaming mode button, fullscreens the session and holds the pointer and the keyboard as well, so a game receives `Escape`, `Alt + Tab` and raw pointer motion instead of the browser. The dashboard folds away for it. The same chord leaves it, as does `Escape` held for at least two seconds, because a locked keyboard delivers a short press to the session instead. Holding the keyboard takes the Keyboard Lock API, which Chromium-based browsers offer and Firefox and Safari do not; Brave has it but its Shields block it by default as part of fingerprinting protection, so a single `Escape` leaves gaming mode there until the site's Shields allow the keyboard API. The client says so when it enters gaming mode without a keyboard lock. A game inside a nested `kwin_wayland` (the KDE image on the Wayland backend) turns with the mouse like any other: KWin makes the capture compositor's pointer absolute, so each locked delta is delivered through its `org_kde_kwin_fake_input` device instead, which KWin advertises while `KWIN_WAYLAND_NO_PERMISSION_CHECKS` is in its environment, as the KDE image sets it.
+
+The cursor can be locked into the web interface using `Control + Shift + Left Click` in web browsers supporting the Pointer Lock API. Press `Escape` to exit this remote cursor mode. This remote cursor capability is useful for most games or graphics applications where the cursor must be confined to the remote screen. The lock is the page's, the pointer the whole desktop's: locked movement moves the one remote pointer, bounded by the extended desktop rather than by the page's own display, so with a second display open it crosses onto that page's stream, and the cursor is drawn into whichever display's stream it stands on.
+
+Locked movement is relayed to the remote desktop as-is, so the only acceleration applied to it is your own machine's. The client asks the browser for raw mouse movement to leave that curve out, which is what games and 3D applications expect; browsers offer it on Windows, and refuse it on Linux and Android, where locked movement keeps the local acceleration curve. macOS offers it too but is not asked by default, because its curve is what carries a slow hand across the remote screen and the client has nothing to put in its place, which makes the pointer feel heavy. The **Raw pointer motion** toggle in the screen settings decides either way, on any platform; the choice is kept per browser, and `--raw-pointer-motion` sets the deployment's default or locks it.
+
+The side menu is available by clicking the small button on the right side of the interface, or by using the shortcut `Control + Shift + M`; gaming mode is the one mode that hides both.
+
+`Control + Shift + G` toggles the on-screen touch gamepad overlay (the [Universal Touch Gamepad](components/web-client.md#universal-touch-gamepad)), which is also available from the side menu.
+
+These chords are taken by the client before the session sees them, which collides with an application inside the session that binds the same ones. The shortcuts section of the side menu has a switch that hands every one of them to the session instead; the side menu's own buttons still reach each function, and pressing Escape three times still leaves gaming mode. `--keyboard-shortcuts` sets the starting position for every client and can be locked.
+
+## Clipboard
+
+Clipboard synchronization works in both directions and is supported across Chromium, Firefox, and Safari (a valid HTTPS context, or `localhost`, is still required by browsers).
+
+- **Paste into the session:** `Control + V` (`Command + V` on macOS) sends your local clipboard to the remote session.
+- **Copy from the session:** `Control + C` (`Command + C` on macOS) reads the remote session's current clipboard back to your browser. On Firefox and Safari the client requests the latest server clipboard and writes it once it arrives, falling back to a synchronous copy when the browser blocks the asynchronous clipboard API.
+
+Image (binary) clipboard contents can also be transferred when binary clipboard support is enabled (see `enable_binary_clipboard`). Larger contents are sent in multiple parts automatically.
+
+Formatted content keeps its formatting. A copy that carries markup travels with the plain text its source wrote for it, so pasting into a rich editor keeps the styling and pasting into a terminal or a plain field gets the text rather than a rendering of the markup. Content leaving the session keeps its formatting whatever else is set; sending formatted content from the browser reads the clipboard the same way images are read, so that direction follows `enable_binary_clipboard` and falls back to plain text when it is off.
+
+The side menu's clipboard section carries three switches. **Send to session** and **Receive from session** each turn one direction off for this browser, within whatever `--enable-clipboard` already allows; a direction the server refuses is not offered at all. **Seamless** is what makes the clipboard follow every copy on either side by itself. Turned off, nothing moves automatically and the clipboard box in that same section becomes the deliberate path in both directions, which suits a session whose content should not follow the user out of it by accident. `--clipboard-seamless` sets the starting position for every client and can be locked.
+
+Clipboard behavior is controlled by the server option `SELKIES_ENABLE_CLIPBOARD`/`--enable-clipboard`, which takes `true` (both directions), `in` (paste into session only), `out` (copy from session only), or `false`, plus `SELKIES_ENABLE_BINARY_CLIPBOARD`/`--enable-binary-clipboard` for the image clipboard. The client settings `clipboard_in_enabled` and `clipboard_out_enabled` are derived from that policy and can be toggled per browser within it.
+
+## File Transfers
+
+The side menu's files section uploads files into the session and browses the same directory for downloads. Both directions are on by default; `--file-transfers` (`SELKIES_FILE_TRANSFERS`) narrows them to `upload`, to `download`, or to `none`, and a read-only viewer is refused uploads whatever the setting says.
+
+`--file-manager-path` (`FILE_MANAGER_PATH`, default `~/Desktop`) is the directory both directions use, created at startup when missing. Transfers in either direction are paced against the video stream so a large one does not stall the session, measured end to end so a reverse proxy in front changes nothing; `--file-transfer-limit-mbps` adds a fixed cap on top for operators who want one.
+
+## Printing
+
+The session has a printer named **Selkies**, and a document printed to it opens in the browser's own print dialog, ready for whatever printer the browser can reach. Each printed document also appears in the side menu's printing section, which opens with the first one, where it can be printed again or saved as a PDF; its **Print automatically** switch is what opens the dialog on arrival, and off it leaves the documents in the list. A browser that does not show a PDF in a frame leaves every document in the list too, where **Save** hands over the file. No mobile browser prints a PDF from a frame, so on a phone or tablet each document also raises a notice with its name and an **Open** link that hands it to a new tab, where the browser's own viewer prints or saves it; the notice stays until the link is tapped or it is closed, the section there offers **Save** alone, and since a tab opens only from a tap, nothing prints automatically.
+
+Selkies runs the queue itself, as the session user, from a CUPS scheduler installed on the host: `cups-daemon` with the `cups-filters` chain, which turns whatever an application prints into a PDF. The scheduler keeps its state under the runtime directory, needs nothing under `/etc/cups` and no privilege, runs as a copy of the program so the confinement a distribution gives its system scheduler, written for the system's own directories, does not apply, and listens on `$XDG_RUNTIME_DIR/selkies-cups/cups.sock`; the containers point the session's `CUPS_SERVER` there, and a session started any other way sets that variable for its applications the way it sets `DISPLAY`. Without a scheduler on the host there is no queue, but a PDF placed in the spool by any other means is handed over the same way.
+
+`--printing-enabled=false` (`SELKIES_PRINTING_ENABLED`) turns the feature off: no queue, no documents handed over. `--print-spool-path` (`SELKIES_PRINT_SPOOL_PATH`, default `~/.local/state/selkies/print`) is the directory the queue writes finished jobs into as PDFs. A document leaves the spool once the page has taken it, so the spool holds what has not reached a browser yet, and a page that connects later gets it then. Documents go to the page that holds the session; a shared viewer receives none.
+
+## Audit Trail
+
+`--audit-webhook-url` (`SELKIES_AUDIT_WEBHOOK_URL`) POSTs one JSON object to a collector for every clipboard transfer, file upload, file download and printed document handed over, every page that connects and leaves, and every recording, for deployments that have to produce a record of what moved. Metadata only: the content is never sent, and neither is anything identifying the client, since Selkies has no first-class user of its own. Nothing is sent without a URL. `--audit-webhook-token` adds an `Authorization: Bearer` header a proxy in front of the collector can check, and `--audit-webhook-timeout` bounds one POST; the URL is used as given, so a collector anywhere but this host wants `https://`.
+
+| `event` | Fields | Recorded when |
+| --- | --- | --- |
+| `clipboard.send` | `mime_type`, `size_bytes` | the session's clipboard goes out to the clients |
+| `clipboard.receive` | `mime_type`, `size_bytes`, `multipart` | a client's clipboard is written into the session |
+| `file.upload.end` | `filename`, `size_bytes` | an upload lands in the file-manager directory |
+| `file.upload.error` | `filename`, `error` | an upload is refused or fails, `filename` as the client asked for it |
+| `file.download` | `filename`, `size_bytes`, `partial` | a file went out of the file-manager directory whole, or the range of it a client asked for (`partial`), with the bytes served; a download the client stopped early is not recorded |
+| `print.document` | `filename`, `size_bytes`, `partial` | a printed document went out of the print spool to a page, on the same terms as `file.download` |
+| `session.connect` | `transport`, `role`, `slot` | a page's connection is accepted on either transport |
+| `session.disconnect` | `transport`, `role`, `slot`, `duration_s` | that connection ends, however it ends |
+| `recording.start` | `filename` | a recording starts through the operator API |
+| `recording.stop` | `filename`, `size_bytes`, `duration_s`, `frames` | it is stopped and the file is whole |
+| `capture.demand` | `subject`, `action`, `reader` | under a `demand` webcam or microphone policy, a page is asked for (`ask`) or released from (`release`) its `webcam` or `microphone`, with what the sink named as reading the device |
+
+Every object also carries `ts`, an RFC 3339 UTC timestamp with milliseconds taken when the transfer happened, and both transports emit the same objects. An event costs the session an enqueue and nothing else: one task delivers the queue in order over a single keep-alive connection, so a collector that is slow or down never paces the stream. The queue holds 1024 events and drops what overflows, a POST that fails drops its event with no retry, and each outage is logged once.
+
+## Session Sharing
+
+The side menu's sharing section hands out links to the running session. Each one is the page's own address with a fragment on the end, and it carries no credential of its own — whatever already guards the page (HTTP Basic authentication, a reverse proxy) guards the link too, so treat a copied link as one:
+
+| Link | Fragment | What the holder can do |
+| --- | --- | --- |
+| Viewer | `#shared` | watch the session; no keyboard, mouse, or gamepad |
+| Player 2, 3, and 4 | `#player2`, `#player3`, `#player4` | watch, and drive the gamepad in that slot |
+
+Input authority is enforced on the server rather than in the page, so a modified client cannot exceed its role: a viewer's keyboard, mouse, and settings messages are refused whatever it sends, and its gamepad messages are refused unless they drive the slot its own link carries — a `#shared` viewer holds none and drives no gamepad at all.
+
+`--enable-sharing=false` (`SELKIES_ENABLE_SHARING`) turns the feature off, and one page then holds the session: a second one takes it over instead of joining. `--enable-shared` and `--enable-player2` through `--enable-player4` drop individual links, and `--ui-sidebar-show-sharing=false` hides the section while leaving the links working.
+
+These fragments apply when the server has no master token. Under [Secure Mode](secure-mode.md) a client presents a provisioned session token that carries its own role and gamepad slot, and the sharing fragments are ignored.
+
+## Operator API
+
+Every control endpoint lives under `/api`, behind the same credentials as the rest of the API: the login or session token a page holds, or the master token for a deployment that automates the session from outside. A change to the session is refused to view-only credentials; reading is not.
+
+| Endpoint | What it does |
+| --- | --- |
+| `GET /api/sessions` | The pages connected to the active transport: `id`, `transport`, `role`, `slot`, `display`, `connected_at`, and `rtt_ms`, the round trip the page's own reports carry, `null` before the first one |
+| `DELETE /api/sessions/<id>` | Closes that page's connection |
+| `GET /api/recording` | The recording under way, or the last one: `active`, `path`, `frames`, `audio_frames`, `bytes`, `duration_s`, `width`, `height`, and `error` when it failed |
+| `POST /api/recording` | Starts a recording. A JSON body may name a `path`; a relative one lands in the file-manager directory, and no body at all names a timestamped file there, where the files section then offers it for download. One recording at a time: a second start is a conflict |
+| `DELETE /api/recording` | Stops it and reports the finished file |
+| `GET /api/screenshot?display=<name>` | A PNG of that display with the cursor drawn in, the primary when unnamed. On X11 the root, which holds every display |
+
+The recording is the one pixelflux makes: an H.264 fragmented MP4, playable from the first frame, with the session's audio as an Opus track when audio is on and pcmflux is installed. On X11 the video is a capture of its own, so it follows the desktop rather than a client's link; on Wayland it taps the live stream of the output. The audio is a pcmflux capture of the session's sink that runs for the recorder alone and serves its packets as an Ogg Opus stream over a Unix socket, which pixelflux muxes as they are: nothing is decoded, re-encoded, or handed through Python, and a client's audio toggle does not affect it. Its frame rate, bitrate and keyframe interval come from pixelflux's `PIXELFLUX_RECORD_FPS`, `PIXELFLUX_RECORD_BITRATE` and `PIXELFLUX_RECORD_KEYFRAME_S`, thirty frames a second and a keyframe every two seconds by default. The audit trail records every connection and recording, so a webhook collector needs no polling.
+
+## Microphone and Webcam
+
+Both send a local device into the session, are off by default, and need a secure context (HTTPS, or `localhost`) before the browser hands the device over. Each is toggled from the side menu while the session runs.
+
+- **Microphone** (`--microphone-enabled` / `SELKIES_MICROPHONE_ENABLED`) publishes the browser's microphone as an ordinary PulseAudio source in the session, so applications record it like any capture device. It rides the audio path, so `--audio-enabled=false` disables it as well.
+- **Webcam** (`--webcam-enabled` / `SELKIES_WEBCAM_ENABLED`) publishes the browser's camera as a V4L2 capture device. How applications reach it, and what each of its sinks needs, is in [V4L2 Interposer](components/v4l2-interposer.md).
+
+## What a Session Starts With
+
+A session starts with video, audio, and gamepad input on, and the microphone and webcam off; each is then toggled from the side menu. The `--video-on-start`, `--audio-on-start`, `--microphone-on-start`, `--webcam-on-start`, and `--gamepad-on-start` settings (`SELKIES_VIDEO_ON_START` and so on) change that start state for a session's primary page: an image that should open silent sets `--audio-on-start=false`, one that should ask for the camera at once sets `--webcam-on-start=true` alongside `--webcam-enabled=true`. Whatever starts off is not captured at all until it is turned on, on either transport: no screen or audio capture runs for a page that does not receive it, a microphone or webcam is not asked for, and gamepads are not polled. A toggle made during the session wins over the start state, a shared viewer and a second display page always start their stream, and the gamepad toggle's choice is remembered by the browser.
+
+`--webcam-on-start=demand` and `--microphone-on-start=demand` replace that start state with the session's own use of the device: the browser is asked for the camera while an application holds the virtual V4L2 device open, and for the microphone while one records from the virtual source, and released a few seconds after the last one lets go, so the light beside the user's camera follows the desktop rather than the session. A toggle made during the session still wins, a shared viewer is never asked, and only one page is asked at a time. Neither policy defaults to it because any process on the desktop can then cause a permission prompt; every ask and release is logged with the reader's name and sent to the audit webhook as `capture.demand`. What the sinks report is an open handle rather than an active stream, so an application that keeps the camera open or holds a live recording stream while muted in software keeps the device asked for.
+
+## Command-Line Options and Environment Variables
+
+Use `selkies --help` for all command-line options, and `selkies --version` to print the installed version.
+
+Every command-line option has a matching environment variable, formed by capitalizing the option and prepending `SELKIES_` (such as `SELKIES_VIDEO_BITRATE` for `--video-bitrate`). The [Settings Reference](settings.md) lists every setting with its flag, environment variables, type, and default; it is generated from [`src/selkies/settings.py`](https://github.com/selkies-project/selkies/tree/main/src/selkies/settings.py), where the settings are defined.
+
+`SELKIES_VIDEO_BITRATE` is in **kilobits per second (kbps)**, range `100-1000000`, default `8000` (8 Mbps); no unit multiplier is applied, e.g. `4000` is 4 Mbps.
+
+## Configuring Encoders, Display Capture, or Transport Protocols
+
+[Components](components/index.md#encoders) lists every encoder, capture backend, audio path, and transport the runtime implements, with the setting that selects each one, and the ladder a session steps down when a codec cannot be served. The encoder, the bitrates, the frame rate, and the UI scaling are the client's to choose from the dashboard among what the server allows; a deployment sets `SELKIES_ENCODER` only to narrow that menu, and a single value locks it. The [Settings Reference](settings.md) groups every setting by what it governs, the stream settings first.

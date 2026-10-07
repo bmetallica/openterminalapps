@@ -1,0 +1,18 @@
+{
+  "a": {
+    "type": "button",
+    "index": 0
+  },
+  "b": {
+    "type": "button",
+    "index": 1
+  },
+  "rightstick": {
+    "type": "button",
+    "index": 4
+  },
+  "start": {
+    "type": "button",
+    "index": 2
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "back": {
+    "type": "button",
+    "index": 0
+  },
+  "dpdown": {
+    "type": "button",
+    "index": 11
+  },
+  "dpleft": {
+    "type": "button",
+    "index": 9
+  },
+  "dpright": {
+    "type": "button",
+    "index": 10
+  },
+  "dpup": {
+    "type": "button",
+    "index": 8
+  },
+  "leftshoulder": {
+    "type": "button",
+    "index": 5
+  },
+  "lefttrigger": {
+    "type": "button",
+    "index": 7
+  },
+  "leftx": {
+    "type": "axis",
+    "index": 0
+  },
+  "lefty": {
+    "type": "axis",
+    "index": 1
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "a": {
+    "type": "button",
+    "index": 2
+  },
+  "b": {
+    "type": "button",
+    "index": 1
+  },
+  "back": {
+    "type": "button",
+    "index": 8
+  },
+  "dpdown": {
+    "type": "axis",
+    "index": 0
+  },
+  "dpleft": {
+    "type": "axis",
+    "index": 1
+  },
+  "dpright": {
+    "type": "axis",
+    "index": 2
+  },
+  "dpup": {
+    "type": "axis",
+    "index": 4
+  },
+  "start": {
+    "type": "button",
+    "index": 9
+  }
+}

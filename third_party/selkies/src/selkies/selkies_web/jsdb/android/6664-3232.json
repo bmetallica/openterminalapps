@@ -1,0 +1,34 @@
+{
+  "a": {
+    "type": "button",
+    "index": 1
+  },
+  "b": {
+    "type": "button",
+    "index": 19
+  },
+  "back": {
+    "type": "button",
+    "index": 17
+  },
+  "dpdown": {
+    "type": "button",
+    "index": 12
+  },
+  "dpleft": {
+    "type": "button",
+    "index": 13
+  },
+  "dpright": {
+    "type": "button",
+    "index": 14
+  },
+  "dpup": {
+    "type": "button",
+    "index": 11
+  },
+  "start": {
+    "type": "button",
+    "index": 18
+  }
+}

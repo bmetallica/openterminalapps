@@ -1,0 +1,423 @@
+name: Images
+
+# Multi-architecture (x86_64 + aarch64) container images, published to ghcr.io.
+# Follows the llama.cpp docker build procedure: each architecture builds on a
+# native runner (no QEMU), pushes by digest, and a merge job assembles the
+# multi-arch manifest.
+
+# Triggered by ci.yaml on pushes to main and by release.yaml for releases;
+# can also be run standalone via the Actions tab, from main alone since the
+# images leave the run, in which case it builds the wheel itself unless
+# `wheel_artifact` names an existing artifact.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag_prefix:
+        description: Tag prefix for the images
+        type: string
+        default: main
+      floating_tags:
+        description: Also move the floating `latest` tags onto this build
+        type: boolean
+        default: true
+      wheel_artifact:
+        description: Artifact name of a prebuilt wheel (skips the wheel build when set)
+        type: string
+        default: ""
+      capture_stack_published:
+        description: Resolve the pinned pixelflux/pcmflux from PyPI, an explicit choice for a build made after they were published there
+        type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      tag_prefix:
+        description: Tag prefix for the images (e.g. 1.2.3 or latest)
+        type: string
+        default: main
+      floating_tags:
+        description: Also move the floating `latest` tags onto this build
+        type: boolean
+        default: true
+      wheel_artifact:
+        description: Artifact name of a prebuilt wheel (skips the wheel build when set)
+        type: string
+        default: ""
+      capture_stack_published:
+        description: Resolve the pinned pixelflux/pcmflux from PyPI, an explicit choice for a build made after they were published there
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY_NAMESPACE: ghcr.io/selkies-project/selkies
+  BASE_IMAGE_NAME: ghcr.io/selkies-project/selkies/base
+  IMAGE_NAME: ghcr.io/selkies-project/selkies/desktop
+  # ghcr answers a secondary rate limit with 403 on the push itself. buildx
+  # reports that as a build failure rather than a response this can read a
+  # Retry-After from, so the pause is the minute GitHub asks for when it names
+  # no delay of its own.
+  PUSH_RETRY_DELAY: "60"
+
+jobs:
+  wheel:
+    name: Build wheel for the images
+    if: ${{ inputs.wheel_artifact == '' }}
+    permissions:
+      contents: read
+    uses: ./.github/workflows/build-wheel.yaml
+
+  build:
+    name: ${{ matrix.flavor.name }} (${{ matrix.arch.name }})
+    needs: wheel
+    if: ${{ github.ref == 'refs/heads/main' && !cancelled() && contains(fromJSON('["success", "skipped"]'), needs.wheel.result) }}
+    runs-on: ${{ matrix.arch.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        flavor:
+          - name: ubuntu26.04
+            image: ubuntu
+            release: "26.04"
+          - name: debiantrixie
+            image: debian
+            release: trixie
+        arch:
+          - name: amd64
+            platform: linux/amd64
+            runner: ubuntu-latest
+          - name: arm64
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v7
+      - name: Free disk space
+        # The tool cache is kept: setup-python and setup-node resolve from it
+        uses: endersonmenezes/free-disk-space@2a22f8c59cae9cddae7194b33e6b92d023b2b4b8 # v4
+        with:
+          remove_android: true
+          remove_dotnet: true
+          remove_haskell: true
+          remove_tool_cache: false
+          remove_packages: azure-cli google-cloud-cli microsoft-edge-stable google-chrome-stable firefox postgresql* temurin-* mysql* mongodb*
+          remove_packages_one_command: true
+          remove_folders: /usr/share/swift /usr/share/miniconda /usr/share/az* /usr/local/lib/node_modules /usr/local/share/chromium /usr/local/share/powershell /usr/local/julia /usr/local/aws-cli /usr/local/aws-sam-cli /usr/share/gradle /usr/local/share/vcpkg
+      - name: Download the wheel
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ inputs.wheel_artifact || 'selkies-wheel' }}
+          path: dist/
+      # The pixelflux/pcmflux wheels the orchestrating run resolved: each
+      # project's main HEAD, or the pinned release at a release. Absence is
+      # tolerated (standalone dispatch): the Dockerfile takes what is missing
+      # from the GitHub releases, and the index only where those have nothing
+      - name: Download the pixelflux wheels
+        if: ${{ !inputs.capture_stack_published }}
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          pattern: pixelflux-wheels-*
+          path: dist/
+          merge-multiple: true
+      - name: Download the pcmflux wheels
+        if: ${{ !inputs.capture_stack_published }}
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          pattern: pcmflux-wheels-*
+          path: dist/
+          merge-multiple: true
+      - name: Check the capture stack this build carries
+        env:
+          PUBLISHED: ${{ inputs.capture_stack_published }}
+        run: |
+          if [ "${PUBLISHED}" = "true" ]; then
+            echo "capture stack: the pinned releases, resolved from PyPI"
+            exit 0
+          fi
+          for project in pixelflux pcmflux; do
+            # What ships has to be the capture stack this run resolved, which
+            # exists nowhere else, so the wheels are required rather than
+            # preferred: the orchestrating workflow puts them here before
+            # calling, and a standalone dispatch has to supply them the same way.
+            if ! ls "dist/${project}"-*.whl > /dev/null 2>&1; then
+              echo "::error::No ${project} wheel in dist/; run this through ci.yaml or release.yaml, which resolve the capture stack first"
+              exit 1
+            fi
+            echo "${project}: wheel from this run"
+          done
+      - name: Prepare wheels directory
+        run: |
+          set -e
+          # .gitignore keeps addons/base/wheels/*.whl out of git
+          cp dist/*.whl addons/base/wheels/
+          ls -la addons/base/wheels/
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # The session without a desktop, which the desktop image is then built
+      # on. Both are built in this one job so the desktop image can name the base it was
+      # just given by digest: an exact, single-architecture reference, months
+      # before any manifest for it exists.
+      - name: Build and push the base by digest
+        id: base
+        uses: ./.github/actions/build-push
+        with:
+          context: .
+          file: addons/base/Dockerfile
+          platforms: ${{ matrix.arch.platform }}
+          build-args: |
+            DISTRIB_IMAGE=${{ matrix.flavor.image }}
+            DISTRIB_RELEASE=${{ matrix.flavor.release }}
+          outputs: type=image,"name=${{ env.BASE_IMAGE_NAME }}",push-by-digest=true,name-canonical=true,push=true
+          cache-scope: base-${{ matrix.flavor.name }}-${{ matrix.arch.name }}
+          retry-delay: ${{ env.PUSH_RETRY_DELAY }}
+      - name: Build and push the desktop image by digest
+        id: build
+        uses: ./.github/actions/build-push
+        with:
+          context: .
+          file: addons/desktop/Dockerfile
+          platforms: ${{ matrix.arch.platform }}
+          build-args: |
+            BASE_IMAGE=${{ env.BASE_IMAGE_NAME }}@${{ steps.base.outputs.digest }}
+          outputs: type=image,"name=${{ env.IMAGE_NAME }}",push-by-digest=true,name-canonical=true,push=true
+          cache-scope: desktop-${{ matrix.flavor.name }}-${{ matrix.arch.name }}
+          retry-delay: ${{ env.PUSH_RETRY_DELAY }}
+      - name: Export digests
+        env:
+          BASE_DIGEST: ${{ steps.base.outputs.digest }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir -p /tmp/digests/base /tmp/digests/desktop
+          touch "/tmp/digests/base/${BASE_DIGEST#sha256:}"
+          touch "/tmp/digests/desktop/${DIGEST#sha256:}"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: digest-base-${{ matrix.flavor.name }}-${{ matrix.arch.name }}
+          path: /tmp/digests/base/*
+          if-no-files-found: error
+          retention-days: 1
+      - uses: actions/upload-artifact@v7
+        with:
+          name: digest-${{ matrix.flavor.name }}-${{ matrix.arch.name }}
+          path: /tmp/digests/desktop/*
+          if-no-files-found: error
+          retention-days: 1
+      # What the images were built from and hold, for the release to attach.
+      # The distribution image is a moving tag, so its digest is read from the
+      # provenance the push attached; each package list is read out of the
+      # builder's cache rather than a pull of the image it describes.
+      - name: Record what the images were built from
+        env:
+          TAG_PREFIX: ${{ inputs.tag_prefix }}
+          FLAVOR: ${{ matrix.flavor.name }}
+          ARCH: ${{ matrix.arch.name }}
+          PLATFORM: ${{ matrix.arch.platform }}
+          BASE_DIGEST: ${{ steps.base.outputs.digest }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -e
+          out="selkies-${TAG_PREFIX}-images-${FLAVOR}-${ARCH}.txt"
+          {
+            echo "# selkies ${TAG_PREFIX} ${FLAVOR} ${PLATFORM}: the images this build pushed, what they were built from, and the packages each holds"
+            echo "base ${BASE_IMAGE_NAME}@${BASE_DIGEST}"
+            echo "desktop ${IMAGE_NAME}@${DIGEST}"
+            docker buildx imagetools inspect "${BASE_IMAGE_NAME}@${BASE_DIGEST}" --format '{{json .Provenance}}' \
+              | jq -r '.. | objects | select(has("buildDefinition")) | .buildDefinition.resolvedDependencies[] | select(.uri | startswith("pkg:docker/")) | "distribution " + (.uri | capture("^pkg:docker/(?<name>[^@?]+)@(?<tag>[^?]+)") | "\(.name):\(.tag)") + "@sha256:" + .digest.sha256' \
+              | sort -u | grep .
+          } > "${out}"
+          mkdir -p /tmp/empty
+          for image in base desktop; do
+            case "${image}" in
+              base) ref="${BASE_IMAGE_NAME}@${BASE_DIGEST}" ;;
+              desktop) ref="${IMAGE_NAME}@${DIGEST}" ;;
+            esac
+            printf 'FROM %s\nFROM scratch\nCOPY --from=0 /var/lib/dpkg/status /status\n' "${ref}" \
+              | docker buildx build --platform "${PLATFORM}" --output "type=local,dest=/tmp/dpkg-${image}" -f - /tmp/empty
+            { echo; echo "# ${image} packages"; dpkg-query --admindir="/tmp/dpkg-${image}" -W -f '${binary:Package}=${Version}\n'; } >> "${out}"
+          done
+          wc -l "${out}"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: images-${{ matrix.flavor.name }}-${{ matrix.arch.name }}
+          path: selkies-*-images-*.txt
+          if-no-files-found: error
+
+  merge:
+    name: Merge base and desktop manifests (${{ matrix.flavor }})
+    needs: build
+    # Stated rather than left to the default: `wheel` is skipped whenever the
+    # caller supplies the artifact, and the images stay untagged if that skip
+    # carries down the chain past `build`.
+    if: ${{ !cancelled() && needs.build.result == 'success' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        flavor: [ubuntu26.04, debiantrixie]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Download the base digests for this flavor
+        uses: actions/download-artifact@v8
+        with:
+          pattern: digest-base-${{ matrix.flavor }}-*
+          path: /tmp/digests/base
+          merge-multiple: true
+      - name: Download the desktop digests for this flavor
+        uses: actions/download-artifact@v8
+        with:
+          pattern: digest-${{ matrix.flavor }}-*
+          path: /tmp/digests/desktop
+          merge-multiple: true
+      - name: Create and push the multi-arch manifests
+        env:
+          TAG_PREFIX: ${{ inputs.tag_prefix }}
+          FLOATING_TAGS: ${{ inputs.floating_tags }}
+          FLAVOR: ${{ matrix.flavor }}
+        run: |
+          set -e
+          # One manifest per image, from the one empty file per pushed digest
+          # each build job left behind, named after that digest
+          publish() {
+            local image="$1" dir="$2"
+            local tags=("-t" "${image}:${TAG_PREFIX}-${FLAVOR}")
+            if [ "${TAG_PREFIX}" != "main" ] && [ "${FLOATING_TAGS}" = "true" ]; then
+              # Release builds also carry the floating `latest-*` tags, unless
+              # the caller holds them back
+              tags+=("-t" "${image}:latest-${FLAVOR}")
+            fi
+            local sources=()
+            for digest in "${dir}"/*; do sources+=("${image}@sha256:$(basename "${digest}")"); done
+            "${GITHUB_WORKSPACE}/scripts/ci/retry.sh" 3 "${PUSH_RETRY_DELAY}" \
+              docker buildx imagetools create "${tags[@]}" "${sources[@]}"
+            echo "pushed: ${tags[*]}"
+          }
+          publish "${BASE_IMAGE_NAME}" /tmp/digests/base
+          publish "${IMAGE_NAME}" /tmp/digests/desktop
+
+  addons:
+    if: ${{ github.ref == 'refs/heads/main' }}
+    name: ${{ matrix.addon }} (${{ matrix.arch.name }})
+    # The TURN server and the TURN REST credential service documented in
+    # docs/components/index.md; independent of the wheel
+    runs-on: ${{ matrix.arch.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        addon: [coturn, turn-rest]
+        arch:
+          - name: amd64
+            platform: linux/amd64
+            runner: ubuntu-latest
+          - name: arm64
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push by digest
+        id: build
+        uses: ./.github/actions/build-push
+        with:
+          context: addons/${{ matrix.addon }}
+          platforms: ${{ matrix.arch.platform }}
+          outputs: type=image,"name=${{ env.REGISTRY_NAMESPACE }}/${{ matrix.addon }}",push-by-digest=true,name-canonical=true,push=true
+          cache-scope: ${{ matrix.addon }}-${{ matrix.arch.name }}
+          retry-delay: ${{ env.PUSH_RETRY_DELAY }}
+      - name: Export digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir -p /tmp/digests
+          touch "/tmp/digests/${DIGEST#sha256:}"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: digest-${{ matrix.addon }}-${{ matrix.arch.name }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  addons-merge:
+    name: Merge multi-arch manifests (${{ matrix.addon }})
+    needs: addons
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        addon: [coturn, turn-rest]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Download digests for this addon
+        uses: actions/download-artifact@v8
+        with:
+          pattern: digest-${{ matrix.addon }}-*
+          path: /tmp/digests
+          merge-multiple: true
+      - name: Create and push the multi-arch manifest
+        working-directory: /tmp/digests
+        env:
+          TAG_PREFIX: ${{ inputs.tag_prefix }}
+          FLOATING_TAGS: ${{ inputs.floating_tags }}
+          ADDON: ${{ matrix.addon }}
+        run: |
+          set -e
+          IMAGE="${REGISTRY_NAMESPACE}/${ADDON}"
+          IMGTAGS=("-t" "${IMAGE}:${TAG_PREFIX}")
+          if [ "${TAG_PREFIX}" != "main" ] && [ "${FLOATING_TAGS}" = "true" ]; then
+            # Release builds also carry the floating `latest` tag, unless the
+            # caller holds it back
+            IMGTAGS+=("-t" "${IMAGE}:latest")
+          fi
+          # One empty file per pushed digest, named after it
+          SOURCES=()
+          for digest in *; do SOURCES+=("${IMAGE}@sha256:${digest}"); done
+          "${GITHUB_WORKSPACE}/scripts/ci/retry.sh" 3 "${PUSH_RETRY_DELAY}" \
+            docker buildx imagetools create "${IMGTAGS[@]}" "${SOURCES[@]}"
+          echo "pushed: ${IMGTAGS[*]}"
+
+  cleanup:
+    name: Prune untagged images
+    needs: [merge, addons-merge]
+    # Each push moves the `main-*` tags onto new manifests, and the ones they
+    # pointed at before stay in the registry untagged, platform and attestation
+    # children included. Nothing else ever removes them.
+    if: ${{ github.ref == 'refs/heads/main' && !cancelled() }}
+    runs-on: ubuntu-latest
+    # The action is not safe to run against a package twice at once, and a
+    # release build can overlap a push build
+    concurrency:
+      group: cleanup-images
+    # A prune that hits a rate limit must not fail the publish
+    continue-on-error: true
+    steps:
+      - uses: dataaxiom/ghcr-cleanup-action@d52806a0dc70b430571a37da1fde39733ffd640f # v1
+        with:
+          packages: selkies/base,selkies/desktop,selkies/coturn,selkies/turn-rest
+          delete-untagged: true
+          # A build in flight has its platform images untagged until its
+          # manifest lands, so the window stays well clear of a publish
+          older-than: 1 day

@@ -1,0 +1,21 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+# Maintainer: Selkies Project <https://github.com/selkies-project/selkies>
+pkgname=selkies
+pkgver=0.0.0
+pkgrel=0
+pkgdesc="Low-latency HTML5 remote desktop streaming (WebSocket and WebRTC)"
+url="https://github.com/selkies-project/selkies"
+arch="all"
+license="MPL-2.0"
+depends="python3 libpulse libxcb libxkbcommon libx11 libxext libxfixes libva libdrm libice libsm mesa-gbm mesa-egl wayland-libs-server glib pixman"
+# The payload (/opt/selkies venv staged by infra/packaging/apk.sh) is packed here.
+source=""
+# !fhs: the venv is self-contained under /opt, which abuild's FHS check rejects.
+options="!check !fhs"
+package() {
+    # abuild removes $pkgdir before package() and leaves recreating it to us
+    mkdir -p "$pkgdir"
+    cp -a /pkg-root/. "$pkgdir"/
+}

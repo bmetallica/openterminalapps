@@ -1,0 +1,188 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
+import React from "react";
+import { t } from "@/i18n";
+import { isMobileClient } from "@/utils";
+
+/**
+ * The floating, draggable touch-gamepad toggle for every client that is not
+ * the primary controller: the `#player2` to `#player4` and `#shared` hashes,
+ * which render no dashboard, and a token-authenticated viewer, whose menu
+ * DashboardOverlay withdraws. Uncontrolled it drives the touch overlay with
+ * the same `TOUCH_GAMEPAD_SETUP` and `TOUCH_GAMEPAD_VISIBILITY` messages
+ * DashboardOverlay posts on the primary display; controlled, the overlay
+ * keeps that state so the Ctrl+Shift+G hotkey and the button agree.
+ * @module
+ */
+
+interface PlayerGamepadButtonProps {
+    /** Render only on a mobile or touch-detected client. */
+    touchOnly?: boolean;
+    /** Overlay state when controlled by the host. */
+    isActive?: boolean;
+    /** Host toggle, replacing the internal one. */
+    onToggle?: () => void;
+}
+
+const TOUCH_GAMEPAD_HOST_DIV_ID = "touch-gamepad-host";
+/** Pointer travel in pixels before a press counts as a drag rather than a click. */
+const DRAG_THRESHOLD = 10;
+
+const GamepadIcon = () => (
+    <svg viewBox="0 0 24 24" fill="currentColor" width="28" height="28">
+        <path d="M15 7.5V2H9v5.5l3 3 3-3zM7.5 9H2v6h5.5l3-3-3-3zM9 16.5V22h6v-5.5l-3-3-3 3zM16.5 9l-3 3 3 3H22V9h-5.5z" />
+    </svg>
+);
+
+/**
+ * Renders the toggle. The player slots exist to contribute gamepad input, so
+ * their toggle is reachable on any device; a shared viewer only sees it once
+ * the client looks like a touch device (`touchOnly`: a mobile user agent or
+ * a first `touchstart`), the same gate the top menu applies to its touch
+ * entries. The title names the action a click performs, with the same
+ * wording as the classic sidebar's touch-gamepad button.
+ * @param touchOnly Render only on a mobile or touch-detected client.
+ * @param isActive Overlay state when controlled by the host.
+ * @param onToggle Host toggle, replacing the internal one.
+ */
+export default function PlayerGamepadButton({ touchOnly = false, isActive, onToggle }: PlayerGamepadButtonProps) {
+    const [ownActive, setOwnActive] = React.useState(false);
+    const [isTouchGamepadSetup, setIsTouchGamepadSetup] = React.useState(false);
+    const [hasDetectedTouch, setHasDetectedTouch] = React.useState(isMobileClient);
+    const isControlled = typeof onToggle === "function";
+    const isTouchGamepadActive = isControlled ? !!isActive : ownActive;
+
+    React.useEffect(() => {
+        if (hasDetectedTouch) return undefined;
+        const detectTouch = () => setHasDetectedTouch(true);
+        window.addEventListener("touchstart", detectTouch, { once: true, passive: true });
+        return () => window.removeEventListener("touchstart", detectTouch);
+    }, [hasDetectedTouch]);
+
+    const [buttonPosition, setButtonPosition] = React.useState({ bottom: 20, right: 20 });
+    const dragInfo = React.useRef({
+        isDragging: false,
+        hasDragged: false,
+        pointerId: null as number | null,
+        startX: 0,
+        startY: 0,
+        initialBottom: 0,
+        initialRight: 0,
+    });
+
+    const handleToggleTouchGamepad = React.useCallback(() => {
+        if (isControlled) {
+            onToggle();
+            return;
+        }
+        const newActiveState = !isTouchGamepadActive;
+        setOwnActive(newActiveState);
+
+        if (newActiveState && !isTouchGamepadSetup) {
+            window.postMessage({
+                type: "TOUCH_GAMEPAD_SETUP",
+                payload: { targetDivId: TOUCH_GAMEPAD_HOST_DIV_ID, visible: true },
+            }, window.location.origin);
+            setIsTouchGamepadSetup(true);
+        } else if (isTouchGamepadSetup) {
+            window.postMessage({
+                type: "TOUCH_GAMEPAD_VISIBILITY",
+                payload: { visible: newActiveState, targetDivId: TOUCH_GAMEPAD_HOST_DIV_ID },
+            }, window.location.origin);
+        }
+    }, [isControlled, onToggle, isTouchGamepadActive, isTouchGamepadSetup]);
+
+    const handlePointerDown = (e: React.PointerEvent) => {
+        dragInfo.current = {
+            isDragging: true,
+            hasDragged: false,
+            pointerId: e.pointerId,
+            startX: e.clientX,
+            startY: e.clientY,
+            initialBottom: buttonPosition.bottom,
+            initialRight: buttonPosition.right,
+        };
+        e.currentTarget.setPointerCapture(e.pointerId);
+    };
+
+    const handlePointerMove = (e: React.PointerEvent) => {
+        if (!dragInfo.current.isDragging) return;
+
+        const dx = e.clientX - dragInfo.current.startX;
+        const dy = e.clientY - dragInfo.current.startY;
+
+        if (!dragInfo.current.hasDragged && (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD)) {
+            dragInfo.current.hasDragged = true;
+        }
+
+        if (dragInfo.current.hasDragged) {
+            setButtonPosition({
+                bottom: dragInfo.current.initialBottom - dy,
+                right: dragInfo.current.initialRight - dx,
+            });
+        }
+    };
+
+    const handlePointerUp = (e: React.PointerEvent) => {
+        if (dragInfo.current.pointerId !== null) {
+            e.currentTarget.releasePointerCapture(dragInfo.current.pointerId);
+        }
+        dragInfo.current.isDragging = false;
+        dragInfo.current.pointerId = null;
+    };
+
+    const onButtonClick = (e: React.MouseEvent) => {
+        // A drag that ends on the button must not toggle the gamepad.
+        if (dragInfo.current.hasDragged) {
+            e.preventDefault();
+            e.stopPropagation();
+            dragInfo.current.hasDragged = false;
+            return;
+        }
+        handleToggleTouchGamepad();
+    };
+
+    if (touchOnly && !hasDetectedTouch) return null;
+
+    const title = t(isTouchGamepadActive
+        ? "sections.gamepads.touchDisableTitle"
+        : "sections.gamepads.touchEnableTitle");
+
+    return (
+        <button
+            className={`player-gamepad-button ${isTouchGamepadActive ? "active" : ""}`}
+            onClick={onButtonClick}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerUp}
+            style={{
+                position: 'fixed',
+                right: `${buttonPosition.right}px`,
+                bottom: `${buttonPosition.bottom}px`,
+                touchAction: 'none',
+                zIndex: 10000,
+                width: '60px',
+                height: '60px',
+                borderRadius: '50%',
+                backgroundColor: 'rgba(0, 0, 0, 0.6)',
+                border: '2px solid rgba(255, 255, 255, 0.7)',
+                color: 'white',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                cursor: 'pointer',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+                transition: 'background-color 0.2s ease-in-out',
+            }}
+            title={title}
+            aria-label={title}
+        >
+            <GamepadIcon />
+        </button>
+    );
+}

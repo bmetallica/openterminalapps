@@ -1,0 +1,18 @@
+{
+  "leftx": {
+    "type": "axis",
+    "index": 0
+  },
+  "lefty": {
+    "type": "axis",
+    "index": 1
+  },
+  "rightx": {
+    "type": "axis",
+    "index": 5
+  },
+  "righty": {
+    "type": "axis",
+    "index": 2
+  }
+}

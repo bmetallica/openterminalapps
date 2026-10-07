@@ -1,0 +1,46 @@
+{
+  "a": {
+    "type": "button",
+    "index": 1
+  },
+  "b": {
+    "type": "button",
+    "index": 0
+  },
+  "back": {
+    "type": "button",
+    "index": 10
+  },
+  "guide": {
+    "type": "button",
+    "index": 2
+  },
+  "leftshoulder": {
+    "type": "button",
+    "index": 6
+  },
+  "lefttrigger": {
+    "type": "axis",
+    "index": 5
+  },
+  "rightshoulder": {
+    "type": "button",
+    "index": 7
+  },
+  "righttrigger": {
+    "type": "axis",
+    "index": 4
+  },
+  "start": {
+    "type": "button",
+    "index": 11
+  },
+  "x": {
+    "type": "button",
+    "index": 4
+  },
+  "y": {
+    "type": "button",
+    "index": 3
+  }
+}

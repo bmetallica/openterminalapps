@@ -1,0 +1,102 @@
+#!/bin/bash
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+export DISPLAY="${DISPLAY:-:20}"
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/runtime-ubuntu}"
+until [ -f "${XDG_RUNTIME_DIR}/container-env" ]; do sleep 0.5; done
+# shellcheck disable=SC1091  # written by container-entrypoint.sh at startup
+. "${XDG_RUNTIME_DIR}/container-env"
+
+# The Wayland backend has its own display servers: the capture compositor and
+# the session compositor's XWayland. A framebuffer X server would only burn a
+# core probing GLX against GPU stacks it never uses, so the service parks.
+if [ "${SELKIES_WAYLAND:-false}" = "true" ]; then
+  echo "[xvfb] Wayland backend active; the X11 framebuffer stays parked"
+  exec sleep infinity
+fi
+
+# Zink belongs to the GL applications in the session, not to the display server:
+# this is a virtual framebuffer with no GPU output. Inheriting it makes the
+# server's GLX module bring up a Vulkan driver it never renders through, and on
+# some Mesa versions that initialization never returns -- the server then holds
+# its listening sockets without ever accepting, so clients hang instead of
+# failing. The session keeps its own Zink settings; only this process drops them.
+unset GALLIUM_DRIVER MESA_LOADER_DRIVER_OVERRIDE LIBGL_KOPPER_DRI2
+# Glamor and DRI3 on a DRM render node are what give GL clients the GPU: the
+# server draws through the node's own EGL, NVIDIA's included, and clients
+# present their buffers into it without a copy. The node is the one Selkies
+# renders on (--render-dri, else the --auto-gpu pick the entrypoint resolved),
+# so the X11 backend and the Wayland compositor answer to the same selection.
+# A node whose renderer did not come up for the entrypoint's probe (a driver
+# whose GBM allocates nothing, say) draws nothing here either: glamor on it
+# reports success and leaves the screen black. Without a usable node the
+# server is the software framebuffer, whose GLX probing is kept on Mesa's EGL:
+# a vendor library's GBM has nothing to offer it and has crashed it before. The
+# session's own EGL selection is untouched either way.
+VFB_DEVICE=""
+RENDER_DRI="${SELKIES_RENDER_DRI:-${DRINODE:-}}"
+if [ "${SELKIES_GPU_ACCELERATED:-}" != "false" ] && /usr/bin/Xvfb -help 2>&1 | grep -q -- '-glamor'; then
+  if [ -n "${RENDER_DRI}" ]; then
+    VFB_DEVICE="-glamor -dri ${RENDER_DRI}"
+  else
+    # shellcheck disable=SC2086  # the resolved node, else every node here
+    for node in ${SELKIES_GPU_RENDER_NODE:-/dev/dri/renderD*}; do
+      [ -e "${node}" ] && VFB_DEVICE="-glamor -dri ${node}"
+      break
+    done
+  fi
+fi
+MESA_EGL_VENDOR="/usr/share/glvnd/egl_vendor.d/50_mesa.json"
+if [ -z "${VFB_DEVICE}" ] && [ -f "${MESA_EGL_VENDOR}" ]; then
+  export __EGL_VENDOR_LIBRARY_FILENAMES="${MESA_EGL_VENDOR}"
+fi
+
+# A server that died leaves its lock and socket behind, and the replacement then
+# starts against a display number that still looks taken.
+# The server creates its socket directory only as root; made here so an
+# unprivileged run (Apptainer, a rootless engine) still gets the path socket.
+# shellcheck disable=SC2174  # /tmp always exists, so -m applies to the leaf
+mkdir -pm1777 /tmp/.X11-unix /tmp/.ICE-unix 2>/dev/null || true
+DISPLAY_NUM="${DISPLAY#:}"
+DISPLAY_NUM="${DISPLAY_NUM%%.*}"
+if [ -n "${DISPLAY_NUM}" ] && ! pgrep -f "Xvfb ${DISPLAY}( |$)" >/dev/null 2>&1; then
+    rm -f "/tmp/.X${DISPLAY_NUM}-lock" "/tmp/.X11-unix/X${DISPLAY_NUM}"
+fi
+
+# Screen saver (-s 0) and DPMS (-dpms) are off at the server level so the
+# framebuffer can never blank: a black stream is never what a viewer wants, and
+# nothing in this image unblanks one. The framebuffer is sized by the RandR
+# screen Selkies sets, so the server takes no -screen. `-verbose 1` is what
+# makes the server say which EGL vendor glamor came up on and whether the
+# screen pixmap is on the GPU; both are startup lines, and both are the first
+# thing to look at when a session renders in software.
+# shellcheck disable=SC2086  # VFB_DEVICE is an option pair or empty
+/usr/bin/Xvfb "${DISPLAY}" -verbose 1 +extension "COMPOSITE" +extension "DAMAGE" +extension "GLX" +extension "RANDR" +extension "RENDER" +extension "MIT-SHM" +extension "XFIXES" +extension "XTEST" +iglx +render -nolisten "tcp" -ac -noreset -shmem -s 0 -dpms ${VFB_DEVICE} &
+XVFB_PID=$!
+trap 'kill "${XVFB_PID}" 2>/dev/null' TERM INT
+
+# The socket appears before the server can answer, and a server that stalls
+# during startup keeps it open without ever accepting: clients then hang instead
+# of failing, which reads downstream as "no screen found" and leaves the whole
+# container up but unusable. Prove the server completes a handshake, and hand a
+# stalled one back to the supervisor rather than supervising a dead display.
+READY="false"
+for _ in $(seq 1 30); do
+    if ! kill -0 "${XVFB_PID}" 2>/dev/null; then
+        break
+    fi
+    if timeout 2 xdpyinfo -display "${DISPLAY}" >/dev/null 2>&1; then
+        READY="true"
+        break
+    fi
+    sleep 1
+done
+if [ "${READY}" != "true" ]; then
+    echo "[xvfb] ${DISPLAY} did not answer within 30s; restarting the server" >&2
+    kill -9 "${XVFB_PID}" 2>/dev/null
+    wait "${XVFB_PID}" 2>/dev/null
+    exit 1
+fi
+echo "[xvfb] ${DISPLAY} is serving clients"
+wait "${XVFB_PID}"

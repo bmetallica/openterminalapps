@@ -1,0 +1,45 @@
+{
+    "name": "Selkies",
+    "id": "selkies",
+    "version": "1.1.0",
+    "description": "Low-latency HTML5 remote desktop streaming for Linux (WebSocket and WebRTC)",
+    "options": {
+        "release": {
+            "type": "string",
+            "default": "latest",
+            "description": "The selkies GitHub release to install; latest is the newest one."
+        },
+        "xserver": {
+            "type": "string",
+            "enum": [
+                "xvfb",
+                "host"
+            ],
+            "default": "xvfb",
+            "description": "type of xserver to use, if xvfb, Xserver will be created automatically"
+        },
+        "desktop": {
+            "type": "string",
+            "enum": [
+                "lxqt",
+                "none"
+            ],
+            "default": "lxqt",
+            "description": "The desktop environment to install (LXQt) or none"
+        },
+        "wayland": {
+            "type": "boolean",
+            "default": false,
+            "description": "Use the headless Wayland backend instead of X11 (default: false)."
+        },
+        "web_port": {
+            "type": "string",
+            "default": "8080",
+            "description": "The port number to listen on to host the web interface and signal server."
+        }
+    },
+    "entrypoint": "/usr/local/bin/start-selkies.sh",
+    "installsAfter": [
+        "ghcr.io/devcontainers/features/common-utils"
+    ]
+}

@@ -1,0 +1,175 @@
+#!/usr/bin/env python3
+"""Kernel gamepad end-to-end: a real browser client with a synthetic Gamepad API
+drives selkies over each transport; the /dev/uinput emulator records what the
+kernel would receive. A `#player2` client repeats it on the sharing path, where
+the slot comes from the connection rather than the message."""
+import os
+import struct
+import sys
+import time
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import helpers as H
+import core_lib as C
+from playwright.sync_api import sync_playwright
+sys.path.insert(0, H.SRC)
+import selkies.input_handler as ih
+
+
+PAD_INIT: str = """
+window.__pad = {
+  index: 0, id: "Selkies Test Pad (STANDARD GAMEPAD Vendor: 045e Product: 028e)",
+  mapping: "standard", connected: true, timestamp: 1,
+  buttons: Array.from({length: 17}, () => ({pressed: false, touched: false, value: 0})),
+  axes: [0, 0, 0, 0],
+};
+navigator.getGamepads = () => [window.__pad, null, null, null];
+window.__padPress = (i, v) => {
+  window.__pad.buttons[i] = {pressed: v > 0, touched: v > 0, value: v};
+  window.__pad.timestamp = performance.now();
+};
+window.__padAxis = (i, v) => {
+  window.__pad.axes[i] = v;
+  window.__pad.timestamp = performance.now();
+};
+"""
+
+def decode(path: str) -> list[tuple[int, int, int]]:
+    """Decode a uinput-shim event stream into (type, code, value) tuples.
+
+    Args:
+        path: Path to the shim's binary event stream file.
+
+    Returns:
+        One `(ev_type, ev_code, ev_value)` tuple per 24-byte input_event
+        record, timestamps stripped.
+    """
+    blob = open(path, "rb").read()
+    return [struct.unpack("=qqHHi", blob[o:o + 24])[2:] for o in range(0, len(blob) - 23, 24)]
+
+def launch(pw, mode: str, fragment: str = ""):
+    """Launch Chromium with the synthetic pad injected and open the stream page.
+
+    Args:
+        pw: Active Playwright instance.
+        mode: Transport mode, ``websockets`` or ``webrtc``.
+        fragment: Sharing fragment to open the page with ("#player2"), or "".
+
+    Returns:
+        Tuple of (browser, page, console-error list).
+    """
+    browser = C.chromium_launch(pw)
+    ctx = browser.new_context(viewport={"width": 1280, "height": 720})
+    ctx.add_init_script(f"window.__SELKIES_STREAMING_MODE__ = '{mode}';")
+    ctx.add_init_script(C.WIRE_TAP_JS)
+    ctx.add_init_script(PAD_INIT)
+    page = ctx.new_page()
+    errors = []
+    page.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    page.goto(H.BASE_URL + "/" + fragment, wait_until="load")
+    return browser, page, errors
+
+def run(mode: str, results: "H.Results") -> None:
+    """Drive pad input over one transport and verify the kernel-side record.
+
+    Args:
+        mode: Transport mode, ``websockets`` or ``webrtc``.
+        results: Results accumulator shared across both transports.
+    """
+    shim_env, STREAM, SHIMLOG = H.uinput_shim_env(f"e2e-{mode}")
+    H.server_start(mode=mode, extra_env=shim_env)
+    try:
+        with sync_playwright() as pw:
+            browser, page, errors = launch(pw, mode)
+            video = C.wait_wr_video(page) if mode == "webrtc" else C.wait_ws_video(page)
+            results.check(f"{mode}: video flowing", bool(video), str(video))
+            for action in ("__padPress(0, 1)", "__padPress(0, 0)",
+                           "__padPress(12, 1)", "__padPress(12, 0)",
+                           "__padAxis(0, -1)", "__padPress(6, 1)"):
+                page.evaluate(f"window.{action}")
+                time.sleep(0.25)
+            time.sleep(0.5)
+            real_errors, _ = C.benign_console(errors, [])
+            results.check(f"{mode}: console clean", not real_errors, str(real_errors[:2]))
+            browser.close()
+    finally:
+        H.server_stop()
+
+    log = open(SHIMLOG).read()
+    events = decode(STREAM)
+    results.check(f"{mode}: kernel device created",
+                  H.shim_created(SHIMLOG, ih.STANDARD_XPAD_CONFIG["name"]) == 1)
+    results.check(f"{mode}: device is the standard pad",
+                  "vendor=0x045e product=0x028e" in log and "Microsoft X-Box 360 pad" in log)
+    for name, event in (("A press", (ih.EV_KEY, ih.BTN_A, 1)),
+                        ("A release", (ih.EV_KEY, ih.BTN_A, 0)),
+                        ("dpad up", (ih.EV_ABS, ih.ABS_HAT0Y, -1)),
+                        ("dpad release", (ih.EV_ABS, ih.ABS_HAT0Y, 0)),
+                        ("stick left", (ih.EV_ABS, ih.ABS_X, -32767)),
+                        ("left trigger", (ih.EV_ABS, ih.ABS_Z, 32767))):
+        results.check(f"{mode}: {name} reached the kernel device", event in events)
+    print(f"    {mode} events:", [e for e in events if e[0] != 4])
+    synced = all(events[i + 1] == (ih.EV_SYN, 0, 0)
+                 for i in range(0, len(events) - 1, 2)) and len(events) % 2 == 0
+    results.check(f"{mode}: every event is framed by SYN_REPORT", synced, f"{len(events)} events")
+
+def run_player_slot(mode: str, results: "H.Results") -> None:
+    """A `#player2` link drives player 2's pad and no other.
+
+    The slot a client may drive is the one its own connection carries, which
+    each transport learns differently: the websockets handshake reads it off the
+    query, and the signaling HELLO carries it to the WebRTC gate. Driving a real
+    pad through to the kernel device is what proves that path end to end.
+
+    Args:
+        mode: Transport mode, ``websockets`` or ``webrtc``.
+        results: Results accumulator shared across both transports.
+    """
+    shim_env, STREAM, SHIMLOG = H.uinput_shim_env(f"e2e-player2-{mode}")
+    H.server_start(mode=mode, extra_env=shim_env)
+    try:
+        with sync_playwright() as pw:
+            browser, page, errors = launch(pw, mode, fragment="#player2")
+            video = C.wait_wr_video(page) if mode == "webrtc" else C.wait_ws_video(page)
+            results.check(f"{mode}: player-2 video flowing", bool(video), str(video))
+            for action in ("__padPress(0, 1)", "__padPress(0, 0)"):
+                page.evaluate(f"window.{action}")
+                time.sleep(0.25)
+            time.sleep(0.5)
+            # A pad announced before the server has registered this link's slot
+            # is dropped by the slot gate, which knows of no slot to allow yet,
+            # and the button sends that follow still route by index -- so the
+            # pad drives its slot with no association recorded. The client's own
+            # repair is to announce again, which is what a re-attach does.
+            if "virtual gamepad slot" not in H.server_log():
+                page.evaluate("window.webrtcInput && window.webrtcInput.resyncGamepads"
+                              " && window.webrtcInput.resyncGamepads()")
+                for _ in range(20):
+                    if "virtual gamepad slot" in H.server_log():
+                        break
+                    time.sleep(0.25)
+            # What the page sent for its pad, so a missing association on the
+            # server can be told from an announcement the client never made.
+            sent = [m for m in page.evaluate("window.__wireSent || []")
+                    if isinstance(m, str) and m.startswith("js,")]
+            browser.close()
+    finally:
+        server_log = H.server_log()
+        H.server_stop()
+
+    events = decode(STREAM)
+    results.check(f"{mode}: a player-2 link is given slot 1",
+                  "virtual gamepad slot 1" in server_log
+                  and "virtual gamepad slot 0" not in server_log,
+                  f"client sent {sent[:3]}")
+    results.check(f"{mode}: its pad reaches the kernel device",
+                  (ih.EV_KEY, ih.BTN_A, 1) in events, f"{len(events)} events")
+    results.check(f"{mode}: no other slot was driven",
+                  H.shim_created(SHIMLOG, ih.STANDARD_XPAD_CONFIG["name"]) == 1)
+
+
+results = H.Results("uinput")
+for mode in ("websockets", "webrtc"):
+    run(mode, results)
+    run_player_slot(mode, results)
+sys.exit(0 if results.summary() else 1)

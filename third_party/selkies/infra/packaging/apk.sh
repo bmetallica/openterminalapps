@@ -1,0 +1,62 @@
+#!/bin/sh
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+# Build selkies-<ver>-r0.apk (run inside an Alpine container)
+set -eux
+
+# Package managers with no retry option of their own -- apk, dnf, pacman and
+# RubyGems all lack one -- are bounded-retried here. This composes with whatever
+# internal retrying the tool already does rather than replacing it, so it cannot
+# lower a default the way an explicit --setopt could.
+retry() {
+    i=1
+    until "$@"; do
+        [ "${i}" -ge 5 ] && return 1
+        i=$((i + 1)); sleep 5
+    done
+}
+# build-base/python3-dev/linux-headers: musl has no manylinux wheels, so every
+# extension dependency is compiled here (psutil needs the kernel headers).
+# pipewire-dev gives the V4L2 interposer its PipeWire frame source (headers
+# only; the library is loaded at runtime when an application uses it)
+retry apk add --no-cache \
+    abuild build-base pkgconf linux-headers pipewire-dev \
+    python3 python3-dev py3-pip py3-virtualenv \
+    ca-certificates
+# The runtime libraries come from the APKBUILD's own depends, keeping one list:
+# the venv links them, mkvenv.sh's smoke test loads them, and abuild resolves the
+# sonames it scans against whatever the builder has installed.
+# shellcheck disable=SC2046  # the depends list is deliberately word-split
+retry apk add --no-cache $(sed -n 's/^depends="\(.*\)"$/\1/p' /repo/infra/packaging/apk/APKBUILD)
+# shellcheck source=infra/packaging/version.sh
+. /repo/infra/packaging/version.sh
+/repo/infra/packaging/mkvenv.sh
+/repo/infra/packaging/interposer.sh /pkg-root
+/repo/infra/packaging/v4l2-interposer.sh /pkg-root
+# abuild writes src/ and pkg/ next to the APKBUILD, and /repo is read-only
+rm -rf /build
+mkdir -p /build /out
+cp -r /repo/infra/packaging/apk /build/apk
+chmod -R u+w /build/apk
+# Alpine spells pre-releases such as the 0.0.0.dev0 CI default its own way
+PKGVER="$(alpine_version "${SELKIES_VERSION:-0.0.0}")"
+sed -i "s/^pkgver=.*/pkgver=${PKGVER}/" /build/apk/APKBUILD
+# -i would install the public key with doas, which this image has no need for:
+# the build runs as root and can place the key itself
+abuild-keygen -a -n
+cp -f "${HOME}"/.abuild/*.rsa.pub /etc/apk/keys/
+# rootpkg is the target that assembles the .apk; `package` alone only stages
+# $pkgdir
+REPODEST="/build/apkrepo"
+export REPODEST
+cd /build/apk && abuild -F rootpkg
+# abuild's filename has no architecture in it, and both arch jobs land their
+# .apk in the same release directory; every package file is
+# selkies-<version>-<architecture>.<format>, the version as the release tag spells
+# it, while apk reads its own (2.0.0_rc0-r0) from inside the archive
+# shellcheck disable=SC2046  # abuild filenames never contain spaces
+set -- $(find /build/apkrepo -name 'selkies-*.apk')
+[ "$#" -eq 1 ] || { echo "abuild produced $# .apk files, expected one" >&2; exit 1; }
+cp "$1" "/out/selkies-${SELKIES_VERSION:-0.0.0}-$(uname -m).apk"
+ls -la /out

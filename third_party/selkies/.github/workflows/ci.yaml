@@ -1,0 +1,182 @@
+name: CI
+
+# Single orchestrator for pushes to main: lint, build the wheel once, then
+# fan out to the image and native-package builds, which consume the wheel
+# artifact instead of rebuilding it. Pushes that only touch docs or
+# devcontainer files skip CI (their own workflows cover them).
+
+on:
+  # Manual as well as automatic: a push whose run GitHub does not create leaves
+  # no other way to get one, and a branch can be put through the same pipeline
+  # without opening a pull request.
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths-ignore:
+      - docs/**
+      - website/**
+      - .devcontainer/**
+      - .github/workflows/docs.yaml
+      - .github/workflows/devcontainer-feature.yaml
+      - README.md
+      - LICENSE
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "26"
+  # Linters are pinned to a minor line so a new rule in a released version
+  # cannot turn a green branch red without a deliberate bump here
+  PRE_COMMIT_VERSION: "4.6.*"
+  ACTIONLINT_VERSION: "1.7.12"
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - name: Run the Python pre-commit hooks
+        # The same config contributors install locally, so a green commit hook
+        # and a green CI lint cannot diverge. Tool revisions live in
+        # .pre-commit-config.yaml. The web hook runs in its own job, which is
+        # what keeps the slow npm install off this one.
+        run: |
+          python3 -m pip install "pre-commit==${PRE_COMMIT_VERSION}"
+          pre-commit run --all-files --show-diff-on-failure ruff-check
+          pre-commit run --all-files --show-diff-on-failure codespell
+          pre-commit run --all-files --show-diff-on-failure settings-doc
+          pre-commit run --all-files --show-diff-on-failure file-index
+      - name: Install shellcheck
+        # actionlint runs shellcheck over every `run:` block, and the same
+        # pinned build the shell suite gates on decides what it reports
+        run: scripts/ci/install-shellcheck.sh
+      - name: Lint the workflow files
+        # actionlint validates the expression syntax and shellchecks every
+        # `run:` block
+        run: |
+          scripts/ci/fetch.sh "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" actionlint.tar.gz
+          tar -xzf actionlint.tar.gz actionlint
+          ./actionlint -color
+
+  web-lint:
+    name: Lint web client
+    # Its own job rather than a step of Lint: the npm install is the slow part
+    # and there is no reason for it to sit in front of the Python linters
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            addons/selkies-dashboard/package-lock.json
+            addons/selkies-dashboard-wish/package-lock.json
+      - name: ESLint and TypeScript
+        # Through pre-commit so the hook definition is the single source of truth
+        run: |
+          python3 -m pip install "pre-commit==${PRE_COMMIT_VERSION}"
+          pre-commit run --all-files --show-diff-on-failure web-lint
+
+  python-compat:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14", "3.15"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+          # The newest interpreter is taken from its release candidates until
+          # its final release
+          allow-prereleases: true
+      - name: Byte-compile every module
+        # pyproject.toml claims 3.9 through 3.15; this catches syntax that only
+        # the newer interpreters accept
+        run: python -m compileall -q src/selkies
+
+  tests:
+    name: Test suites
+    # The wheels are a dependency, not just an ordering constraint: the suites
+    # run against the same main-HEAD capture stack the artifacts ship
+    needs: [python-compat, pixelflux-pcmflux]
+    # The browser tier runs nightly from tests.yaml; this keeps the push and
+    # pull-request path at the suites that need no browser install
+    permissions:
+      contents: read
+    uses: ./.github/workflows/tests.yaml
+    with:
+      tiers: unit or integration
+      # The job above puts them in this run's artifacts either way
+      wheels_ready: true
+
+  wheel:
+    name: Build wheel
+    # Only the smoke test needs the capture stack, so the wheel is built while
+    # those wheels still are: it depends on nothing but the interpreters.
+    needs: [python-compat]
+    permissions:
+      contents: read
+    uses: ./.github/workflows/build-wheel.yaml
+
+  wheel-smoke:
+    name: Smoke test the wheel
+    # Installs the built wheel against the main-HEAD capture stack, which only
+    # this run's artifacts carry, so it waits for the job that puts them in reach.
+    needs: [wheel, pixelflux-pcmflux]
+    permissions:
+      contents: read
+    uses: ./.github/workflows/smoke-wheel.yaml
+    with:
+      wheels_ready: true
+
+  pixelflux-pcmflux:
+    name: Capture stack (main HEAD)
+    # Each project's per-commit pre-release when it is published, a build when
+    # it is not. Either way the wheels land in this run's artifacts, which is
+    # where the images, packages and suites read them, and running it here
+    # rather than inside each caller keeps it to one resolution per run.
+    permissions:
+      contents: read
+    uses: ./.github/workflows/build-pixelflux-pcmflux-wheels.yaml
+
+  images:
+    name: Multi-arch images
+    needs: [wheel, wheel-smoke, pixelflux-pcmflux]
+    if: github.event_name == 'push'
+    # A called workflow can only narrow the caller's token, so the GHCR push
+    # scope has to be granted here
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/images.yaml
+    with:
+      tag_prefix: main
+      wheel_artifact: selkies-wheel
+
+  packages:
+    name: Native packages
+    needs: [wheel, wheel-smoke, pixelflux-pcmflux]
+    if: github.event_name == 'push'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/packages.yaml
+    with:
+      wheel_artifact: selkies-wheel

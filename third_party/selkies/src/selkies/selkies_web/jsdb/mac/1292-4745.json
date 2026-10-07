@@ -1,0 +1,34 @@
+{
+  "a": {
+    "type": "button",
+    "index": 0
+  },
+  "b": {
+    "type": "button",
+    "index": 2
+  },
+  "lefttrigger": {
+    "type": "button",
+    "index": 14
+  },
+  "rightshoulder": {
+    "type": "button",
+    "index": 10
+  },
+  "righttrigger": {
+    "type": "button",
+    "index": 4
+  },
+  "start": {
+    "type": "button",
+    "index": 12
+  },
+  "x": {
+    "type": "button",
+    "index": 6
+  },
+  "y": {
+    "type": "button",
+    "index": 8
+  }
+}

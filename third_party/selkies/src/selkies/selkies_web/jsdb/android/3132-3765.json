@@ -1,0 +1,62 @@
+{
+  "a": {
+    "type": "button",
+    "index": 24
+  },
+  "b": {
+    "type": "button",
+    "index": 23
+  },
+  "back": {
+    "type": "button",
+    "index": 25
+  },
+  "dpdown": {
+    "type": "button",
+    "index": 12
+  },
+  "dpleft": {
+    "type": "button",
+    "index": 13
+  },
+  "dpright": {
+    "type": "button",
+    "index": 14
+  },
+  "dpup": {
+    "type": "button",
+    "index": 11
+  },
+  "leftshoulder": {
+    "type": "button",
+    "index": 27
+  },
+  "lefttrigger": {
+    "type": "button",
+    "index": 29
+  },
+  "rightshoulder": {
+    "type": "button",
+    "index": 78
+  },
+  "rightx": {
+    "type": "axis",
+    "index": 0
+  },
+  "righty": {
+    "type": "axis",
+    "index": 1
+  },
+  "start": {
+    "type": "button",
+    "index": 26
+  },
+  "x": {
+    "type": "button",
+    "index": 22
+  },
+  "y": {
+    "type": "button",
+    "index": 21
+  }
+}

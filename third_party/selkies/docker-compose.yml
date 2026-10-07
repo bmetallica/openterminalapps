@@ -1,0 +1,121 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+# Development stack for this repository. `dist` builds the wheel (web client
+# included), `base` builds the desktop-less session container from addons/base,
+# `desktop` layers the reference LXQt desktop on it, and `desktop-gpu` is the
+# same container with a GPU attached.
+#
+#   docker compose build dist                      # wheel image
+#   docker compose build base desktop              # session, then the desktop
+#   docker compose up desktop                      # http://localhost:8080
+#   docker compose --profile gpu up desktop-gpu    # NVIDIA
+#
+# `desktop` builds FROM the image `base` produces, so the two are built in that
+# order; Compose has no build-time dependency to express it with.
+#
+# Compose V2 is required (no `version:` key, `extends`, `develop`).
+
+services:
+  dist:
+    image: selkies-py-build
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        PACKAGE_VERSION: ${PACKAGE_VERSION:-0.0.0.dev0}
+
+  base:
+    ###
+    # NOTE: export DISTRIB_IMAGE and DISTRIB_RELEASE to change the base image.
+    # To test an unreleased wheel, build it with the `dist` service, then copy it
+    # from the `selkies-py-build` image into `addons/base/wheels/` before
+    # building this service; otherwise the wheel of the newest GitHub release
+    # is installed.
+    ###
+    image: selkies-base:latest-${DISTRIB_IMAGE:-ubuntu}${DISTRIB_RELEASE:-26.04}
+    build:
+      # Repository root: the Dockerfile also pulls in addons/input-interposer,
+      # addons/fake-udev and addons/v4l2-interposer
+      context: .
+      dockerfile: addons/base/Dockerfile
+      args:
+        DISTRIB_IMAGE: ${DISTRIB_IMAGE:-ubuntu}
+        DISTRIB_RELEASE: ${DISTRIB_RELEASE:-26.04}
+
+  desktop:
+    image: selkies-desktop:latest-${DISTRIB_IMAGE:-ubuntu}${DISTRIB_RELEASE:-26.04}
+    build:
+      context: .
+      dockerfile: addons/desktop/Dockerfile
+      args:
+        BASE_IMAGE: selkies-base:latest-${DISTRIB_IMAGE:-ubuntu}${DISTRIB_RELEASE:-26.04}
+    environment:
+      # Streaming mode: websockets, webrtc, or both with dual mode
+      SELKIES_MODE: ${SELKIES_MODE:-websockets}
+      SELKIES_ENABLE_DUAL_MODE: ${SELKIES_ENABLE_DUAL_MODE:-true}
+      SELKIES_PORT: ${SELKIES_PORT:-8080}
+      # One switch: Selkies mints a self-signed certificate when the configured
+      # one is absent, so nothing else has to be prepared for it
+      SELKIES_ENABLE_HTTPS: ${SELKIES_ENABLE_HTTPS:-false}
+      SELKIES_ENABLE_BASIC_AUTH: ${SELKIES_ENABLE_BASIC_AUTH:-}
+      SELKIES_BASIC_AUTH_USER: ${SELKIES_BASIC_AUTH_USER:-}
+      SELKIES_BASIC_AUTH_PASSWORD: ${SELKIES_BASIC_AUTH_PASSWORD:-}
+      # Left empty, the entrypoint starts an internal coTURN for WebRTC
+      SELKIES_TURN_SHARED_SECRET: ${SELKIES_TURN_SHARED_SECRET:-}
+      SELKIES_TURN_HOST: ${SELKIES_TURN_HOST:-}
+      SELKIES_TURN_PORT: ${SELKIES_TURN_PORT:-}
+      SELKIES_TURN_USERNAME: ${SELKIES_TURN_USERNAME:-}
+      SELKIES_TURN_PASSWORD: ${SELKIES_TURN_PASSWORD:-}
+      SELKIES_TURN_REST_URI: ${SELKIES_TURN_REST_URI:-}
+      SELKIES_TURN_REST_USERNAME: ${SELKIES_TURN_REST_USERNAME:-}
+      SELKIES_TURN_REST_USERNAME_AUTH_HEADER: ${SELKIES_TURN_REST_USERNAME_AUTH_HEADER:-}
+      SELKIES_ENABLE_RESIZE: ${SELKIES_ENABLE_RESIZE:-}
+      SELKIES_DEBUG_CURSORS: ${SELKIES_DEBUG_CURSORS:-false}
+      # Login password of the unprivileged user
+      PASSWD: ${PASSWD:-mypasswd}
+      # Start a full LXQt session, vs just the display server.
+      START_LXQT: ${START_LXQT:-true}
+      # Use the headless Wayland backend instead of X11 (default: X11 Xvfb).
+      SELKIES_WAYLAND: ${SELKIES_WAYLAND:-false}
+      # Session compositor nested in the capture compositor, supplying window
+      # management, decorations and XWayland; empty picks labwc, "none" drops it
+      SELKIES_WAYLAND_COMPOSITOR: ${SELKIES_WAYLAND_COMPOSITOR:-}
+      # Render/encode GPU selection; empty means auto-detect
+      SELKIES_RENDER_DRI: ${SELKIES_RENDER_DRI:-}
+      DRI_NODE: ${DRI_NODE:-}
+      # Serve the bind-mounted checkout below rather than the installed package
+      SELKIES_DEV_SOURCE: /opt/selkies-src
+    ports:
+      - "${SELKIES_PORT:-8080}:${SELKIES_PORT:-8080}"
+    volumes:
+      # The checkout runs instead of the package baked into the image, so a
+      # server-side edit takes effect on a restart rather than a rebuild.
+      # Writable because a checkout with no built web client is given the
+      # image's own, as a link at the (gitignored) path the client is served
+      # from.
+      - type: bind
+        source: ./
+        target: /opt/selkies-src
+    # The browsers in the image allocate their shared memory here; the 64 MB
+    # Docker default makes them abort on the first heavy page
+    shm_size: "2gb"
+    stdin_open: true
+    tty: true
+
+  # Same container with a GPU. NVIDIA needs the container toolkit, v1.20.1 or
+  # higher, on the host and drives OpenGL through Zink; AMD and Intel need
+  # nothing beyond the render nodes, which the display server opens directly.
+  desktop-gpu:
+    extends: desktop
+    profiles: ["gpu"]
+    devices:
+      - /dev/dri:/dev/dri
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: ["gpu", "compute", "utility", "video", "graphics", "display"]

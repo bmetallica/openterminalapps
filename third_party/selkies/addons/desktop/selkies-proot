@@ -1,0 +1,129 @@
+#!/bin/sh
+
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+# Dashboard-facing wrapper around proot-apps (linuxserver.io): the apps panel
+# posts `selkies-proot install|remove|update <app>` through the server's
+# command channel, and the server asks `check` whether apps can run here at all
+# and `list` which ones are installed. proot-apps runs its whole toolchain
+# (proot, jq, ncat) from ~/.local/bin by absolute path, so the image's staging
+# directory is linked there before delegating -- linked rather than copied,
+# because a copy drops the extended attribute the capability-carrying proot
+# below is built on.
+
+set -eu
+
+staging="/opt/proot-apps"
+capable="/opt/proot-apps-cap/proot"
+bin="${HOME}/.local/bin"
+
+if [ -d "${staging}" ]; then
+    mkdir -p "${bin}"
+    for tool in "${staging}"/*; do
+        ln -sfn "${tool}" "${bin}/$(basename "${tool}")"
+    done
+    # proot traces every process it starts, so on a host that restricts ptrace
+    # only the copy carrying CAP_SYS_PTRACE can run anything. That copy cannot
+    # even exec where the container's bounding set lacks the capability, so
+    # which one works is settled by running it.
+    if [ -x "${capable}" ] && "${capable}" -0 /bin/true > /dev/null 2>&1; then
+        ln -sfn "${capable}" "${bin}/proot"
+    fi
+fi
+
+# proot traces every process it starts, so a host that denies ptrace leaves
+# nothing for the panel to install or launch.
+proot_runs() {
+    [ -x "${bin}/proot" ] && "${bin}/proot" -0 /bin/true > /dev/null 2>&1
+}
+
+explain_denial() {
+    scope="$(cat /proc/sys/kernel/yama/ptrace_scope 2>/dev/null || echo unknown)"
+    bounding="$(grep CapBnd /proc/self/status 2>/dev/null | cut -f2)"
+    echo "selkies-proot: proot cannot ptrace here, so no app can install or run." >&2
+    echo "  kernel.yama.ptrace_scope=${scope}, container CapBnd=${bounding}" >&2
+    echo "  Grant the container CAP_SYS_PTRACE, or lower the sysctl on the host." >&2
+}
+
+# A file manager will not launch a desktop entry it has not been told to trust,
+# and draws it with a warning until then: the entries this runner puts on the
+# desktop are trusted here, so an application the user just installed is one they
+# can start. The mark is GIO metadata under two names -- libfm-qt reads
+# metadata::trust, the GNOME family metadata::trusted -- kept by a daemon on
+# the session bus, so this is best-effort and silent where either is absent.
+# Both semantics also require the entry to be executable.
+#
+# Which entries those are is read from the entries themselves: whatever the
+# runner names them, they are the ones that run it.
+trust_desktop_entries() {
+    command -v gio > /dev/null 2>&1 || return 0
+    # The desktop directory is configuration, not a fixed name: xdg-user-dirs
+    # localizes it.
+    config="${XDG_CONFIG_HOME:-${HOME}/.config}/user-dirs.dirs"
+    if [ -f "${config}" ]; then
+        # shellcheck disable=SC1090
+        . "${config}" 2>/dev/null || true
+    fi
+    desktop="${XDG_DESKTOP_DIR:-${HOME}/Desktop}"
+    [ -d "${desktop}" ] || return 0
+    for entry in "${desktop}"/*.desktop; do
+        [ -f "${entry}" ] || continue
+        grep -q "proot-apps" "${entry}" || continue
+        chmod +x "${entry}" 2>/dev/null || true
+        gio set "${entry}" metadata::trust true > /dev/null 2>&1 || true
+        gio set "${entry}" metadata::trusted true > /dev/null 2>&1 || true
+    done
+    return 0
+}
+
+# What proot-apps has installed, named as the panel posts commands for. It keeps
+# no index: an install is a directory under its root named for the image with the
+# separators replaced, so `ghcr.io_linuxserver_proot-apps_x` is app `x`. Read
+# from the directory, not recorded here, so an install by any route is reported.
+list_installed() {
+    # Its install root. PA_REPO_FOLDER is the local repo cache: downloads, not
+    # installs, so it is not consulted.
+    root="${HOME}/proot-apps"
+    [ -d "${root}" ] || return 0
+    for app in "${root}"/*; do
+        [ -d "${app}" ] || continue
+        name="$(basename "${app}")"
+        # A bare app name never contains an underscore, so the last one ends the
+        # image reference; a folder without one is a name already.
+        printf '%s\n' "${name##*_}"
+    done
+}
+
+# `check` is what the server asks before telling clients the apps panel is
+# usable; the rest is answered here rather than as a failed unpack several
+# hundred megabytes later.
+case "${1:-}" in
+    check)
+        proot_runs && exit 0
+        explain_denial
+        exit 1
+        ;;
+    list)
+        list_installed
+        exit 0
+        ;;
+    install|update|run|get)
+        if ! proot_runs; then
+            explain_denial
+            exit 1
+        fi
+        ;;
+esac
+
+case "${1:-}" in
+    install|update)
+        status=0
+        "${bin}/proot-apps" "$@" || status=$?
+        trust_desktop_entries
+        exit "${status}"
+        ;;
+esac
+
+exec "${bin}/proot-apps" "$@"

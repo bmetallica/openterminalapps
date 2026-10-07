@@ -1,0 +1,22 @@
+{
+  "name": "selkies-web-core",
+  "version": "1.0.0",
+  "description": "Selkies HTML5 web client core",
+  "type": "module",
+  "main": "index.html",
+  "directories": {
+    "lib": "lib"
+  },
+  "scripts": {
+    "serve": "vite",
+    "build": "vite build",
+    "postbuild": "node gendb.js",
+    "preview": "vite preview"
+  },
+  "author": "Selkies",
+  "license": "MPL-2.0",
+  "dependencies": {
+    "vite": "^8.2.0",
+    "vite-plugin-minify": "^3.0.0"
+  }
+}

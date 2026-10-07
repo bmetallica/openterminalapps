@@ -1,0 +1,18 @@
+{
+  "a": {
+    "type": "button",
+    "index": 21
+  },
+  "b": {
+    "type": "button",
+    "index": 22
+  },
+  "back": {
+    "type": "button",
+    "index": 23
+  },
+  "start": {
+    "type": "button",
+    "index": 24
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "dpdown": {
+    "type": "button",
+    "index": 2
+  },
+  "dpleft": {
+    "type": "button",
+    "index": 0
+  },
+  "dpright": {
+    "type": "button",
+    "index": 3
+  },
+  "dpup": {
+    "type": "button",
+    "index": 1
+  },
+  "leftshoulder": {
+    "type": "button",
+    "index": 4
+  },
+  "rightshoulder": {
+    "type": "button",
+    "index": 5
+  }
+}

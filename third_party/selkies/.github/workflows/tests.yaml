@@ -1,0 +1,337 @@
+name: Tests
+
+# The suites in tests/. The integration tier runs on every push and pull
+# request; the browser tier is long enough to run nightly and on request, and
+# the perf and soak tiers only on request.
+#
+# tests/README.md documents what each tier needs and how to run it locally.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tiers:
+        description: 'Marker expression, e.g. "e2e" or "integration or e2e"'
+        type: string
+        default: integration or e2e
+      suites:
+        description: 'Suite name expression (pytest -k), e.g. "portal or codecs"; empty runs every suite of the tiers'
+        type: string
+        default: ''
+  workflow_call:
+    inputs:
+      tiers:
+        description: Marker expression selecting the tiers to run
+        type: string
+        default: integration
+      wheels_ready:
+        description: The caller already built the pixelflux and pcmflux wheels in this run
+        type: boolean
+        default: false
+  schedule:
+    # Nightly full browser matrix
+    - cron: "0 4 * * *"
+
+# `github.workflow` resolves to the CALLING workflow inside a `workflow_call`,
+# so deriving the group from it would produce ci.yaml's own group and deadlock
+# every run that calls this one. The literal name keeps standalone runs
+# deduplicated, and the event keeps the nightly browser matrix from being
+# canceled by a push to the same ref.
+concurrency:
+  group: tests-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "26"
+  E2E_DISPLAY: ":99"
+  # Drive the release Chrome build rather than Playwright's bundled Chromium
+  E2E_CHROME: /usr/bin/google-chrome
+
+jobs:
+  unit:
+    name: Unit suites (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The uinput ABI is computed in pure Python, so every interpreter the
+        # package claims support for checks it against the kernel headers
+        python-version: ["3.9", "3.15"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+          # The newest interpreter is taken from its release candidates until
+          # its final release
+          allow-prereleases: true
+      # The dashboard translation audit is JavaScript, and reports itself
+      # skipped rather than passing when it cannot run
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Build the test tools
+        run: make -C tests/tools
+      # Without it the shell suite still passes, having run only bash -n: the
+      # lint half reports itself skipped inside a suite that exits zero, so
+      # nothing else notices it never ran.
+      - name: Install shellcheck
+        run: scripts/ci/install-shellcheck.sh
+      - name: Run the unit tier
+        run: |
+          # The suites import the source tree, so every module-level import
+          # under selkies has to resolve: the runtime dependencies from
+          # pyproject.toml minus the capture stack, which the suites stub.
+          python scripts/ci/unit-deps.py > "${RUNNER_TEMP}/unit-requirements.txt"
+          python -m pip install pytest -r "${RUNNER_TEMP}/unit-requirements.txt"
+          python -m pytest tests -m unit -v --junitxml=unit-report.xml
+      - name: Fail if any suite skipped
+        if: ${{ !cancelled() }}
+        run: python tests/tools/assert_no_skips.py unit-report.xml
+
+  # pixelflux and pcmflux ship as wheels this run has in hand rather than from
+  # an index, which carries neither pre-release. The caller passes them in as
+  # artifacts when it has already resolved them; a standalone run resolves them
+  # here, downloading each project's per-commit pre-release or building what
+  # has none yet.
+  wheels:
+    name: Capture stack (main HEAD)
+    if: ${{ !inputs.wheels_ready }}
+    permissions:
+      contents: read
+    uses: ./.github/workflows/build-pixelflux-pcmflux-wheels.yaml
+
+  suites:
+    name: Suites (${{ inputs.tiers || 'integration or e2e' }})
+    needs: [wheels]
+    if: ${{ always() && (needs.wheels.result == 'success' || needs.wheels.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+      - name: Free disk space
+        uses: endersonmenezes/free-disk-space@2a22f8c59cae9cddae7194b33e6b92d023b2b4b8 # v4
+        with:
+          remove_android: true
+          remove_dotnet: true
+          remove_haskell: true
+          remove_tool_cache: false
+          remove_packages: azure-cli google-cloud-cli microsoft-edge-stable postgresql* temurin-* mysql* mongodb*
+          remove_packages_one_command: true
+          remove_folders: /usr/share/swift /usr/share/miniconda /usr/share/az* /usr/local/share/powershell /usr/local/julia /usr/local/aws-cli /usr/local/aws-sam-cli /usr/share/gradle /usr/local/share/vcpkg
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            addons/selkies-web-core/package.json
+            addons/selkies-dashboard/package.json
+            addons/selkies-dashboard-wish/package.json
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - name: Install the display server, audio and GPU userspace
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            xvfb x11-xserver-utils x11-utils xauth xcvt wmctrl \
+            wl-clipboard libsdl2-2.0-0 openbox kwin-x11 kwin-wayland \
+            pulseaudio pulseaudio-utils \
+            dbus pipewire wireplumber xdg-desktop-portal xdg-desktop-portal-kde qtwayland5 \
+            libxcb-shm0 libxcb-xfixes0 libxcb-randr0 libxcb-dri3-0 \
+            libxkbcommon0 libxdamage1 libxfixes3 libxtst6 \
+            libgl1 libegl1 libgbm1 libdrm2 libva2 libva-drm2 mesa-va-drivers \
+            coturn cups-daemon cups-client cups-filters \
+            xwayland libinput10 libseat1 librsvg2-2 liblcms2-2 libxml2 libvulkan1 \
+            libpixman-1-0 libwayland-server0 libwayland-cursor0 libwayland-egl1 \
+            libgles2 libxcb-composite0 libxcb-ewmh2 libxcb-icccm4 \
+            libxcb-render-util0 libxcb-res0 libxcb-xinput0
+      # The compositor the Wayland suites drive is the one the images ship:
+      # the pinned wlroots and the patched labwc, built by the same script as
+      # the base image's labwc stage (the distribution's labwc has neither the
+      # control socket nor the seam patch, and the no-skip gate would trip on
+      # the suites that need them). The pins are read from the Dockerfile so
+      # this job can never drift from the image.
+      - name: Resolve the patched labwc pins
+        id: labwc
+        run: |
+          eval "$(grep -E '^ARG (WLROOTS|LABWC)_VERSION=' addons/base/Dockerfile | sed 's/^ARG //')"
+          echo "wlroots=${WLROOTS_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "labwc=${LABWC_VERSION}" >> "$GITHUB_OUTPUT"
+      - name: Cache the patched labwc
+        id: labwc-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.local/labwc
+          key: labwc-${{ steps.labwc.outputs.wlroots }}-${{ steps.labwc.outputs.labwc }}-${{ hashFiles('addons/base/patches/labwc-*.patch', 'addons/base/build-labwc.sh') }}
+      - name: Build the patched labwc
+        if: steps.labwc-cache.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get install --no-install-recommends -y \
+            build-essential gettext git glslang-tools hwdata meson ninja-build pkg-config \
+            libcairo2-dev libdisplay-info-dev libdrm-dev libgbm-dev libglib2.0-dev \
+            libglvnd-dev libinput-dev liblcms2-dev libliftoff-dev libpango1.0-dev \
+            libpixman-1-dev libpng-dev librsvg2-dev libseat-dev libudev-dev libvulkan-dev \
+            libffi-dev libexpat1-dev libxml2-dev \
+            libwayland-dev libxcb1-dev libxcb-composite0-dev libxcb-dri3-dev libxcb-ewmh-dev \
+            libxcb-icccm4-dev libxcb-present-dev libxcb-randr0-dev libxcb-render0-dev \
+            libxcb-render-util0-dev libxcb-res0-dev libxcb-shape0-dev libxcb-shm0-dev \
+            libxcb-sync-dev libxcb-xfixes0-dev libxcb-xinput-dev libxkbcommon-dev \
+            wayland-protocols
+          WLROOTS_VERSION="${{ steps.labwc.outputs.wlroots }}" \
+            LABWC_VERSION="${{ steps.labwc.outputs.labwc }}" \
+            PREFIX="$HOME/.local/labwc" addons/base/build-labwc.sh
+      - name: Put the patched labwc on the session path
+        run: echo "$HOME/.local/labwc/bin" >> "$GITHUB_PATH"
+      # A cache hit skips the build step and with it the build's apt closure,
+      # so a runtime library the list above misses would otherwise surface as
+      # every nested suite timing out; a loader error here names it instead.
+      # Runs bare on purpose: the build's own rpath has to resolve its
+      # libraries, since an exported LD_LIBRARY_PATH would leak into every
+      # server and browser the suites start.
+      - name: Verify the patched labwc
+        run: labwc --version
+      # Likewise the X server: the images build XLibre's Xvfb with the Selkies
+      # patches, and the X11 layout the suites see depends on what the server
+      # offers (an output per display against logical monitors), so the suites
+      # drive that server. The pin and its checksum are read from the
+      # Dockerfile as well.
+      - name: Resolve the patched Xvfb pin
+        id: xvfb
+        run: |
+          eval "$(grep -E '^ARG XLIBRE_(TAG|SHA256)=' addons/base/Dockerfile | sed 's/^ARG //')"
+          echo "tag=${XLIBRE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "sha256=${XLIBRE_SHA256}" >> "$GITHUB_OUTPUT"
+      - name: Cache the patched Xvfb
+        id: xvfb-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.local/xvfb
+          key: xvfb-${{ steps.xvfb.outputs.tag }}-${{ hashFiles('addons/base/patches/xvfb-*.patch', 'addons/base/build-xvfb.sh') }}
+      - name: Build the patched Xvfb
+        if: steps.xvfb-cache.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get install --no-install-recommends -y \
+            build-essential git meson ninja-build pkg-config \
+            libaudit-dev libbsd-dev libdrm-dev libepoxy-dev libfontenc-dev libgbm-dev \
+            libglvnd-dev libpixman-1-dev libselinux1-dev libssl-dev libx11-dev libxau-dev \
+            libxcvt-dev libxdmcp-dev libxext-dev libxfont-dev libxkbfile-dev \
+            libxshmfence-dev mesa-common-dev x11proto-dev xtrans-dev
+          XLIBRE_TAG="${{ steps.xvfb.outputs.tag }}" XLIBRE_SHA256="${{ steps.xvfb.outputs.sha256 }}" \
+            PREFIX="$HOME/.local/xvfb" addons/base/build-xvfb.sh
+      - name: Put the patched Xvfb on the session path
+        run: echo "$HOME/.local/xvfb/bin" >> "$GITHUB_PATH"
+      - name: Verify the patched Xvfb
+        run: |
+          Xvfb -help 2>&1 | grep -q -- 'CRTCs per screen (default: 4)'
+      # The suites have to exercise the pixelflux and pcmflux that the images,
+      # packages and AppImages ship, which come from main HEAD rather than any
+      # released version. Whichever job resolved them left them here.
+      - name: Download the pixelflux wheels (main HEAD)
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          pattern: pixelflux-wheels-*
+          path: main-wheels/
+          merge-multiple: true
+      - name: Download the pcmflux wheels (main HEAD)
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          pattern: pcmflux-wheels-*
+          path: main-wheels/
+          merge-multiple: true
+      - name: Install selkies and the test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # Built once and installed from the wheel, rather than installed from
+          # the source tree: dist/ is where the packaging suite looks, so it
+          # packages the very artifact these suites ran against instead of
+          # spending another build on a second copy of it.
+          python -m pip wheel --no-deps -w dist .
+          # The pinned pixelflux/pcmflux are a pre-release no index carries:
+          # resolve them from the main-HEAD wheels downloaded above. The test extras
+          # (pytest, playwright, ...) come from the wheel's own [test] group.
+          mkdir -p main-wheels
+          wheel="$(ls dist/selkies-*.whl)"
+          python -m pip install --find-links "$PWD/main-wheels" "${wheel}[test]"
+          ABI="cp$(python -c 'import sys; print(f"{sys.version_info.major}{sys.version_info.minor}")')"
+          WHEEL_GLOB="*${ABI}-*manylinux*$(uname -m)*.whl"
+          # Fatal rather than a note: a run that quietly took an index's copy
+          # tests a capture stack nothing ships, and reports it as a pass.
+          for project in pixelflux pcmflux; do
+            found="$(find main-wheels -maxdepth 1 -name "${project}-${WHEEL_GLOB}" 2>/dev/null || true)"
+            if [ -z "${found}" ]; then
+              echo "::error::No main-HEAD ${project} wheel matching ${WHEEL_GLOB}"
+              exit 1
+            fi
+            echo "${found}" | xargs python -m pip install --force-reinstall --no-deps
+            echo "${found}" | xargs cp -t dist/
+          done
+          python -c 'import pixelflux, pcmflux; print("capture stack:", pixelflux.__file__)'
+      - name: Build the web client
+        run: ./scripts/ci/build-web.sh
+      - name: Build the test tools
+        run: make -C tests/tools
+      # The same stack a development sandbox starts, on the display the
+      # workflow names
+      - name: Start the display server and audio
+        run: scripts/ci/test-stack.sh
+      # The integration tier drives Chromium as well, for the gamepad and
+      # WebRTC-transport suites; only the browser matrix needs the other engines
+      - name: Install Chromium
+        run: python -m playwright install --with-deps chromium
+      # Release Chrome alongside it: its media stack differs from Chromium's,
+      # and E2E_CHROME is what points the suites at a system browser.
+      - name: Install Google Chrome
+        run: |
+          cd /tmp
+          curl -o google-chrome-stable.deb -fsSL "https://dl.google.com/linux/direct/google-chrome-stable_current_$(dpkg --print-architecture).deb"
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y ./google-chrome-stable.deb
+          rm -f google-chrome-stable.deb
+      - name: Install the remaining browser engines
+        if: contains(inputs.tiers || 'integration or e2e', 'e2e')
+        run: python -m playwright install --with-deps firefox webkit
+      # WebKit paints every <video> through its GL sink, which needs GStreamer's
+      # opengl plugin; without it a silent software fallback is what the suites
+      # would measure, so the plugin is named and checked here rather than left
+      # to Playwright's dependency list (the harness refuses WebKit without it).
+      - name: Install the GStreamer plugin WebKit's video sink needs
+        if: contains(inputs.tiers || 'integration or e2e', 'e2e')
+        run: |
+          sudo apt-get install --no-install-recommends -y gstreamer1.0-gl gstreamer1.0-tools
+          gst-inspect-1.0 opengl > /dev/null
+      # Firefox negotiates H.264 only with the OpenH264 GMP, which its bundled
+      # profile never carries; without this the whole firefox-wr block skips.
+      - name: Install the OpenH264 plugin for Firefox
+        if: contains(inputs.tiers || 'integration or e2e', 'e2e')
+        run: sh tests/tools/fetch-openh264.sh
+      # The suites' own output goes into the report, so the no-skip gate below
+      # can list the checks a suite recorded as unobserved.
+      - name: Run the suites
+        env:
+          TIERS: ${{ inputs.tiers || 'integration or e2e' }}
+          SUITES: ${{ inputs.suites || '' }}
+        run: python -m pytest tests -m "${TIERS}" -k "${SUITES}" -v --junitxml=suites-report.xml -o junit_logging=system-out
+      - name: Fail if any suite skipped
+        if: ${{ !cancelled() }}
+        run: python tests/tools/assert_no_skips.py suites-report.xml
+      - name: Collect the server logs
+        if: always()
+        run: |
+          # The last suite's logs, and the copy the runner kept of every suite's
+          mkdir -p suite-logs
+          cp -r /tmp/selkies-tests/*.log suite-logs/ 2>/dev/null || true
+          cp -r /tmp/selkies-tests/suite-logs/. suite-logs/ 2>/dev/null || true
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: suite-logs
+          path: suite-logs/
+          if-no-files-found: ignore
+          retention-days: 7
