@@ -7,7 +7,9 @@ pixelflux/
 pcmflux/
 **/node_modules
 **/dist
-src/selkies/selkies_web/
+# OTA: Der gebaute Web-Client ist Teil unseres Forks und muss mit in den
+# Baukontext des Basisimages (OTA-FORK.md).
+# src/selkies/selkies_web/
 src/*.egg-info
 **/__pycache__
 **/*.pyc

@@ -6,7 +6,9 @@ src/*.egg-info
 NOTES.md
 **/__pycache__/
 src/**/.ruff_cache
-src/selkies/selkies_web
+# OTA: Der gebaute Web-Client gehoert in unseren Fork (OTA-FORK.md) — der Bau
+# des Basisimages soll kein Node brauchen.
+# src/selkies/selkies_web
 addons/base/wheels/*.whl
 build/appimage/
 out/
