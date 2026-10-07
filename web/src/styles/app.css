@@ -1790,3 +1790,8 @@ input[type="color"] {
 .xterm .xterm-viewport { background-color: #0e1116; scrollbar-color: #3a4250 #0e1116; }
 .xterm .xterm-viewport::-webkit-scrollbar { width: 10px; background: #0e1116; }
 .xterm .xterm-viewport::-webkit-scrollbar-thumb { background: #3a4250; border-radius: 5px; }
+
+/* Paketquellen — Verweise auf Dateien der Paketquelle. Wie im Handbuch
+   (`.md a`), nicht im Blau des Browsers, das auf dunklem Grund verschwindet. */
+.repo-link { color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--edge-lit); }
+.repo-link:hover { border-bottom-color: var(--accent); }

@@ -130,9 +130,10 @@ def remove_container(cid: str, daten: bool = False) -> dict[str, Any]:
     return _call("DELETE", f"/containers/{cid}{suffix}")
 
 
-def fortsetzen(cid: str) -> dict[str, Any]:
+def fortsetzen(cid: str, repo: dict[str, Any] | None = None) -> dict[str, Any]:
     """Einen angehaltenen Root-Arbeitsplatz wieder starten."""
-    return _call("POST", f"/containers/{cid}/fortsetzen", timeout=180.0)
+    return _call("POST", f"/containers/{cid}/fortsetzen", json={"repo": repo or {}},
+                 timeout=180.0)
 
 
 def platz(cid: str) -> dict[str, Any]:

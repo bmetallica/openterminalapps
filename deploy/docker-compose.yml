@@ -203,6 +203,10 @@ services:
       OTA_KEYCLOAK_URL: "${OTA_KEYCLOAK_URL:-}"
       OTA_KEYCLOAK_REALM: "${OTA_KEYCLOAK_REALM:-ota}"
       OTA_KEYCLOAK_SECRET: "${OTA_KEYCLOAK_SECRET:-}"
+      # Paketquellen (Kapitel 26). Aus heisst: nichts wird in Container
+      # eingetragen; der Menuepunkt sagt dann, wie man sie einschaltet.
+      OTA_REPO: "${OTA_REPO:-0}"
+      OTA_REPO_URL: "http://repo:8200"
     volumes:
       # Das Handbuch wird eingehaengt statt ins Abbild kopiert: So laesst es
       # sich nachbessern, ohne das Abbild neu zu bauen — dieselbe Ueberlegung
@@ -629,6 +633,75 @@ services:
       - "traefik.http.routers.ota-keycloak.tls=true"
       - "traefik.http.routers.ota-keycloak.priority=60"
       - "traefik.http.services.ota-keycloak.loadbalancer.server.port=8080"
+
+  # ------------------------------------------------------------------
+  # Paketquellen (Handbuch Kapitel 26) — optional, Profil `repo`.
+  #
+  # Laeuft nur mit OTA_REPO=1 in deploy/.env (`make up` setzt dann das
+  # Profil). `repo` ist aptly samt Steuerdienst: Spiegel von Debian 13 und
+  # Dockers Quelle, eigenes Repository, Snapshots. `repo-web` liefert die
+  # veroeffentlichten Staende unter /repo aus — nur lesend, ohne Anmeldung,
+  # weil apt in den Arbeitsplaetzen keine hat. Was dort liegt, ist signiert.
+  # ------------------------------------------------------------------
+  repo:
+    build:
+      context: ../repo
+      dockerfile: Dockerfile
+      args:
+        http_proxy: "${OTA_HTTP_PROXY:-}"
+        https_proxy: "${OTA_HTTPS_PROXY:-}"
+        no_proxy: "${OTA_NO_PROXY:-}"
+        HTTP_PROXY: "${OTA_HTTP_PROXY:-}"
+        HTTPS_PROXY: "${OTA_HTTPS_PROXY:-}"
+        NO_PROXY: "${OTA_NO_PROXY:-}"
+    image: ota/repo:${OTA_VERSION:-dev}
+    container_name: ota-repo
+    profiles: ["repo"]
+    logging: *protokoll
+    restart: unless-stopped
+    environment:
+      OTA_AGENT_TOKEN: "${OTA_AGENT_TOKEN}"
+      OTA_REPO_ROOT: /srv/ota/repo
+      # Leer = Vollspiegel. Ein aptly-Filter spiegelt nur diese Pakete samt
+      # Abhaengigkeiten (zum Ausprobieren ohne 100 GB frei).
+      OTA_REPO_FILTER: "${OTA_REPO_FILTER:-}"
+      HTTP_PROXY: "${OTA_HTTP_PROXY:-}"
+      HTTPS_PROXY: "${OTA_HTTPS_PROXY:-}"
+      NO_PROXY: "${OTA_NO_PROXY:-}"
+      http_proxy: "${OTA_HTTP_PROXY:-}"
+      https_proxy: "${OTA_HTTPS_PROXY:-}"
+      no_proxy: "${OTA_NO_PROXY:-}"
+    volumes:
+      - ${OTA_REPO_ROOT:-/srv/ota/repo}:/srv/ota/repo
+      # Die Abhaengigkeiten von Selkies, gegen die das Basisimage gebaut wird.
+      # "Dateien holen" legt genau diese Raeder in den Vorrat.
+      - ../third_party/selkies/ota-abhaengigkeiten.txt:/app/selkies-abhaengigkeiten.txt:ro
+    networks:
+      - public      # der Weg nach draussen fuer den Abgleich
+      - internal    # die API spricht mit dem Steuerdienst
+
+  repo-web:
+    # Die stabile Linie von nginx, wie die anderen Dienste auf eine Fassung
+    # festgelegt und nicht auf `latest`.
+    image: nginx:1.30-alpine
+    container_name: ota-repo-web
+    profiles: ["repo"]
+    logging: *protokoll
+    restart: unless-stopped
+    volumes:
+      - ${OTA_REPO_ROOT:-/srv/ota/repo}/aptly/public:/usr/share/nginx/html/repo:ro
+      - ./nginx/repo.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      - public
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=ota_public"
+      - "traefik.http.routers.ota-repo.rule=PathPrefix(`/repo/`)"
+      - "traefik.http.routers.ota-repo.entrypoints=websecure"
+      - "traefik.http.routers.ota-repo.tls=true"
+      # Ueber der Weboberflaeche (1), API (50) und Keycloak (60).
+      - "traefik.http.routers.ota-repo.priority=70"
+      - "traefik.http.services.ota-repo.loadbalancer.server.port=80"
 
 volumes:
   # Der zuletzt gewuenschte Zustand der Firewall. Auf Platte, damit ein

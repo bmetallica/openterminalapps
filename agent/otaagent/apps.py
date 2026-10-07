@@ -84,8 +84,22 @@ BREITE=${GEOMETRY%%x*}
 HOEHE=${GEOMETRY##*x}
 
 if [ -e /tmp/.X11-unix/X$DISPLAY_NUM ]; then
-  echo "display-exists"
-  exit 0
+  # Nur ein Bildschirm, auf dessen Port auch jemand antwortet, gilt als da.
+  # Ein gescheiterter Start liess sonst den X-Socket zurueck, und jeder
+  # weitere Start meldete "gibt es schon" — OTA zeigte die Anwendung als
+  # laufend, und dahinter hoerte niemand (gefunden 2026-10-07).
+  if (echo > /dev/tcp/127.0.0.1/$PORT) 2>/dev/null; then
+    echo "display-exists"
+    exit 0
+  fi
+  for was in selkies xvfb; do
+    if [ -f /tmp/ota-$was-$DISPLAY_NUM.pid ]; then
+      kill "$(cat /tmp/ota-$was-$DISPLAY_NUM.pid)" 2>/dev/null || true
+      rm -f /tmp/ota-$was-$DISPLAY_NUM.pid
+    fi
+  done
+  sleep 1
+  rm -f /tmp/.X11-unix/X$DISPLAY_NUM /tmp/.X$DISPLAY_NUM-lock 2>/dev/null || true
 fi
 
 xauth add :$DISPLAY_NUM MIT-MAGIC-COOKIE-1 "$(mcookie)"
@@ -121,13 +135,20 @@ fi
 DISPLAY=:$DISPLAY_NUM nohup xfwm4 --compositor=off   > /tmp/ota-wm-$DISPLAY_NUM.log 2>&1 &
 sleep 1
 
-# Die Anmeldung ist dieselbe wie beim Hauptbildschirm — Traefik setzt denselben
-# Header vor jede Route dieser Sitzung.
-export SELKIES_ENABLE_BASIC_AUTH=true
-export SELKIES_BASIC_AUTH_USER="${VNC_USER:-ota}"
-export SELKIES_BASIC_AUTH_PASSWORD="$VNC_PW"
-
-DISPLAY=:$DISPLAY_NUM nohup selkies-gstreamer   --addr=0.0.0.0 --port="$PORT" --enable_https=false   --web_root=/opt/gst-web --enable_resize=true   --turn_host="${SELKIES_TURN_HOST:-}"   --turn_port="${SELKIES_TURN_PORT:-3478}"   --turn_protocol="${SELKIES_TURN_PROTOCOL:-udp}"   --turn_shared_secret="${SELKIES_TURN_SHARED_SECRET:-}"   --stun_host="${SELKIES_STUN_HOST:-${SELKIES_TURN_HOST:-}}"   --stun_port="${SELKIES_STUN_PORT:-${SELKIES_TURN_PORT:-3478}}"   --encoder="${SELKIES_ENCODER:-x264enc}"   --framerate="${SELKIES_FRAMERATE:-30}"   > /tmp/ota-selkies-$DISPLAY_NUM.log 2>&1 &
+# Selkies 2.0 (Basisimage ab 2026-10-07) bringt sein Startskript mit — dasselbe,
+# das den Hauptbildschirm startet, mit derselben Anmeldung und denselben
+# Einstellungen. Ein Golden Image auf dem alten Basisimage hat es nicht; dort
+# laeuft Selkies 1.6.2 noch auf dem alten Weg, mit TURN.
+if [ -x /dockerstartup/selkies-starten.sh ]; then
+  DISPLAY=:$DISPLAY_NUM nohup /dockerstartup/selkies-starten.sh "$PORT"     > /tmp/ota-selkies-$DISPLAY_NUM.log 2>&1 &
+else
+  # Die Anmeldung ist dieselbe wie beim Hauptbildschirm — Traefik setzt
+  # denselben Header vor jede Route dieser Sitzung.
+  export SELKIES_ENABLE_BASIC_AUTH=true
+  export SELKIES_BASIC_AUTH_USER="${VNC_USER:-ota}"
+  export SELKIES_BASIC_AUTH_PASSWORD="$VNC_PW"
+  DISPLAY=:$DISPLAY_NUM nohup selkies-gstreamer   --addr=0.0.0.0 --port="$PORT" --enable_https=false   --web_root=/opt/gst-web --enable_resize=true   --turn_host="${SELKIES_TURN_HOST:-}"   --turn_port="${SELKIES_TURN_PORT:-3478}"   --turn_protocol="${SELKIES_TURN_PROTOCOL:-udp}"   --turn_shared_secret="${SELKIES_TURN_SHARED_SECRET:-}"   --stun_host="${SELKIES_STUN_HOST:-${SELKIES_TURN_HOST:-}}"   --stun_port="${SELKIES_STUN_PORT:-${SELKIES_TURN_PORT:-3478}}"   --encoder="${SELKIES_ENCODER:-x264enc}"   --framerate="${SELKIES_FRAMERATE:-30}"   > /tmp/ota-selkies-$DISPLAY_NUM.log 2>&1 &
+fi
 echo $! > /tmp/ota-selkies-$DISPLAY_NUM.pid
 
 for i in $(seq 1 90); do

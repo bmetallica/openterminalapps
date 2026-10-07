@@ -244,11 +244,11 @@ function Editor({ tpl, host, groups, images, netzprofile, onSaved, onClose, onTo
 
           <Field label={tr('Streaming')}
             hint={draft.stream_engine === 'selkies'
-              ? tr('H.264 über WebRTC. Die Vorgabe, und der Weg des eigenen Basisimages.')
+              ? tr('Selkies 2.0, H.264 über WebSockets durch dieselbe Adresse wie OTA. Die Vorgabe, und der Weg des eigenen Basisimages.')
               : tr('RFB über KasmVNC. Nötig für Images von Kasm — die bringen kein Selkies mit.')}>
             <Segmented label={tr('Streaming')} value={draft.stream_engine ?? 'selkies'}
               options={[
-                { value: 'selkies' as const, label: tr('Selkies (WebRTC)') },
+                { value: 'selkies' as const, label: tr('Selkies') },
                 { value: 'kasmvnc' as const, label: tr('KasmVNC (RFB)') },
               ]}
               onChange={(v) => set('stream_engine', v)} />

@@ -21,7 +21,7 @@ Zu finden unter **Netz**. Es braucht das Recht `settings.manage`.
 | Das Firmennetz (alle privaten Bereiche) | ❌ zu |
 | Der Arbeitsplatz eines Kollegen | ❌ zu |
 | Der Wirt, auf dem OTA läuft | ❌ zu |
-| Der TURN-Server, OTA selbst, die Namensauflösung | ✅ erlaubt — sonst käme kein Bild an |
+| Der TURN-Server, OTA selbst, die Namensauflösung | ✅ erlaubt — OTA und Namensauflösung immer, TURN für Images mit Selkies 1.6.2 |
 
 Das ist die Stufe **Internet**, und sie gilt für jeden Arbeitsplatz ohne eigenes Profil.
 
@@ -37,7 +37,7 @@ Dort steht jede Regel einzeln, mit **Ziel, Ports, Protokoll, Grund und Herkunft*
 
 | Ziel | Ports | Warum |
 |---|---|---|
-| Der TURN-Server | 3478 und der Relay-Bereich | Der Medienweg. Ohne ihn kommt kein Bild an. |
+| Der TURN-Server | 3478 und der Relay-Bereich | Der Medienweg von Selkies 1.6.2 (Golden Images auf dem alten Basisimage). Selkies 2.0 braucht ihn nicht. |
 | OTA selbst | 8443 | Der Browser im Arbeitsplatz lädt von dort die Erweiterung für die Zwischenablage. |
 | Der Router selbst | 53 | Namensauflösung. Ein anderer Namensdienst ist nicht erreichbar. Der Router fragt seinerseits die Nameserver des Wirts oder `OTA_FW_DNS_UPSTREAM` — **das** muss die äussere Firewall durchlassen, nicht die Freigaben hier. |
 | Traefik → Arbeitsplatz | 6901, 8080 | Die Gegenrichtung: der Bildstrom. |

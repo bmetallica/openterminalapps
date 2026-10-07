@@ -4,6 +4,11 @@
 ältere Weg über KasmVNC bleibt bestehen und ist für Images von Kasm weiterhin
 nötig; umschalten lässt es sich je Arbeitsplatz.
 
+**Seit dem 2026-10-07 läuft Selkies 2.0** — aus OTAs eigenem Fork, über
+WebSockets, ohne TURN. Was bis dahin galt (Selkies 1.6.2 über WebRTC), steht
+im [Anhang](#anhang-selkies-162-bis-2026-10-07) und gilt weiter für Golden
+Images, die noch auf dem alten Basisimage gebaut sind.
+
 ## Worum es geht
 
 KasmVNC spricht **RFB**: Es überträgt rechteckige Bildausschnitte, sobald sich
@@ -12,38 +17,108 @@ Bandbreite, gestochen scharf. Für alles, was sich bewegt, ist es die falsche
 Form: Ein Video, ein Scroll durch eine lange Datei, eine Zeichenfläche
 zerfallen in nachziehende Kacheln.
 
-**Selkies** kodiert statt dessen einen H.264-Strom und schickt ihn über
-WebRTC. Das ist die Technik, mit der Spiele-Streaming arbeitet.
+**Selkies** kodiert statt dessen einen H.264-Strom. In der Fassung 2.0 geht er
+über **WebSockets** — durch denselben Port und dieselbe Adresse wie OTAs
+Oberfläche — und der Browser dekodiert ihn mit WebCodecs.
 
 ## Die beiden Wege im Vergleich
 
-Ehrlich vorweg, denn es sind keine Kleinigkeiten:
-
-| | KasmVNC | Selkies |
+| | KasmVNC | Selkies 2.0 |
 |---|---|---|
 | Anwendungen | **je Anwendung ein Bildschirm**, umschaltbar in der Leiste | dasselbe — je Anwendung ein `Xvfb` mit eigener Selkies-Instanz |
-| Weg des Bildes | durch Traefik, ein Port | **an Traefik vorbei**, WebRTC über UDP |
-| Zusätzliche Ports | keine | 3478 und 49160–49260 auf dem Host (UDP), einmal für alle |
-| Sitzungen gleichzeitig | beliebig viele | beliebig viele (ein TURN für den ganzen Host) |
+| Weg des Bildes | durch Traefik, ein Port | **durch Traefik**, ein Port (WebSockets) |
+| Zusätzliche Ports | keine | **keine** |
+| Sitzungen gleichzeitig | beliebig viele | beliebig viele |
 | Zwischenablage | OTAs Brücke zwischen den Displays | Selkies' eigene, im Bild eingebaut |
-| Ton | über KasmVNC | über WebRTC |
+| Ton | über KasmVNC | über WebSockets |
+| Kodierer | — | H.264 in Software (x264); mit GPU NVENC oder VA-API |
 
-**Das Arbeitsplatzmodell bleibt dasselbe.** Das war zwischenzeitlich anders
-gedacht — eine Selkies-Instanz überträgt genau einen Bildschirm, und daraus
-wurde erst der Schluss gezogen, alle Anwendungen müssten sich einen teilen.
-Das ist eine Eigenschaft *einer Instanz*, nicht des Modells: Es läuft eine
-Instanz **je Anwendung**, jede auf ihrem eigenen Bildschirm, formatfüllend und
-umschaltbar in der Leiste. Siehe unten.
+**Was sich mit 2.0 geändert hat.** Selkies 1.6.2 schickte das Bild als WebRTC
+über UDP an Traefik vorbei und brauchte dafür einen TURN-Server samt Ports auf
+dem Wirt, eine Sperrliste, eine Antwort auf kleine Paketgrössen im VPN und fünf
+Eingriffe in seinen Code. Mit WebSockets ist all das weg: Der Weg zum Bild ist
+derselbe wie der zur Oberfläche, hinter einem Reverse-Proxy, durch ein VPN und
+durch eine Firewall mit NAT.
 
 ## Einrichten
 
 ```bash
-scripts/build-desktop-image.sh --pruefen   # baut ota/base-desktop:1 und misst 19 Punkte
+scripts/build-desktop-image.sh --pruefen   # baut ota/base-desktop:1 und misst 18 Punkte
 ```
 
-In `deploy/.env` muss stehen, unter welcher Adresse die **Browser** diesen
-Host erreichen — nicht die eines Docker-Netzes und nicht `0.0.0.0` — und ein
-Geheimnis für die TURN-Anmeldung:
+Dann eine Vorlage anlegen mit `image_ref: ota/base-desktop:1`. Die
+Streaming-Maschine muss dabei **nicht** angegeben werden — OTA liest sie aus
+dem Image. Alles andere bleibt wie bei jedem Arbeitsplatz: Zuhause, Ablagen,
+Skeleton, Startskript, Rechte.
+
+**Golden Images**, die auf dem alten Basisimage gebaut sind, tragen weiter
+Selkies 1.6.2 und laufen weiter — über TURN, wie im Anhang beschrieben. Unter
+**Verwaltung → Software** einmal neu gebaut, kommen sie auf 2.0. Der Agent
+erkennt die Fassung selbst (an `/dockerstartup/selkies-starten.sh`).
+
+## OTAs Fork
+
+Selkies liegt **als Quellcode in OTAs Repository** (`third_party/selkies/`),
+mit Herkunft, Prüfsumme des Releases und jeder eigenen Änderung in
+`third_party/selkies/OTA-FORK.md`. Das Basisimage wird nur daraus gebaut.
+
+Der Grund ist ein Erlebnis: Am 2026-10-07 waren die Release-Dateien von
+Selkies 1.6.2 bei GitHub verschwunden — das Projekt war umbenannt, die alten
+Releases entfernt —, und OTAs Basisimage liess sich nirgends mehr neu bauen.
+Ein zweites Mal soll ein Wechsel oben uns nicht treffen.
+
+Die Abhängigkeiten stehen vollständig und mit Prüfsumme in
+`third_party/selkies/ota-abhaengigkeiten.txt`, darunter die beiden
+Rust-Erweiterungen `pixelflux` (Bild) und `pcmflux` (Ton). Mit der eigenen
+Paketquelle liegen sie im Datei-Vorrat, und der Bau braucht kein Internet
+([Kapitel 26](26-paketquellen.md#der-datei-vorrat)).
+
+## Was OTA an Selkies einstellt — und abschaltet
+
+Alles über Einstellungen (`SELKIES_*`), keine Eingriffe in den Code. Sie stehen
+an einer Stelle, `images/base-desktop/dockerstartup/selkies-starten.sh`, die
+Haupt- und Anwendungsbildschirm gemeinsam benutzen.
+
+| Einstellung | Wert | Warum |
+|---|---|---|
+| Transport | WebSockets, fest | ein Port, durch Traefik; WebRTC trüge hier nicht ohne TURN |
+| Anmeldung | Basic-Auth | Traefik setzt den Header; das Passwort verlässt den Server nie |
+| Seitenleiste von Selkies | aus | läge unter OTAs Griff; was darin steht, regelt OTA |
+| Dateiübertragung, Drucken | **aus** | an OTAs Ablagen, Rechten und Protokoll vorbei |
+| Freigabe-Links, Mitspieler | **aus** | eine Sitzung gehört einem Menschen |
+| Befehle über den Kanal | **aus** | Vorgabe von Selkies, hier ausdrücklich festgehalten |
+| Mikrofon, Kamera, Gamepad | aus | |
+| Zweiter Bildschirm | aus | mehrere Anwendungen sind bei OTA mehrere Bildschirme |
+| Zwischenablage | an, beide Richtungen | wie bisher |
+| Tastaturlayout | vor dem Start (`OTA_KEYBOARD_LAYOUT`) | siehe [unten](#das-tastaturlayout-) |
+
+Selkies 2.0 bringt die ersten fünf **eingeschaltet** mit. Jeder davon wäre ein
+neuer Weg für Daten aus dem Arbeitsplatz hinaus oder hinein gewesen. Die
+Prüfung des Basisimages liest sie aus dem laufenden Prozess nach.
+
+## Prüfen
+
+```bash
+scripts/build-desktop-image.sh --pruefen   # das Image, 18 Punkte
+scripts/test-streaming.sh                  # durch OTA bis zum Bild, auch auf dem Bildschirm einer Anwendung
+```
+
+`test-streaming.sh` legt sich eine eigene Vorlage auf dem aktuellen
+Basisimage an, startet sie in einem Browser in einem fremden Netz und zählt
+die Bilder, die dort **dekodiert** ankommen — auf dem Arbeitsplatz und auf dem
+Bildschirm einer Anwendung. Gemessen am 2026-10-07: rund 350 Bilder in
+12 Sekunden, je Bildschirm, in Fenstergrösse.
+
+---
+
+# Anhang: Selkies 1.6.2 (bis 2026-10-07)
+
+*Gilt nur noch für Golden Images auf dem alten Basisimage.* Dort läuft das
+Bild als WebRTC über UDP an Traefik vorbei, und alles Folgende bleibt nötig:
+TURN, seine Ports, seine Sperrliste.
+
+In `deploy/.env` muss dafür stehen, unter welcher Adresse die **Browser**
+diesen Host erreichen, und ein Geheimnis für die TURN-Anmeldung:
 
 ```
 OTA_TURN_HOST=192.168.66.224
@@ -52,27 +127,9 @@ OTA_TURN_PROTOCOL=udp        # tcp bei kleiner MTU, siehe unten
 OTA_TURN_ICE_POLICY=all      # relay bei kleiner MTU, siehe unten
 ```
 
-**Hinter einer Firewall mit Portweiterleitung** sind das zwei Adressen: die der Firewall für die
-Browser (`OTA_TURN_HOST`) und die eigene des Hosts, an die coturn sich bindet (`OTA_TURN_BIND`).
-Welche Ports die Firewall weiterreichen muss und warum der Relay-Bereich dabei zu bleibt, steht in
+Nachmessen mit `python3 scripts/pruef-turn.py`; die letzte Zeile muss
+`TURN vermittelt.` lauten. Hinter einer Firewall mit Portweiterleitung siehe
 [Kapitel 24](24-hinter-nat.md).
-
-Dann den TURN-Dienst starten und **nachmessen**, bevor irgendetwas anderes
-probiert wird:
-
-```bash
-docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d turn
-python3 scripts/pruef-turn.py
-```
-
-Die letzte Zeile muss `TURN vermittelt.` lauten. Tut sie es nicht, hat es
-keinen Zweck, eine Sitzung zu starten — sie zeigt dann „Waiting for stream"
-und sagt nicht warum.
-
-Dann eine Vorlage anlegen mit `image_ref: ota/base-desktop:1`. Die
-Streaming-Maschine muss dabei **nicht** angegeben werden — OTA liest sie aus
-dem Image. Alles andere bleibt wie bei jedem Arbeitsplatz:
-Zuhause, Ablagen, Skeleton, Startskript, Rechte.
 
 ## Warum der TURN-Server im Stack läuft und nicht in der Sitzung
 
@@ -135,6 +192,14 @@ Die Grösse ist der ehrliche Wermutstropfen: Das Bündel fällt weg, aber Debian
 `gstreamer1.0-plugins-bad` bringt fast dasselbe mit — CUDA-, Vulkan- und
 Wayland-Anteile, die ein Streaming-Server nie anfasst. Abspecken wäre ein
 eigener Schritt.
+
+### Selkies 1.6.2 gibt es bei GitHub nicht mehr
+
+Seit dem **2026-10-07** liefern die Release-Adressen von Selkies 1.6.2 einen
+404: Das Projekt heisst jetzt `selkies-project/selkies`, führt nur noch 2.0
+und hat die alten Releases entfernt. Das war der Anlass für den Umstieg auf
+2.0 und für OTAs eigenen Fork (oben). Ein Basisimage mit 1.6.2 lässt sich
+seither nicht mehr neu bauen; vorhandene Images laufen weiter.
 
 ### Wo das Zuhause liegt, sagt das Image
 
@@ -436,11 +501,13 @@ OTA_KEYBOARD_VARIANT=         # z. B. nodeadkeys
 ```
 
 Sie wirkt beim **nächsten Start** eines Arbeitsplatzes, ein Neubau des Images ist nicht nötig. Der
-Agent setzt das Layout nach dem Start auf dem Hauptbildschirm und startet dessen Selkies danach
-einmal neu. Das ist kein Schönheitsfehler, sondern die Bedingung dafür, dass es wirkt: Selkies liest
-die Belegung beim eigenen Start einmal ein. Ein später gesetztes Layout sähe es nie. Gemessen mit
-`de`, aber ohne Neustart: `a_²yß` statt `aäöüß/Ä@z-`, aus `z` wurde `y`. Die Bildschirme der
-einzelnen Anwendungen bekommen das Layout, bevor ihr Selkies startet.
+Agent gibt sie dem Container mit, und **Selkies 2.0** bekommt das Layout gesetzt, bevor es startet —
+auf dem Hauptbildschirm wie auf denen der einzelnen Anwendungen. Gemessen am 2026-10-07: getippt
+`aäöüß/Ä@z-`, angekommen `aäöüß/Ä@z-`.
+
+Bei **Selkies 1.6.2** setzt der Agent das Layout nach dem Start und startet Selkies danach einmal
+neu — es liest die Belegung beim eigenen Start einmal ein, ein später gesetztes Layout sähe es nie.
+Gemessen mit `de`, aber ohne Neustart: `a_²yß` statt `aäöüß/Ä@z-`, aus `z` wurde `y`.
 
 **Das Layout ist eines für die ganze Anlage.** Es muss zu den Tastaturen passen, an denen die
 Menschen sitzen, nicht zum Server. Wer mit einer US-Tastatur auf einen `de`-Arbeitsplatz kommt, hat
@@ -492,6 +559,8 @@ Tastatur in ein Terminal im Arbeitsplatz und vergleicht, was ankommt.
    zwischen einer funktionierenden und einer scheiternden Sitzung.
 
 ## Was es kostet — gemessen
+
+*Gemessen mit Selkies 1.6.2 (GStreamer, WebRTC). Für 2.0 steht die Messung aus.*
 
 Lange stand hier eine Vermutung. Am **2026-09-03** ist es gemessen, mit `make messung`: beide Wege
 bei 1280×720, dieselbe Last, derselbe Prüfbrowser hinter demselben TURN, auf dieser Maschine —
@@ -579,14 +648,16 @@ ob das Modell trägt — sind beantwortet: die ersten beiden im Abschnitt oben,
 die dritte im Alltag. Es läuft eine Instanz je Anwendung, und der Umschalter
 in der Leiste ist geblieben.
 
-Offen bleibt eine Frage, und sie stellt sich erst bei vielen Menschen
-gleichzeitig:
+**Offen seit dem Umstieg auf 2.0** (2026-10-07):
 
-- **Wie viele Sitzungen trägt ein TURN?** Eine Verbindung belegt vier
-  Relay-Ports, und coturn gibt sie erst nach Ablauf der Lebenszeit frei. Der
-  Vorgabebereich von hundert Ports reicht für rund zwanzig gleichzeitige
-  Sitzungen; wer mehr braucht, macht ihn grösser. Gemessen ist das nicht —
-  gerechnet.
+- **Was 2.0 kostet**, ist nicht gemessen. Die Zahlen im Abschnitt „Was es
+  kostet" stammen von 1.6.2 mit GStreamer; 2.0 kodiert mit `pixelflux` und
+  überträgt über TCP. `make messung` misst noch den WebRTC-Weg und muss für
+  2.0 umgeschrieben werden.
+- **Wie viele Sitzungen trägt ein TURN** — nur noch für Golden Images mit
+  1.6.2 von Belang. Eine Verbindung belegt vier Relay-Ports; der Vorgabebereich
+  von hundert reicht für rund zwanzig gleichzeitige Sitzungen. Gerechnet,
+  nicht gemessen.
 
 Wer zurück will, stellt einen Arbeitsplatz in der Oberfläche unter
 **Streaming** auf KasmVNC. Für Images von Kasm ist das ohnehin nötig — die

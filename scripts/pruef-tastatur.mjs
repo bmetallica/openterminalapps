@@ -30,13 +30,25 @@ if (!(await page.$('.rail'))) {
   await page.type('input[autocomplete="current-password"]', env.OTA_TEST_ADMIN_PW)
   await Promise.all([page.click('button.btn--primary'), page.waitForSelector('.rail', { timeout: 25000 })])
 }
+// Der Start wird wiederholt, wenn der Browser die Anfrage selbst abbricht.
+// Laeuft er auf dem Docker-Wirt, haelt Chromium die Netze, die ein neuer
+// Arbeitsplatz anlegt, fuer einen Netzwechsel (`net::ERR_NETWORK_CHANGED`)
+// und verwirft die laufende Anfrage — der Arbeitsplatz startet trotzdem. Ein
+// zweiter Start gibt ihn einfach zurueck.
 const s = await page.evaluate(async (slug) => {
   const alle = await (await fetch('/api/templates')).json()
   const v = slug ? alle.find((t) => t.slug === slug)
     : alle.find((t) => t.stream_engine === 'selkies' && t.mode === 'workspace' && t.is_enabled)
-  const a = await fetch('/api/sessions', { method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ template_id: v.id }) })
-  return a.json()
+  for (let i = 0; ; i++) {
+    try {
+      const a = await fetch('/api/sessions', { method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ template_id: v.id }) })
+      return a.json()
+    } catch (e) {
+      if (i >= 10) throw e
+      await new Promise((r) => setTimeout(r, 3000))
+    }
+  }
 }, SLUG)
 console.log('Sitzung', s.id, s.stream_engine)
 await page.goto(BASE + s.url, { waitUntil: 'domcontentloaded' })
@@ -79,6 +91,9 @@ const bekommen = execSync(`docker exec ${cn} cat /tmp/getippt`).toString()
 console.log(`erwartet: ${erwartet}\nbekommen: ${bekommen}`)
 console.log(bekommen === erwartet ? 'TASTATUR STIMMT' : 'TASTATUR FALSCH')
 if (!process.env.OTA_BEHALTEN) {
+  // Zurück auf OTAs Seite: Selkies 2.0 ersetzt auf seiner eigenen `fetch`,
+  // und ein Aufruf der OTA-API von dort scheitert.
+  await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' })
   await page.evaluate(async (id) => fetch(`/api/sessions/${id}`, { method: 'DELETE' }), s.id)
 }
 await browser.disconnect()

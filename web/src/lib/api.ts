@@ -597,6 +597,40 @@ export type Allocation = {
   has_own_override: boolean
 }
 
+// ------------------------------------------------- Paketquellen (Kapitel 26)
+export type RepoModus = 'aus' | 'zuerst' | 'nur'
+export type RepoEinstellungen = {
+  modus: RepoModus; bau_snapshot: string; alter_gelb: number; alter_rot: number
+}
+export type RepoAuftrag = {
+  art: string; laeuft: boolean; protokoll?: string
+  start: string | null; ende: string | null; ergebnis: string
+}
+export type RepoSpiegel = {
+  name: string; quelle: string; pakete: number; angelegt: boolean; aktuell: string
+}
+export type RepoSnapshot = { zeit: string; notiz: string; von: string; teile: string[] }
+export type RepoStatus = {
+  filter: string; vollspiegel: boolean; spiegel: RepoSpiegel[]
+  eigene_pakete: number; schluessel: string; belegt: number; frei: number
+  letzter_abgleich: { zeit: string; spiegel: Record<string, number> } | null
+  auftrag: RepoAuftrag; veroeffentlicht: string[]
+  snapshots: Record<string, RepoSnapshot>
+  dateien: { pfad: string; groesse: number }[]
+}
+export type RepoUebersicht = {
+  aktiv: boolean; erreichbar?: boolean; fehler?: string
+  status?: RepoStatus; alter_tage?: number | null
+  einstellungen: RepoEinstellungen
+}
+export type RepoPaket = {
+  schluessel: string; name: string; version: string; arch: string
+  groesse?: number; sha256?: string; von?: string; zeit?: string
+}
+export type RepoKurz = {
+  aktiv: boolean; erreichbar?: boolean; alter_tage?: number | null; gelb?: number; rot?: number
+}
+
 /** Fehler mit der Meldung, die die API geliefert hat — nicht "Fehler 500". */
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -949,6 +983,32 @@ export const api = {
   /** Kein `call`: Die Antwort ist eine Datei, kein JSON. */
   terminalProtokollUrl: (id: string, format: 'txt' | 'csv') =>
     `/api/admin/arbeitsplaetze/${id}/terminal-protokoll?format=${format}`,
+
+  // Paketquellen (Kapitel 26) — nur Administratoren.
+  repo: () => call<RepoUebersicht>('/paketquellen'),
+  repoKurz: () => call<RepoKurz>('/paketquellen/kurz'),
+  repoEinstellungen: (body: RepoEinstellungen) =>
+    call<{ status: string }>('/paketquellen/einstellungen', { method: 'PUT', body: JSON.stringify(body) }),
+  repoAbgleich: () => call<{ status: string }>('/paketquellen/abgleich', { method: 'POST' }),
+  repoDateien: () => call<{ status: string }>('/paketquellen/dateien', { method: 'POST' }),
+  repoAuftrag: () => call<RepoAuftrag>('/paketquellen/auftrag'),
+  repoPakete: () => call<RepoPaket[]>('/paketquellen/pakete'),
+  repoHochladen: (datei: File) => {
+    const body = new FormData()
+    body.append('datei', datei, datei.name)
+    return call<RepoPaket>('/paketquellen/pakete', { method: 'POST', body })
+  },
+  repoPaketLoeschen: (schluessel: string) =>
+    call<{ status: string }>(`/paketquellen/pakete/${encodeURIComponent(schluessel)}`, { method: 'DELETE' }),
+  repoSnapshot: (name: string, notiz: string) =>
+    call<{ name: string }>('/paketquellen/snapshots', {
+      method: 'POST', body: JSON.stringify({ name, notiz }),
+    }),
+  repoSnapshotLoeschen: (name: string) =>
+    call<{ status: string }>(`/paketquellen/snapshots/${encodeURIComponent(name)}`, { method: 'DELETE' }),
+  repoZurueckdrehen: (name: string) =>
+    call<{ status: string }>(`/paketquellen/snapshots/${encodeURIComponent(name)}/zurueckdrehen`,
+      { method: 'POST' }),
 
   backups: () => call<Backup[]>('/backups'),
   backupStorage: () => call<BackupStorage>('/backups/storage'),

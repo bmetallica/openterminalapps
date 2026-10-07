@@ -43,6 +43,10 @@ Sockets und Sperrdateien. In einem echten Profil schrumpfte das Archiv dadurch v
 auf 355 Einträge — ohne dass eine Nutzerdatei fehlte. Die 306 MB Unterschied waren ein
 heruntergeladener SDK-Cache.
 
+**Nicht dabei: die eigene Paketquelle** ([Kapitel 26](26-paketquellen.md#sicherung)). Ihr
+Signierschlüssel, die eigenen Pakete und der Datei-Vorrat liegen unter `OTA_REPO_ROOT` und gehören
+in die Sicherung des Wirts. Der Spiegel selbst kommt mit einem Abgleich wieder.
+
 ### Root-Arbeitsplätze ✅
 
 Bei Root-Arbeitsplätzen ([Kapitel 25](25-root-arbeitsplatz.md)) ist der Container der Zustand, den

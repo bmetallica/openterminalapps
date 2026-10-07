@@ -13,7 +13,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session as DbSession
 
-from .. import agent_client, audit
+from .. import agent_client, audit, paketquellen, settings_store
 from ..db import SessionLocal, get_db
 from ..deps import current_user, require_permission
 from ..models import ImageBuild, Session as SessionModel, Template, User
@@ -421,6 +421,10 @@ async def start_build(
         # Arbeitsplatz-Images duerfen keine Anwendung von selbst starten.
         "mode": tpl.mode,
         "pause_containers": pause,
+        # Eigene Paketquelle fuer den Bau (Kapitel 26) — und gegen welchen
+        # festgehaltenen Stand. Leer: Quellen des Basisimages.
+        "repo": paketquellen.fuer_container(db),
+        "repo_snapshot": settings_store.get(db, settings_store.REPO_BAU_SNAPSHOT) or "",
     })
 
     build.log = f"Build gestartet als {tag}\n\n"

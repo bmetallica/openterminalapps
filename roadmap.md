@@ -864,6 +864,33 @@ selbst führt der Betreiber; hier steht, was daraus gebaut wurde.
       anzufassen; `make root-image`; `scripts/test-root-arbeitsplatz.sh` (33 Prüfungen)
 - [ ] Externer Docker-Server — zurückgestellt (Uoktober.md, Teil D)
 
+**Nachtrag 2026-10-07 — Eigene Paketquelle** ([Kapitel 26](docs/wiki/26-paketquellen.md)):
+
+- [x] Spiegel von Debian 13 (trixie, -updates, -security) und Dockers Quelle mit aptly, signiert
+      mit eigenem Schlüssel; Abgleich nur von Hand, Alter gelb/rot auf der Seite und im Dashboard
+- [x] Betriebsart je Anlage: „Eigene zuerst" (Vorgabe), „Nur eigene", „Aus" — nur in Debian-13-Images,
+      beim Start und beim Fortsetzen von Root-Arbeitsplätzen
+- [x] Eigene `.deb`-Pakete (nur Administratoren, Audit), Snapshots mit „Bauen gegen" und Zurückdrehen
+- [x] Bildbauer trägt ein und wieder aus; fertige Images ohne Spur der Anlage
+- [x] Datei-Vorrat: Selkies, clipnotify, pip-Räder, Sysbox; Basisimage-Bau über `--build-context`,
+      Selkies und pip **ohne Internet**; `sysbox-einrichten.sh` nimmt das Paket aus dem Vorrat
+- [x] **Selkies 1.6.2 bei GitHub verschwunden** (2026-10-07) — Anlass für den Umstieg unten
+- [x] `scripts/test-repo.sh` (28 Prüfungen) in `make test`
+- [ ] apt im Bau des Basisimages über die eigene Quelle (heute noch `deb.debian.org`)
+- [ ] Vollspiegel auf einer Anlage mit Platz gemessen (hier nur mit Filter geprüft)
+
+**Nachtrag 2026-10-07 — Selkies 2.0 aus eigenem Fork** ([Kapitel 20](docs/wiki/20-selkies-versuch.md)):
+
+- [x] Selkies 2.0.0 als Quellcode in `third_party/selkies/` (OTA-FORK.md: Herkunft, Prüfsumme,
+      jede eigene Änderung); Abhängigkeiten vollständig mit Prüfsumme, im Datei-Vorrat
+- [x] **WebSockets statt WebRTC** — das Bild geht durch Traefik, kein TURN mehr für das Basisimage;
+      kein GStreamer, keine fünf Patches
+- [x] Dateiübertragung, Drucken, Freigaben, Befehle, Mikrofon, Kamera abgeschaltet (in 2.0 ab Werk an)
+- [x] Tastaturlayout vor dem Start, ohne Neustart; Agent bedient 1.6.2-Images weiter
+- [x] `test-streaming.sh` mit eigener Vorlage, Arbeitsplatz und Anwendungsbildschirm
+- [ ] `make messung` für 2.0 (misst noch den WebRTC-Weg); Kosten von 2.0 messen
+- [ ] TURN aus dem Stack nehmen, sobald keine Golden Images mit 1.6.2 mehr laufen
+
 **Ausdrücklich nicht gebaut**, jeweils als Entscheidung festgehalten: Verschlüsselung im
 Ruhezustand samt der TOTP-Startwerte, ein Streifen im Bild während des Aufschaltens (ein
 Administrator sieht auch ohne OTA zu — ein Signal, dessen Fehlen nichts bedeutet, wäre eine falsche

@@ -53,9 +53,10 @@ heute schon funktioniert.
 14. [Sicherung und Wiederherstellung](14-sicherung.md)
 15. [Ein Profil aus Kasm übernehmen](15-migration-aus-kasm.md)
 24. [Betrieb hinter einer Firewall mit NAT](24-hinter-nat.md)
+26. [Die eigene Paketquelle](26-paketquellen.md)
 
 Die Nummern sind die Reihenfolge, in der die Kapitel entstanden sind, nicht die, in der man sie
-liest — deshalb stehen 16 bis 23 zwischen 9 und 10, und 24 steht unter Betrieb. Umnummerieren würde jeden Verweis brechen, der
+liest — deshalb stehen 16 bis 23 zwischen 9 und 10, und 24 und 26 stehen unter Betrieb. Umnummerieren würde jeden Verweis brechen, der
 irgendwo schon steht.
 
 ## Wo was steht

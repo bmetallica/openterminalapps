@@ -146,9 +146,19 @@ echo
 echo "Paket"
 ARBEIT="$(mktemp -d)"
 trap 'rm -rf "$ARBEIT"' EXIT
-curl -fsSL -o "$ARBEIT/$DEB" "$URL" || halt "Download gescheitert: $URL (Proxy? Kapitel 21)"
+# Zuerst aus dem Datei-Vorrat der eigenen Paketquelle (Kapitel 26), sonst
+# von GitHub. Die Prüfsumme gilt für beide Wege.
+REPO_ROOT="${OTA_REPO_ROOT:-$(grep -E '^OTA_REPO_ROOT=' "$(dirname "$0")/../deploy/.env" 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '"')}"
+VORRAT="${REPO_ROOT:-/srv/ota/repo}/aptly/public/dateien/sysbox/$DEB"
+if [ -f "$VORRAT" ]; then
+  cp "$VORRAT" "$ARBEIT/$DEB"
+  HER="aus dem Datei-Vorrat"
+else
+  curl -fsSL -o "$ARBEIT/$DEB" "$URL" || halt "Download gescheitert: $URL (Proxy? Kapitel 21)"
+  HER="heruntergeladen"
+fi
 echo "$SHA256  $ARBEIT/$DEB" | sha256sum -c --quiet - || halt "Prüfsumme stimmt nicht — Paket NICHT installiert."
-ok "Heruntergeladen, Prüfsumme stimmt"
+ok "Paket $HER, Prüfsumme stimmt"
 
 # Das Paket meldet ggf., dass die Kernel-Header fehlen. Für Root-Arbeitsplätze
 # werden sie nicht gebraucht (sie wären es nur für Programme, die im Container

@@ -36,7 +36,7 @@ daneben.
 
 Ein deaktivierter Workspace verschwindet aus den Dashboards, die Zuweisungen bleiben aber bestehen.
 
-**Streaming** steht ebenfalls hier: `Selkies (WebRTC)` ist die Vorgabe und der Weg des eigenen
+**Streaming** steht ebenfalls hier: `Selkies` ist die Vorgabe und der Weg des eigenen
 Basisimages; `KasmVNC (RFB)` gehört zu Images von Kasm, die kein Selkies mitbringen.
 
 ### Netz ✅

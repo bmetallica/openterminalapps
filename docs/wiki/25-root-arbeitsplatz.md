@@ -50,7 +50,8 @@ sudo scripts/sysbox-einrichten.sh --pruefen          # nur prüfen
 sudo scripts/sysbox-einrichten.sh --live-restore     # einrichten (empfohlen)
 ```
 
-Das Skript lädt Sysbox 0.7.1, prüft die Prüfsumme und installiert es — **ohne einen Container
+Das Skript lädt Sysbox 0.7.1 (oder nimmt es aus dem Datei-Vorrat der eigenen Paketquelle,
+[Kapitel 26](26-paketquellen.md#der-datei-vorrat)), prüft die Prüfsumme und installiert es — **ohne einen Container
 anzufassen**:
 
 - Das Paket will normalerweise Docker neu starten, um zwei Netzwerkwerte in

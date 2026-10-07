@@ -110,9 +110,10 @@ Nichts davon wird durch OTA neu lizenziert.
 
 | Bestandteil | Lizenz | Anmerkung |
 |---|---|---|
-| **Selkies** | **MPL-2.0** | Die Streaming-Engine des Vorgabe-Images. **OTA ändert sie** — siehe unten |
-| **libx264** | **GPL-2.0+** | Der Kodierer, über `gstreamer1.0-plugins-ugly` |
-| GStreamer (base/good/bad/ugly) | LGPL-2.0+ (die Pakete) | Einzelne Plugins binden GPL-Bibliotheken ein |
+| **Selkies 2.0** | **MPL-2.0** (darin `Xlib`: LGPL-3.0) | Die Streaming-Engine des Vorgabe-Images, **als Quellcode in OTAs Repository** — siehe unten |
+| `pixelflux`, `pcmflux` | MPL-2.0 | Bild- und Tonaufnahme samt Kodierung; Rust-Erweiterungen von Selkies |
+| **libx264, x265, FFmpeg** | **GPL-2.0+** (so gebaut) | Im `pixelflux`-Rad mitgeliefert — siehe unten |
+| libvpx, SVT-AV1, dav1d, kvazaar, libFLAC | BSD bzw. BSD-artig | Ebenfalls in den Rädern von `pixelflux`/`pcmflux` |
 | **KasmVNC** | GPL-2.0 | Nur noch im alten Image `base-xfce` |
 | **Kasm-Workspaces-Images** | MIT **nur für die Baurezepte** | Siehe unten |
 | XFCE | GPL | Desktop |
@@ -126,56 +127,45 @@ Nichts davon wird durch OTA neu lizenziert.
 | Google Chrome | Google-Nutzungsbedingungen | Proprietär |
 | Sonstige Anwendungen | jeweils eigene | Was im Image installiert wurde |
 
-Alle Angaben oben sind am 2026-09-03 aus dem gebauten Image abgelesen
+Alle Angaben oben sind am 2026-09-03 aus dem gebauten Image abgelesen —
+die Zeilen zu Selkies 2.0, `pixelflux` und `pcmflux` am 2026-10-07 aus den Rädern
 (`/usr/share/doc/<paket>/copyright` bzw. die Metadaten des Python-Pakets),
 nicht aus dem Gedächtnis.
 
-### Selkies — MPL-2.0, und OTA ändert es
+### Selkies — MPL-2.0, als Fork in OTAs Repository
 
-Das ist der Punkt, der beim Wechsel auf das eigene Basisimage **neu
-hinzugekommen** ist und der leicht übersehen wird.
+Seit dem 2026-10-07 läuft **Selkies 2.0**, und es liegt **als Quellcode** in
+`third_party/selkies/` — OTAs Fork, aus dem das Basisimage gebaut wird.
+Herkunft (Tag, Commit, Prüfsumme des Releases) und **jede Abweichung** von
+upstream stehen in `third_party/selkies/OTA-FORK.md`. Am Programm selbst ändert
+OTA nichts; eingestellt wird es über seine Einstellungen.
 
-OTA startet Selkies nicht nur, sondern **verändert es beim Bauen des Images**.
-**Fünf** Eingriffe, alle in `images/base-desktop/patches/`, alle im Dockerfile
-angewendet:
+Die MPL-2.0 verlangt bei Weitergabe (§3.1/3.2), geänderte Dateien im
+Quelltext verfügbar zu machen und den Lizenztext beizulegen. Beides liegt mit
+dem Fork vor: `LICENSE` im Verzeichnis, die Quellen daneben. Das mitgelieferte
+`src/selkies/Xlib` steht unter LGPL-3.0 (eigene `LICENSE` dort).
 
-| Patch | Was er ändert |
-|---|---|
-| `gst-web-pfad.py` | zwei Adressen im Client, die sonst an der Wurzel des Hosts hängen |
-| `kein-fremd-stun.py` | nimmt `stun.l.google.com` aus der Konfiguration |
-| `ice-nur-vermittelt.py` | macht `iceTransportPolicy` einstellbar |
-| `beide-turn-wege.py` | bietet denselben TURN-Server über UDP **und** TCP an statt nur über einen |
-| `keine-fremde-leiste.py` | entfernt den Knopf für Selkies' eigene Seitenleiste |
+Bis zum 2026-10-07 lief Selkies 1.6.2, und OTA änderte es beim Bauen mit fünf
+Patches (`images/base-desktop/patches/`). Die gibt es nicht mehr; Golden
+Images, die noch auf dem alten Basisimage gebaut sind, tragen sie weiter in
+sich.
 
-> Diese Liste stand bis zum 2026-09-04 mit **vier** Einträgen hier, während das
-> Dockerfile fünf anwendete. Bei einer Weitergabe wäre eine geänderte Datei
-> nicht offengelegt worden — genau das, was die MPL verlangt. Wer einen Patch
-> hinzufügt, trägt ihn **hier** ein; das Dockerfile allein genügt nicht.
+### libx264, x265, FFmpeg — GPL-2.0+, und damit die eigentliche Pflicht
 
-Die MPL-2.0 verlangt (§3.1/3.2): Wer die Software weitergibt, muss die
-**geänderten Dateien im Quelltext** unter derselben Lizenz verfügbar machen.
-Für OTA heisst das bei Weitergabe eines Images:
+Selkies 2.0 kodiert mit `pixelflux` (MPL-2.0). Dessen Räder von PyPI — die,
+die OTA verwendet — sind in der **GPL-Konfiguration** gebaut und bringen
+**libx264**, **x265** und ein mit `--enable-gpl` gebautes **FFmpeg** mit
+(`pixelflux.libs/`). Wer ein Image weitergibt, in dem sie stecken — jedes
+Selkies-Image —, übernimmt die Pflichten der GPL: Lizenztext beilegen, die
+Quellen anbieten oder auf sie verweisen (`github.com/selkies-project/pixelflux`,
+Fassung 2.1.0, und die Projekte von x264, x265 und FFmpeg). Die genaue
+Aufstellung liegt im Rad selbst: `pixelflux-2.1.0.dist-info/licenses/LICENSES.md`.
 
-* Die vier Patch-Dateien mitliefern — sie beschreiben die Änderung
-  vollständig und sind selbst lesbar.
-* Auf das verwendete Release verweisen
-  (`github.com/selkies-project/selkies-gstreamer`, Tag `v<SELKIES_VERSION>`).
-* Den Lizenztext der MPL-2.0 beilegen.
-
-Was die MPL **nicht** verlangt: dass OTAs eigener Code unter MPL steht. Sie
-wirkt dateiweise, nicht auf das ganze Werk.
-
-### libx264 — GPL-2.0+, und damit die eigentliche Pflicht
-
-Die GStreamer-Pakete selbst sind LGPL. Der Kodierer dahinter ist es nicht:
-`gstreamer1.0-plugins-ugly` bringt `libgstx264.so`, und das bindet **libx264
-(GPL-2.0+)** ein. Wer ein Image weitergibt, in dem der H.264-Kodierer steckt —
-und das ist jedes Selkies-Image —, übernimmt damit die Pflichten der GPL:
-Lizenztext beilegen, auf die Quellen verweisen oder sie anbieten.
-
-Praktisch ist das dasselbe wie bei KasmVNC vorher, nur mit einem anderen
-Programm. Das Debian-Paket verweist auf `deb-src`; das ist ein gangbarer Weg,
-den Bezug der Quellen zu belegen.
+Praktisch ist das dasselbe wie vorher mit GStreamers `libgstx264.so` und wie
+bei KasmVNC — nur mit einem anderen Programm. **Ohne GPL** ginge es auch:
+`pixelflux` lässt sich mit `PIXELFLUX_ENABLE_GPL=0` aus den Quellen bauen und
+nimmt dann OpenH264 (BSD) statt x264. Dann müssten diese Räder selbst gebaut
+und in den Vorrat gelegt werden (OTA-FORK.md, „Abhängigkeiten").
 
 ### KasmVNC — GPL-2.0 (nur noch im alten Image)
 

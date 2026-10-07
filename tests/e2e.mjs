@@ -41,6 +41,10 @@ let pass = 0, fail = 0
 const ok = (m) => { console.log(`  \x1b[32m✓\x1b[0m ${m}`); pass++ }
 const bad = (m) => { console.log(`  \x1b[31m✗\x1b[0m ${m}`); fail++ }
 const check = (cond, m) => (cond ? ok(m) : bad(m))
+// Ein Tab, auf den gewartet wird, muss auch kommen — sonst ein Fehler mit
+// Namen statt eines Tests, der bis zum Abbruch von aussen steht.
+const mitGrenze = (versprechen, ms, was) => Promise.race([versprechen,
+  new Promise((_, nein) => setTimeout(() => nein(new Error(`${was}: nach ${ms / 1000}s nicht da`)), ms))])
 
 const shot = async (page, name) => {
   await page.screenshot({ path: `${SHOTS}/${name}.png` })
@@ -264,9 +268,21 @@ try {
 
   // Sessions oeffnen seit M4 in einem eigenen Tab. Der Test folgt dem Tab —
   // "page" bleibt das Dashboard, "view" ist die Session.
+  // **Jede Wartestelle hat eine Grenze.** Hier stand `await opened` ohne: Ein
+  // Klick auf eine Arbeitsplatz-Kachel startet nur und öffnet bewusst keinen
+  // Tab (das tut nur eine Einzelanwendung). Stand ein Arbeitsplatz vorn in der
+  // Liste, wartete der Test bis zum Abbruch von aussen — zweimal 25 Minuten,
+  // je nachdem, welche Kachel zufällig zuerst stand.
+  const neuerTab = (ms) => new Promise((resolve) => {
+    const t = setTimeout(() => { browser.off('targetcreated', h); resolve(null) }, ms)
+    const h = async (z) => {
+      const p = await z.page()
+      if (p) { clearTimeout(t); browser.off('targetcreated', h); resolve(p) }
+    }
+    browser.on('targetcreated', h)
+  })
   const hasBay = await page.$('.bay')
-  const opened = new Promise((resolve) => browser.once('targetcreated',
-    (t) => resolve(t.page())))
+  let opened = neuerTab(20000)
   if (hasBay) {
     await page.click('.bay .btn--primary')
   } else {
@@ -274,7 +290,15 @@ try {
     ok('Session über die Kachel gestartet')
   }
 
-  const view = await opened
+  let view = await opened
+  if (!view) {
+    // Ein Arbeitsplatz: gestartet, aber nicht geöffnet. Er steht jetzt als
+    // laufende Sitzung oben — von dort öffnen, wie ein Mensch es täte.
+    await page.waitForSelector('.bay .btn--primary', { timeout: 60000 }).catch(() => {})
+    opened = neuerTab(20000)
+    await page.click('.bay .btn--primary').catch(() => {})
+    view = await opened
+  }
   // Der Client meldet die gestellte Leerlaufuhr in der Konsole. Das ist der
   // einzige Weg, an den **wirksamen** Wert heranzukommen: Im Auswahlfeld
   // steht danach weiter 60, weil es den grossen Wert gar nicht anbietet.
@@ -797,7 +821,7 @@ try {
     const legen = new Promise((resolve) => browser.once('targetcreated',
       (t) => resolve(t.page())))
     await page.click('.shortcut')
-    const ablage = await legen
+    const ablage = await mitGrenze(legen, 60000, 'Tab der Ablage')
     await ablage.waitForSelector('.place', { timeout: 20000 })
     ok('Die Ablege-Seite öffnet sich')
 
@@ -1059,7 +1083,7 @@ try {
       // Tab, der danach wieder zugeht.
       const spawn = new Promise((r) => browser.once('targetcreated', (t) => r(t.page())))
       await page.click('.bay .strip__app:not(:disabled)')
-      const started = await spawn
+      const started = await mitGrenze(spawn, 90000, 'Tab der Anwendung')
       await started.waitForSelector('.viewer__frame', { timeout: 90000 })
       await started.close()
       await page.bringToFront()
@@ -1080,7 +1104,7 @@ try {
     const running = await page.$$('.bay .strip__app.is-on')
     const appTab = new Promise((r) => browser.once('targetcreated', (t) => r(t.page())))
     await running[running.length - 1].click()
-    const appView = await appTab
+    const appView = await mitGrenze(appTab, 90000, 'Tab der Anwendung')
     await appView.waitForSelector('.viewer__frame', { timeout: 60000 })
     const appSrc = await appView.$eval('.viewer__frame', (el) => el.getAttribute('src'))
     check(/\/s\/[0-9a-f-]{36}\//.test(appSrc ?? ''),

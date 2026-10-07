@@ -194,6 +194,14 @@ cert:
 # ergibt statt eines Make-Fehlers.
 -include deploy/.env
 export OTA_TEST_ADMIN_PW
+# Die Paketquellen (Kapitel 26) sind ein Compose-Profil. Mit OTA_REPO=1 in
+# deploy/.env starten `make up`/`make update` die Dienste `repo` und `repo-web`
+# mit; sonst bleiben sie aus, und nichts aendert sich.
+# `default` mit, weil `keycloak-db-init` dieses Profil traegt: Sobald ueberhaupt
+# ein Profil gesetzt ist, faellt er sonst weg, und Compose verweigert den Stack
+# („keycloak depends on undefined service").
+komma := ,
+export COMPOSE_PROFILES := $(if $(filter 1,$(OTA_REPO)),default$(komma)repo,)
 # Und das Geheimnis des Dienstkontos: Ohne das ueberspringt die Rechtepruefung
 # ihre Keycloak- und Passkey-Abschnitte — und zwar rot, nicht still. Es stand
 # lange nicht hier, und ein `make test` war deshalb nur dann vollstaendig, wenn
@@ -228,6 +236,9 @@ test:
 	@# Root-Arbeitsplatz: root und Docker unter Sysbox, Anhalten statt Loeschen,
 	@# Webterminal mit Protokoll. Ohne Sysbox wird uebersprungen statt rot.
 	@./scripts/test-root-arbeitsplatz.sh
+	@echo
+	@# Eigene Paketquelle (Kapitel 26). Ohne OTA_REPO=1 uebersprungen statt rot.
+	@./scripts/test-repo.sh
 	@echo
 	@# Zuletzt, weil dieser Test Sessions beendet, um die Wiederherstellung
 	@# überhaupt prüfen zu können — **nur die eigenen**: `/api/sessions`

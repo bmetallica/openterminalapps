@@ -35,10 +35,12 @@ muss antworten), dazu `git`, `make` und `openssl`. Die Ports **8443** und **8081
 — 443 bleibt bewusst unbelegt, damit ein bestehendes Kasm daneben weiterlaufen kann. Beide sind über
 `OTA_HTTPS_PORT` und `OTA_HTTP_PORT` in `deploy/.env` änderbar.
 
-Dazu, sobald gestreamt wird: **3478** (TURN) und **49160–49260/UDP** für den Medienweg, sowie
-**30000–30019** als Vorrat für Portfreigaben. Steht OTA hinter einer Firewall mit
-Portweiterleitung, reichen nach aussen **443** und **3478/TCP** — welche Ports wohin, und was dafür
-in `deploy/.env` gehört, steht in [Kapitel 24](docs/wiki/24-hinter-nat.md). Und ein Adressbereich für die Arbeitsplatznetze, ab
+Dazu **30000–30019** als Vorrat für Portfreigaben. Der Bildstrom braucht **keinen** eigenen Port:
+Selkies 2.0 überträgt über WebSockets durch denselben HTTPS-Port wie die Oberfläche. Nur Golden
+Images, die noch auf dem alten Basisimage mit Selkies 1.6.2 gebaut sind, brauchen **3478** (TURN)
+und **49160–49260/UDP**. Steht OTA hinter einer Firewall mit Portweiterleitung, reicht nach aussen
+**443** — welche Ports wohin, und was dafür in `deploy/.env` gehört, steht in
+[Kapitel 24](docs/wiki/24-hinter-nat.md). Und ein Adressbereich für die Arbeitsplatznetze, ab
 Werk `10.99.0.0/16` — er darf sich **nicht** mit dem Firmennetz überschneiden. Alles einstellbar,
 alles erklärt in [`deploy/.env.example`](deploy/.env.example) und
 [Kapitel 2](docs/wiki/02-erste-schritte.md).
@@ -174,10 +176,11 @@ Gemessen in beide Richtungen; die Stolperstellen stehen in
 ### Hinter einer Firewall mit NAT
 
 Nutzer kommen von aussen über die Adresse der Firewall, OTA steht dahinter, vielleicht mit einem
-Reverse Proxy davor und dem Verzeichnis auf der anderen Seite. Nach aussen weiterzuleiten sind
-**443** (auf den Proxy) und **3478/TCP** (direkt auf den OTA-Host — der Bildstrom geht nicht durch
-den Proxy); ins äussere Netz braucht Keycloak **636** zum Verzeichnis. In `deploy/.env` kommen zwei
-TURN-Adressen, die der Firewall und die eigene:
+Reverse Proxy davor und dem Verzeichnis auf der anderen Seite. Nach aussen weiterzuleiten ist
+**443** (auf den Proxy, mit WebSockets — auch der Bildstrom geht seit Selkies 2.0 dort durch); ins
+äussere Netz braucht Keycloak **636** zum Verzeichnis. Nur solange Golden Images mit Selkies 1.6.2
+laufen, kommt **3478/TCP** direkt auf den OTA-Host dazu, und in `deploy/.env` zwei TURN-Adressen,
+die der Firewall und die eigene:
 
 ```bash
 OTA_TURN_HOST=10.50.0.33        # die Firewall — so sehen die Browser den TURN
@@ -208,6 +211,21 @@ Dann eine Vorlage der Klasse „Root mit Docker" anlegen und das Recht „Root-A
 die Gruppen vergeben, die es bekommen sollen. Ausführlich in
 [Kapitel 25](docs/wiki/25-root-arbeitsplatz.md).
 
+### Eigene Paketquelle einschalten
+
+Ein Spiegel von Debian 13 und Dockers Paketquelle, dazu eigene `.deb`-Pakete und festgehaltene
+Stände — ab Werk aus. Ein Vollspiegel braucht grob 100 bis 130 GB:
+
+```bash
+# in deploy/.env
+OTA_REPO=1
+OTA_REPO_ROOT=/srv/ota/repo
+sudo make update
+```
+
+Dann unter **Verwaltung → Paketquellen** einmal abgleichen. Ausführlich in
+[Kapitel 26](docs/wiki/26-paketquellen.md).
+
 ### Wenn etwas schiefgeht
 
 ```bash
@@ -237,6 +255,11 @@ dabei **nicht** zurückwandert, ist die Datenbank: Neue Spalten bleiben stehen. 
   **hält an** statt zu löschen: Was installiert wird, bleibt, unter fester Adresse; „Neu aufsetzen"
   holt ein neues Basisimage. Die inneren Container gehen durch denselben Router und dieselben
   Netzregeln ([Kapitel 25](docs/wiki/25-root-arbeitsplatz.md))
+- **Eigene Paketquelle** (Zusatz, ab Werk aus): Spiegel von Debian 13 samt Sicherheitsupdates und
+  Dockers Quelle, **eigene `.deb`-Pakete** per Drag & Drop, **festgehaltene Stände** mit
+  Zurückdrehen und reproduzierbaren Images. Arbeitsplätze installieren auch dann, wenn draussen
+  etwas fehlt — Betriebsart „Eigene zuerst" oder „Nur eigene". Abgeglichen wird von Hand; das
+  Alter des Spiegels wird gelb und rot ([Kapitel 26](docs/wiki/26-paketquellen.md))
 
 **Verwaltung**
 - Ressourcen **je Nutzer und Workspace**: Nutzer A bekommt 2 Kerne, Nutzer B einen
@@ -337,9 +360,11 @@ mit stehenden Paketen.
 
 **Betrieb**
 - **Eigenes Basisimage** `ota/base-desktop`: Debian 13 + XFCE + **Selkies**, ohne Anwendung und
-  **ohne fremde Streaming-Software** — H.264 über WebRTC statt rechteckiger Ausschnitte über RFB.
+  **ohne fremde Streaming-Software** — H.264 über WebSockets statt rechteckiger Ausschnitte über RFB.
+  Selkies 2.0 liegt **als Fork in OTAs Repository** (`third_party/selkies/`), damit ein Wechsel oben
+  — wie das Verschwinden von 1.6.2 am 2026-10-07 — den Bau nicht mehr bricht.
   Das Konto heisst `ota` und wohnt unter `/home/ota`; kein Bestandteil trägt „Kasm" im Namen.
-  `scripts/build-desktop-image.sh --pruefen` misst 19 Punkte gegen den Vertrag mit dem Agent
+  `scripts/build-desktop-image.sh --pruefen` misst 18 Punkte gegen den Vertrag mit dem Agent
 - **Der ältere Weg bleibt** — `ota/base-xfce` (Ubuntu + KasmVNC) für Images von Kasm, die kein
   Selkies mitbringen. Umschaltbar je Arbeitsplatz unter **Streaming**;
   `scripts/build-base-image.sh --pruefen` prüft ihn weiterhin
@@ -399,7 +424,7 @@ nicht — dieselbe Trennung gilt für das Dateisystem des Hosts.
 
 ## Dokumentation
 
-- **[Handbuch](docs/wiki/README.md)** — Bedienung, Verwaltung, Betrieb, Fehlersuche (25 Kapitel)
+- **[Handbuch](docs/wiki/README.md)** — Bedienung, Verwaltung, Betrieb, Fehlersuche (26 Kapitel)
 - **[plan.md](plan.md)** — Architektur **und die Begründungen dahinter**, samt der Sackgassen
 - **[docs/adr/](docs/adr/README.md)** — Entscheidungen, die teuer rückgängig zu machen sind, mit den
   Alternativen, die nicht getragen hätten
@@ -428,9 +453,10 @@ make test
 | `test-clipboard-bridge.sh` | Kopieren zwischen zwei Anwendungen im selben Arbeitsplatz: beide Richtungen, Umlaute, ein Bild, ein Megabyte, nach Pause, und abgeschaltet |
 | `tests/e2e.mjs` | Die Oberfläche in einem echten Browser — bis zur Frage, ob der Stream wirklich verbindet |
 | `test-ldap.sh` | Verzeichnis-Anbindung **über Keycloak** gegen ein echtes OpenLDAP im Container — vor allem, dass ein Verzeichniseintrag kein lokales Konto übernimmt und ein Ausfall den Notzugang nicht mitreisst |
-| `test-streaming.sh` | Der Medienweg: Vermittelt der TURN-Server wirklich, kommt im Browser ein Bild an, kommen Umlaute, Shift und AltGr einer deutschen Tastatur richtig an, und liegt die eigene Adresse in keinem gesperrten Bereich? Der Prüfbrowser läuft in einem Netz, aus dem der Session-Container **nicht** direkt erreichbar ist — wie ein Arbeitsplatz im Firmennetz. Ist `OTA_TURN_BIND` gesetzt, stellt die Reihe die Portweiterleitung der Firewall für den Prüfbrowser nach und prüft den Weg durch die NAT |
+| `test-streaming.sh` | Der Medienweg mit einer eigenen Vorlage auf dem aktuellen Basisimage: Ein Browser in einem fremden Netz zählt die **dekodierten Bilder** — auf dem Arbeitsplatz und auf dem Bildschirm einer Anwendung (Selkies 2.0, WebSockets durch Traefik); Umlaute, Shift und AltGr einer deutschen Tastatur kommen richtig an. Ist TURN eingerichtet (nur noch für Golden Images mit Selkies 1.6.2), wird er mitgeprüft, samt Sperrliste und NAT |
 | `test-firewall.sh` | Die Netzabsicherung, **von innen gemessen**: Nachbar, Wirt, Firmennetz, TURN, Namensdienst, Internet je Stufe, Freigabe nach Namen, Portfreigabe — und alles noch einmal nach einem Neustart des Routers |
 | `test-root-arbeitsplatz.sh` | Der Root-Arbeitsplatz: root auf dem Host unprivilegiert (Sysbox), Docker und Compose im Container, Netzregeln auch für die **inneren** Container, Anhalten und Fortsetzen mit erhaltenem Stand, Neu aufsetzen, Webterminal samt Protokoll und Export, kein Terminal in Dienste des Stacks, Golden Images mit `USER 1000`. Ohne Sysbox übersprungen |
+| `test-repo.sh` | Die eigene Paketquelle: Signatur, Hochladen (doppelt 409, kaputt 422), Snapshots samt Schutz vor dem Löschen, ein Debian-13-Arbeitsplatz installiert ein eigenes Paket **von hier**, „Nur eigene" ruft `deb.debian.org` nicht mehr, der Bildbauer trägt ein und wieder aus, ein Ubuntu-Image bleibt unberührt, ein Root-Arbeitsplatz übernimmt beim Fortsetzen die aktuelle Einstellung. Ohne `OTA_REPO=1` übersprungen |
 | `test-backup.sh` | Sicherung und Wiederherstellung von Profil, Container und Datenbank. Beendet dafür Sitzungen — **nur die eigenen**, und prüft das ausdrücklich nach |
 
 Die Zugangsdaten der Prüfung stehen in `deploy/.env` und nicht im Quelltext; die Reihen lesen sie

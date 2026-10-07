@@ -22,13 +22,13 @@ Arbeitsplätze erreichbar:
 |---|---|---|
 | **8443** (TCP) | Die Oberfläche und der Bildstrom | `OTA_HTTPS_PORT` |
 | **8081** (TCP) | Leitet nur auf HTTPS um | `OTA_HTTP_PORT` |
-| **3478** (UDP/TCP) | Der TURN-Server, sobald eine Vorlage auf Selkies steht | `OTA_TURN_PORT` |
-| **49160–49260** (UDP) | Worüber TURN den Medienstrom vermittelt. Eine Verbindung belegt vier Ports | `OTA_TURN_MIN/MAX` |
+| **3478** (UDP/TCP) | Der TURN-Server — **nur noch für Golden Images mit Selkies 1.6.2**; Selkies 2.0 streamt über 8443 | `OTA_TURN_PORT` |
+| **49160–49260** (UDP) | Worüber TURN den Medienstrom vermittelt — ebenso nur für 1.6.2 | `OTA_TURN_MIN/MAX` |
 | **30000–30019** (TCP) | Der Vorrat für Portfreigaben („+ NAT", [Kapitel 23](23-netz.md)). Belegt wird davon nur, was jemand freigibt | `OTA_NAT_MIN/MAX` |
 
 **Steht eine Firewall mit Portweiterleitung zwischen Nutzern und OTA**, sieht es anders aus: Nach
-aussen genügen 443 (auf den Reverse Proxy) und 3478/TCP (direkt auf den OTA-Host); der
-Relay-Bereich bleibt zu. Dafür kommen zwei TURN-Adressen in `deploy/.env` —
+aussen genügt 443 (auf den Reverse Proxy, mit WebSockets). Nur für Golden Images mit Selkies 1.6.2
+kommt 3478/TCP direkt auf den OTA-Host dazu, samt zwei TURN-Adressen in `deploy/.env` —
 [Kapitel 24](24-hinter-nat.md).
 
 Dazu ein **freier Adressbereich für die Arbeitsplatznetze**: ab Werk `10.99.0.0/16`. Er darf sich
@@ -130,8 +130,11 @@ ein Formular davor gibt es nicht. Dort stehen Anzeigename, Image, Betriebsart, *
 
 ## Der Medienweg — und der Zugriff über ein VPN ✅
 
-Seit Selkies die Vorgabe ist, läuft der Bildstrom **nicht durch Traefik**, sondern über den
-TURN-Dienst des Stacks. Der braucht eine Adresse, unter der ihn die **Browser** erreichen — nicht
+**Seit Selkies 2.0 (2026-10-07) läuft der Bildstrom durch Traefik**, über WebSockets, und braucht
+nichts von dem, was folgt. Es gilt nur noch für Golden Images, die auf dem alten Basisimage mit
+Selkies 1.6.2 gebaut sind ([Kapitel 20](20-selkies-versuch.md)).
+
+Dort läuft der Bildstrom **nicht durch Traefik**, sondern über den TURN-Dienst des Stacks. Der braucht eine Adresse, unter der ihn die **Browser** erreichen — nicht
 die eines Docker-Netzes, nicht `0.0.0.0`. `make setup` schlägt die erste eigene Adresse des Hosts
 vor und erzeugt das Geheimnis dazu:
 

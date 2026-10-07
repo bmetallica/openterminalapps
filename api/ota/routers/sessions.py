@@ -15,7 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DbSession
 
-from .. import agent_client, audit, settings_store
+from .. import agent_client, audit, paketquellen, settings_store
 from .firewall import schieben as firewall_schieben
 from ..config import settings
 from ..db import get_db
@@ -667,6 +667,8 @@ def start_session(
             "engine": tpl.stream_engine,
             # Root-Arbeitsplatz: Sysbox, Docker, angehalten statt geloescht.
             "klasse": tpl.klasse,
+            # Das eigene Paket-Repository (Kapitel 26). Leer: Modul aus.
+            "repo": paketquellen.fuer_container(db),
         })
     except HTTPException:
         sess.status = "failed"
@@ -785,7 +787,7 @@ def platz_fortsetzen(db: DbSession, sess: SessionModel, request: Request | None,
     sess.status = "starting"
     db.commit()
     try:
-        agent_client.fortsetzen(sess.container_id)
+        agent_client.fortsetzen(sess.container_id, paketquellen.fuer_container(db))
     except HTTPException as exc:
         if exc.status_code == status.HTTP_404_NOT_FOUND:
             # Der Container ist weg (von Hand geloescht, Docker zurueckgesetzt).

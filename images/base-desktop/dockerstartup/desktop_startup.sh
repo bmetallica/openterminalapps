@@ -10,12 +10,11 @@
 #     bleibt `VNC_*`, obwohl hier kein VNC mehr läuft: Der Agent reicht sie
 #     unverändert durch, und ein zweiter Satz Namen für dieselbe Sache wäre
 #     eine Fehlerquelle ohne Gewinn.
-#   * **Der Medienstrom geht nicht durch Traefik.** Das ist der eigentliche
-#     Unterschied: Die Weboberfläche und die Signalisierung laufen wie bisher
-#     über 8080, das Bild selbst aber als WebRTC über UDP. Vermittelt wird
-#     über den TURN-Dienst aus dem Stack; `SELKIES_TURN_HOST` und
-#     `SELKIES_TURN_SHARED_SECRET` sagen, wohin und womit. Der Container
-#     selbst veröffentlicht keinen einzigen Port.
+#   * **Alles geht durch Traefik.** Selkies 2.0 überträgt Bild, Ton und
+#     Eingaben über WebSockets auf demselben Port 8080 wie die Oberfläche.
+#     Bis zum 2026-10-07 lief das Bild als WebRTC über UDP und brauchte den
+#     TURN-Dienst des Stacks; das ist vorbei. Der Container veröffentlicht
+#     keinen einzigen Port.
 #   * `/dockerstartup/custom_startup.sh` wird ausgeführt und neu gestartet,
 #     wenn es sich beendet. Ein Arbeitsplatz überdeckt es mit einem Skript,
 #     das nur wartet.
@@ -199,58 +198,25 @@ fi
 autocutsel -selection CLIPBOARD -fork > /dev/null 2>&1 &
 autocutsel -selection PRIMARY -fork > /dev/null 2>&1 &
 
-# --- Selkies -------------------------------------------------------------
+# --- Tastaturlayout -----------------------------------------------------
 #
-# `--enable_https=false`, weil Traefik davor TLS beendet. `--enable_resize`,
-# damit der ferne Bildschirm mit dem Fenster wächst — dasselbe Verhalten wie
-# `resize=remote` beim bisherigen Weg.
-#
-# GStreamer kommt aus der Distribution (Debian 13 liefert 1.26) und nicht mehr
-# aus einem vorgebauten Bündel. Deshalb ist hier auch nichts mehr in die
-# Umgebung zu holen: Der Versuch mit dem Ubuntu-Bündel scheiterte daran, dass
-# dessen `gi/overrides` für Python 3.12 übersetzt ist und Debian 3.13 hat.
-#
-# **Der Medienweg.** Bild und Ton laufen als WebRTC über UDP und damit nicht
-# durch Traefik. Browser und Container haben keinen gemeinsamen Weg — die
-# Sitzung liegt in einem internen Docker-Netz —, also vermittelt ein
-# TURN-Server. Der läuft **nicht hier drin**, sondern als Dienst `turn` im
-# Stack, auf dem Netz des Hosts.
-#
-# Dass er dort und nicht hier läuft, ist die Lehre aus dem ersten Anlauf:
-# Ein TURN hinter einer Docker-Bridge meldet die Adresse des Hosts als Relay
-# und verschickt die Pakete mit der Container-Adresse als Absender. Der
-# Browser verwirft sie und zeigt bis in alle Ewigkeit "Waiting for stream";
-# hier drin stand nur "Fatal SSL error" beim DTLS-Handschlag. Nachmessen mit
-# `scripts/pruef-turn.py`.
-#
-# `SELKIES_TURN_SHARED_SECRET` ist dasselbe Geheimnis, das der TURN-Dienst
-# kennt. Selkies rechnet sich daraus für jede Sitzung ein kurzlebiges
-# Anmeldepaar aus und gibt es dem Browser mit — das Sitzungspasswort bleibt,
-# wo es hingehört.
-export SELKIES_ENABLE_BASIC_AUTH=true
-export SELKIES_BASIC_AUTH_USER="${VNC_USER:-kasm_user}"
-export SELKIES_BASIC_AUTH_PASSWORD="$VNC_PW"
-
-TURN_PORT=${SELKIES_TURN_PORT:-3478}
-if [ -z "${SELKIES_TURN_HOST:-}" ] || [ -z "${SELKIES_TURN_SHARED_SECRET:-}" ]; then
-  echo "SELKIES_TURN_HOST/-SHARED_SECRET fehlt — ohne TURN bleibt der Strom schwarz" >&2
+# **Vor** Selkies, nicht danach. Selkies schickt Zeichen und übersetzt sie im
+# Container über die Belegung des X-Servers zurück in Tasten; Xvfb startet mit
+# `us`, und darauf verschwinden Umlaute ohne Meldung (gemessen 2026-09-28).
+# Bei 1.6.2 setzte der Agent das Layout nachträglich und musste Selkies dafür
+# neu starten; der Agent gibt es jetzt beim Anlegen mit.
+if [ -n "${OTA_KEYBOARD_LAYOUT:-}" ]; then
+  setxkbmap -layout "$OTA_KEYBOARD_LAYOUT" \
+    ${OTA_KEYBOARD_VARIANT:+-variant "$OTA_KEYBOARD_VARIANT"} 2>/dev/null || true
 fi
 
-selkies-gstreamer \
-  --addr=0.0.0.0 \
-  --port="$PORT" \
-  --enable_https=false \
-  --web_root=/opt/gst-web \
-  --enable_resize=true \
-  --turn_host="${SELKIES_TURN_HOST:-}" \
-  --turn_port="$TURN_PORT" \
-  --turn_protocol="${SELKIES_TURN_PROTOCOL:-udp}" \
-  --turn_shared_secret="${SELKIES_TURN_SHARED_SECRET:-}" \
-  --stun_host="${SELKIES_STUN_HOST:-$SELKIES_TURN_HOST}" \
-  --stun_port="${SELKIES_STUN_PORT:-$TURN_PORT}" \
-  --encoder="${SELKIES_ENCODER:-x264enc}" \
-  --framerate="${SELKIES_FRAMERATE:-30}" \
-  > /tmp/selkies.log 2>&1 &
+# --- Selkies -------------------------------------------------------------
+#
+# Selkies 2.0 aus OTAs Fork, über WebSockets: Bild, Ton, Eingaben und
+# Zwischenablage gehen über Port 8080 durch Traefik. Kein UDP, kein TURN.
+# Was eingestellt ist und warum, steht in selkies-starten.sh — dasselbe Skript
+# startet auch die Bildschirme der einzelnen Anwendungen.
+"$STARTUPDIR/selkies-starten.sh" "$PORT" > /tmp/selkies.log 2>&1 &
 SELKIES_PID=$!
 
 # --- Das Startskript des abgeleiteten Images -----------------------------

@@ -17,7 +17,8 @@ from .routers import (
     admin, arbeitsplaetze, auth, backups, branding, builds,
     firewall as firewall_router, help as help_router, netprofiles,
     identity as identity_router, internal, monitoring,
-    files, groupfiles, pwa, recipes as recipes_router, webapps,
+    files, groupfiles, paketquellen as paketquellen_router, pwa,
+    recipes as recipes_router, webapps,
     registries as registries_router,
     sessions, shared as shared_router, skeleton as skeleton_router, templates,
 )
@@ -141,17 +142,17 @@ def _reap_once() -> None:
         # Aufraeumen. Zwei Faelle:
         #  - Waisen: tragen eine OTA-Kennzeichnung, sind der DB aber unbekannt.
         #  - Leichen: Container zu Sessions, die fehlgeschlagen oder laengst
-        #    beendet sind. Ein gestoppter Container einer noch gueltigen
-        #    Session bleibt bewusst liegen, damit sie schnell wieder anlaeuft.
-        keep_stopped = {
-            s.container_id for s in db.scalars(select(SessionModel).where(
-                SessionModel.status == "stopped",
-                SessionModel.end_reason == "idle",
-            )).all() if s.container_id
-        }
+        #    beendet sind — **auch die wegen Leerlauf gestoppten**. Hier stand
+        #    bis zum 2026-10-07, ein solcher Container bleibe liegen, "damit er
+        #    schnell wieder anlaeuft". Gebaut war das nie: Ein neuer Start nimmt
+        #    nur Sessions in LIVE wieder auf, nie gestoppte. Die Container
+        #    blieben fuer immer liegen, je rund 340 MB — auf der
+        #    Entwicklungsmaschine zehn Stueck. Das Zuhause liegt ausserhalb im
+        #    Profil; verloren geht nichts, was ein neuer Start nicht ohnehin
+        #    verwirft.
         # Angehaltene Root-Arbeitsplaetze: Ihr Container **ist** der Zustand.
         # Ohne diese Zeile hielte der Aufraeumer ihn fuer eine Leiche.
-        keep_stopped |= {
+        keep_stopped = {
             s.container_id for s in db.scalars(select(SessionModel).where(
                 SessionModel.status == "angehalten")).all() if s.container_id
         }
@@ -322,6 +323,7 @@ app.include_router(backups.router)
 app.include_router(sessions.router)
 app.include_router(admin.router)
 app.include_router(arbeitsplaetze.router)
+app.include_router(paketquellen_router.router)
 app.include_router(help_router.router)
 app.include_router(pwa.router)
 app.include_router(branding.router)

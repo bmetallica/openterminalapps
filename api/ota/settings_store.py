@@ -66,6 +66,14 @@ BRAND_LOGO = "brand.logo"
 # jedem Profil wiederholt.
 FIREWALL_GLOBAL = "firewall.global"
 
+# Paketquellen (Kapitel 26): wie Container das eigene Repository benutzen
+# (aus / zuerst / nur), gegen welchen festgehaltenen Stand gebaut wird, und ab
+# wie vielen Tagen das Alter des Spiegels gelb bzw. rot erscheint.
+REPO_MODUS = "repo.modus"
+REPO_BAU_SNAPSHOT = "repo.bau_snapshot"
+REPO_ALTER_GELB = "repo.alter_gelb"
+REPO_ALTER_ROT = "repo.alter_rot"
+
 DEFAULTS: dict[str, Any] = {
     # Acht Stunden: ein Arbeitstag. Wer morgens kommt, meldet sich einmal an.
     AUTH_IDLE_MINUTES: 480,
@@ -78,6 +86,10 @@ DEFAULTS: dict[str, Any] = {
     BRAND_ACCENT: "#06B6D4",
     BRAND_LOGO: None,
     FIREWALL_GLOBAL: [],
+    REPO_MODUS: "zuerst",
+    REPO_BAU_SNAPSHOT: "",
+    REPO_ALTER_GELB: 7,
+    REPO_ALTER_ROT: 30,
 }
 
 _cache: dict[str, tuple[float, Any]] = {}

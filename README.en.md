@@ -37,12 +37,13 @@ answer), plus `git`, `make` and `openssl`. Ports **8443** and **8081** must be f
 alone on purpose so an existing Kasm can keep running alongside. Both are changeable via
 `OTA_HTTPS_PORT` and `OTA_HTTP_PORT` in `deploy/.env`.
 
-Once streaming is in use, add **3478** (TURN) and **49160–49260/UDP** for the media path, plus
-**30000–30019** as the pool for published ports. Behind a firewall with port forwarding, only
-**443** (to the reverse proxy) and **3478/TCP** (straight to the OTA host — the media stream does
-not pass through the proxy) need to be forwarded; Keycloak needs **636** out to the directory. Set
-`OTA_TURN_HOST` to the firewall's address and `OTA_TURN_BIND` to the host's own; the workspace
-router rewrites the published address itself, so no hairpin NAT is required. Full port lists and an
+Add **30000–30019** as the pool for published ports. The picture needs **no** port of its own:
+Selkies 2.0 streams over WebSockets through the same HTTPS port as the interface. Only golden images
+still built on the old base image with Selkies 1.6.2 need **3478** (TURN) and **49160–49260/UDP**.
+Behind a firewall with port forwarding, only **443** (to the reverse proxy, with WebSockets) needs to
+be forwarded; Keycloak needs **636** out to the directory. While 1.6.2 images are around, add
+**3478/TCP** straight to the OTA host and set `OTA_TURN_HOST` to the firewall's address and
+`OTA_TURN_BIND` to the host's own. Full port lists and an
 nginx example are in [handbook chapter 24](docs/wiki/24-hinter-nat.md) (German). And an address range for the workspace networks,
 `10.99.0.0/16` out of the box — it must **not** overlap with the corporate network. All of it is
 configurable and explained in [`deploy/.env.example`](deploy/.env.example).
@@ -112,6 +113,12 @@ In detail in [handbook chapter 2](docs/wiki/02-erste-schritte.md) (German).
   up a new base image. Inner containers go through the same router and network rules. Enabling it:
   `sudo scripts/sysbox-einrichten.sh --live-restore`, then `make up` — the script installs Sysbox
   without touching a single running container ([handbook chapter 25](docs/wiki/25-root-arbeitsplatz.md), German)
+- **Own package source** (add-on, off by default): a mirror of Debian 13 including security
+  updates and Docker's repository, **your own `.deb` packages** by drag and drop, and **frozen
+  states** with roll-back and reproducible images. Workspaces keep installing when something
+  outside is gone — mode “own first” or “own only”. Syncing is manual; the mirror's age turns
+  yellow and red. Enable with `OTA_REPO=1` in `deploy/.env` and `make update`; a full mirror needs
+  roughly 100 to 130 GB ([handbook chapter 26](docs/wiki/26-paketquellen.md), German)
 
 **Administration**
 - Resources **per user and workspace**: user A gets 2 cores, user B gets one
@@ -189,9 +196,10 @@ inbound published port) are in [handbook chapter 23](docs/wiki/23-netz.md).*
 
 **Operations**
 - **An own base image** `ota/base-desktop`: Debian 13 + XFCE + **Selkies**, with no application and
-  **no third-party streaming software** — H.264 over WebRTC instead of rectangles over RFB. The
+  **no third-party streaming software** — H.264 over WebSockets instead of rectangles over RFB, from
+  **Selkies 2.0 kept as a fork in OTA's repository** (`third_party/selkies/`). The
   account is called `ota` and lives in `/home/ota`; nothing in it carries the Kasm name.
-  `scripts/build-desktop-image.sh --pruefen` measures 19 points against the agent's contract
+  `scripts/build-desktop-image.sh --pruefen` measures 18 points against the agent's contract
 - **The older path remains** — `ota/base-xfce` (Ubuntu + KasmVNC) for images from Kasm that do not
   ship Selkies. Switchable per workspace under **Streaming**
 - **A bill of materials per image** (`make sbom`) in SPDX and CycloneDX — needed as soon as an image
@@ -254,7 +262,7 @@ the same separation applies to the host filesystem.
 
 ## Documentation
 
-- **[Handbook](docs/wiki/README.md)** — use, administration, operations, troubleshooting (25
+- **[Handbook](docs/wiki/README.md)** — use, administration, operations, troubleshooting (26
   chapters, German)
 - **[plan.md](plan.md)** — architecture **and the reasoning behind it**, dead ends included
 - **[docs/adr/](docs/adr/README.md)** — decisions that are expensive to reverse, with the
@@ -279,9 +287,10 @@ make test
 | `test-clipboard-bridge.sh` | Copying between two applications in one workspace: both directions, umlauts, an image, a megabyte, after a pause, and switched off |
 | `tests/e2e.mjs` | The interface in a real browser — down to whether the stream actually connects |
 | `test-ldap.sh` | Directory sign-in **through Keycloak** against a real OpenLDAP in a container — above all that a directory entry cannot take over a local account and an outage does not take the emergency login down |
-| `test-streaming.sh` | The media path: does the TURN server actually relay, does a picture arrive in the browser, and do umlauts, Shift and AltGr from a German keyboard arrive correctly (`OTA_KEYBOARD_LAYOUT`)? The probe browser runs in a network from which the session container is **not** directly reachable — like a workstation on a corporate network. With `OTA_TURN_BIND` set, it emulates the firewall's port forwarding for the probe browser and checks the path through the NAT |
+| `test-streaming.sh` | The media path with its own template on the current base image: a browser in a foreign network counts the **decoded frames** — on the workspace and on an application's own screen (Selkies 2.0, WebSockets through Traefik); umlauts, Shift and AltGr from a German keyboard arrive correctly. If TURN is set up (only still needed for golden images with Selkies 1.6.2) it is checked too, with its deny list and NAT |
 | `test-firewall.sh` | The network isolation, **measured from inside**: neighbour, host, corporate network, TURN, name service, internet per level, an exception by name, a published port — and all of it again after the router restarts |
 | `test-root-arbeitsplatz.sh` | The root workspace: root unprivileged on the host (Sysbox), Docker and Compose inside, network rules applying to the **inner** containers too, stop and resume with state kept, rebuild, web terminal with its log and export, no terminal into stack services. Skipped without Sysbox |
+| `test-repo.sh` | The own package source: signature, upload (duplicate 409, broken 422), snapshots and their delete protection, a Debian 13 workspace installs an own package **from here**, “own only” no longer calls `deb.debian.org`, the image builder adds and removes the source, an Ubuntu image is left alone, a root workspace picks up the current setting when resumed. Skipped without `OTA_REPO=1` |
 | `test-backup.sh` | Backup and restore of profile, container and database. It stops sessions to do so — **only its own**, and it checks that explicitly |
 
 The test credentials live in `deploy/.env` as `OTA_TEST_ADMIN_PW`, not in the source.

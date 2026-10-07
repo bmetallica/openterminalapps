@@ -13,6 +13,7 @@ import { Storage } from './screens/Storage'
 import { Account } from './screens/Account'
 import { useMarke } from './lib/branding'
 import { Registries } from './screens/Registries'
+import { Paketquellen } from './screens/Paketquellen'
 import { StandaloneViewer } from './screens/StandaloneViewer'
 import { anmeldePfad, openInTab, parseRoute, viewPath, type Route } from './lib/routes'
 import { ApiError, api, type Host, type Me, type Session, type Stream, type Template } from './lib/api'
@@ -21,7 +22,7 @@ import { setLang, t, useLang, type Lang } from './lib/i18n'
 import { setTheme, useTheme, type Theme } from './lib/theme'
 import './styles/app.css'
 
-type View = 'dashboard' | 'workspaces' | 'webapps' | 'images' | 'registries' | 'storage'
+type View = 'dashboard' | 'workspaces' | 'webapps' | 'images' | 'registries' | 'paketquellen' | 'storage'
   | 'files' | 'people' | 'monitor' | 'netz' | 'settings' | 'account' | 'help'
 type Toast = { id: number; msg: string; tone: 'ok' | 'bad' }
 
@@ -34,6 +35,10 @@ const NAV: { id: View; glyph: string; cap: string; adminOnly: boolean }[] = [
   { id: 'webapps', glyph: '◇', cap: 'Anwendungen', adminOnly: true },
   { id: 'images', glyph: '⬢', cap: 'Images', adminOnly: true },
   { id: 'registries', glyph: '◇', cap: 'Registries', adminOnly: true },
+  // Die eigene Paketquelle (Kapitel 26). Auch ausgeschaltet sichtbar: Die
+  // Seite sagt dann, wie man sie einschaltet — ein Zusatz, von dem man nichts
+  // weiss, wird nie eingeschaltet.
+  { id: 'paketquellen', glyph: '⊞', cap: 'Paketquellen', adminOnly: true },
   // Zwei Ablagen, zwei Zwecke — deshalb zwei Einträge.
   //
   // Die eigene gehört jedem, auch Administratoren: Sie ist der Weg, Dateien
@@ -274,6 +279,7 @@ export default function App() {
         {current === 'webapps' && <WebApps onToast={toast} />}
         {current === 'images' && <Images onToast={toast} />}
         {current === 'registries' && <Registries onToast={toast} />}
+        {current === 'paketquellen' && <Paketquellen onToast={toast} />}
         {current === 'storage' && (
           <Storage onToast={toast}
             canWrite={me.is_admin || me.permissions.includes('images.manage')

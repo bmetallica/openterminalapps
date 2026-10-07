@@ -3,7 +3,7 @@ import { AppIcon } from '../components/AppIcon'
 import { Led, stateClass } from '../components/controls'
 import {
   ApiError, api,
-  type Me, type MyStorage, type Session, type Stream, type Template,
+  type Me, type MyStorage, type RepoKurz, type Session, type Stream, type Template,
   type WebApp as WebAppT,
 } from '../lib/api'
 import { ago, duration, gb } from '../lib/format'
@@ -299,6 +299,14 @@ export function Dashboard({ me, onOpen, onToast }: {
 
   useEffect(() => { api.myStorage().then(setSpace).catch(() => {}) }, [])
 
+  // Das Alter des Spiegels (Kapitel 26), nur für Administratoren: Abgeglichen
+  // wird nur von Hand, und ein Hinweis hier sorgt dafür, dass das nicht
+  // unbemerkt „nie" wird.
+  const [repo, setRepo] = useState<RepoKurz | null>(null)
+  useEffect(() => {
+    if (me.is_admin) api.repoKurz().then(setRepo).catch(() => {})
+  }, [me.is_admin])
+
   async function load() {
     try {
       const [s, t] = await Promise.all([api.sessions(), api.templates()])
@@ -448,6 +456,23 @@ export function Dashboard({ me, onOpen, onToast }: {
             {space.level === 'voll'
               ? tr('Bis du aufräumst, startet kein Arbeitsplatz mehr.')
               : tr('Downloads, Caches und alte Abbilder sind meist die Größten.')}
+          </span>
+        </div>
+      )}
+
+      {repo?.aktiv && (repo.erreichbar === false
+        || repo.alter_tage == null || repo.alter_tage >= (repo.gelb ?? 7)) && (
+        <div className="gate-note" role="status">
+          <b>
+            {repo.erreichbar === false ? tr('Die eigene Paketquelle antwortet nicht.')
+              : repo.alter_tage == null ? tr('Die eigene Paketquelle ist noch nie abgeglichen worden.')
+                : tr('Der Spiegel der Paketquelle ist {n} Tage alt.', { n: Math.floor(repo.alter_tage) })}
+          </b>
+          <span>
+            {repo.alter_tage != null && repo.alter_tage >= (repo.rot ?? 30)
+              ? tr('Sicherheitsupdates fehlen seitdem in den Arbeitsplätzen.') + ' '
+              : ''}
+            {tr('Abgleichen unter Paketquellen.')}
           </span>
         </div>
       )}

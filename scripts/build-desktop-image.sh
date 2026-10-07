@@ -60,9 +60,31 @@ proxy_argumente() {
   done
 }
 
+# Der Datei-Vorrat der eigenen Paketquelle (Handbuch Kapitel 26). Liegt er
+# da, nimmt der Bau clipnotify und die Abhängigkeiten von Selkies von dort
+# statt aus dem Internet. Nur das eine Verzeichnis wird gelesen, nicht die
+# ganze .env.
+OTA_REPO_ROOT="${OTA_REPO_ROOT:-$(grep -E '^OTA_REPO_ROOT=' "$ROOT/deploy/.env" 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '"')}"
+DATEIEN="${OTA_DATEIEN:-${OTA_REPO_ROOT:-/srv/ota/repo}/aptly/public/dateien}"
+
+vorrat_argumente() {
+  if [ -d "$DATEIEN" ] && [ -n "$(ls -A "$DATEIEN" 2>/dev/null)" ]; then
+    printf -- '--build-context ota-dateien=%s ' "$DATEIEN"
+  fi
+}
+
 bauen() {
   echo "Baue $TAG …"
-  docker build $(proxy_argumente) -t "$TAG" "$ROOT/images/base-desktop" || return 1
+  # Selkies aus unserem Fork (third_party/selkies/OTA-FORK.md) — immer, nicht
+  # nur auf Wunsch: Das Dockerfile bricht ohne diese Quellen ab.
+  if [ -n "$(vorrat_argumente)" ]; then
+    echo "  Datei-Vorrat: $DATEIEN"
+  else
+    echo "  Ohne Datei-Vorrat — alles aus dem Internet."
+  fi
+  docker build $(proxy_argumente) $(vorrat_argumente) \
+    --build-context selkies-quelle="$ROOT/third_party/selkies" \
+    -t "$TAG" "$ROOT/images/base-desktop" || return 1
   # `:test` bleibt als Zweitname, damit die Testvorlagen weiterlaufen.
   docker tag "$TAG" ota/base-desktop:test
   echo
@@ -76,7 +98,7 @@ pruefen() {
   docker rm -f "$CN" >/dev/null 2>&1
   docker run -d --name "$CN" --shm-size=512m \
     -e VNC_PW="$PW" -e VNC_USER=ota -e VNC_RESOLUTION=1280x720 \
-    -e OTA_LOGIN=pruefnutzer \
+    -e OTA_LOGIN=pruefnutzer -e OTA_KEYBOARD_LAYOUT=de \
     "$TAG" >/dev/null || { bad "Der Container startete nicht"; return 1; }
 
   # --- Der Vertrag mit dem Agent ----------------------------------------
@@ -130,14 +152,25 @@ print(c.XcursorGetDefaultSize(x.XOpenDisplay(b\":1\")))"')
 [ "$GROESSE" = "24" ] && ok "Zeigergroesse festgenagelt (24)" \
                       || bad "Zeigergroesse haengt an der Bildschirmgroesse ($GROESSE)"
 
-  # --- GStreamer ---------------------------------------------------------
-  imc 'gst-inspect-1.0 webrtcbin >/dev/null' && ok "webrtcbin vorhanden" \
-    || bad "webrtcbin fehlt — ohne ihn kommt keine Verbindung zustande"
-  imc 'gst-inspect-1.0 x264enc >/dev/null' && ok "x264enc vorhanden" \
-    || bad "x264enc fehlt — ohne ihn gibt es kein Bild"
-  imc 'python3 -c "import gi; gi.require_version(\"GstWebRTC\",\"1.0\"); from gi.repository import GstWebRTC"' \
-    && ok "GStreamer-Bindungen für Python" \
-    || bad "GstWebRTC fehlt in Python — daran ist der Wechsel auf Debian zuerst gescheitert"
+  # --- Selkies 2.0 -------------------------------------------------------
+  V=$(imc '/opt/selkies/bin/python -c "from importlib.metadata import version; print(version(\"selkies\"))"')
+  [ "$V" = "2.0.0" ] && ok "Selkies $V aus OTAs Fork" || bad "Selkies-Fassung ist '$V', erwartet 2.0.0"
+  imc 'grep -q "websockets transport" /tmp/selkies.log' \
+    && ok "Streamt über WebSockets (durch Traefik, ohne TURN)" \
+    || bad "Kein WebSocket-Transport im Protokoll: $(imc 'grep -m1 starting /tmp/selkies.log')"
+  # Die Wege, die 2.0 eingeschaltet mitbringt und OTA bewusst abschaltet —
+  # gelesen aus der Umgebung des laufenden Prozesses, nicht aus dem Skript.
+  UMG=$(imc 'P=$(pgrep -f "bin/selkies --addr" | head -1); tr "\0" "\n" < /proc/$P/environ')
+  ZU=""
+  for z in SELKIES_FILE_TRANSFERS=none SELKIES_PRINTING_ENABLED=false SELKIES_ENABLE_SHARING=false \
+           SELKIES_COMMAND_ENABLED=false SELKIES_ENABLE_DUAL_MODE=false SELKIES_UI_SHOW_SIDEBAR=false; do
+    grep -qx "$z" <<<"$UMG" || ZU="$ZU $z"
+  done
+  [ -z "$ZU" ] && ok "Dateiübertragung, Drucken, Freigaben, Befehle, Moduswechsel, Seitenleiste: aus" \
+               || bad "Nicht gesetzt:$ZU"
+  [ "$(imc 'setxkbmap -query | awk "\$1==\"layout:\"{print \$2}"')" = "de" ] \
+    && ok "Tastaturlayout vor dem Start gesetzt (de)" \
+    || bad "Tastaturlayout ist nicht de — Umlaute verschwänden"
 
   # --- Werkzeuge, an denen die Zwischenablage haengt ---------------------
   FEHLT=""
@@ -151,16 +184,6 @@ print(c.XcursorGetDefaultSize(x.XOpenDisplay(b\":1\")))"')
   # Rechnung mit, geprueft am Referenzwert fuer 1920x1080.
   imc "cvt -r 1920 1080 60 | grep -q '138.50  1920 1968 2000 2080'" \
     && ok "cvt rechnet richtig" || bad "cvt liefert die falsche Modeline"
-
-  # --- Was der Browser bekommt ------------------------------------------
-  TURN=$(imc "curl -s -u ota:$PW http://127.0.0.1:8080/turn")
-  case "$TURN" in
-    *stun.l.google.com*) bad "Die TURN-Auskunft nennt Googles STUN-Server" ;;
-    *) ok "Kein fremder STUN in der TURN-Auskunft" ;;
-  esac
-  [ -z "$(imc "grep -o '<v-btn class=\"fab-container\"' /opt/gst-web/index.html")" ] \
-    && ok "Selkies' eigener Leistenknopf ist entfernt" \
-    || bad "Der Leistenknopf liegt wieder unter OTAs Griff"
 
   docker rm -f "$CN" >/dev/null 2>&1
 

@@ -29,17 +29,23 @@ Das Beispiel durchs ganze Kapitel:
                           └──────────────┘
 ```
 
-**Der Bildstrom geht nicht durch den Reverse Proxy.** Selkies überträgt über WebRTC, und der Weg
-dafür ist der TURN-Server `coturn` auf dem OTA-Host. Er braucht seine eigene Weiterleitung, direkt
-auf den OTA-Host. Das ist der Punkt, an dem die meisten Einrichtungen scheitern: Die Seite lädt, die
-Anmeldung klappt, und dann steht „Waiting for stream".
+**Seit Selkies 2.0 (2026-10-07) geht auch der Bildstrom durch den Reverse Proxy** — über
+WebSockets, auf demselben Port 443 wie alles andere ([Kapitel 20](20-selkies-versuch.md)). Für
+Arbeitsplätze auf dem aktuellen Basisimage braucht es **keine TURN-Weiterleitung mehr**. Der Reverse
+Proxy muss dafür WebSockets durchreichen (`Upgrade`/`Connection`, siehe das Beispiel unten) — das
+musste er für KasmVNC schon immer.
+
+**Nur Golden Images mit Selkies 1.6.2** (gebaut auf dem alten Basisimage) übertragen noch über
+WebRTC an Traefik vorbei, über den TURN-Server `coturn` auf dem OTA-Host. Solange es solche Images
+gibt, bleibt die Weiterleitung von 3478 nötig — sonst lädt die Seite, die Anmeldung klappt, und
+dann steht „Waiting for stream". Ein Neubau unter **Verwaltung → Software** bringt ein Image auf 2.0.
 
 ## 1 · Portweiterleitungen an der Firewall (von aussen nach innen)
 
 | Extern | Ziel innen | Proto | Wofür | Pflicht |
 |---|---|---|---|---|
 | `10.50.0.33:443` | `192.168.1.23:443` (Reverse Proxy) | TCP | Oberfläche, API, Anmeldung (`/auth`), KasmVNC-Streams, WebSockets | ja |
-| `10.50.0.33:3478` | `192.168.1.22:3478` (OTA-Host, **nicht** der Proxy) | TCP | TURN — der Bildstrom von Selkies | ja |
+| `10.50.0.33:3478` | `192.168.1.22:3478` (OTA-Host, **nicht** der Proxy) | TCP | TURN — der Bildstrom von Selkies **1.6.2** | nur für Golden Images auf dem alten Basisimage |
 | `10.50.0.33:80` | `192.168.1.23:80` | TCP | nur die Umleitung auf HTTPS | nein |
 | `10.50.0.33:30000–30019` | `192.168.1.22:30000–30019` | TCP | befristete Portfreigaben aus einem Arbeitsplatz („+ NAT", [Kapitel 23](23-netz.md)) | nur wenn genutzt |
 

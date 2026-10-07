@@ -61,7 +61,8 @@ _TIMEOUT = 45 * 60
 def render_dockerfile(base_image: str, apt_packages: list[str],
                       vscode_extensions: list[str], setup_script: str,
                       mode: str = "workspace", start_command: str = "",
-                      basis_nutzer: str = "1000") -> str:
+                      basis_nutzer: str = "1000", repo: dict[str, Any] | None = None,
+                      repo_snapshot: str = "") -> str:
     """Erzeugt das Dockerfile aus den Angaben der Oberflaeche.
 
     Alle Eingaben werden mit shlex.quote entschaerft, bevor sie in eine
@@ -96,6 +97,13 @@ def render_dockerfile(base_image: str, apt_packages: list[str],
         "USER root",
         "",
     ]
+    # Das eigene Paket-Repository (Kapitel 26) fuer die Dauer des Baus — am
+    # Ende wieder heraus, damit das Image die Adresse dieses Wirts nicht traegt.
+    if repo:
+        from . import paketquelle
+
+        lines += ["# Eigene Paketquelle fuer diesen Bau (OTA, Kapitel 26).",
+                  paketquelle.als_run(paketquelle.einrichten_skript(repo, repo_snapshot)), ""]
 
     if apt_packages:
         pkgs = " ".join(shlex.quote(p) for p in apt_packages)
@@ -204,6 +212,11 @@ def render_dockerfile(base_image: str, apt_packages: list[str],
     # wartete 30 Sekunden auf den Docker-Socket, `setpriv` scheiterte, und der
     # Container endete mit 127 — im Browser ein ausgegrauter Arbeitsplatz und
     # danach „Internal Server Error". Gemessen auf der Produktivanlage.
+    if repo:
+        from . import paketquelle
+
+        lines += ["# Eigene Paketquelle wieder entfernen.",
+                  paketquelle.als_run(paketquelle.aufraeumen_skript()), ""]
     lines += [f"USER {basis_nutzer or '1000'}", ""]
     return "\n".join(lines)
 
@@ -439,10 +452,11 @@ def _basis_nutzer(base_image: str) -> str:
 def start(tag: str, base_image: str, apt_packages: list[str],
           vscode_extensions: list[str], setup_script: str,
           pause_containers: list[str] | None = None,
-          mode: str = "workspace", start_command: str = "") -> dict[str, Any]:
+          mode: str = "workspace", start_command: str = "",
+          repo: dict[str, Any] | None = None, repo_snapshot: str = "") -> dict[str, Any]:
     dockerfile = render_dockerfile(base_image, apt_packages, vscode_extensions,
                                    setup_script, mode, start_command,
-                                   _basis_nutzer(base_image))
+                                   _basis_nutzer(base_image), repo, repo_snapshot)
     build_id = uuid.uuid4().hex
 
     _builds[build_id] = {

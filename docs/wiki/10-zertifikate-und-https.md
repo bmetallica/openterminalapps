@@ -96,9 +96,10 @@ WebSockets müssen durchgelassen werden — ohne sie erscheint kein Bild.
 
 In beiden Fällen: Der Browser muss die Seite als `https://` sehen, sonst fällt die Zwischenablage aus.
 
-**Der Bildstrom von Selkies geht nicht durch den Proxy**, sondern über den TURN-Server auf Port
-3478. Steht zwischen Browser und OTA eine Firewall mit Portweiterleitung, braucht er eine eigene
-Weiterleitung direkt auf den OTA-Host — [Kapitel 24](24-hinter-nat.md) mit vollständiger Portliste
+**Der Bildstrom von Selkies 2.0 geht durch den Proxy**, über WebSockets — der Proxy muss sie
+durchreichen. Nur Golden Images mit Selkies 1.6.2 schicken das Bild am Proxy vorbei über den
+TURN-Server auf Port 3478; steht dann eine Firewall mit Portweiterleitung dazwischen, braucht er eine
+eigene Weiterleitung direkt auf den OTA-Host — [Kapitel 24](24-hinter-nat.md) mit vollständiger Portliste
 und einem Beispiel für nginx.
 
 ## HSTS

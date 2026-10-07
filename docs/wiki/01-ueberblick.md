@@ -59,7 +59,7 @@ Die Trennung wird serverseitig an jedem Endpunkt durchgesetzt, nicht nur im Men�
 - **Docker** auf Debian, kein Kubernetes nötig
 - **Traefik** als Ingress mit TLS — Pflicht, nicht Kür: Ohne HTTPS funktioniert die Zwischenablage
   im Browser nicht ([Kapitel 4](04-zwischenablage.md))
-- **Selkies** als Streaming-Engine (H.264 über WebRTC), ein Display je Anwendung. **KasmVNC**
+- **Selkies 2.0** als Streaming-Engine (H.264 über WebSockets, aus OTAs eigenem Fork), ein Display je Anwendung. **KasmVNC**
   bleibt für Images von Kasm und ist je Arbeitsplatz wählbar
   ([Kapitel 20](20-selkies-versuch.md))
 - **Ein eigenes Netz je Arbeitsplatz** hinter einem Router, der alles filtert

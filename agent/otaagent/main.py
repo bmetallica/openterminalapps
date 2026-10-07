@@ -428,6 +428,9 @@ class StartRequest(BaseModel):
     # Die Arbeitsplatzklasse. `root` heisst: Sysbox, root und Docker im
     # Container, angehalten statt geloescht (Handbuch Kapitel 25, ADR-007).
     klasse: str = "standard"
+    # Das eigene Paket-Repository (Kapitel 26): Modus, Quellen, Schluessel,
+    # CA. Leer heisst: nichts eintragen. Siehe paketquelle.py.
+    repo: dict[str, Any] = {}
     # Wem die eigene Ablage gehoert, die eingehaengt werden soll. Leer heisst:
     # keine. Die Vorlage kann das abschalten, und die API entscheidet es —
     # der Agent haengt nur ein, was ihm gesagt wird.
@@ -1063,9 +1066,14 @@ def start_container(req: StartRequest) -> dict[str, Any]:
             log.warning("Eigene Ablage fuer %s nicht einhaengbar: %s",
                         req.shelf_user, exc)
 
-    # --- Selkies: der Medienstrom geht nicht durch Traefik ----------------
+    # --- Selkies 1.6.2: der Medienstrom geht nicht durch Traefik ----------
     #
-    # KasmVNC schickt alles durch den einen HTTPS-Weg. Selkies überträgt das
+    # **Nur noch fuer Golden Images auf dem alten Basisimage.** Selkies 2.0
+    # (Basisimage ab 2026-10-07) uebertraegt alles ueber WebSockets durch
+    # Traefik und liest keinen dieser Werte. Sie bleiben, solange Images mit
+    # 1.6.2 im Umlauf sind; schaden tun sie dem neuen Weg nicht.
+    #
+    # KasmVNC schickt alles durch den einen HTTPS-Weg. Selkies 1.6.2 überträgt das
     # Bild als WebRTC über UDP, und dafür braucht es einen Weg vom Browser zum
     # Container, den Traefik nicht kennt. Vermittelt wird über den TURN-Dienst
     # **aus dem Stack** (`deploy/docker-compose.yml`, Dienst `turn`).
@@ -1084,8 +1092,8 @@ def start_container(req: StartRequest) -> dict[str, Any]:
         turn_host = _wirt(os.environ.get("OTA_TURN_HOST", ""))
         turn_secret = os.environ.get("OTA_TURN_SECRET", "")
         if not turn_host or not turn_secret:
-            log.warning("OTA_TURN_HOST oder OTA_TURN_SECRET fehlt — der Strom "
-                        "bleibt voraussichtlich schwarz")
+            log.info("OTA_TURN_HOST oder OTA_TURN_SECRET fehlt — Images mit "
+                     "Selkies 1.6.2 bleiben damit schwarz, 2.0 braucht es nicht")
         # Fuer die Bildschirme je Anwendung, die das Skript aus `apps.py`
         # im Container aufmacht (`_tastatur_setzen`).
         if TASTATUR:
@@ -1271,6 +1279,7 @@ def start_container(req: StartRequest) -> dict[str, Any]:
 
     # Der Proxy an die Stellen, die kein Programm aus der Umgebung liest.
     _proxy_einrichten(container)
+    _repo_einrichten(container, req.repo)
 
     # Selkies hoert auf 8080, KasmVNC auf 6901.
     _wait_for_vnc(container, port=8080 if req.engine == "selkies" else 6901)
@@ -1546,6 +1555,9 @@ for p in /proc/[0-9]*; do
   c=$(tr '\0' ' ' < "$p/cmdline" 2>/dev/null) || continue
   case "$c" in
     *selkies-gstreamer\ *--port=8080\ *) PID=$n ;;
+    # Selkies 2.0 setzt das Layout schon im Startskript, vor dem eigenen
+    # Start; hier landet es nur, wenn sich die Einstellung seither geaendert hat.
+    *bin/selkies\ --addr=*--port=8080*) PID=$n ;;
   esac
 done
 if [ -z "$PID" ]; then echo "tastatur-gesetzt-ohne-selkies"; exit 0; fi
@@ -1697,6 +1709,30 @@ def _umgebung_schreiben(session_id: str) -> str:
     os.chmod(datei, 0o644)
     return str(datei)
 
+
+
+class FortsetzenRequest(BaseModel):
+    repo: dict[str, Any] = {}
+
+
+def _repo_einrichten(container, repo: dict[str, Any]) -> None:
+    """Das eigene Paket-Repository eintragen (Kapitel 26) — als root, nur bei
+    Debian 13. Ein leeres `repo` heisst: Modul aus; dann bleibt der Container,
+    wie das Image ihn mitbringt. Scheitert es, startet der Arbeitsplatz
+    trotzdem — dann eben mit den Quellen des Images."""
+    if not repo:
+        return
+    from . import paketquelle
+
+    try:
+        code, out = _run_as_root(container, ["sh", "-c", paketquelle.einrichten_skript(repo)])
+        if code != 0:
+            log.warning("Paketquelle in %s nicht eingetragen: %s", container.name,
+                        out.strip()[-300:])
+        else:
+            log.info("Paketquelle in %s: %s", container.name, out.strip().splitlines()[-1:])
+    except APIError as exc:
+        log.warning("Paketquelle nicht eingetragen: %s", exc)
 
 
 def _proxy_einrichten(container) -> None:
@@ -1921,7 +1957,7 @@ def _root_container(client, cid: str):
 
 
 @app.post("/containers/{cid}/fortsetzen", dependencies=[Depends(require_token)])
-def fortsetzen(cid: str) -> dict[str, Any]:
+def fortsetzen(cid: str, body: "FortsetzenRequest | None" = None) -> dict[str, Any]:
     """Einen angehaltenen Root-Arbeitsplatz wieder starten.
 
     Derselbe Container, dieselbe Kennung, dasselbe Netz — nur die
@@ -1954,6 +1990,9 @@ def fortsetzen(cid: str) -> dict[str, Any]:
     # Namensraum, in den die Route gehoert, gibt es erst jetzt.
     _firewall_abgleich(client)
     _proxy_einrichten(c)
+    # Auch beim Fortsetzen: Der Modus der Paketquellen kann sich geaendert
+    # haben, waehrend der Platz angehalten war.
+    _repo_einrichten(c, (body.repo if body else {}))
     _wait_for_vnc(c, port=8080)
     _tastatur_setzen(c)
     c.reload()
@@ -2271,6 +2310,10 @@ class BuildRequest(BaseModel):
     mode: str = "workspace"
     # Container, die waehrend des Builds angehalten werden. Siehe builder._pause.
     pause_containers: list[str] = []
+    # Das eigene Paket-Repository fuer den Bau (Kapitel 26), samt Snapshot,
+    # gegen den gebaut wird. Leer heisst: Quellen des Basisimages.
+    repo: dict[str, Any] = {}
+    repo_snapshot: str = ""
 
 
 @app.post("/builds", dependencies=[Depends(require_token)])
@@ -2291,7 +2334,7 @@ def start_build(req: BuildRequest) -> dict[str, Any]:
     return builder.start(
         req.tag, req.base_image, req.apt_packages,
         req.vscode_extensions, req.setup_script, req.pause_containers, req.mode,
-        req.start_command,
+        req.start_command, req.repo, req.repo_snapshot,
     )
 
 
