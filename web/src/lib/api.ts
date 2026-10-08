@@ -241,6 +241,8 @@ export type GlobalSettings = {
   /** 0 heisst jeweils: keine Grenze. */
   profile_quota_gb: number
   disk_floor_gb: number
+  /** Wohin Web-Anwendungen ihre Anmeldung schicken dürfen. Leer: nirgends. */
+  app_origins: string[]
 }
 
 /** Ein Programm, wie es im Image gefunden wurde. */

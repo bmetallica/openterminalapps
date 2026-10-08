@@ -59,9 +59,9 @@ def _erlaubt(db: DbSession, ziel: str) -> None:
     if not erlaubt:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            "Es ist noch kein Ziel freigegeben. Trag unter Einstellungen ein, "
-            "wohin Anwendungen ihre Anmeldung schicken dürfen — solange dort "
-            "nichts steht, ist nichts erlaubt.",
+            "Es ist noch kein Ziel freigegeben. Trag unter Einstellungen → "
+            "Anwendungen → Erlaubte Ziele ein, wohin Anwendungen ihre Anmeldung "
+            "schicken dürfen — solange dort nichts steht, ist nichts erlaubt.",
         )
 
     teil = urlparse(ziel)
@@ -79,8 +79,9 @@ def _erlaubt(db: DbSession, ziel: str) -> None:
     if herkunft not in erlaubt:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            f"„{herkunft}“ steht nicht auf der Liste erlaubter Ziele. "
-            "Wer sie ergänzt, entscheidet, wohin Anmeldedaten fliessen dürfen.",
+            f"„{herkunft}“ steht nicht auf der Liste erlaubter Ziele "
+            "(Einstellungen → Anwendungen). Wer sie ergänzt, entscheidet, wohin "
+            "Anmeldedaten fliessen dürfen.",
         )
 
 

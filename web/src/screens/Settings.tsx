@@ -123,6 +123,14 @@ export function Settings({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad'
         </p>
       </div>
 
+      <div className="section__head" style={{ marginTop: 30 }} id="erlaubte-ziele">
+        <span className="silk">{t('Anwendungen')}</span><span className="section__rule" />
+      </div>
+      <div style={{ maxWidth: 620 }}>
+        <ErlaubteZiele ziele={data.app_origins}
+          speichern={(neu, note) => save({ app_origins: neu }, note)} />
+      </div>
+
       <div className="section__head" style={{ marginTop: 30 }}>
         <span className="silk">{t('Marke')}</span><span className="section__rule" />
       </div>
@@ -137,6 +145,83 @@ export function Settings({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad'
       <div style={{ maxWidth: 620 }}>
         <Directory onToast={onToast} />
       </div>
+    </div>
+  )
+}
+
+/**
+ * Wohin Web-Anwendungen ihre Anmeldung schicken dürfen.
+ *
+ * Geprüft wird in der API — beim Speichern dieser Liste (nur Herkünfte, ohne
+ * Pfad) und beim Anlegen einer Anwendung (die Rückadresse muss hier stehen).
+ * Das Formular prüft nur vor, damit ein Tippfehler nicht erst als Meldung
+ * vom Server zurückkommt.
+ */
+function ErlaubteZiele({ ziele, speichern }: {
+  ziele: string[]
+  speichern: (neu: string[], note: string) => Promise<void>
+}) {
+  const [eingabe, setEingabe] = useState('')
+  const [fehler, setFehler] = useState<string | null>(null)
+
+  function herkunft(roh: string): string | null {
+    try {
+      const u = new URL(roh.trim())
+      if (u.protocol !== 'https:' && u.protocol !== 'http:') return null
+      if (u.pathname !== '/' || u.search || u.hash) return null
+      return u.origin
+    } catch {
+      return null
+    }
+  }
+
+  async function hinzufuegen() {
+    const h = herkunft(eingabe)
+    if (!h) {
+      setFehler(t('Erwartet wird eine Herkunft wie https://ai.firma.de — mit Schema, ohne Pfad.'))
+      return
+    }
+    setFehler(null)
+    if (!ziele.includes(h)) await speichern([...ziele, h], t('{ziel} ist als Ziel erlaubt', { ziel: h }))
+    setEingabe('')
+  }
+
+  return (
+    <div className="panel" style={{ padding: '18px 20px' }}>
+      <Field
+        label={t('Erlaubte Ziele')}
+        hint={t('Dorthin dürfen Web-Anwendungen ihre Anmeldung schicken: Die Rückadresse einer Anwendung muss mit einer dieser Herkünfte beginnen. Leer heisst: nirgends.')}>
+        {ziele.length === 0 ? (
+          <p className="field__hint" style={{ margin: '4px 0 10px' }}>{t('Noch kein Ziel erlaubt.')}</p>
+        ) : (
+          <ul style={{ listStyle: 'none', padding: 0, margin: '4px 0 10px' }}>
+            {ziele.map((z) => (
+              <li key={z} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0' }}>
+                <code style={{ flex: 1, overflowWrap: 'anywhere' }}>{z}</code>
+                {z.startsWith('http://') && <span className="silk data">{t('unverschlüsselt')}</span>}
+                <button className="btn btn--sm btn--ghost"
+                  aria-label={t('{ziel} entfernen', { ziel: z })}
+                  onClick={() => void speichern(ziele.filter((x) => x !== z),
+                    t('{ziel} ist nicht mehr erlaubt', { ziel: z }))}>
+                  {t('Entfernen')}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <form style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}
+          onSubmit={(e) => { e.preventDefault(); void hinzufuegen() }}>
+          <input style={{ flex: '1 1 240px' }} value={eingabe} placeholder="https://ai.firma.de"
+            aria-label={t('Neues Ziel')} onChange={(e) => { setEingabe(e.target.value); setFehler(null) }} />
+          <button type="submit" className="btn btn--sm btn--primary" disabled={!eingabe.trim()}>
+            {t('Hinzufügen')}
+          </button>
+        </form>
+        {fehler && <p className="field__hint" style={{ color: 'var(--bad, #e5484d)' }}>{fehler}</p>}
+      </Field>
+      <p className="note-info" style={{ marginTop: 6 }}>
+        {t('Ein Ziel mit http:// ist erlaubt, aber dann geht der Anmeldecode im Klartext über die Leitung. Bestehende Anwendungen bleiben angelegt, wenn ihr Ziel hier entfernt wird; neu anlegen oder ändern lassen sie sich dann nicht mehr.')}
+      </p>
     </div>
   )
 }

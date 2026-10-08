@@ -78,7 +78,11 @@ environment:
   )
 }
 
-export function WebApps({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad') => void }) {
+export function WebApps({ onToast, zuEinstellungen }: {
+  onToast: (m: string, tone?: 'ok' | 'bad') => void
+  /** Fehlt, wenn dieses Konto die Einstellungen nicht sieht. */
+  zuEinstellungen?: () => void
+}) {
   useLang()
   const [liste, setListe] = useState<WebApp[] | null>(null)
   const [gruppen, setGruppen] = useState<Group[]>([])
@@ -161,6 +165,9 @@ export function WebApps({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad')
           <p className="empty__body">
             {tr('Bevor die erste entstehen kann, muss unter Einstellungen stehen, wohin Anwendungen ihre Anmeldung schicken dürfen. Solange dort nichts steht, ist nichts erlaubt.')}
           </p>
+          {zuEinstellungen && (
+            <button className="btn btn--sm" onClick={zuEinstellungen}>{tr('Erlaubte Ziele einrichten')}</button>
+          )}
         </div>
       )}
 
@@ -233,6 +240,10 @@ export function WebApps({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad')
               <input value={entwurf.redirect_uri} placeholder="https://ai.firma.de/oauth/oidc/callback"
                 onChange={(e) => set('redirect_uri', e.target.value)} />
             </div>
+            {zuEinstellungen && (
+              <button type="button" className="btn btn--sm btn--ghost" style={{ marginTop: 6 }}
+                onClick={zuEinstellungen}>{tr('Erlaubte Ziele ansehen')}</button>
+            )}
           </Field>
 
           <Field label={tr('Zugriff')} hint={tr('Ohne Auswahl sehen alle die Kachel.')}>

@@ -193,6 +193,20 @@ export default function App() {
     || me.permissions.includes('images.manage')
     || me.permissions.includes('templates.manage')
   const darfAnwendungen = me.is_admin || me.permissions.includes('anwendungen.verwalten')
+  /* Von den Web-Anwendungen zu den erlaubten Zielen: Die Einstellungen laden
+     erst, deshalb wird kurz nach dem Abschnitt gesucht, statt ihn blind
+     anzuspringen. */
+  function zuDenZielen() {
+    setView('settings')
+    let versuche = 0
+    const suchen = () => {
+      const ziel = document.getElementById('erlaubte-ziele')
+      if (ziel) ziel.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      else if (++versuche < 20) setTimeout(suchen, 100)
+    }
+    setTimeout(suchen, 50)
+  }
+
   const visible = NAV.filter((n) =>
     n.id === 'storage' ? darfVerteilen
       : n.id === 'webapps' ? darfAnwendungen
@@ -276,7 +290,8 @@ export default function App() {
           <Dashboard me={me} onOpen={openSession} onToast={toast} />
         )}
         {current === 'workspaces' && <Workspaces onToast={toast} />}
-        {current === 'webapps' && <WebApps onToast={toast} />}
+        {current === 'webapps' && <WebApps onToast={toast}
+          zuEinstellungen={visible.some((n) => n.id === 'settings') ? zuDenZielen : undefined} />}
         {current === 'images' && <Images onToast={toast} />}
         {current === 'registries' && <Registries onToast={toast} />}
         {current === 'paketquellen' && <Paketquellen onToast={toast} />}
