@@ -103,6 +103,10 @@ export function openInTab(path: string): void {
  * Anwendung und nicht im Dashboard.
  */
 export function anmeldePfad(): string {
-  const hier = window.location.pathname + window.location.search
+  // Eine Adresse der API oder von Keycloak ist nie ein Ziel. Steht der
+  // Browser auf einer, ist etwas schiefgegangen — sie mitzugeben hiesse, sie
+  // bei jeder Runde tiefer zu verschachteln (2026-10-08: Schleife bis 414).
+  const pfad = window.location.pathname
+  const hier = /^\/(api|auth)(\/|$)/.test(pfad) ? '/' : pfad + window.location.search
   return `/api/auth/oidc/start?next=${encodeURIComponent(hier)}`
 }

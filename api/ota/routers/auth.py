@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 
+import re
 import secrets
 import time
 from datetime import datetime, timedelta, timezone
@@ -686,7 +687,11 @@ def _sicheres_ziel(next_: str | None) -> str:
     Adresse mit Herkunft liest.
     """
     ziel = (next_ or "/").strip()
-    if not ziel.startswith("/") or ziel.startswith("//"):
+    if not ziel.startswith("/") or ziel.startswith("//") or ziel.startswith("/\\"):
+        return "/"
+    # Keine Adresse der API oder von Keycloak: Das sind keine Seiten, und ein
+    # Ziel /api/auth/oidc/start?next=… ist der Anfang einer Schleife.
+    if re.match(r"^/(api|auth)(/|$|\?)", ziel):
         return "/"
     return ziel
 
