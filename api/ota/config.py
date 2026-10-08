@@ -6,7 +6,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="OTA_", extra="ignore")
 
-    database_url: str = "postgresql+psycopg://ota:ota@db:5432/ota"
+    # Ohne Passwort: Das echte steht in deploy/.env und kommt ueber
+    # OTA_DATABASE_URL aus dem Compose. Frueher stand hier `ota:ota@` — kein
+    # gueltiges Passwort einer Anlage, aber Scanner wie GitGuardian melden es
+    # zu Recht als Zugangsdaten im Code, und ein Vorgabewert mit Passwort
+    # verleitet dazu, es irgendwo stehen zu lassen.
+    database_url: str = "postgresql+psycopg://ota@db:5432/ota"
 
     # Wird beim ersten Start erzeugt, falls nicht gesetzt. In Produktion
     # gehoert er in die .env, sonst sind nach jedem Neustart alle Sitzungen
