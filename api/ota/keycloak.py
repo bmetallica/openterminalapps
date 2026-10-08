@@ -363,6 +363,97 @@ def authorize_url(redirect_uri: str, state: str, challenge: str,
     return f"{basis}/realms/{_realm()}/protocol/openid-connect/auth?{frage}"
 
 
+class SitzungWeg(KeycloakFehler):
+    """Keycloak kennt die Sitzung nicht mehr (abgemeldet, abgelaufen, beendet)."""
+
+
+def auffrischen(refresh_token: str) -> dict[str, Any]:
+    """Die Keycloak-Sitzung am Leben halten: Refresh-Token gegen neue Token.
+
+    Jede Auffrischung setzt Keycloaks Leerlauf-Uhr der SSO-Sitzung zurück.
+    Darum geht es: Solange jemand in OTA arbeitet, soll eine fremde Anwendung
+    ihn über die zentrale Anmeldung ohne Maske hereinlassen (2026-10-08).
+    Vorher lief Keycloaks Sitzung nach 30 Minuten ohne Kontakt ab, während
+    OTA längst nur noch mit seinem eigenen Cookie arbeitete.
+
+    `SitzungWeg`, wenn Keycloak das Token ablehnt; `KeycloakFehler`, wenn
+    Keycloak nicht antwortet — das ist kein Grund, jemanden abzumelden.
+    """
+    cfg = settings()
+    url = f"{_basis()}/realms/{_realm()}/protocol/openid-connect/token"
+    try:
+        with httpx.Client(timeout=10.0) as client:
+            resp = client.post(url, headers=_wie_ausgestellt(refresh_token), data={
+                "grant_type": "refresh_token",
+                "client_id": "ota",
+                "client_secret": f"{cfg.keycloak_secret}-app",
+                "refresh_token": refresh_token,
+            })
+    except httpx.HTTPError as exc:
+        raise KeycloakFehler("Keycloak antwortet gerade nicht.") from exc
+    if resp.status_code == 400:
+        raise SitzungWeg(resp.text[:200])
+    if resp.status_code >= 400:
+        raise KeycloakFehler(f"Auffrischen abgelehnt: {resp.status_code}")
+    return resp.json()
+
+
+def _wie_ausgestellt(token: str) -> dict[str, str]:
+    """Kopfzeilen, unter denen Keycloak sich so sieht wie beim Ausstellen.
+
+    Der Browser hat sich unter der öffentlichen Adresse angemeldet; dort steht
+    der Aussteller im Token (`https://ota.firma.de/auth/realms/ota`). OTA
+    spricht Keycloak aber intern an (`http://keycloak:8080`), und beim
+    Auffrischen vergleicht Keycloak den Aussteller mit der Adresse, unter der
+    er gerade gefragt wird: „Invalid token issuer". Beim Code-Tausch spielt
+    das keine Rolle, beim Auffrischen schon. Keycloak liest die
+    X-Forwarded-Kopfzeilen (KC_PROXY_HEADERS=xforwarded) — dieselben, die
+    Traefik für den Browser setzt.
+    """
+    import base64
+    import json
+    from urllib.parse import urlparse
+
+    try:
+        teil = token.split(".")[1]
+        daten = json.loads(base64.urlsafe_b64decode(teil + "=" * (-len(teil) % 4)))
+        aussteller = urlparse(str(daten.get("iss") or ""))
+    except (IndexError, ValueError):
+        return {}
+    if aussteller.scheme not in ("http", "https") or not aussteller.hostname \
+            or not aussteller.path.endswith(f"/realms/{_realm()}"):
+        return {}
+    port = aussteller.port or (443 if aussteller.scheme == "https" else 80)
+    return {
+        "X-Forwarded-Proto": aussteller.scheme,
+        "X-Forwarded-Host": aussteller.netloc,
+        "X-Forwarded-Port": str(port),
+    }
+
+
+# Obergrenze einer SSO-Sitzung. OTA selbst kennt keine — seine Sitzung rollt,
+# solange jemand arbeitet. Keycloaks Vorgabe (10 Stunden) hätte jeden, der
+# länger am Stück arbeitet, aus OTA geworfen, seit beide Sitzungen zusammen
+# enden. Eine Woche ist die Grenze für den, der seinen Rechner nie ausmacht.
+SSO_HOECHSTENS_S = 7 * 24 * 3600
+
+
+def sitzungsfristen_setzen(leerlauf_minuten: int) -> None:
+    """Keycloaks Leerlauf-Frist der SSO-Sitzung = OTAs Anmeldefrist.
+
+    Damit gilt eine Uhr: Wer in OTA angemeldet ist, ist es auch in Keycloak,
+    und eine fremde Anwendung lässt ihn ohne Maske herein — auch wenn der
+    OTA-Tab eine Weile zu war.
+    """
+    leerlauf = int(leerlauf_minuten) * 60
+    resp = ruf("PUT", "", json={
+        "ssoSessionIdleTimeout": leerlauf,
+        "ssoSessionMaxLifespan": max(leerlauf, SSO_HOECHSTENS_S),
+    })
+    if resp.status_code not in (200, 204):
+        raise KeycloakFehler(f"Sitzungsfristen nicht gesetzt: {resp.text[:200]}")
+
+
 def tausche_code(code: str, redirect_uri: str, verifier: str) -> dict[str, Any]:
     """Den Code gegen Token eintauschen. Läuft über die **interne** Adresse.
 

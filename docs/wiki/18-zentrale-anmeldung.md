@@ -257,6 +257,37 @@ Das Client-Geheimnis kommt **einmal** zurück und steht danach nur noch in Keycl
 Zum Zertifikat — die Stelle, an der die erste Anbindung verlässlich scheitert — siehe
 [Kapitel 10](10-zertifikate-und-https.md).
 
+### Eine Uhr für OTA und die Anwendungen ✅
+
+*Seit dem 2026-10-08.* Wer in OTA angemeldet ist, kommt in eine angebundene Anwendung **ohne
+Anmeldemaske** — solange er in OTA angemeldet ist, nicht nur eine halbe Stunde lang.
+
+Vorher liefen zwei Uhren nebeneinander: OTAs eigene Sitzung (Einstellungen → *Abmelden nach
+Untätigkeit*, etwa acht Stunden) und Keycloaks SSO-Sitzung (Vorgabe 30 Minuten ohne Kontakt).
+Nach der Anmeldung arbeitet man nur noch mit OTAs Cookie, Keycloak hört nichts mehr. Nach einer
+halben Stunde war man in OTA noch angemeldet, aber Open WebUI zeigte die Maske.
+
+Jetzt gilt:
+
+* **Gleiche Frist.** OTA stellt Keycloaks Leerlauf-Frist auf seine eigene — beim Start und bei
+  jeder Änderung in den Einstellungen. Die Obergrenze einer SSO-Sitzung liegt bei einer Woche, weil
+  OTA selbst keine kennt; Keycloaks Vorgabe von zehn Stunden hätte jeden, der länger am Stück
+  arbeitet, hinausgeworfen.
+* **Wachhalten.** Solange in OTA gearbeitet wird, frischt OTA die Keycloak-Anmeldung alle fünf
+  Minuten auf. Das Refresh-Token dafür liegt als httponly-Cookie im Browser (`ota_kcwach`, nur für
+  `/api`), nicht in der Datenbank — es gehört zu dieser einen Anmeldung auf diesem Gerät.
+* **Gemeinsam enden.** Kennt Keycloak die Sitzung nicht mehr — anderswo abgemeldet, in der
+  Konsole beendet —, endet bei der nächsten Auffrischung auch die Sitzung in OTA. Antwortet
+  Keycloak nur gerade nicht, bleibt alles, wie es ist.
+
+Wer über `/notfall` angemeldet ist, hat keine Keycloak-Sitzung; für ihn gibt es auch kein SSO.
+
+> **Beim Auffrischen spricht OTA Keycloak intern an** (`http://keycloak:8080`), der Browser hat
+> sich aber unter der öffentlichen Adresse angemeldet. Keycloak vergleicht beim Auffrischen den
+> Aussteller im Token mit der Adresse, unter der er gefragt wird. OTA gibt deshalb die öffentliche
+> Adresse aus dem Token als `X-Forwarded-*` mit — dieselben Kopfzeilen, die Traefik für den Browser
+> setzt.
+
 ## Bestandskonten übernehmen
 
 **Am einfachsten zieht ein Konto selbst um — beim nächsten Anmelden** (*seit dem 2026-10-08*):

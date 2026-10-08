@@ -11,6 +11,8 @@
 #   * Ein lokales Bestandskonto zieht beim Anmelden mit **seinem** Passwort
 #     um. Das Notfallkonto bleibt lokal.
 #   * /login sagt, ob es noch lokale Konten gibt; ohne leitet es weiter.
+#   * Eine Uhr: Keycloaks SSO-Sitzung lebt so lange wie OTAs; OTA haelt sie
+#     wach und endet mit ihr.
 #
 # Konten mit Verzeichnis (AD/LDAP) prüft scripts/test-ldap.sh.
 set -uo pipefail
@@ -84,6 +86,55 @@ grep -q "^ok" <<<"$(kc "$NEU" "$PW2" "$TMP/k2.jar" --aktion UPDATE_PASSWORD --ne
   && ok "Passwort über Keycloak geändert" || bad "Passwortänderung über Keycloak scheiterte"
 grep -q "^ok" <<<"$(kc "$NEU" "$PW1" "$TMP/k3.jar")" && ok "Das neue Passwort gilt" \
   || bad "Das neue Passwort gilt nicht"
+
+# ------------------------------------------------------------ Eine Uhr
+echo
+echo "SSO bleibt, solange OTA angemeldet ist"
+keks() {  # keks <jar> -> Wert von ota_kcwach (leer, wenn keiner)
+  python3 - "$1" <<'PY'
+import sys
+for z in open(sys.argv[1]):
+    f = z.rstrip("\n").split("\t")
+    if len(f) == 7 and f[5] == "ota_kcwach":
+        print(f[6])
+PY
+}
+keks_setzen() {  # keks_setzen <jar> <wert>
+  python3 - "$1" "$2" <<'PY'
+import sys
+pfad, wert = sys.argv[1], sys.argv[2]
+zeilen = []
+for z in open(pfad):
+    f = z.rstrip("\n").split("\t")
+    if len(f) == 7 and f[5] == "ota_kcwach":
+        f[6] = wert
+        z = "\t".join(f) + "\n"
+    zeilen.append(z)
+open(pfad, "w").writelines(zeilen)
+PY
+}
+realm_frist() {
+  docker exec ota-api python -c "from ota import keycloak; print(keycloak.ruf('GET', '').json()['ssoSessionIdleTimeout'])"
+}
+W=$(keks "$TMP/k3.jar")
+[ -n "$W" ] && ok "Nach der Anmeldung über Keycloak liegt das Wach-Cookie im Browser" \
+  || bad "Kein Wach-Cookie nach der Anmeldung"
+FRIST=$(api "$BASE/api/admin/settings" | jqp "d['auth_idle_minutes']")
+expect "$((FRIST * 60))" "$(realm_frist)" "Keycloaks SSO-Leerlauf = OTAs Anmeldefrist ($FRIST Minuten)"
+keks_setzen "$TMP/k3.jar" "1000.${W#*.}"
+expect "200" "$(curl -sk -b "$TMP/k3.jar" -c "$TMP/k3.jar" -o /dev/null -w '%{http_code}' "$BASE/api/auth/me")" \
+  "Nach fünf Minuten frischt die nächste Anfrage Keycloak auf"
+NEU_STEMPEL=$(keks "$TMP/k3.jar"); NEU_STEMPEL=${NEU_STEMPEL%%.*}
+[ "${NEU_STEMPEL:-0}" -gt $(( $(date +%s) - 60 )) ] && ok "… und der Zeitpunkt im Cookie ist frisch" \
+  || bad "Zeitpunkt im Cookie nicht erneuert: $NEU_STEMPEL"
+keks_setzen "$TMP/k3.jar" "1000.kaputt"
+expect "401" "$(curl -sk -b "$TMP/k3.jar" -o /dev/null -w '%{http_code}' "$BASE/api/auth/me")" \
+  "Kennt Keycloak die Sitzung nicht mehr, endet auch die bei OTA"
+ANDERE=$([ "$FRIST" = "240" ] && echo 480 || echo 240)
+api -X PUT "$BASE/api/admin/settings" -H 'Content-Type: application/json' -d "{\"auth_idle_minutes\": $ANDERE}" >/dev/null
+expect "$((ANDERE * 60))" "$(realm_frist)" "Ändert die Verwaltung die Frist, zieht Keycloak mit ($ANDERE Minuten)"
+api -X PUT "$BASE/api/admin/settings" -H 'Content-Type: application/json' -d "{\"auth_idle_minutes\": $FRIST}" >/dev/null
+expect "$((FRIST * 60))" "$(realm_frist)" "… und zurück ($FRIST Minuten)"
 
 # ------------------------------------------------------------ Verwaltung
 echo

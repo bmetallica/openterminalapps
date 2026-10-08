@@ -717,6 +717,12 @@ def write_settings(
                 "Diese Anmeldefrist ist nicht vorgesehen.",
             )
         settings_store.put(db, settings_store.AUTH_IDLE_MINUTES, body.auth_idle_minutes)
+        # Eine Uhr fuer beide Anmeldungen: Keycloaks SSO-Sitzung lebt so lange
+        # wie OTAs (siehe keycloak.sitzungsfristen_setzen).
+        try:
+            keycloak.sitzungsfristen_setzen(body.auth_idle_minutes)
+        except (keycloak.KeycloakFehler, httpx.HTTPError) as exc:
+            log.warning("Keycloak-Sitzungsfrist nicht angeglichen: %s", exc)
 
     # 0 heisst „keine Grenze" und ist damit ein zulaessiger Wert, kein
     # fehlender. Deshalb `is not None` und nicht `if body.x`.

@@ -10,7 +10,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import select
 
-from . import agent_client, migrate, recipes, schema_sync
+from . import agent_client, migrate, recipes, schema_sync, settings_store
 from .db import Base, SessionLocal, engine
 from .models import ImageBuild, Session as SessionModel
 from .routers import (
@@ -255,6 +255,30 @@ async def _reaper() -> None:
             log.warning("Reaper-Durchlauf fehlgeschlagen: %s", exc)
 
 
+async def _keycloak_fristen() -> None:
+    """Keycloaks SSO-Fristen beim Start an OTAs Anmeldefrist angleichen.
+
+    Beim Start, weil eine bestehende Anlage sonst bei Keycloaks Vorgabe von
+    30 Minuten bliebe, bis jemand die Frist in den Einstellungen anfasst.
+    Keycloak startet womoeglich gerade mit — deshalb ein paar Versuche im
+    Hintergrund statt eines Fehlers beim Hochfahren.
+    """
+    from . import keycloak
+
+    letzter: Exception | None = None
+    for _ in range(20):
+        try:
+            with SessionLocal() as db:
+                minuten = settings_store.idle_minutes(db)
+            await asyncio.to_thread(keycloak.sitzungsfristen_setzen, minuten)
+            log.info("Keycloak-Sitzungsfrist angeglichen: %d Minuten", minuten)
+            return
+        except Exception as exc:  # noqa: BLE001 — Keycloak startet vielleicht noch
+            letzter = exc
+        await asyncio.sleep(30)
+    log.warning("Keycloak-Sitzungsfrist nicht angeglichen: %s", letzter)
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     # Drei Schritte, und jeder deckt ab, was der vorige nicht kann:
@@ -295,7 +319,8 @@ async def lifespan(_: FastAPI):
         except Exception as exc:  # noqa: BLE001
             log.warning("Mitgelieferte Netzprofile nicht angelegt: %s", exc)
 
-    tasks = [asyncio.create_task(_reaper()), asyncio.create_task(_scheduler())]
+    tasks = [asyncio.create_task(_reaper()), asyncio.create_task(_scheduler()),
+             asyncio.create_task(_keycloak_fristen())]
     try:
         yield
     finally:

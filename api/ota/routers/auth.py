@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session as DbSession
 from .. import agent_client, audit, kcidentity, keycloak
 from ..config import settings
 from ..db import get_db
-from ..deps import current_user, set_session_cookie
+from ..deps import clear_kc_wach, current_user, set_kc_wach, set_session_cookie
 from ..models import User
 from .. import settings_store, totp
 from ..schemas import (
@@ -240,6 +240,7 @@ def login(
     db.commit()
 
     set_session_cookie(response, user, settings_store.idle_minutes(db))
+    clear_kc_wach(response)
     return _me(user)
 
 
@@ -281,6 +282,7 @@ def my_storage(
 @router.post("/logout")
 def logout(response: Response) -> dict[str, str]:
     response.delete_cookie(settings().cookie_name, path="/")
+    clear_kc_wach(response)
     return {"status": "abgemeldet"}
 
 
@@ -375,6 +377,7 @@ def umziehen(body: UmzugIn, request: Request, response: Response,
     audit.record(db, "konto.umgezogen", actor=user, request=request, keycloak=sub[:8])
     db.commit()
     response.delete_cookie(settings().cookie_name, path="/")
+    clear_kc_wach(response)
     from urllib.parse import quote
     return {
         "status": f"Dein Konto meldet sich ab jetzt über die zentrale Anmeldung an. {hinweis}",
@@ -640,6 +643,8 @@ def oidc_token(
     db.commit()
 
     set_session_cookie(response, user, settings_store.idle_minutes(db))
+    # Ohne Refresh-Token gibt es hier nichts wachzuhalten.
+    clear_kc_wach(response)
     return _me(user)
 
 
@@ -801,7 +806,16 @@ def oidc_callback(
     fertig = RedirectResponse(_sicheres_ziel(str(notiz.get("ziel"))),
                               status_code=status.HTTP_303_SEE_OTHER)
     fertig.delete_cookie(OIDC_COOKIE, path="/api/auth")
-    set_session_cookie(fertig, user, settings_store.idle_minutes(db))
+    minuten = settings_store.idle_minutes(db)
+    set_session_cookie(fertig, user, minuten)
+    # Damit OTA die Keycloak-Sitzung wachhalten kann, solange hier gearbeitet
+    # wird (deps._keycloak_wach) — sonst endete sie nach Keycloaks Frist,
+    # und fremde Anwendungen zeigten trotz OTA-Anmeldung die Maske.
+    rt = str(token_antwort.get("refresh_token") or "")
+    if rt:
+        set_kc_wach(fertig, rt, minuten)
+    else:
+        clear_kc_wach(fertig)
 
     # Das ID-Token bleibt liegen, aber nur als Ausweis fürs Abmelden.
     #
@@ -887,4 +901,5 @@ def oidc_logout(request: Request, db: DbSession = Depends(get_db)) -> Response:
     antwort = RedirectResponse(wohin, status_code=status.HTTP_303_SEE_OTHER)
     antwort.delete_cookie(settings().cookie_name, path="/")
     antwort.delete_cookie(IDT_COOKIE, path="/api/auth")
+    clear_kc_wach(antwort)
     return antwort
