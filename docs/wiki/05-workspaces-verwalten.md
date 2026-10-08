@@ -113,7 +113,9 @@ Nutzer sehen den Workspace nach dem Speichern.").
 
 ## Änderungen an laufenden Sessions
 
-Ressourcenänderungen wirken auf die **nächste** Session. Laufende bleiben unberührt — niemandem wird
-im Betrieb der Speicher entzogen.
+Ressourcenänderungen wirken **sofort, auch auf laufende, pausierte und angehaltene Container**. Nur
+wenn der Arbeitsspeicher unter das sinken soll, was ein laufender Container gerade belegt, wartet
+dieser Teil bis zum nächsten Start — niemandem wird im Betrieb Speicher entzogen, den er braucht.
+Einzelheiten in [Kapitel 6](06-ressourcen-und-zuteilung.md#wirksamwerden).
 
 Rechteänderungen wirken sofort.

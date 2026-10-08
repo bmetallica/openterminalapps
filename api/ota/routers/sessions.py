@@ -15,7 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DbSession
 
-from .. import agent_client, audit, paketquellen, settings_store
+from .. import agent_client, audit, paketquellen, ressourcen, settings_store
 from .firewall import schieben as firewall_schieben
 from ..config import settings
 from ..db import get_db
@@ -784,6 +784,10 @@ def platz_fortsetzen(db: DbSession, sess: SessionModel, request: Request | None,
     Container, dieselbe Kennung, dieselbe Adresse."""
     if platzgrenze:
         _platz_pruefen(sess)
+    # Steht der Container, gehen auch die Grenzen, die ihm im Lauf zu eng
+    # gewesen waeren. Scheitert es, startet er mit den alten — lieber so als
+    # gar nicht.
+    ressourcen.angleichen(sess)
     sess.status = "starting"
     db.commit()
     try:

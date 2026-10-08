@@ -39,7 +39,9 @@ def kurz(db: DbSession = Depends(get_db)) -> dict:
     """Für das Dashboard der Verwaltung: erreichbar? wie alt ist der Spiegel?"""
     spiegel = paketquellen.spiegel_aktiv()
     try:
-        st = paketquellen.aufruf("GET", "/status", timeout=30.0)
+        # Kurz: Das Dashboard fragt alle 15 Sekunden. Haengt der Dienst, sollen
+        # keine Anfragen auflaufen und Arbeiter der API belegen.
+        st = paketquellen.aufruf("GET", "/status", timeout=5.0)
     except HTTPException:
         return {"aktiv": True, "spiegel": spiegel, "erreichbar": False}
     return {"aktiv": True, "spiegel": spiegel, "erreichbar": True,

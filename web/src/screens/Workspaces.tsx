@@ -106,8 +106,10 @@ function Editor({ tpl, host, groups, images, netzprofile, onSaved, onClose, onTo
   async function save() {
     setBusy(true)
     try {
-      await api.updateTemplate(tpl.id, toPayload(draft))
-      onToast(`${draft.friendly_name} gespeichert`)
+      const neu = await api.updateTemplate(tpl.id, toPayload(draft))
+      onToast(neu.ressourcen_hinweis
+        ? `${draft.friendly_name} gespeichert — ${neu.ressourcen_hinweis}`
+        : `${draft.friendly_name} gespeichert`)
       onSaved()
     } catch (err) {
       onToast(err instanceof ApiError ? err.message : tr('Speichern fehlgeschlagen'), 'bad')
@@ -128,8 +130,9 @@ function Editor({ tpl, host, groups, images, netzprofile, onSaved, onClose, onTo
         : (alloc.memory_from === 'Nutzer' ? alloc.memory_bytes : null),
     }
     try {
-      await api.setOverride(tpl.id, body)
+      const antwort = await api.setOverride(tpl.id, body)
       setAllocs(await api.allocations(tpl.id))
+      if (antwort.status.includes(' — ')) onToast(antwort.status)
     } catch (err) {
       onToast(err instanceof ApiError ? err.message : tr('Zuteilung fehlgeschlagen'), 'bad')
     }

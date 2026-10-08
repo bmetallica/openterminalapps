@@ -56,8 +56,19 @@ sie in eine Gruppe.
 
 ## Wirksamwerden
 
-Änderungen gelten für die **nächste** Session. Laufende bleiben unberührt — es wäre schwer erklärbar,
-wenn jemandem mitten in der Arbeit der Speicher entzogen würde.
+Seit dem 2026-10-08 gelten geänderte Ressourcen **auch für vorhandene Container** — laufende,
+pausierte und angehaltene Root-Arbeitsplätze. Vorher galten sie erst für den nächsten Container,
+und ein Root-Arbeitsplatz, der wochenlang derselbe bleibt, bekam sie nie. Das gilt für Änderungen am
+Workspace und für Abweichungen je Gruppe und Nutzer; die Meldung nach dem Speichern sagt, wie viele
+Container angepasst wurden.
+
+Eine Grenze bleibt, und sie ist Absicht: **Niemandem wird mitten in der Arbeit Speicher entzogen,
+den er gerade belegt.** Soll der Arbeitsspeicher unter das sinken, was ein laufender Container
+gerade braucht, gilt die CPU sofort und der Arbeitsspeicher ab dem nächsten Start oder Fortsetzen.
+Sonst hiesse die Änderung: Der Kernel beendet Programme in der Sitzung.
+
+Technisch ist das `docker update` durch den Agent; Swap wird wie beim Anlegen auf das Doppelte des
+Arbeitsspeichers gesetzt.
 
 Beim Start wird der aufgelöste Wert festgeschrieben und als `--cpus` und `--memory` an den Container
 übergeben. In der Session-Übersicht ist er nachvollziehbar.

@@ -290,6 +290,7 @@ make test
 | Suite | Checks |
 |---|---|
 | `test-authz.sh` | An ordinary user provably cannot do anything administrative and cannot sit at anyone else's screen; plus container hardening, metrics, quotas and two-factor |
+| `test-ressourcen.sh` | Changed CPU and RAM reach existing containers, running and paused; RAM below current usage waits for the next start, CPU does not |
 | `test-konten.sh` | Central sign-in accounts: creating one in OTA creates it in Keycloak (including the forced password change) and it cannot sign in locally; edits, password, second factor, disabling and deletion take effect in Keycloak; My account goes through Keycloak; a legacy local account moves over with its own password, the emergency account does not |
 | `test-clipboard-bridge.sh` | Copying between two applications in one workspace: both directions, umlauts, an image, a megabyte, after a pause, and switched off |
 | `tests/e2e.mjs` | The interface in a real browser — down to whether the stream actually connects |

@@ -227,6 +227,9 @@ class TemplateOut(BaseModel):
     # Was fuer den anfragenden Nutzer tatsaechlich gilt.
     effective_cores: float | None = None
     effective_memory_bytes: int | None = None
+    # Nur in der Antwort auf das Speichern: was mit vorhandenen Containern
+    # geschah (geaenderte Ressourcen ziehen nach, 2026-10-08).
+    ressourcen_hinweis: str | None = None
 
 
 class TemplateIn(BaseModel):

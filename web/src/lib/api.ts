@@ -93,6 +93,8 @@ export type Template = {
   group_ids: string[]
   effective_cores: number | null
   effective_memory_bytes: number | null
+  /** Nur in der Antwort auf das Speichern: was mit vorhandenen Containern geschah. */
+  ressourcen_hinweis?: string | null
 }
 
 export type Stream = {

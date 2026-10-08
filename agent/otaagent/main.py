@@ -1966,6 +1966,59 @@ def container_status(cid: str) -> dict[str, Any]:
 # Eigener Pfadabschnitt statt eines freien Platzhalters. Ein
 # "/containers/{cid}/{action}" wuerde jede weitere Unterroute verdecken —
 # etwa /containers/{cid}/apps, die dann als Aktion "apps" ankaeme.
+class RessourcenIn(BaseModel):
+    cores: float = Field(gt=0)
+    memory_bytes: int = Field(gt=0)
+
+
+@app.post("/containers/{cid}/ressourcen", dependencies=[Depends(require_token)])
+def ressourcen_setzen(cid: str, req: RessourcenIn) -> dict[str, Any]:
+    """CPU und RAM eines vorhandenen Containers aendern — laufend, pausiert
+    oder angehalten (`docker update`).
+
+    Bis zum 2026-10-08 kamen die Grenzen nur beim **Anlegen** in den
+    Container. Wer einen Workspace grosszuegiger stellte, sah davon nichts,
+    solange der Container lebte — und ein Root-Arbeitsplatz lebt lange.
+
+    Eine Ausnahme: weniger RAM, als ein laufender Container gerade belegt.
+    Das hiesse, ihn dem OOM-Killer vorzulegen. Dann `spaeter` — die API setzt
+    es beim naechsten Fortsetzen, wenn der Container steht.
+
+    Ueber die Docker-API und nicht `Container.update()`: Die kennt `NanoCpus`
+    nicht, und `CpuQuota` neben dem beim Anlegen gesetzten `NanoCpus` lehnt
+    Docker ab.
+    """
+    try:
+        c = dc().containers.get(cid)
+    except NotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Container nicht gefunden")
+    hc = c.attrs.get("HostConfig") or {}
+    werte: dict[str, int] = {"NanoCpus": int(req.cores * 1_000_000_000)}
+    zu_eng = False
+    if c.status in ("running", "paused") and req.memory_bytes < int(hc.get("Memory") or 0):
+        try:
+            belegt = int(((c.stats(stream=False) or {}).get("memory_stats") or {}).get("usage") or 0)
+        except APIError:
+            belegt = 0
+        zu_eng = belegt > req.memory_bytes * 0.9
+    if not zu_eng:
+        # Swap wie beim Anlegen: Docker setzt ohne Angabe das Doppelte des
+        # RAM. Bliebe der alte Wert stehen, waere eine Erhoehung ueber ihn
+        # hinaus ungueltig („Memory limit should be smaller than memoryswap").
+        werte["Memory"] = req.memory_bytes
+        werte["MemorySwap"] = -1 if int(hc.get("MemorySwap") or 0) == -1 else 2 * req.memory_bytes
+    api = dc().api
+    try:
+        antwort = api._post_json(api._url("/containers/{0}/update", c.id), data=werte)
+        api._raise_for_status(antwort)
+    except APIError as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+    log.info("%s: %.2g Kerne%s", c.name, req.cores,
+             "" if zu_eng else f", {req.memory_bytes // 2**20} MiB")
+    # Die CPU gilt auch dann sofort, wenn der RAM warten muss.
+    return {"status": "spaeter" if zu_eng else "gesetzt"}
+
+
 @app.post("/containers/{cid}/action/{action}", dependencies=[Depends(require_token)])
 def container_action(cid: str, action: str) -> dict[str, str]:
     if action not in {"pause", "unpause", "stop", "start", "restart"}:

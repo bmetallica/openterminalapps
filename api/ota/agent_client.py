@@ -130,6 +130,13 @@ def remove_container(cid: str, daten: bool = False) -> dict[str, Any]:
     return _call("DELETE", f"/containers/{cid}{suffix}")
 
 
+def ressourcen(cid: str, cores: float, memory_bytes: int) -> dict[str, Any]:
+    """CPU und RAM eines vorhandenen Containers aendern. `status` ist
+    `gesetzt` oder `spaeter` (weniger RAM, als er gerade belegt)."""
+    return _call("POST", f"/containers/{cid}/ressourcen",
+                 json={"cores": cores, "memory_bytes": memory_bytes})
+
+
 def fortsetzen(cid: str, repo: dict[str, Any] | None = None) -> dict[str, Any]:
     """Einen angehaltenen Root-Arbeitsplatz wieder starten."""
     return _call("POST", f"/containers/{cid}/fortsetzen", json={"repo": repo or {}},

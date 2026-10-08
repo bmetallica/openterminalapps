@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session as DbSession
 
-from .. import agent_client, audit, icons
+from .. import agent_client, audit, icons, ressourcen
 from ..db import get_db
 from ..deps import current_user, require_permission
 from ..models import (
@@ -187,7 +187,10 @@ def update_template(
     audit.record(db, "template.updated", actor=actor, object_type="template",
                  object_id=tpl.slug, request=request)
     db.commit()
-    return _out(tpl)
+    # Geaenderte Ressourcen gelten auch fuer Container, die es schon gibt.
+    out = _out(tpl)
+    out.ressourcen_hinweis = ressourcen.nachziehen(db, tpl) or None
+    return out
 
 
 @router.delete("/{template_id}", dependencies=[Depends(manage)])
@@ -316,7 +319,9 @@ def set_override(
                      object_id=tpl.slug, request=request,
                      scope=body.scope, target=str(body.target_id))
         db.commit()
-        return {"status": "Abweichung entfernt"}
+        db.refresh(tpl)
+        hinweis = ressourcen.nachziehen(db, tpl)
+        return {"status": "Abweichung entfernt" + (f" — {hinweis}" if hinweis else "")}
 
     if existing:
         existing.cores = body.cores
@@ -329,7 +334,9 @@ def set_override(
                  scope=body.scope, target=str(body.target_id),
                  cores=body.cores, memory_bytes=body.memory_bytes)
     db.commit()
-    return {"status": "Abweichung gespeichert"}
+    db.refresh(tpl)
+    hinweis = ressourcen.nachziehen(db, tpl)
+    return {"status": "Abweichung gespeichert" + (f" — {hinweis}" if hinweis else "")}
 
 
 # --------------------------------------------------------------------------

@@ -214,6 +214,9 @@ test:
 	@# Keycloak, Umzug lokaler Bestandskonten mit ihrem Passwort.
 	@./scripts/test-konten.sh
 	@echo
+	@# Geaenderte CPU/RAM erreichen vorhandene Container (docker update).
+	@./scripts/test-ressourcen.sh
+	@echo
 	@./scripts/test-clipboard-bridge.sh || \
 	  echo "  (übersprungen — dafür muss ein Arbeitsplatz mit zwei Apps laufen)"
 	@echo
