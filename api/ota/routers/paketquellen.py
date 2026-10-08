@@ -39,9 +39,11 @@ def kurz(db: DbSession = Depends(get_db)) -> dict:
     """Für das Dashboard der Verwaltung: erreichbar? wie alt ist der Spiegel?"""
     spiegel = paketquellen.spiegel_aktiv()
     try:
-        # Kurz: Das Dashboard fragt alle 15 Sekunden. Haengt der Dienst, sollen
-        # keine Anfragen auflaufen und Arbeiter der API belegen.
-        st = paketquellen.aufruf("GET", "/status", timeout=5.0)
+        # `/kurz` statt `/status`: Das Dashboard fragt alle 15 Sekunden, und
+        # `/status` misst den ganzen Bestand und wartet auf aptlys Sperre —
+        # mit kurzer Wartezeit hiess das dauerhaft „antwortet nicht", mit
+        # langer belegten haengende Abfragen Arbeiter der API.
+        st = paketquellen.aufruf("GET", "/kurz", timeout=5.0)
     except HTTPException:
         return {"aktiv": True, "spiegel": spiegel, "erreichbar": False}
     return {"aktiv": True, "spiegel": spiegel, "erreichbar": True,

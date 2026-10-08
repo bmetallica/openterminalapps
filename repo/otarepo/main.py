@@ -317,6 +317,21 @@ def status_() -> dict[str, Any]:
     }
 
 
+@app.get("/kurz", dependencies=[Depends(require_token)])
+def kurz() -> dict[str, Any]:
+    """Fuer das Dashboard: lebt der Dienst, und wann war der letzte Abgleich?
+
+    Liest nur die Merkdatei. `/status` misst dagegen die Groesse (`du` ueber
+    den ganzen Bestand, beim Vollspiegel ueber 100 GB) und fragt aptly, das
+    waehrend eines Abgleichs auf seine Datenbanksperre wartet. Das Dashboard
+    fragt alle 15 Sekunden — mit `/status` meldete es im Betrieb dauerhaft
+    „antwortet nicht", waehrend `apt` in den Containern einwandfrei lief
+    (2026-10-08).
+    """
+    return {"spiegel_an": SPIEGEL_AN,
+            "letzter_abgleich": (_meta()["abgleiche"] or [None])[-1]}
+
+
 @app.get("/auftrag", dependencies=[Depends(require_token)])
 def auftrag() -> dict[str, Any]:
     return dict(_auftrag)

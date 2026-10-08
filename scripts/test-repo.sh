@@ -262,5 +262,18 @@ else
 fi
 
 echo
+echo "Dashboard"
+# Die Kachel fragt alle 15 Sekunden. Sie darf weder den Bestand messen noch
+# auf aptlys Sperre warten — sonst meldet sie „antwortet nicht", während apt
+# in den Containern einwandfrei läuft (2026-10-08).
+KURZ=$(api -w '\n%{time_total}' "$BASE_URL/api/paketquellen/kurz")
+[ "$(head -1 <<<"$KURZ" | jqp "d.get('erreichbar')")" = "True" ] \
+  && ok "Die Dashboard-Abfrage sieht die Paketquelle" || bad "Dashboard-Abfrage: $(head -1 <<<"$KURZ")"
+python3 -c "import sys; sys.exit(0 if float('$(tail -1 <<<"$KURZ")') < 1.0 else 1)" \
+  && ok "… in unter einer Sekunde ($(tail -1 <<<"$KURZ") s)" || bad "Dashboard-Abfrage zu langsam: $(tail -1 <<<"$KURZ") s"
+docker exec ota-repo sh -c 'curl -s -H "X-Agent-Token: $OTA_AGENT_TOKEN" http://127.0.0.1:8200/openapi.json' 2>/dev/null \
+  | grep -q '"/kurz"' && ok "Der Repo-Dienst hat den schlanken Weg /kurz" || bad "/kurz fehlt im Repo-Dienst"
+
+echo
 printf '  bestanden: %d   fehlgeschlagen: %d\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
