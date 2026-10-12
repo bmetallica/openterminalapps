@@ -51,6 +51,27 @@ def _host() -> dict[str, Any] | None:
     return data
 
 
+@router.get("/api/wartung")
+def wartung(response: Response, db: DbSession = Depends(get_db)) -> dict[str, Any]:
+    """Laeuft gerade ein Update? Fuer das Banner auf jeder Seite.
+
+    Ohne Anmeldung, wie `/api/branding`: Das Banner gehoert auch auf die
+    Anmeldeseite und in Fenster, deren Sitzung gerade nicht gilt. Es verraet
+    nichts ausser „Update laeuft seit …".
+
+    Gelesen wird an der Datenbank vorbei am Zwischenspeicher von
+    `settings_store`: `make update` schreibt den Wert direkt, nicht ueber die
+    API, und fuenf Sekunden alte Auskunft waeren hier die falsche.
+    """
+    from .. import settings_store
+    from ..models import Setting
+
+    response.headers["Cache-Control"] = "no-store"
+    zeile = db.get(Setting, settings_store.WARTUNG_UPDATE)
+    seit = zeile.value.get("v") if zeile and isinstance(zeile.value, dict) else None
+    return {"update": bool(seit), "seit": seit or None}
+
+
 @router.get("/healthz")
 def healthz(response: Response, db: DbSession = Depends(get_db)) -> dict[str, Any]:
     """Kann dieser Dienst arbeiten?

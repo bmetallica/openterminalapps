@@ -144,6 +144,11 @@ git pull
 sudo make update          # .env ergänzen, bauen, starten
 ```
 
+Ab dem ersten Schritt zeigt jede OTA-Seite (Dashboard, Anmeldung, jede Sitzung) ein Banner
+„**Achtung!** OTA Update im Gange, bitte laden Sie alle OTA-Seiten neu, sobald diese Meldung
+verschwunden ist.“ Es verschwindet, sobald die neue API gesund ist; scheitert das Update, bleibt es
+stehen ([Kapitel 11](docs/wiki/11-betrieb.md#das-banner-während-des-updates-)).
+
 `make update` macht drei Dinge in dieser Reihenfolge, und die Reihenfolge ist nicht beliebig:
 
 1. **Fehlende Einstellungen ergänzen.** Bringt eine Fassung neue Werte in `deploy/.env.example`

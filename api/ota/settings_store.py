@@ -69,6 +69,11 @@ FIREWALL_GLOBAL = "firewall.global"
 # Paketquellen (Kapitel 26): wie Container das eigene Repository benutzen
 # (aus / zuerst / nur), gegen welchen festgehaltenen Stand gebaut wird, und ab
 # wie vielen Tagen das Alter des Spiegels gelb bzw. rot erscheint.
+# Gesetzt von `make update`, solange es laeuft (Wert: Beginn als ISO-Zeit).
+# Jede Seite zeigt dann ein Banner. Steht direkt in der Datenbank, weil die
+# API waehrend des Updates neu startet — die Datenbank nicht.
+WARTUNG_UPDATE = "wartung.update"
+
 REPO_MODUS = "repo.modus"
 REPO_BAU_SNAPSHOT = "repo.bau_snapshot"
 REPO_ALTER_GELB = "repo.alter_gelb"

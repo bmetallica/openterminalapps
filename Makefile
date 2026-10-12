@@ -142,8 +142,14 @@ update:
 	@#
 	@# Vorhandene Werte in der .env bleiben unangetastet; das Skript ergaenzt
 	@# nur, was fehlt.
+	@#
+	@# Davor das Banner auf allen OTA-Seiten („Update im Gange, danach neu
+	@# laden"), danach wieder weg — aber erst, wenn die neue API gesund ist.
+	@# Scheitert ein Schritt, bleibt es stehen: dann ist die Meldung wahr.
+	@./scripts/wartung.sh an
 	@./scripts/setup-env.sh
 	@$(MAKE) --no-print-directory up
+	@./scripts/wartung.sh aus
 	@echo
 	@# Das Basisimage wird hier bewusst **nicht** mitgebaut: Es dauert Minuten,
 	@# und die allermeisten Updates fassen es gar nicht an. Statt dessen wird

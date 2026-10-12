@@ -236,14 +236,34 @@ docker exec <container> bash -lc \
 ## Update
 
 ```bash
+sudo make backup     # erst sichern
 git pull
-cd web && npm install && npm run build && cd ../deploy
-docker compose pull
-docker compose up -d
-docker compose exec ota-api alembic upgrade head    # läuft beim Start automatisch
+sudo make update     # .env ergänzen, bauen, starten
 ```
 
-Migrationen werden beim Start geprüft und nie automatisch destruktiv ausgeführt.
+Migrationen laufen beim Start der API von selbst und nie destruktiv. Was `make update` im Einzelnen
+tut und was es nicht anfasst, steht in der README unter *Aktualisieren*.
+
+### Das Banner während des Updates ✅
+
+*Seit dem 2026-10-12.* Ab dem ersten Schritt von `make update` zeigt **jede OTA-Seite** oben ein
+Banner — Dashboard, Anmeldung und jede Sitzung, auch im eigenen Tab:
+
+> **Achtung!** OTA Update im Gange, bitte laden Sie alle OTA-Seiten neu, sobald diese Meldung
+> verschwunden ist.
+
+Es verschwindet erst, wenn die neue API gesund ist; wer dann neu lädt, bekommt die neue Fassung und
+keine Fehlerseite. Während API und Weboberfläche neu starten, bleibt es stehen — keine Antwort ist
+kein Grund, es auszublenden. Klicks gehen hindurch: Wer gerade arbeitet, kann weiterarbeiten.
+
+* **So funktioniert es:** `scripts/wartung.sh an` setzt eine Marke in der Datenbank (`settings`,
+  Schlüssel `wartung.update`) — die Datenbank läuft während des Updates durch, die API nicht.
+  Jede Seite fragt alle 15 Sekunden `GET /api/wartung` (ohne Anmeldung, `no-store`).
+  `scripts/wartung.sh aus` wartet, bis `ota-api` gesund ist, und nimmt die Marke weg.
+* **Scheitert ein Update, bleibt das Banner stehen** — dann ist die Meldung wahr. Nach der Behebung
+  nimmt es der nächste erfolgreiche `make update` weg, oder von Hand: `scripts/wartung.sh aus`
+  (wartet auf die API) bzw. `scripts/wartung.sh aus --sofort`.
+* Für eine Wartung ohne Update lässt es sich genauso von Hand setzen: `scripts/wartung.sh an`.
 
 ## Backup ✅
 

@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App'
+import { UpdateBanner } from './components/UpdateBanner'
 import { ladeMarke } from './lib/branding'
 
 // Erst die Marke, dann das erste Bild. Ein Logo, das eine Zehntelsekunde
@@ -9,7 +10,10 @@ import { ladeMarke } from './lib/branding'
 // trotzdem gezeichnet: dann eben mit der Vorgabe.
 void ladeMarke().finally(() => {
   createRoot(document.getElementById('root')!).render(
-    <StrictMode><App /></StrictMode>,
+    // Das Banner neben der Anwendung, nicht in ihr: So steht es auf jeder
+    // Seite, die diese Anwendung zeichnet — Dashboard, Anmeldung und jede
+    // Sitzung, auch im eigenen Tab.
+    <StrictMode><App /><UpdateBanner /></StrictMode>,
   )
 })
 

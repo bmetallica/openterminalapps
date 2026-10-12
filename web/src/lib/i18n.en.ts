@@ -1497,4 +1497,6 @@ export const EN: Record<string, string> = {
   'Ein Ziel mit http:// ist erlaubt, aber dann geht der Anmeldecode im Klartext über die Leitung. Bestehende Anwendungen bleiben angelegt, wenn ihr Ziel hier entfernt wird; neu anlegen oder ändern lassen sie sich dann nicht mehr.': 'A target with http:// is allowed, but the sign-in code then travels in clear text. Existing applications stay in place when their target is removed here; they can no longer be created or changed, though.',
   'Erlaubte Ziele einrichten': 'Set up allowed targets',
   'Erlaubte Ziele ansehen': 'View allowed targets',
+  'Achtung!': 'Attention!',
+  'OTA Update im Gange, bitte laden Sie alle OTA-Seiten neu, sobald diese Meldung verschwunden ist.': 'OTA update in progress. Please reload all OTA pages once this message has disappeared.',
 }
