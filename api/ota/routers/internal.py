@@ -111,6 +111,13 @@ def session_unavailable() -> Response:
     return Response(
         status_code=status.HTTP_410_GONE,
         media_type="text/html; charset=utf-8",
+        # **Nie zwischenspeichern.** Ein 410 darf ein Browser (und ein
+        # vorgeschalteter Proxy) ohne ausdrueckliche Erlaubnis aufheben. Ein
+        # Root-Arbeitsplatz behaelt seine Adresse ueber Tage; wer ihn einmal
+        # im falschen Moment ansah — angehalten, gerade beim Fortsetzen —,
+        # bekam danach aus dem Cache weiter „laeuft nicht mehr", auch nach
+        # Abmelden und Browser-Neustart. Inkognito ging (2026-10-12).
+        headers={"Cache-Control": "no-store, max-age=0", "Pragma": "no-cache"},
         content=(
             "<!doctype html><meta charset='utf-8'>"
             "<title>Sitzung nicht verfügbar</title>"

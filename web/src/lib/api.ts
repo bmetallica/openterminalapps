@@ -102,6 +102,7 @@ export type Stream = {
   display_num: number
   status: string
   url: string
+  started_at?: string
 }
 
 export type Session = {

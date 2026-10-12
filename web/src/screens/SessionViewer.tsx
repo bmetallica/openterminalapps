@@ -31,6 +31,22 @@ const LEBT = new Set(['running', 'starting', 'paused'])
 /** Wie oft OTA von selbst nachfasst, bevor es beim Knopf bleibt. */
 const MAX_VERSUCHE = 8
 
+/**
+ * Die Adresse des Streams, mit einem Merkmal für diesen Lauf.
+ *
+ * Ein Root-Arbeitsplatz behält seine Adresse (`/s/<id>/a/2/`) über Tage. Hatte
+ * der Browser dort einmal eine Fehlerseite bekommen — angehalten, gerade beim
+ * Fortsetzen —, lieferte er sie aus dem Cache weiter aus, auch nach Abmelden
+ * und Neustart (2026-10-12). Das Merkmal ändert sich mit jedem Start und
+ * Fortsetzen des Containers und jedem Start der Anwendung; innerhalb eines
+ * Laufs bleibt es gleich, damit Zwischengespeichertes dort weiter hilft.
+ */
+function mitStand(url: string, ...staende: (string | undefined)[]): string {
+  const stand = staende.filter(Boolean).map((s) => Date.parse(s!) || 0).join('-')
+  if (!stand) return url
+  return `${url}${url.includes('?') ? '&' : '?'}ota=${stand}`
+}
+
 export function SessionViewer({
   session, stream, template, standalone = false, onSwitch, onClose, onToast,
 }: {
@@ -50,7 +66,7 @@ export function SessionViewer({
   // iframe zeigt, ist gegen KasmVNCs Weboberfläche geschrieben — Selkies
   // bringt seine eigene mit, und dort gibt es diese Elemente nicht.
   const engine = session.stream_engine ?? 'kasmvnc'
-  const src = stream?.url ?? session.url
+  const src = mitStand(stream?.url ?? session.url, session.started_at, stream?.started_at)
   const label = stream
     ? template?.apps.find((a) => a.slug === stream.app_slug)?.name ?? stream.app_slug
     : session.template_name

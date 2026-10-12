@@ -450,6 +450,8 @@ class StreamOut(BaseModel):
     display_num: int
     status: str
     url: str = ""
+    # Fuer das Merkmal in der Stream-Adresse (SessionViewer.mitStand).
+    started_at: datetime | None = None
 
 
 class AppIn(BaseModel):
