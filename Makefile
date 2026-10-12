@@ -206,6 +206,13 @@ cert:
 # erwarten; `-include` damit ein fehlendes .env eine verstaendliche Meldung
 # ergibt statt eines Make-Fehlers.
 -include deploy/.env
+# Make liest die Werte woertlich, Anfuehrungszeichen eingeschlossen. Stand ein
+# Name schon in der Umgebung (etwa nach `set -a; . deploy/.env`), reichte Make
+# ihn so an `docker compose` weiter — und das zieht die Umgebung der --env-file
+# vor: Keycloak bekam JAVA_OPTS_APPEND="-Xms256m -Xmx512m" mit den Zeichen
+# und startete nie mehr (2026-10-12). Deshalb geht ausser den zwei Werten
+# unten nichts aus der .env an die Befehle; compose liest sie selbst.
+$(foreach v,$(shell sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' deploy/.env 2>/dev/null),$(eval unexport $(v)))
 export OTA_TEST_ADMIN_PW
 # Und das Geheimnis des Dienstkontos: Ohne das ueberspringt die Rechtepruefung
 # ihre Keycloak- und Passkey-Abschnitte — und zwar rot, nicht still. Es stand
