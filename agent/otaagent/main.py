@@ -1319,6 +1319,7 @@ def start_container(req: StartRequest) -> dict[str, Any]:
     if req.engine == "selkies":
         _tastatur_setzen(container)
 
+    _grundausstattung(container, heimat)
     # Reihenfolge mit Absicht: erst das Skeleton, dann der Verweis auf die
     # Ablage, dann das Startskript. Das Skeleton legt den Grundstand; das
     # Skript darf ihn ueberschreiben, denn es ist das spezifischere Werkzeug.
@@ -1770,6 +1771,38 @@ def _repo_einrichten(container, repo: dict[str, Any]) -> None:
         log.warning("Paketquelle nicht eingetragen: %s", exc)
 
 
+# Was `useradd -m` beim Bau ins Zuhause gelegt hat (`.bashrc`, `.profile`,
+# `.bash_logout`), sieht der Nutzer nie: Sein Zuhause ist das Profil, das
+# beim Start darueber gehaengt wird, und das ist am Anfang leer. Ohne
+# `.bashrc` fehlen Prompt, Farben, Aliase und alles, was Programme beim
+# Einrichten dort anhaengen. Deshalb legt der Agent bei jedem Start nach, was
+# aus `/etc/skel` des Images **fehlt** — Vorhandenes bleibt unberuehrt, und
+# ein Skeleton des Workspace hat danach das letzte Wort.
+_GRUNDAUSSTATTUNG = r"""
+H="$1"
+[ -d /etc/skel ] && [ -d "$H" ] || exit 0
+for f in /etc/skel/.[!.]* /etc/skel/*; do
+  [ -e "$f" ] || continue
+  n=${f##*/}
+  [ -e "$H/$n" ] || [ -L "$H/$n" ] && continue
+  cp -a "$f" "$H/$n" && chown -R 1000:1000 "$H/$n" && echo "$n"
+done
+"""
+
+
+def _grundausstattung(container, heim: str) -> None:
+    """Fehlende Dateien aus /etc/skel ins Zuhause. Scheitert es, startet der
+    Arbeitsplatz trotzdem."""
+    try:
+        code, out = _run_as_root(container, ["sh", "-c", _GRUNDAUSSTATTUNG, "sh", heim])
+        if code != 0:
+            log.warning("Grundausstattung in %s: %s", container.name, out.strip()[-300:])
+        elif out.strip():
+            log.info("Grundausstattung in %s: %s", container.name, " ".join(out.split()))
+    except APIError as exc:
+        log.warning("Grundausstattung nicht angelegt: %s", exc)
+
+
 # Hebt Selkies in einem Container auf die Fassung der eigenen Paketquelle —
 # auch ein Selkies 1.6.2, das ein altes Basisimage von Hand eingerichtet hat;
 # das ersetzt das Paket selbst (packaging/ota-selkies/preinst). Nur in
@@ -2134,6 +2167,9 @@ def fortsetzen(cid: str, body: "FortsetzenRequest | None" = None) -> dict[str, A
     # haben, waehrend der Platz angehalten war.
     repo = body.repo if body else {}
     _repo_einrichten(c, repo)
+    # Auch hier: Ein Root-Arbeitsplatz von vor dieser Aenderung bekommt die
+    # fehlende `.bashrc` beim naechsten Fortsetzen.
+    _grundausstattung(c, _heimat_container(c))
     # Und Selkies auf den Stand der Paketquelle heben (Kapitel 20). Hat sich
     # etwas geaendert, einmal neu starten: Das laufende Selkies ist noch das
     # alte, und das Startskript liest die neuen Dateien nur beim Start. Der

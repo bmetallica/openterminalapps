@@ -36,6 +36,22 @@ Damit fängt niemand mit einem nackten Desktop an: Editor-Einstellungen, ein Wur
 Vorlagendatei, eine `.bashrc`. **Punktdateien sind ausdrücklich erlaubt** und der Normalfall — anders
 als in der gemeinsamen Ablage, wo sie nichts zu suchen haben.
 
+### `.bashrc`, `.profile` und `.bash_logout` ✅
+
+Auch ohne Skeleton bekommt jedes Zuhause die Grunddateien aus `/etc/skel` des Images, in beiden
+Klassen. Bis zum 2026-10-19 fehlten sie. Das Image legt sie zwar beim Bau an, aber das Zuhause
+ist das Profil, das beim Start *darüber* gehängt wird, und das ist am Anfang leer. Ohne
+`.bashrc` fehlen Prompt, Farben und Aliase, und Programme, die sich beim Einrichten dort eintragen
+(nvm, conda, rustup …), finden die Datei nicht.
+
+Der Agent legt deshalb bei **jedem** Start, und beim Fortsetzen eines Root-Arbeitsplatzes, nach,
+was aus `/etc/skel` **fehlt**:
+
+- Eine vorhandene Datei bleibt unangetastet, auch wenn der Nutzer sie geändert hat.
+- Das Skeleton kommt danach und hat das letzte Wort.
+- Eine **gelöschte** `.bashrc` ist beim nächsten Start wieder da. Wer keine will, leert sie, statt
+  sie zu löschen.
+
 ### „Durchsetzen"
 
 Neben jedem Eintrag steht ein Schalter *durchsetzen*. Ist er an, kommt dieser Pfad bei **jedem**

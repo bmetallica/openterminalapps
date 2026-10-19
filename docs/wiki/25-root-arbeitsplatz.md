@@ -145,6 +145,9 @@ Werkzeug für Entwickler, kein Verwaltungsrecht.
   der Agent das Paket `ota-selkies` auf die Fassung der eigenen Paketquelle und startet den Platz
   dafür einmal neu — alles andere im Platz bleibt (Entscheidung des Betreibers, 2026-10-08;
   [Kapitel 20](20-selkies-versuch.md#auf-20-anheben)).
+- **`.bashrc` und `.profile`** liegen im Zuhause, seit dem 2026-10-19. Ein bestehender Platz
+  bekommt sie beim nächsten Fortsetzen, ohne „Neu aufsetzen“. Vorhandene Dateien bleiben, wie sie
+  sind ([Kapitel 17](17-ablage-und-startskript.md#bashrc-profile-und-bash_logout-)).
 - **Docker:** `docker`, `docker compose`, `docker buildx` ohne `sudo`. Ein veröffentlichter Port
   (`ports: ["8080:80"]`) ist im Browser des Arbeitsplatzes unter `http://localhost:8080` erreichbar.
   Von ausserhalb des Arbeitsplatzes über eine befristete Portfreigabe („+ NAT", [Kapitel 23](23-netz.md)).
