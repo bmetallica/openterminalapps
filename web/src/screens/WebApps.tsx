@@ -16,7 +16,7 @@ import { t as tr, useLang } from '../lib/i18n'
  */
 const LEER: WebAppIn = {
   name: '', description: '', icon: '◇', url: '', redirect_uri: '',
-  is_enabled: true, sort_order: 0, group_ids: [],
+  is_enabled: true, sort_order: 0, group_ids: [], fuer_alle: false,
 }
 
 /**
@@ -44,6 +44,7 @@ function Konfiguration({ app, geheimnis }: { app: WebApp; geheimnis?: string }) 
     'ENABLE_OAUTH_SIGNUP=true',
     'OAUTH_GROUP_CLAIM=groups',
     'ENABLE_OAUTH_GROUP_MANAGEMENT=true',
+    'ENABLE_OAUTH_GROUP_CREATION=true',
   ].join('\n')
 
   return (
@@ -104,7 +105,7 @@ export function WebApps({ onToast, zuEinstellungen }: {
     setEntwurf(a ? {
       name: a.name, description: a.description, icon: a.icon, url: a.url,
       redirect_uri: a.redirect_uri, is_enabled: a.is_enabled,
-      sort_order: a.sort_order, group_ids: a.group_ids,
+      sort_order: a.sort_order, group_ids: a.group_ids, fuer_alle: a.fuer_alle,
     } : LEER)
   }
 
@@ -184,9 +185,11 @@ export function WebApps({ onToast, zuEinstellungen }: {
             {tr('Anmeldung geht zurück an')} <code>{a.redirect_uri}</code>
           </p>
           <p className="field__hint" style={{ marginTop: 2 }}>
-            {tr('Zugriff')}: {a.group_ids.length === 0
-              ? tr('alle')
-              : gruppen.filter((g) => a.group_ids.includes(g.id)).map((g) => g.name).join(', ')}
+            {tr('Zugriff')}: {a.fuer_alle
+              ? tr('alle angemeldeten Nutzer')
+              : a.group_ids.length === 0
+                ? <span style={{ color: 'var(--halt, #b91c1c)' }}>{tr('niemand — keine Gruppe zugewiesen')}</span>
+                : gruppen.filter((g) => a.group_ids.includes(g.id)).map((g) => g.name).join(', ')}
           </p>
           <Konfiguration app={a} geheimnis={geheimnis?.fuer === a.name ? geheimnis.wert : undefined} />
 
@@ -246,8 +249,14 @@ export function WebApps({ onToast, zuEinstellungen }: {
             )}
           </Field>
 
-          <Field label={tr('Zugriff')} hint={tr('Ohne Auswahl sehen alle die Kachel.')}>
-            <div className="strip">
+          <Field label={tr('Zugriff')}
+            hint={tr('Wer die Kachel sieht und wer sich bei der Anwendung anmelden darf — Keycloak prüft das selbst, auch beim direkten Aufruf der Adresse. Ohne Gruppe kommt niemand hinein.')}>
+            <Toggle on={Boolean(entwurf.fuer_alle)} name={tr('Alle angemeldeten Nutzer')}
+              note={entwurf.fuer_alle ? tr('Jedes Konto der zentralen Anmeldung kommt hinein; die Gruppen unten gelten dann nicht.')
+                : tr('Nur Mitglieder der gewählten Gruppen.')}
+              onChange={(v) => set('fuer_alle', v)} />
+            {!entwurf.fuer_alle && (
+            <div className="strip" style={{ marginTop: 8 }}>
               {gruppen.map((g) => {
                 const an = (entwurf.group_ids ?? []).includes(g.id)
                 return (
@@ -260,6 +269,12 @@ export function WebApps({ onToast, zuEinstellungen }: {
                 )
               })}
             </div>
+            )}
+            {!entwurf.fuer_alle && (entwurf.group_ids ?? []).length === 0 && (
+              <p className="note-warn" style={{ margin: '8px 0 0' }}>
+                {tr('Keine Gruppe gewählt: Niemand kann sich bei dieser Anwendung anmelden.')}
+              </p>
+            )}
           </Field>
 
           <Field label={tr('Sichtbar')}>

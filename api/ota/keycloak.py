@@ -1009,3 +1009,422 @@ def zweiten_faktor_entfernen(sub: str) -> int:
             if r.status_code in (200, 204):
                 weg += 1
     return weg
+
+
+# --- Gruppen aus dem Verzeichnis (Handbuch Kapitel 08) --------------------
+#
+# Keycloak liest die Gruppen eines angebundenen Verzeichnisses und fuehrt sie
+# als **Rollen des Clients `ota-verzeichnis`** — nicht als Gruppen. Das ist
+# die eine Entscheidung, an der hier alles haengt: Gruppen stuenden im Token
+# unter `groups`, neben den OTA-Gruppen und mit demselben kurzen Namen. Eine
+# Verzeichnisgruppe „admins" machte dann jeden ihrer Mitglieder zum
+# OTA-Administrator. Als Rollen eines eigenen Clients stehen sie getrennt, und
+# was daraus in OTA wird, entscheidet allein die Kopplung an einer OTA-Gruppe.
+#
+# Gelesen wird **live** (`cachePolicy: NO_CACHE`): Eine Aenderung im
+# Verzeichnis gilt bei der naechsten Anmeldung, ohne auf einen Abgleich zu
+# warten. Gemessen am 2026-10-19 gegen Keycloak 26.7: Mit dem Vorgabe-Cache
+# sah eine Anmeldung noch Minuten spaeter die alte Mitgliedschaft.
+
+VERZEICHNIS_CLIENT = "ota-verzeichnis"
+GRUPPEN_MAPPER = "ota-gruppen"
+MAPPER_TYP = "org.keycloak.storage.ldap.mappers.LDAPStorageMapper"
+
+# Die drei Formen, in denen ein Verzeichnis Gruppen ablegt: Objektklasse,
+# Attribut der Mitglieder, und ob darin ein DN oder ein Anmeldename steht.
+GRUPPENFORMEN: dict[str, tuple[str, str, str]] = {
+    "groupOfNames": ("groupOfNames", "member", "DN"),
+    "groupOfUniqueNames": ("groupOfUniqueNames", "uniqueMember", "DN"),
+    "posixGroup": ("posixGroup", "memberUid", "UID"),
+}
+
+
+def _verzeichnis_client() -> str:
+    """Die interne Kennung von `ota-verzeichnis` — legt den Client an, wenn
+    noch keiner da ist. Er meldet niemanden an (`bearerOnly`); er traegt nur
+    die Rollen."""
+    resp = ruf("GET", "/clients", params={"clientId": VERZEICHNIS_CLIENT})
+    if resp.status_code == 200 and resp.json():
+        return str(resp.json()[0]["id"])
+    neu = ruf("POST", "/clients", json={
+        "clientId": VERZEICHNIS_CLIENT, "name": "Verzeichnisgruppen (OTA)",
+        "enabled": True, "publicClient": False, "bearerOnly": True,
+        "standardFlowEnabled": False, "directAccessGrantsEnabled": False,
+        "description": "Gruppen aus dem Verzeichnis, als Rollen. Von OTA verwaltet.",
+    })
+    if neu.status_code not in (201, 409):
+        raise KeycloakFehler(f"Client {VERZEICHNIS_CLIENT} anlegen: {neu.text[:150]}")
+    resp = ruf("GET", "/clients", params={"clientId": VERZEICHNIS_CLIENT})
+    return str(resp.json()[0]["id"])
+
+
+def _gruppen_mapper(fid: str) -> dict[str, Any] | None:
+    resp = ruf("GET", "/components", params={"parent": fid, "type": MAPPER_TYP})
+    if resp.status_code != 200:
+        raise KeycloakFehler("Die Zuordnungen der Anbindung liessen sich nicht lesen.")
+    return next((m for m in resp.json() if m.get("name") == GRUPPEN_MAPPER), None)
+
+
+def verzeichnisgruppen_lesen() -> dict[str, Any] | None:
+    """Wie die Gruppen gelesen werden — oder nichts, wenn gar nicht."""
+    anbindung = verzeichnis_lesen()
+    if anbindung is None:
+        return None
+    m = _gruppen_mapper(anbindung["id"])
+    if m is None:
+        return None
+    c = m.get("config", {})
+    klasse = (c.get("role.object.classes") or [""])[0]
+    form = next((k for k, v in GRUPPENFORMEN.items() if v[0] == klasse), klasse)
+    return {
+        "gruppen_dn": (c.get("roles.dn") or [""])[0],
+        "form": form,
+        "filter": (c.get("roles.ldap.filter") or [""])[0],
+    }
+
+
+def _mapper_setzen(fid: str, gruppen_dn: str, form: str, filt: str,
+                   login_attribut: str) -> str:
+    klasse, attribut, art = GRUPPENFORMEN[form]
+    vorhanden = _gruppen_mapper(fid)
+    if vorhanden is not None:
+        ruf("DELETE", f"/components/{vorhanden['id']}")
+    resp = ruf("POST", "/components", json={
+        "name": GRUPPEN_MAPPER, "providerId": "role-ldap-mapper",
+        "providerType": MAPPER_TYP, "parentId": fid,
+        "config": {
+            "roles.dn": [gruppen_dn],
+            "role.name.ldap.attribute": ["cn"],
+            "role.object.classes": [klasse],
+            "membership.ldap.attribute": [attribut],
+            "membership.attribute.type": [art],
+            "membership.user.ldap.attribute": [login_attribut or "uid"],
+            "roles.ldap.filter": [filt],
+            # Nur lesen — wie die ganze Anbindung.
+            "mode": ["READ_ONLY"],
+            "user.roles.retrieve.strategy": ["LOAD_ROLES_BY_MEMBER_ATTRIBUTE"],
+            "use.realm.roles.mapping": ["false"],
+            "client.id": [VERZEICHNIS_CLIENT],
+        },
+    })
+    if resp.status_code != 201:
+        raise KeycloakFehler(f"Gruppenzuordnung anlegen abgelehnt: {resp.text[:200]}")
+    return _gruppen_mapper(fid)["id"]
+
+
+def _rollen_leeren(cid: str) -> None:
+    """Alle Rollen von `ota-verzeichnis` weg. Sie sind nur ein Abbild des
+    Verzeichnisses; nach einer geaenderten Einstellung stuenden sonst Gruppen
+    darin, die es unter der neuen gar nicht gibt."""
+    for rolle in ruf("GET", f"/clients/{cid}/roles").json() or []:
+        ruf("DELETE", f"/clients/{cid}/roles/{rolle['name']}")
+
+
+def _mapper_abgleichen(fid: str, mid: str) -> int:
+    """Holt die Gruppen ins Abbild. Rueckgabe: wie viele es sind."""
+    resp = ruf("POST", f"/user-storage/{fid}/mappers/{mid}/sync",
+               params={"direction": "fedToKeycloak"})
+    if resp.status_code not in (200, 204):
+        raise KeycloakFehler(f"Gruppen holen scheiterte: {resp.text[:200]}")
+    try:
+        d = resp.json()
+        return int(d.get("added", 0)) + int(d.get("updated", 0))
+    except (ValueError, AttributeError):
+        return 0
+
+
+def verzeichnisgruppen_setzen(gruppen_dn: str, form: str, filt: str = "") -> dict[str, Any]:
+    """Richtet das Lesen der Gruppen ein. `form` darf `auto` sein: Dann wird
+    jede Form probiert, und die erste, unter der Gruppen auftauchen, bleibt.
+    Rueckgabe: die gewaehlte Form und die gefundenen Gruppen."""
+    anbindung = verzeichnis_lesen()
+    if anbindung is None:
+        raise KeycloakFehler("Erst das Verzeichnis anbinden, dann die Gruppen.")
+    fid = anbindung["id"]
+    cid = _verzeichnis_client()
+    filt = (filt or "").strip()
+    if filt and not (filt.startswith("(") and filt.endswith(")")):
+        raise KeycloakFehler("Ein LDAP-Filter steht in Klammern, z. B. (cn=ki-*).")
+
+    # Live lesen, nicht aus Keycloaks Zwischenspeicher.
+    komp = ruf("GET", f"/components/{fid}").json()
+    if (komp.get("config", {}).get("cachePolicy") or [""])[0] != "NO_CACHE":
+        komp.setdefault("config", {})["cachePolicy"] = ["NO_CACHE"]
+        ruf("PUT", f"/components/{fid}", json=komp)
+
+    formen = list(GRUPPENFORMEN) if form == "auto" else [form]
+    if any(f not in GRUPPENFORMEN for f in formen):
+        raise KeycloakFehler(f"Unbekannte Form: {form}")
+    gewaehlt, anzahl = formen[0], 0
+    for f in formen:
+        _rollen_leeren(cid)
+        mid = _mapper_setzen(fid, gruppen_dn, f, filt, anbindung.get("login_attribute") or "uid")
+        anzahl = _mapper_abgleichen(fid, mid)
+        gewaehlt = f
+        if anzahl:
+            break
+    return {"gruppen_dn": gruppen_dn, "form": gewaehlt, "filter": filt,
+            "gruppen": verzeichnisgruppen_liste()}
+
+
+def verzeichnisgruppen_entfernen() -> None:
+    anbindung = verzeichnis_lesen()
+    if anbindung is None:
+        return
+    m = _gruppen_mapper(anbindung["id"])
+    if m is not None:
+        ruf("DELETE", f"/components/{m['id']}")
+    _rollen_leeren(_verzeichnis_client())
+
+
+def verzeichnisgruppen_abgleichen() -> int:
+    """Neue und verschwundene Gruppen ins Abbild. Mitgliedschaften liest
+    Keycloak ohnehin live."""
+    anbindung = verzeichnis_lesen()
+    if anbindung is None:
+        return 0
+    m = _gruppen_mapper(anbindung["id"])
+    if m is None:
+        return 0
+    return _mapper_abgleichen(anbindung["id"], m["id"])
+
+
+def verzeichnisgruppen_liste() -> list[str]:
+    resp = ruf("GET", f"/clients/{_verzeichnis_client()}/roles")
+    if resp.status_code != 200:
+        raise KeycloakFehler("Die Verzeichnisgruppen liessen sich nicht lesen.")
+    return sorted(r["name"] for r in resp.json())
+
+
+def verzeichnisgruppe_mitglieder(name: str) -> list[dict[str, str]]:
+    """Wer im Verzeichnis in dieser Gruppe ist: `sub` und Anmeldename.
+
+    Leer, wenn es die Gruppe nicht (mehr) gibt — eine verschwundene Gruppe hat
+    keine Mitglieder, und genau so soll der Abgleich sie behandeln.
+    """
+    cid = _verzeichnis_client()
+    raus: list[dict[str, str]] = []
+    erstes = 0
+    while True:
+        resp = ruf("GET", f"/clients/{cid}/roles/{name}/users",
+                   params={"first": erstes, "max": 500})
+        if resp.status_code == 404:
+            return []
+        if resp.status_code != 200:
+            raise KeycloakFehler(f"Mitglieder von {name} liessen sich nicht lesen.")
+        teil = resp.json()
+        raus += [{"sub": str(u["id"]), "username": u.get("username", "")} for u in teil]
+        if len(teil) < 500:
+            return raus
+        erstes += 500
+
+
+def verzeichnisgruppen_von(sub: str) -> list[str]:
+    """Die Verzeichnisgruppen eines Kontos, live aus dem Verzeichnis."""
+    resp = ruf("GET", f"/users/{sub}/role-mappings/clients/{_verzeichnis_client()}")
+    if resp.status_code == 404:
+        return []
+    if resp.status_code != 200:
+        raise KeycloakFehler("Die Verzeichnisgruppen des Kontos liessen sich nicht lesen.")
+    return sorted(r["name"] for r in resp.json())
+
+
+# --- Zugang zu fremden Anwendungen (Handbuch Kapitel 18) ------------------
+#
+# Bis zum 2026-10-19 entschieden die Gruppen einer Anwendung nur, wer ihre
+# Kachel **sieht**. Anmelden konnte sich jedes Konto des Realms — wer die
+# Adresse kannte, kam hinein. Jetzt prueft Keycloak selbst: Jede Anwendung hat
+# die Rolle `zugang`, OTA haengt sie an die Keycloak-Gruppen `/ota/<gruppe>`
+# der zugewiesenen Gruppen, und ein eigener Anmeldefluss weist ab, wem sie
+# fehlt.
+#
+# **Der Fluss ist eine Kopie des Anmeldeflusses des Realms**, mit der Pruefung
+# in **beiden** Zweigen: nach dem Formular und nach der SSO-Sitzung. Oben auf
+# den Fluss gesetzt ginge nicht — Keycloak ignoriert Alternativen (die
+# SSO-Sitzung) auf einer Ebene, auf der etwas Pflicht ist. Und nur im
+# Formular-Zweig kaeme jeder, der in OTA schon angemeldet ist, ungeprueft
+# durch. Beides gemessen am 2026-10-19.
+#
+# Weil es eine Kopie ist, veraltet sie, wenn sich der Anmeldefluss des Realms
+# aendert (ein neuer zweiter Faktor). Der Name traegt deshalb einen
+# Fingerabdruck des Vorbilds; `anwendungen_nachziehen()` baut beim Start neu,
+# was nicht mehr passt.
+
+ZUGANG_ROLLE = "zugang"
+FLUSS_PRAEFIX = "ota-app"
+
+
+def _q(text: str) -> str:
+    from urllib.parse import quote
+    return quote(text, safe="")
+
+
+def _client(client_id: str) -> dict[str, Any]:
+    resp = ruf("GET", "/clients", params={"clientId": client_id})
+    if resp.status_code != 200 or not resp.json():
+        raise KeycloakFehler(f"Den Client „{client_id}“ gibt es in Keycloak nicht.")
+    return resp.json()[0]
+
+
+def _vorbild() -> tuple[str, str]:
+    """Der Anmeldefluss des Realms und sein Fingerabdruck."""
+    import hashlib
+    import json as _json
+
+    alias = ruf("GET", "").json().get("browserFlow") or "browser"
+    schritte = ruf("GET", f"/authentication/flows/{_q(alias)}/executions").json()
+    kern = [(s.get("level"), s.get("index"), s.get("providerId") or s.get("displayName"),
+             s.get("requirement"), bool(s.get("authenticationConfig"))) for s in schritte]
+    return alias, hashlib.sha1(_json.dumps(kern).encode()).hexdigest()[:8]
+
+
+def _fluss_bauen(alias: str, vorbild: str, rolle: str) -> str:
+    """Kopiert das Vorbild und setzt die Pruefung in beide Zweige."""
+    resp = ruf("POST", f"/authentication/flows/{_q(vorbild)}/copy", json={"newName": alias})
+    if resp.status_code not in (201, 409):
+        raise KeycloakFehler(f"Anmeldefluss kopieren: {resp.text[:200]}")
+
+    def schritte() -> list[dict[str, Any]]:
+        return ruf("GET", f"/authentication/flows/{_q(alias)}/executions").json()
+
+    def pflicht(sid: str, wert: str) -> None:
+        s = next(x for x in schritte() if x["id"] == sid)
+        s["requirement"] = wert
+        r = ruf("PUT", f"/authentication/flows/{_q(alias)}/executions", json=s)
+        if r.status_code not in (200, 204):
+            raise KeycloakFehler(f"Anmeldefluss einstellen: {r.text[:200]}")
+
+    def unterfluss(oben: str, name: str) -> dict[str, Any]:
+        r = ruf("POST", f"/authentication/flows/{_q(oben)}/executions/flow",
+                json={"alias": name, "type": "basic-flow",
+                      "provider": "registration-page-form", "description": ""})
+        if r.status_code != 201:
+            raise KeycloakFehler(f"Anmeldefluss erweitern: {r.text[:200]}")
+        return next(x for x in schritte() if x.get("displayName") == name)
+
+    def schritt(oben: str, anbieter: str) -> dict[str, Any]:
+        r = ruf("POST", f"/authentication/flows/{_q(oben)}/executions/execution",
+                json={"provider": anbieter})
+        if r.status_code != 201:
+            raise KeycloakFehler(f"Anmeldefluss erweitern: {r.text[:200]}")
+        return [x for x in schritte() if x.get("providerId") == anbieter][-1]
+
+    def pruefung(oben: str, name: str) -> None:
+        zweig = unterfluss(oben, name)
+        pflicht(zweig["id"], "CONDITIONAL")
+        bed = schritt(name, "conditional-user-role")
+        pflicht(bed["id"], "REQUIRED")
+        ruf("POST", f"/authentication/executions/{bed['id']}/config",
+            json={"alias": f"{name} bedingung",
+                  "config": {"condUserRole": rolle, "negate": "true"}})
+        nein = schritt(name, "deny-access-authenticator")
+        pflicht(nein["id"], "REQUIRED")
+        ruf("POST", f"/authentication/executions/{nein['id']}/config",
+            json={"alias": f"{name} meldung",
+                  "config": {"denyErrorMessage":
+                             "Kein Zugang zu dieser Anwendung. Die Verwaltung von "
+                             "OpenTerminalApps kann ihn freigeben."}})
+
+    oben = [x for x in schritte() if x["level"] == 0]
+    formular = next((x for x in oben if x.get("authenticationFlow")
+                     and str(x.get("displayName", "")).endswith(" forms")), None)
+    keks = next((x for x in oben if x.get("providerId") == "auth-cookie"), None)
+    if formular is None or keks is None:
+        raise KeycloakFehler("Der Anmeldefluss des Realms hat nicht die erwartete Form "
+                             "(Cookie und Formular). Die Pruefung je Anwendung geht so nicht.")
+
+    pruefung(formular["displayName"], f"{alias} zugang formular")
+    sso = unterfluss(alias, f"{alias} sso")
+    pflicht(sso["id"], "ALTERNATIVE")
+    neu_keks = schritt(f"{alias} sso", "auth-cookie")
+    pflicht(neu_keks["id"], "REQUIRED")
+    pruefung(f"{alias} sso", f"{alias} zugang sso")
+    ruf("DELETE", f"/authentication/executions/{keks['id']}")
+    for _ in range(12):
+        s = next(x for x in schritte() if x.get("displayName") == f"{alias} sso")
+        if s["index"] == 0:
+            break
+        ruf("POST", f"/authentication/executions/{s['id']}/raise-priority")
+    return next(f["id"] for f in ruf("GET", "/authentication/flows").json()
+                if f["alias"] == alias)
+
+
+def _fluss_weg(fluss_id: str | None) -> None:
+    if not fluss_id:
+        return
+    f = ruf("GET", f"/authentication/flows/{fluss_id}")
+    if f.status_code == 200 and str(f.json().get("alias", "")).startswith(FLUSS_PRAEFIX + " "):
+        ruf("DELETE", f"/authentication/flows/{fluss_id}")
+
+
+def anwendung_zugang(client_id: str, gruppen: list[str], fuer_alle: bool) -> None:
+    """Wer sich bei dieser Anwendung anmelden darf.
+
+    `fuer_alle`: jeder mit einem Konto — dann gilt der gewoehnliche
+    Anmeldefluss. Sonst nur Mitglieder der genannten OTA-Gruppen, und ohne
+    Gruppe niemand.
+    """
+    c = _client(client_id)
+    cid = c["id"]
+    if ruf("GET", f"/clients/{cid}/roles/{ZUGANG_ROLLE}").status_code == 404:
+        ruf("POST", f"/clients/{cid}/roles", json={
+            "name": ZUGANG_ROLLE,
+            "description": "Darf sich anmelden. Von OTA an die Gruppen gehaengt."})
+    rolle = ruf("GET", f"/clients/{cid}/roles/{ZUGANG_ROLLE}").json()
+
+    soll = set() if fuer_alle else {gruppe_sorgen(n) for n in gruppen}
+    ist = {str(g["id"]) for g in
+           (ruf("GET", f"/clients/{cid}/roles/{ZUGANG_ROLLE}/groups").json() or [])}
+    for gid in soll - ist:
+        ruf("POST", f"/groups/{gid}/role-mappings/clients/{cid}", json=[rolle])
+    for gid in ist - soll:
+        ruf("DELETE", f"/groups/{gid}/role-mappings/clients/{cid}", json=[rolle])
+
+    gebunden = (c.get("authenticationFlowBindingOverrides") or {}).get("browser")
+    if fuer_alle:
+        if gebunden:
+            # Ein leerer Wert, kein fehlender Schluessel: Fehlt er, laesst
+            # Keycloak die alte Zuordnung stehen (gemessen 2026-10-19).
+            c["authenticationFlowBindingOverrides"] = {
+                **c["authenticationFlowBindingOverrides"], "browser": ""}
+            ruf("PUT", f"/clients/{cid}", json=c)
+            _fluss_weg(gebunden)
+        return
+
+    vorbild, abdruck = _vorbild()
+    alias = f"{FLUSS_PRAEFIX} {client_id} {abdruck}"
+    if gebunden:
+        g = ruf("GET", f"/authentication/flows/{gebunden}")
+        if g.status_code == 200 and g.json().get("alias") == alias:
+            return
+    vorhanden = next((f["id"] for f in ruf("GET", "/authentication/flows").json()
+                      if f["alias"] == alias), None)
+    if vorhanden:
+        ruf("DELETE", f"/authentication/flows/{vorhanden}")
+    neu = _fluss_bauen(alias, vorbild, f"{client_id}.{ZUGANG_ROLLE}")
+    c = _client(client_id)
+    c["authenticationFlowBindingOverrides"] = {
+        **(c.get("authenticationFlowBindingOverrides") or {}), "browser": neu}
+    r = ruf("PUT", f"/clients/{cid}", json=c)
+    if r.status_code not in (200, 204):
+        raise KeycloakFehler(f"Anmeldefluss zuordnen: {r.text[:200]}")
+    if gebunden and gebunden != neu:
+        _fluss_weg(gebunden)
+
+
+def anwendung_fluss_entfernen(client_id: str) -> None:
+    """Der eigene Anmeldefluss einer Anwendung, die geht."""
+    try:
+        c = _client(client_id)
+    except KeycloakFehler:
+        c = None
+    gebunden = ((c or {}).get("authenticationFlowBindingOverrides") or {}).get("browser")
+    if c is not None and gebunden:
+        c["authenticationFlowBindingOverrides"] = {
+            **c["authenticationFlowBindingOverrides"], "browser": ""}
+        ruf("PUT", f"/clients/{c['id']}", json=c)
+    _fluss_weg(gebunden)
+    # Und was eine fruehere Fassung liegen liess.
+    for f in ruf("GET", "/authentication/flows").json() or []:
+        if str(f.get("alias", "")).startswith(f"{FLUSS_PRAEFIX} {client_id} "):
+            ruf("DELETE", f"/authentication/flows/{f['id']}")

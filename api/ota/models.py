@@ -15,6 +15,8 @@ from sqlalchemy import (
     BigInteger, Boolean, DateTime, Float, ForeignKey, Integer, String, Text,
     UniqueConstraint,
 )
+from sqlalchemy import false as sa_false
+from sqlalchemy import true as sa_true
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -146,6 +148,32 @@ class GroupMember(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
     )
+    # Woher die Mitgliedschaft kommt — beides kann zugleich gelten. Eine Zeile
+    # gibt es, solange eins davon stimmt. Der Abgleich fasst nur
+    # `aus_verzeichnis` an, die Verwaltung nur `von_hand`: So nimmt das
+    # Verzeichnis niemandem eine Gruppe, die ihm jemand ausdruecklich gegeben
+    # hat (Betreiber, 2026-10-19), und umgekehrt.
+    #
+    # `server_default`, weil die Beziehungen `User.groups` und `Group.members`
+    # Zeilen ohne diese Spalten schreiben — und das ist immer „von Hand".
+    von_hand: Mapped[bool] = mapped_column(Boolean, default=True, server_default=sa_true())
+    aus_verzeichnis: Mapped[bool] = mapped_column(Boolean, default=False,
+                                                  server_default=sa_false())
+
+
+class GroupDirectoryLink(Base):
+    """Eine OTA-Gruppe bezieht Mitglieder aus einer Verzeichnisgruppe.
+
+    `ldap_gruppe` ist der Name der Gruppe im Verzeichnis (ihr `cn`), so wie
+    Keycloak sie als Rolle des Clients `ota-verzeichnis` fuehrt. Eine OTA-Gruppe
+    kann mehrere haben, eine Verzeichnisgruppe mehrere OTA-Gruppen fuettern.
+    """
+
+    __tablename__ = "group_directory_links"
+    group_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("groups.id", ondelete="CASCADE"), primary_key=True
+    )
+    ldap_gruppe: Mapped[str] = mapped_column(String(255), primary_key=True)
 
 
 class Template(Base):
@@ -415,6 +443,10 @@ class WebApp(Base):
     is_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    # Darf jeder Angemeldete hinein? Sonst nur die zugewiesenen Gruppen — und
+    # ohne Gruppe **niemand** (Betreiber, 2026-10-19). Bis dahin hiess „keine
+    # Gruppe" „alle"; die Migration hat den Bestand auf `True` gesetzt.
+    fuer_alle: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sa_false())
 
     groups: Mapped[list[Group]] = relationship(secondary="group_web_apps", lazy="selectin")
 

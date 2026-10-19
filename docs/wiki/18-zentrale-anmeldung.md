@@ -74,8 +74,10 @@ der Produktivanlage.
   auch (Schalter „Beim ersten Anmelden ändern", Vorgabe: ja). Es muss die Passwortregel von Keycloak
   erfüllen; eine Ablehnung kommt mit Keycloaks Begründung zurück.
 - **Name, E-Mail, Gruppen, aktiv/gesperrt** und die Rolle für die zweite Stufe hält OTA in Keycloak
-  nach, bei jeder Änderung. Die Gruppen sind Pflicht dort: Keycloak gibt sie bei jedem Anmelden mit,
-  und OTA übernimmt sie — eine Gruppe, die nur in OTA stünde, wäre beim nächsten Anmelden weg.
+  nach, bei jeder Änderung. Die Gruppen stehen dort unter `/ota/<gruppe>`, damit angebundene
+  Anwendungen sie im Token sehen. **Massgeblich ist OTA**: Seit dem 2026-10-19 werden die Gruppen
+  bei der Anmeldung nicht mehr aus dem Token übernommen, sondern aus OTA und dem Verzeichnis
+  gerechnet ([Kapitel 08](08-nutzer-und-gruppen.md#gruppen-aus-dem-verzeichnis-)).
 - **Ein neues Passwort** aus der Verwaltung gilt in Keycloak, wieder wahlweise zum Ändern beim
   nächsten Anmelden.
 - **Zweiten Faktor zurücksetzen** entfernt Einmalkennwort und Passkeys in Keycloak.
@@ -256,6 +258,77 @@ Das Client-Geheimnis kommt **einmal** zurück und steht danach nur noch in Keycl
 
 Zum Zertifikat — die Stelle, an der die erste Anbindung verlässlich scheitert — siehe
 [Kapitel 10](10-zertifikate-und-https.md).
+
+### Wer hineinkommt ✅
+
+*Seit dem 2026-10-19.* Die Gruppen einer Anwendung entscheiden nicht mehr nur, wer ihre Kachel
+**sieht**, sondern auch, wer sich dort **anmelden** darf. Keycloak prüft das selbst, auch wenn
+jemand die Adresse der Anwendung direkt aufruft oder schon in OTA angemeldet ist.
+
+| Zugriff | wer hineinkommt |
+|---|---|
+| Gruppen gewählt | nur deren Mitglieder |
+| **Alle angemeldeten Nutzer** | jedes Konto der zentralen Anmeldung |
+| nichts gewählt | **niemand**; die Oberfläche warnt davor |
+
+Wer keinen Zugang hat, sieht bei Keycloak „Kein Zugang zu dieser Anwendung“. In OTA bleibt er
+angemeldet.
+
+> **Beim Update auf diese Fassung** bekommt jede bestehende Anwendung ohne Gruppe einmalig
+> „Alle angemeldeten Nutzer“. Bis dahin hiess „keine Gruppe“ „alle“, und so bricht nichts.
+> Danach gilt die strenge Regel.
+
+**Wie das gebaut ist.**
+
+- Jede Anwendung hat in Keycloak die Rolle `zugang`. OTA hängt sie an die Keycloak-Gruppen
+  `/ota/<gruppe>` der gewählten Gruppen.
+- Ein **eigener Anmeldefluss** je Anwendung (`ota-app <client> <abdruck>`) weist ab, wem sie fehlt.
+  Er ist eine Kopie des Anmeldeflusses des Realms, mit der Prüfung in **beiden** Zweigen: nach dem
+  Formular und nach der bestehenden SSO-Sitzung. Nur im Formular-Zweig käme jeder, der in OTA
+  schon angemeldet ist, ungeprüft durch.
+- Die zweite Stufe wird mitkopiert und gilt dort genauso wie bei OTA.
+- Ändert sich der Anmeldefluss des Realms, etwa durch einen neuen zweiten Faktor, passt der
+  Abdruck im Namen nicht mehr. Beim nächsten Start der API baut OTA die Flüsse neu.
+- „Alle angemeldeten Nutzer“ braucht keinen eigenen Fluss. Dann gilt der gewöhnliche.
+
+### Gruppen in der Anwendung (Open WebUI) ✅
+
+Eine Gruppe in OTA kommt als Gruppe in der Anwendung an. Damit lässt sich dort etwas an sie hängen,
+etwa ein MCP-Server für die Gruppe `ki1`. Der Weg:
+
+```
+LDAP-Gruppe ki-team → OTA-Gruppe ki1 → Keycloak /ota/ki1 → Token "groups": ["ki1"] → Open WebUI-Gruppe ki1
+```
+
+Open WebUI braucht dafür:
+
+```
+OAUTH_GROUP_CLAIM=groups
+ENABLE_OAUTH_GROUP_MANAGEMENT=true
+ENABLE_OAUTH_GROUP_CREATION=true
+```
+
+- Die Gruppe entsteht in Open WebUI bei der ersten Anmeldung eines Mitglieds.
+- Dort weist du ihr einmal den MCP-Server, die Modelle oder das Werkzeug zu.
+- Die Mitglieder legst du in Open WebUI nie von Hand fest. Open WebUI übernimmt sie bei jeder
+  Anmeldung aus dem Token, und was dort von Hand stünde, wäre beim nächsten Mal wieder weg.
+
+**Eine Eigenheit von Open WebUI** (gemessen mit 0.12.3 am 2026-10-19): Es nimmt jemanden nur
+dann aus einer Gruppe, wenn das Token **mindestens eine** Gruppe nennt. Ein Konto, das gar keine
+OTA-Gruppe mehr hat, behält in Open WebUI seine alten Gruppen und damit etwa seinen MCP-Server.
+
+Mit der Zugangssperre kommt das nicht vor: Wer sich anmeldet, ist in mindestens einer Gruppe der
+Anwendung, und die steht im Token. Darum für Open WebUI **eine Zugangsgruppe** (z. B. `ki-alle`)
+und daneben die Gruppen für die Werkzeuge (`ki1`, `ki2`) vergeben, **nicht** „Alle angemeldeten
+Nutzer“. Geprüft mit einer echten Instanz:
+
+- Ein Mitglied der LDAP-Gruppe landet in Open WebUI in `ki1`.
+- Wer keine Gruppe der Anwendung hat, wird schon von Keycloak abgewiesen.
+- Nach dem Entzug im LDAP und einem Abgleich nimmt Open WebUI ihn bei der nächsten Anmeldung aus
+  `ki1`. Über `ki-alle` kommt er weiter hinein.
+
+Wer ohne Gruppe trotzdem hineinkommt („für alle“), behält seine alten Gruppen in Open WebUI, bis
+ein Admin ihn dort herausnimmt.
 
 ### Eine Uhr für OTA und die Anwendungen ✅
 

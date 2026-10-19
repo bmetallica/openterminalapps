@@ -18,9 +18,10 @@ Drei Regeln, und alle drei sind Absicht:
    des ersten Administrators an.
 2. **Der Name folgt dem `sub`, nicht umgekehrt.** Ändert sich der Anmeldename
    in Keycloak, wird er hier nachgezogen — dasselbe Konto bleibt dasselbe.
-3. **Gruppen kommen bei jeder Anmeldung mit**, und zwar nur die, die es in
-   OTA wirklich gibt. Eine Gruppe in Keycloak ist eine Beschriftung; welche
-   Rechte daran hängen, entscheidet OTA (auth-roadmap.md §4).
+3. **Gruppen entscheidet OTA.** Von Hand vergebene stehen in OTA, die aus
+   einem Verzeichnis kommen bei jeder Anmeldung frisch dazu
+   ([`verzeichnis.py`](verzeichnis.py)). Eine Gruppe in Keycloak ist eine
+   Beschriftung, die OTA dorthin schreibt — nicht umgekehrt.
 """
 
 from __future__ import annotations
@@ -31,6 +32,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session as DbSession
 
+from . import verzeichnis
 from .models import Group, User
 
 log = logging.getLogger("ota.kcidentity")
@@ -129,7 +131,13 @@ def anmelden(db: DbSession, angaben: dict) -> User:
     # so entschieden, weil eine Gruppenänderung im Verzeichnis in aller Regel
     # organisatorisch ist und niemandem mitten im Satz den Editor wegnehmen
     # soll (auth-roadmap.md §5c). Sofort wirkt die Sperre, nicht dies hier.
-    user.groups = gruppen_dazu(db, angaben.get("groups") or [])
+    #
+    # Seit dem 2026-10-19 **nicht** mehr aus dem Token: Die von Hand
+    # vergebenen Gruppen stehen in OTA, die aus dem Verzeichnis liest
+    # `verzeichnis.bei_anmeldung` frisch nach. Das Token kennt beide nicht
+    # auseinander — und eine Verzeichnisgruppe, die zufaellig „admins"
+    # heisst, haette darin wie die OTA-Gruppe ausgesehen.
+    verzeichnis.bei_anmeldung(db, user)
     user.last_login_at = datetime.now(timezone.utc)
     user.failed_logins = 0
     db.flush()

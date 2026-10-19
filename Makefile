@@ -240,6 +240,10 @@ test:
 	@# angelegten Verzeichniskonten nicht in einem Sicherungsstand landen.
 	@./scripts/test-ldap.sh
 	@echo
+	@# Gruppen aus dem Verzeichnis und der Zugang zu fremden Anwendungen.
+	@# Dasselbe Wegwerf-Verzeichnis, ebenso danach wieder weg.
+	@./scripts/test-verzeichnis.sh
+	@echo
 	@# Der Medienweg. Eigene Reihe, weil die teuersten Fehler dieses Projekts
 	@# genau dort lagen und keine andere sie gefunden haette — sie sahen im
 	@# Browser alle gleich aus ("Waiting for stream") und standen in keinem

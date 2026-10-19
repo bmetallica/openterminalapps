@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { KcVerzeichnis } from '../components/KcVerzeichnis'
+import { VerzeichnisGruppen } from '../components/VerzeichnisGruppen'
 import { Led } from '../components/controls'
 import { api, type KeycloakStatus } from '../lib/api'
 import { t as tr, useLang } from '../lib/i18n'
@@ -93,6 +94,7 @@ export function Directory({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad
 
       <KeycloakKarte />
       <KcVerzeichnis onToast={onToast} />
+      <VerzeichnisGruppen onToast={onToast} />
     </>
   )
 }

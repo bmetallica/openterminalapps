@@ -16,11 +16,11 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session as DbSession
 
-from .. import audit, keycloak, settings_store, uebernahme
+from .. import audit, keycloak, settings_store, uebernahme, verzeichnis
 from ..db import get_db
 from ..deps import current_user, require_permission
 from ..models import Group, User
-from ..schemas import KcVerzeichnisIn
+from ..schemas import KcGruppenIn, KcVerzeichnisIn, VerzeichnisTaktIn
 
 router = APIRouter(prefix="/api/admin/identity", tags=["identity"])
 manage = require_permission("users.manage", "settings.manage")
@@ -131,6 +131,81 @@ def kc_verzeichnis_abgleich(request: Request, voll: bool = False,
                  voll=voll)
     db.commit()
     return ergebnis
+
+
+# --------------------------------------------------------------------------
+# Gruppen aus dem Verzeichnis und ihr Abgleich (Handbuch Kapitel 08)
+# --------------------------------------------------------------------------
+
+@router.get("/keycloak/verzeichnis/gruppen", dependencies=[Depends(manage)])
+def kc_gruppen() -> dict:
+    try:
+        einstellung = keycloak.verzeichnisgruppen_lesen()
+        if einstellung is None:
+            return {"eingerichtet": False, "gruppen": []}
+        return {"eingerichtet": True, **einstellung,
+                "gruppen": keycloak.verzeichnisgruppen_liste()}
+    except keycloak.KeycloakFehler as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+
+
+@router.put("/keycloak/verzeichnis/gruppen", dependencies=[Depends(manage)])
+def kc_gruppen_setzen(body: KcGruppenIn, request: Request,
+                      actor: User = Depends(current_user),
+                      db: DbSession = Depends(get_db)) -> dict:
+    """Einrichten und gleich die Gruppen holen — das ist zugleich der Test:
+    Die Antwort nennt die gefundenen Gruppen und die erkannte Form."""
+    try:
+        ergebnis = keycloak.verzeichnisgruppen_setzen(body.gruppen_dn.strip(), body.form,
+                                                      body.filter)
+    except keycloak.KeycloakFehler as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    audit.record(db, "verzeichnis.gruppen_gesetzt", actor=actor, request=request,
+                 dn=ergebnis["gruppen_dn"], form=ergebnis["form"],
+                 anzahl=len(ergebnis["gruppen"]))
+    db.commit()
+    return {"eingerichtet": True, **ergebnis}
+
+
+@router.delete("/keycloak/verzeichnis/gruppen", dependencies=[Depends(manage)])
+def kc_gruppen_weg(request: Request, actor: User = Depends(current_user),
+                   db: DbSession = Depends(get_db)) -> dict:
+    try:
+        keycloak.verzeichnisgruppen_entfernen()
+    except keycloak.KeycloakFehler as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    audit.record(db, "verzeichnis.gruppen_entfernt", actor=actor, request=request)
+    db.commit()
+    return {"eingerichtet": False, "gruppen": []}
+
+
+@router.get("/verzeichnis/abgleich", dependencies=[Depends(manage)])
+def abgleich_stand(db: DbSession = Depends(get_db)) -> dict:
+    return {
+        "intervall": settings_store.get(db, settings_store.VERZEICHNIS_INTERVALL),
+        "stufen": list(settings_store.VERZEICHNIS_INTERVALL_STUFEN),
+        "letzter": settings_store.get(db, settings_store.VERZEICHNIS_LETZTER),
+    }
+
+
+@router.put("/verzeichnis/abgleich", dependencies=[Depends(manage)])
+def abgleich_takt(body: VerzeichnisTaktIn, request: Request,
+                  actor: User = Depends(current_user),
+                  db: DbSession = Depends(get_db)) -> dict:
+    if body.intervall not in settings_store.VERZEICHNIS_INTERVALL_STUFEN:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Diesen Takt gibt es nicht.")
+    settings_store.put(db, settings_store.VERZEICHNIS_INTERVALL, body.intervall)
+    audit.record(db, "verzeichnis.takt", actor=actor, request=request, minuten=body.intervall)
+    db.commit()
+    return abgleich_stand(db)
+
+
+@router.post("/verzeichnis/abgleich", dependencies=[Depends(manage)])
+def abgleich_jetzt(request: Request, actor: User = Depends(current_user),
+                   db: DbSession = Depends(get_db)) -> dict:
+    """Der Knopf. Läuft gleich hier, nicht im Hintergrund: Wer ihn drückt,
+    will das Ergebnis sehen."""
+    return verzeichnis.abgleichen(db, actor=actor, request=request, anlass="hand")
 
 
 # --------------------------------------------------------------------------

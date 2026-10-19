@@ -103,6 +103,10 @@ class GroupOut(BaseModel):
     member_count: int = 0
     is_system: bool = False
     require_totp: bool = False
+    # Verzeichnisgruppen, aus denen diese Gruppe Mitglieder bezieht.
+    ldap_gruppen: list[str] = []
+    # Nach dem Speichern einer geaenderten Kopplung: was der Abgleich ergab.
+    abgleich: dict | None = None
 
 
 class GroupIn(BaseModel):
@@ -111,6 +115,9 @@ class GroupIn(BaseModel):
     priority: int = Field(default=100, ge=1, le=9999)
     permissions: list[str] = []
     require_totp: bool = False
+    # None heisst: Kopplung nicht anfassen. Eine Oberflaeche, die das Feld
+    # nicht kennt, soll sie nicht nebenbei loeschen.
+    ldap_gruppen: list[str] | None = None
 
 
 class SessionAdminOut(BaseModel):
@@ -143,6 +150,8 @@ class MeOut(BaseModel):
     recovery_left: int = 0
     # Eine Gruppe verlangt den zweiten Faktor, er ist aber nicht eingerichtet.
     must_setup_totp: bool = False
+    # Gesetzt, wenn das Konto in keiner Gruppe ist: der Text fuers Dashboard.
+    ohne_gruppe_hinweis: str | None = None
 
 
 class AppOut(BaseModel):
@@ -343,6 +352,8 @@ class WebAppOut(BaseModel):
     is_enabled: bool
     sort_order: int
     group_ids: list[uuid.UUID] = []
+    # Jeder Angemeldete darf hinein. Sonst nur die Gruppen — ohne Gruppe niemand.
+    fuer_alle: bool = False
     # Nur beim Anlegen gefuellt. Danach steht es allein in Keycloak — ein
     # zweiter Ort waere ein zweiter Ort, an dem es verlorengehen kann.
     client_secret: str | None = None
@@ -358,6 +369,24 @@ class WebAppIn(BaseModel):
     is_enabled: bool = True
     sort_order: int = 0
     group_ids: list[uuid.UUID] | None = None
+    # None: nicht anfassen. Neu angelegt ist eine Anwendung **nicht** fuer alle.
+    fuer_alle: bool | None = None
+
+
+class KcGruppenIn(BaseModel):
+    """Wie die Gruppen eines Verzeichnisses gelesen werden.
+
+    `form`: `auto`, `groupOfNames`, `groupOfUniqueNames` oder `posixGroup`.
+    `auto` probiert alle und nimmt die erste, unter der Gruppen auftauchen —
+    viele wissen nicht, welche Form ihr OpenLDAP benutzt.
+    """
+    gruppen_dn: str = Field(min_length=3)
+    form: str = "auto"
+    filter: str = ""
+
+
+class VerzeichnisTaktIn(BaseModel):
+    intervall: int
 
 
 class KcVerzeichnisIn(BaseModel):
@@ -520,7 +549,11 @@ class UserOut(BaseModel):
     is_locked: bool
     auth_provider: str
     last_login_at: datetime | None
+    # Alle Gruppen — und davon die von Hand vergebenen bzw. die aus dem
+    # Verzeichnis. Eine Gruppe kann in beiden stehen.
     group_ids: list[uuid.UUID] = []
+    hand_group_ids: list[uuid.UUID] = []
+    verzeichnis_group_ids: list[uuid.UUID] = []
 
 
 class UserIn(BaseModel):
@@ -679,6 +712,8 @@ class SettingsIn(BaseModel):
     # 0 heisst jeweils: keine Grenze.
     profile_quota_gb: int | None = None
     disk_floor_gb: int | None = None
+    # Was ein Konto ohne jede Gruppe auf seinem Dashboard liest.
+    ohne_gruppe_hinweis: str | None = Field(default=None, max_length=1000)
 
 
 

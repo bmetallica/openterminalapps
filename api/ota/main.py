@@ -211,8 +211,19 @@ def _protokoll_aufraeumen() -> dict[str, int]:
         return audit.aufraeumen(db)
 
 
-# Wann der Verzeichnis-Abgleich laeuft: einmal taeglich, nachts.
-#
+def _verzeichnis_takt() -> dict | None:
+    """Der Abgleich der Verzeichnisgruppen, wenn er im Takt dran ist — und
+    nur, wenn ueberhaupt ein Verzeichnis angebunden ist."""
+    from . import keycloak, verzeichnis
+
+    with SessionLocal() as db:
+        if not verzeichnis.faellig(db):
+            return None
+        if keycloak.verzeichnis_lesen() is None:
+            return None
+        return verzeichnis.abgleichen(db, anlass="takt")
+
+
 async def _scheduler() -> None:
     from .routers.backups import run_scheduled
 
@@ -244,6 +255,14 @@ async def _scheduler() -> None:
             except Exception as exc:  # noqa: BLE001 — derselbe Grund wie oben
                 log.warning("Protokoll nicht aufgeraeumt: %s", exc)
 
+        try:
+            stand = await asyncio.to_thread(_verzeichnis_takt)
+            if stand is not None:
+                log.info("Verzeichnisabgleich: %s", "ok" if stand.get("ok")
+                         else stand.get("fehler"))
+        except Exception as exc:  # noqa: BLE001 — derselbe Grund wie oben
+            log.warning("Verzeichnisabgleich fehlgeschlagen: %s", exc)
+
 
 
 async def _reaper() -> None:
@@ -272,6 +291,12 @@ async def _keycloak_fristen() -> None:
                 minuten = settings_store.idle_minutes(db)
             await asyncio.to_thread(keycloak.sitzungsfristen_setzen, minuten)
             log.info("Keycloak-Sitzungsfrist angeglichen: %d Minuten", minuten)
+            # Und der Zugang der Anwendungen: nach einem Update (der Bestand
+            # bekommt „fuer alle") und wenn sich der Anmeldefluss des Realms
+            # geaendert hat, auf dem die Fluesse der Anwendungen aufbauen.
+            from .routers.webapps import zugang_alle
+
+            await asyncio.to_thread(zugang_alle)
             return
         except Exception as exc:  # noqa: BLE001 — Keycloak startet vielleicht noch
             letzter = exc

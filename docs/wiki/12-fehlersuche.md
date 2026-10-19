@@ -353,6 +353,22 @@ docker logs ota-traefik 2>&1 | grep -i "filtering"
 docker inspect ota-web --format '{{.State.Health.Status}}'
 ```
 
+**Ursache D: Docker wurde neu gestartet, Traefik nicht.** ✅ *gefunden am 2026-10-19*
+Mit `live-restore` überleben die Container einen Neustart des Docker-Dienstes. Der Dienst legt dabei
+aber `/var/run/docker.sock` **neu** an, und Traefik hängt weiter am alten Socket. Ab da sieht er
+keinen neuen Container mehr. Laufende Sitzungen bleiben erreichbar, jede neue bleibt auf
+„starting“. Im Protokoll steht es ununterbrochen:
+
+```bash
+docker logs --since 5m ota-traefik 2>&1 | grep -c "Cannot connect to the Docker daemon"
+systemctl show docker -p ActiveEnterTimestamp       # später als der Start von ota-traefik?
+docker inspect ota-traefik -f '{{.State.StartedAt}}'
+```
+
+Abhilfe: `docker restart ota-traefik`. Alle Sitzungen sind danach wieder erreichbar. Der Agent
+hängt am selben Socket, wird aber bei jedem `make update` neu erzeugt und ist deshalb selten
+betroffen. Bei Zweifel ihn ebenso neu starten.
+
 **Ursache C: CLI-Argumente werden ignoriert.**
 Traefik liest die statische Konfiguration aus **genau einer Quelle**. Sobald eine `traefik.yml`
 existiert, werden `command:`-Argumente im Compose **vollständig ignoriert** — sie werden nicht

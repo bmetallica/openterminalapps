@@ -11,7 +11,8 @@ import { t as tr } from '../lib/i18n'
  * nicht öffnen.
  *
  * Der Aufbau folgt der Reihenfolge, in der man das wirklich tut: eintragen,
- * **prüfen**, speichern, einmal abgleichen. Der Prüf-Knopf steht bewusst vor
+ * **prüfen**, speichern. Abgeglichen wird darunter, zusammen mit den Gruppen
+ * (`VerzeichnisGruppen`). Der Prüf-Knopf steht bewusst vor
  * dem Speichern — an dieser Einstellung hängt, wer sich morgen anmelden kann.
  *
  * Das Kennwort geht nur hinein. Leer heisst „nicht anfassen": Sonst verlöre
@@ -160,13 +161,6 @@ export function KcVerzeichnis({ onToast }: {
 
           {gespeichert && (
             <>
-              <button className="btn" disabled={busy !== null}
-                onClick={() => void tun('abgleich', async () => {
-                  const r = await api.kcVerzeichnisAbgleich(true)
-                  onToast(tr('{n} Konten geholt.', { n: r.added ?? 0 }))
-                }, tr('Abgleich gelaufen.'))}>
-                {busy === 'abgleich' ? tr('Wird abgeglichen…') : tr('Jetzt abgleichen')}
-              </button>
               <button className="btn btn--halt" disabled={busy !== null}
                 onClick={() => {
                   if (!window.confirm(tr('Die Anbindung entfernen? Konten, die daraus stammen, können sich danach nicht mehr anmelden.'))) return

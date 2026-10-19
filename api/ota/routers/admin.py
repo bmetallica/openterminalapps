@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session as DbSession
 
-from .. import agent_client, audit, keycloak
+from .. import agent_client, audit, keycloak, verzeichnis
 import os
 import re
 from ..db import get_db
@@ -154,15 +154,25 @@ def remove_image(ref: str, request: Request,
 # Nutzer
 # --------------------------------------------------------------------------
 
-def _user_out(u: User) -> UserOut:
+def _user_out(u: User, zeilen: list[GroupMember] | None = None) -> UserOut:
     data = UserOut.model_validate(u)
     data.group_ids = [g.id for g in u.groups]
+    if zeilen is None:
+        from sqlalchemy.orm import object_session
+        zeilen = list(object_session(u).scalars(
+            select(GroupMember).where(GroupMember.user_id == u.id)).all())
+    data.hand_group_ids = [z.group_id for z in zeilen if z.von_hand]
+    data.verzeichnis_group_ids = [z.group_id for z in zeilen if z.aus_verzeichnis]
     return data
 
 
 @router.get("/users", dependencies=[Depends(manage_users)])
 def list_users(db: DbSession = Depends(get_db)) -> list[UserOut]:
-    return [_user_out(u) for u in db.scalars(select(User).order_by(User.username)).all()]
+    je_konto: dict[uuid.UUID, list[GroupMember]] = {}
+    for z in db.scalars(select(GroupMember)).all():
+        je_konto.setdefault(z.user_id, []).append(z)
+    return [_user_out(u, je_konto.get(u.id, []))
+            for u in db.scalars(select(User).order_by(User.username)).all()]
 
 
 @router.post("/users", dependencies=[Depends(manage_users)],
@@ -198,9 +208,10 @@ def create_user(
         auth_provider="keycloak",
         external_id=sub,
     )
-    user.groups = list(db.scalars(select(Group).where(Group.id.in_(body.group_ids))).all())
     db.add(user)
     db.flush()
+    verzeichnis.hand_setzen(
+        db, user, list(db.scalars(select(Group).where(Group.id.in_(body.group_ids))).all()))
     _nach_keycloak(user)
     audit.record(db, "user.created", actor=actor, object_type="user",
                  object_id=user.username, request=request,
@@ -260,7 +271,11 @@ def update_user(
     new_groups = list(db.scalars(select(Group).where(Group.id.in_(body.group_ids))).all())
 
     # Der letzte aktive lokale Administrator darf sich seine Rechte nicht nehmen.
-    if user.is_admin and not any("admin" in (g.permissions or []) for g in new_groups):
+    # Gerechnet mit dem, was danach gilt: von Hand plus Verzeichnis.
+    aus_verzeichnis = [g for g in user.groups
+                       if verzeichnis.herkunft(db, user).get(str(g.id), {}).get("aus_verzeichnis")]
+    if user.is_admin and not any("admin" in (g.permissions or [])
+                                 for g in new_groups + aus_verzeichnis):
         if _admin_count(db) <= 1:
             raise HTTPException(
                 status.HTTP_409_CONFLICT,
@@ -271,7 +286,9 @@ def update_user(
     user.display_name = body.display_name
     user.email = body.email
     user.is_active = body.is_active
-    user.groups = new_groups
+    # Nur die von Hand vergebenen. Was das Verzeichnis gibt, bleibt — die
+    # Oberflaeche zeigt es gesperrt an.
+    verzeichnis.hand_setzen(db, user, new_groups)
     if body.password:
         problem = password_problem(body.password)
         if problem:
@@ -304,39 +321,8 @@ def update_user(
 
 
 def _nach_keycloak(user: User) -> None:
-    """Traegt Aenderungen an einem uebernommenen Konto in Keycloak nach.
-
-    Ohne das lief die Verwaltung auseinander: Eine E-Mail, hier eingetragen,
-    stand nur hier — und eine fremde Anwendung, die sie im Token erwartet,
-    bekam sie nie zu sehen. Genau daran scheiterte die erste Anbindung von
-    Open WebUI: `OAuth callback failed, email is missing`, obwohl in OTA eine
-    Adresse stand.
-
-    Betrifft **nur** Konten mit `auth_provider == "keycloak"`. Lokale Konten
-    haben dort nichts zu suchen, und ein Verzeichniskonto gehoert dem
-    Verzeichnis.
-
-    Schlaegt es fehl, wird die Aenderung in OTA trotzdem gespeichert. Ein
-    Keycloak, das gerade schweigt, darf die Verwaltung nicht anhalten — der
-    naechste Speichervorgang holt es nach. Sichtbar bleibt es im Protokoll.
-    """
-    if user.auth_provider != "keycloak" or not user.external_id:
-        return
-
-    try:
-        konto = keycloak.konto_lesen(user.external_id)
-        keycloak.konto_profil(user.external_id, anzeigename=user.display_name,
-                              email=user.email,
-                              aktiv=bool(user.is_active) and not user.is_locked,
-                              verzeichnis=keycloak.aus_verzeichnis(konto))
-        keycloak.gruppen_setzen(user.external_id, sorted(g.name for g in user.groups))
-        # Die zweite Stufe haengt an einer Rolle (auth-roadmap.md §5.3).
-        keycloak.rolle_setzen(
-            user.external_id, "zweiter-faktor",
-            any(getattr(g, "require_totp", False) for g in user.groups))
-    except (keycloak.KeycloakFehler, httpx.HTTPError) as exc:
-        log.warning("Konto %s nicht nach Keycloak nachgetragen: %s",
-                    user.username, exc)
+    """Siehe `verzeichnis.nach_keycloak`."""
+    verzeichnis.nach_keycloak(user)
 
 
 def _email_frei(db: DbSession, email: str, ausser: uuid.UUID | None) -> None:
@@ -503,9 +489,11 @@ def list_groups(db: DbSession = Depends(get_db)) -> list[GroupOut]:
         select(GroupMember.group_id, func.count()).group_by(GroupMember.group_id)
     ).all())
     out = []
+    links = verzeichnis.kopplungen(db)
     for g in db.scalars(select(Group).order_by(Group.priority, Group.name)).all():
         data = GroupOut.model_validate(g)
         data.member_count = counts.get(g.id, 0)
+        data.ldap_gruppen = sorted(n for n, ids in links.items() if g.id in ids)
         out.append(data)
     return out
 
@@ -531,14 +519,31 @@ def create_group(
         raise HTTPException(status.HTTP_400_BAD_REQUEST,
                             f"Unbekannte Rechte: {', '.join(sorted(unknown))}")
 
-    group = Group(slug=slug, **body.model_dump())
+    group = Group(slug=slug, **body.model_dump(exclude={"ldap_gruppen"}))
     db.add(group)
+    db.flush()
+    if body.ldap_gruppen:
+        verzeichnis.kopplung_setzen(db, group, body.ldap_gruppen)
     audit.record(db, "group.created", actor=actor, object_type="group",
-                 object_id=slug, request=request)
+                 object_id=slug, request=request, ldap_gruppen=body.ldap_gruppen or [])
     db.commit()
+    abgleich = _nach_kopplung(db, actor, request) if body.ldap_gruppen else None
     data = GroupOut.model_validate(group)
-    data.member_count = 0
+    data.member_count = len(group.members)
+    data.ldap_gruppen = verzeichnis.gekoppelt_an(db, group)
+    data.abgleich = abgleich
     return data
+
+
+def _nach_kopplung(db: DbSession, actor: User, request: Request) -> dict | None:
+    """Nach einer geaenderten Kopplung sofort abgleichen — sonst stuende die
+    Gruppe bis zum naechsten Takt mit den alten Mitgliedern da, und der
+    Administrator wuesste nicht, ob er etwas falsch gemacht hat."""
+    try:
+        return verzeichnis.abgleichen(db, actor=actor, request=request, anlass="kopplung")
+    except Exception as exc:  # noqa: BLE001 — die Kopplung ist gespeichert
+        log.warning("Abgleich nach Kopplung gescheitert: %s", exc)
+        return {"ok": False, "fehler": str(exc)}
 
 
 @router.put("/groups/{group_id}", dependencies=[Depends(manage_groups)])
@@ -560,6 +565,7 @@ def update_group(
 
     # Den Systemgruppen darf ihre Rolle nicht genommen werden — sonst steht
     # niemand mehr in der Verwaltung.
+    name_vorher = group.name
     if group.slug in PROTECTED_SLUGS:
         if group.slug == "admins" and "admin" not in body.permissions:
             raise HTTPException(
@@ -579,12 +585,44 @@ def update_group(
     # fuer sie: „admins muss Zwei-Faktor haben" ist der haeufigste Wunsch.
     group.require_totp = body.require_totp
 
+    gekoppelt_vorher = verzeichnis.gekoppelt_an(db, group)
+    if body.ldap_gruppen is not None:
+        verzeichnis.kopplung_setzen(db, group, body.ldap_gruppen)
+    gekoppelt = verzeichnis.gekoppelt_an(db, group)
+
     audit.record(db, "group.updated", actor=actor, object_type="group",
-                 object_id=group.slug, request=request)
+                 object_id=group.slug, request=request,
+                 **({"ldap_gruppen": gekoppelt} if gekoppelt != gekoppelt_vorher else {}))
     db.commit()
+    abgleich = _nach_kopplung(db, actor, request) if gekoppelt != gekoppelt_vorher else None
+    db.refresh(group)
+    if group.name != name_vorher:
+        # In Keycloak heisst die Gruppe nach ihrem Namen (`/ota/<name>`), und
+        # fremde Anwendungen sehen genau diesen. Mitglieder und Zugaenge also
+        # auf den neuen Namen umziehen.
+        from .webapps import zugang_alle
+
+        for u in group.members:
+            verzeichnis.nach_keycloak(u)
+        zugang_alle()
     data = GroupOut.model_validate(group)
     data.member_count = len(group.members)
+    data.ldap_gruppen = gekoppelt
+    data.abgleich = abgleich
     return data
+
+
+@router.get("/groups/{group_id}/vorschau", dependencies=[Depends(manage_groups)])
+def group_vorschau(group_id: uuid.UUID, ldap: str = "",
+                   db: DbSession = Depends(get_db)) -> dict:
+    """Was eine Kopplung an diese Verzeichnisgruppen aendern wuerde."""
+    group = db.get(Group, group_id)
+    if not group:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Gruppe nicht gefunden")
+    try:
+        return verzeichnis.vorschau(db, group, [n for n in ldap.split(",") if n.strip()])
+    except keycloak.KeycloakFehler as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
 
 
 @router.delete("/groups/{group_id}", dependencies=[Depends(manage_groups)])
@@ -618,6 +656,9 @@ def delete_group(
                  object_id=group.slug, request=request, members=members,
                  apps_freed=freed)
     db.commit()
+    from .webapps import zugang_alle
+
+    zugang_alle()
     tail = f" {freed} Anwendung(en) sind wieder für alle sichtbar." if freed else ""
     return {"status": f"{name} gelöscht. {members} Mitgliedschaft(en) sind entfallen.{tail}"}
 
@@ -700,6 +741,7 @@ def read_settings(db: DbSession = Depends(get_db)) -> dict:
         "profile_quota_gb": settings_store.profile_quota_bytes(db) // 1024 ** 3,
         "disk_floor_gb": settings_store.disk_floor_bytes(db) // 1024 ** 3,
         "app_origins": settings_store.allowed_origins(db),
+        "ohne_gruppe_hinweis": settings_store.get(db, settings_store.OHNE_GRUPPE_HINWEIS),
     }
 
 
@@ -746,6 +788,11 @@ def write_settings(
                 )
             sauber.append(f"{teil.scheme}://{teil.netloc}")
         settings_store.put(db, settings_store.APP_ORIGINS, sorted(set(sauber)))
+
+    if body.ohne_gruppe_hinweis is not None:
+        settings_store.put(db, settings_store.OHNE_GRUPPE_HINWEIS,
+                           body.ohne_gruppe_hinweis.strip()
+                           or settings_store.DEFAULTS[settings_store.OHNE_GRUPPE_HINWEIS])
 
     if body.profile_quota_gb is not None:
         if not 0 <= body.profile_quota_gb <= 10_000:

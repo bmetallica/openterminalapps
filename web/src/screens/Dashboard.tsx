@@ -441,7 +441,16 @@ export function Dashboard({ me, onOpen, onToast }: {
         </div>
       </header>
 
-      {space && (space.level === 'knapp' || space.level === 'voll') && (
+      {/* In keiner Gruppe: Das Dashboard bleibt leer, und hier steht, warum
+          und an wen man sich wendet (Text unter Verzeichnis einstellbar). */}
+      {me.ohne_gruppe_hinweis && (
+        <div className="gate-note" role="status">
+          <b>{tr('Noch keine Zuweisung.')}</b>
+          <span>{me.ohne_gruppe_hinweis}</span>
+        </div>
+      )}
+
+      {space &&(space.level === 'knapp' || space.level === 'voll') && (
         <div className="gate-note" role="status">
           <b>
             {space.level === 'voll'

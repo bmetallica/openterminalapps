@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { ChipSelect, Drawer, Field, Led, Toggle } from '../components/controls'
+import { abgleichSatz } from '../components/VerzeichnisGruppen'
 import {
   ApiError, api,
-  type Group, type Permission, type User,
+  type Group, type KopplungVorschau, type Permission, type User,
 } from '../lib/api'
 import { ago } from '../lib/format'
 import { t as tr, useLang } from '../lib/i18n'
@@ -27,7 +28,12 @@ function UserEditor({ user, groups, onSaved, onClose, onToast }: {
   // die Verwaltung — Vorgabe: ja.
   const [wechseln, setWechseln] = useState(true)
   const [isActive, setIsActive] = useState(user?.is_active ?? true)
-  const [groupIds, setGroupIds] = useState<string[]>(user?.group_ids ?? [])
+  // Nur die von Hand vergebenen. Was das Verzeichnis gibt, steht darunter
+  // und lässt sich hier nicht ändern — der nächste Abgleich stellte es
+  // ohnehin wieder her.
+  const [groupIds, setGroupIds] = useState<string[]>(user?.hand_group_ids ?? [])
+  const ausVerzeichnis = (user?.verzeichnis_group_ids ?? [])
+    .map((id) => groups.find((g) => g.id === id)?.name).filter(Boolean) as string[]
   const [busy, setBusy] = useState(false)
 
   const bySlug = Object.fromEntries(groups.map((g) => [g.name, g.id]))
@@ -151,10 +157,20 @@ function UserEditor({ user, groups, onSaved, onClose, onToast }: {
         )}
       </Field>
 
-      <Field label={tr('Gruppen')} hint={tr('Bestimmt, welche Workspaces der Nutzer sieht und was er darf.')}>
+      <Field label={ausVerzeichnis.length ? tr('Gruppen (von Hand)') : tr('Gruppen')}
+        hint={tr('Bestimmt, welche Workspaces der Nutzer sieht und was er darf.')}>
         <ChipSelect label={tr('Gruppen')} selected={selected} options={groups.map((g) => g.name)}
           onChange={(names) => setGroupIds(names.map((n) => bySlug[n]).filter(Boolean))} />
       </Field>
+
+      {ausVerzeichnis.length > 0 && (
+        <Field label={tr('Gruppen aus dem Verzeichnis')}
+          hint={tr('Kommen aus dem Verzeichnis und gelten zusätzlich. Ändern lassen sie sich nur dort.')}>
+          <div className="strip">
+            {ausVerzeichnis.map((n) => <span key={n} className="chip is-on" title={tr('aus dem Verzeichnis')}>{n} · LDAP</span>)}
+          </div>
+        </Field>
+      )}
 
       <Field label={tr('Konto')}>
         <Toggle on={isActive} name={tr('Konto ist aktiv')}
@@ -189,7 +205,28 @@ function GroupEditor({ group, permissions, onSaved, onClose, onToast }: {
   const [priority, setPriority] = useState(group?.priority ?? 100)
   const [perms, setPerms] = useState<string[]>(group?.permissions ?? [])
   const [requireTotp, setRequireTotp] = useState(group?.require_totp ?? false)
+  const [ldap, setLdap] = useState<string[]>(group?.ldap_gruppen ?? [])
+  const [ldapAngebot, setLdapAngebot] = useState<string[] | null>(null)
+  const [vorschau, setVorschau] = useState<KopplungVorschau | null>(null)
   const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    api.verzeichnisGruppen()
+      .then((g) => setLdapAngebot(g.eingerichtet ? g.gruppen : []))
+      .catch(() => setLdapAngebot([]))
+  }, [])
+
+  // Vor dem Speichern zeigen, was die Kopplung ändert.
+  useEffect(() => {
+    if (!group || !ldapAngebot?.length) { setVorschau(null); return }
+    const vorher = [...(group.ldap_gruppen ?? [])].sort().join(',')
+    if ([...ldap].sort().join(',') === vorher) { setVorschau(null); return }
+    let weg = false
+    api.kopplungVorschau(group.id, ldap)
+      .then((v) => { if (!weg) setVorschau(v) })
+      .catch(() => { if (!weg) setVorschau(null) })
+    return () => { weg = true }
+  }, [group, ldap, ldapAngebot])
 
   const byText = Object.fromEntries(permissions.map((p) => [p.text, p.key]))
   const selected = perms.map((k) => permissions.find((p) => p.key === k)?.text ?? '').filter(Boolean)
@@ -199,11 +236,12 @@ function GroupEditor({ group, permissions, onSaved, onClose, onToast }: {
     try {
       const body = {
         name, description: null, priority, permissions: perms,
-        require_totp: requireTotp,
+        require_totp: requireTotp, ldap_gruppen: ldap,
       }
-      if (isNew) await api.createGroup(body)
-      else await api.updateGroup(group.id, body)
-      onToast(isNew ? `${name} angelegt` : `${name} gespeichert`)
+      const r = isNew ? await api.createGroup(body) : await api.updateGroup(group.id, body)
+      const nach = r.abgleich ? ` · ${abgleichSatz(r.abgleich)}` : ''
+      onToast((isNew ? `${name} angelegt` : `${name} gespeichert`) + nach,
+        r.abgleich && !r.abgleich.ok ? 'bad' : 'ok')
       onSaved()
     } catch (err) {
       onToast(err instanceof ApiError ? err.message : tr('Speichern fehlgeschlagen'), 'bad')
@@ -267,6 +305,28 @@ function GroupEditor({ group, permissions, onSaved, onClose, onToast }: {
           onChange={(texts) => setPerms(texts.map((x) => byText[x]).filter(Boolean))} />
       </Field>
 
+      <Field label={tr('Mitglieder aus dem Verzeichnis')}
+        hint={tr('Wer in einer dieser Verzeichnisgruppen ist, ist auch in dieser Gruppe — bei der Anmeldung und nach jedem Abgleich. Von Hand Aufgenommene bleiben zusätzlich drin.')}>
+        {ldapAngebot === null ? <p className="sub">{tr('Wird geladen…')}</p>
+          : ldapAngebot.length === 0 && ldap.length === 0 ? (
+            <p className="field__hint" style={{ margin: 0 }}>
+              {tr('Es werden keine Gruppen aus dem Verzeichnis gelesen. Einrichten unter Verzeichnis → Gruppen aus dem Verzeichnis.')}
+            </p>
+          ) : (
+            <ChipSelect label={tr('Mitglieder aus dem Verzeichnis')} selected={ldap}
+              options={[...new Set([...ldapAngebot, ...ldap])].sort()} onChange={setLdap} />
+          )}
+        {vorschau && (
+          <p className="note-info" style={{ margin: '10px 0 0' }}>
+            {tr('Nach dem Speichern')}: {vorschau.dazu.length
+              ? tr('{n} kommen dazu ({namen})', { n: vorschau.dazu.length, namen: vorschau.dazu.join(', ') })
+              : tr('niemand kommt dazu')}
+            {vorschau.weg.length > 0 && <> · {tr('{n} fallen weg ({namen})', { n: vorschau.weg.length, namen: vorschau.weg.join(', ') })}</>}
+            {vorschau.noch_nie_angemeldet.length > 0 && <> · {tr('{n} weitere bei ihrer ersten Anmeldung', { n: vorschau.noch_nie_angemeldet.length })}</>}
+          </p>
+        )}
+      </Field>
+
       <Toggle on={requireTotp} name={tr('Zweiter Faktor ist Pflicht')}
         note={tr('Mitglieder ohne zweiten Faktor können keinen Arbeitsplatz starten, bis sie ihn unter „Mein Konto“ eingerichtet haben. Die Anmeldung selbst bleibt möglich — sonst käme niemand an die Einrichtung.')}
         ariaLabel={tr('Zweiter Faktor ist Pflicht')}
@@ -284,6 +344,7 @@ export function People({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad') 
   const [editUser, setEditUser] = useState<User | null | undefined>()
   const [editGroup, setEditGroup] = useState<Group | null | undefined>()
   const [failed, setFailed] = useState<string | null>(null)
+  const [nurOhne, setNurOhne] = useState(false)
 
   async function load() {
     try {
@@ -330,6 +391,15 @@ export function People({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad') 
         ))}
       </div>
 
+      {tab === 'Nutzer' && users.some((u) => u.group_ids.length === 0) && (
+        <div style={{ marginBottom: 12 }}>
+          <Toggle on={nurOhne} name={tr('Nur Konten ohne Gruppe')}
+            note={tr('{n} Konten sind in keiner Gruppe und sehen ein leeres Dashboard.',
+              { n: users.filter((u) => u.group_ids.length === 0).length })}
+            onChange={setNurOhne} />
+        </div>
+      )}
+
       <div className="panel" style={{ padding: '14px 0 0' }}>
         {tab === 'Nutzer' ? (
           <table className="tbl">
@@ -342,7 +412,7 @@ export function People({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad') 
               </tr>
             </thead>
             <tbody>
-              {users.map((u) => (
+              {users.filter((u) => !nurOhne || u.group_ids.length === 0).map((u) => (
                 <tr key={u.id} tabIndex={0} onClick={() => setEditUser(u)}
                   onKeyDown={(e) => { if (e.key === 'Enter') setEditUser(u) }}>
                   <td style={{ paddingLeft: 20 }}>
@@ -352,8 +422,12 @@ export function People({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad') 
                     )}
                   </td>
                   <td style={{ color: 'var(--label)' }}>
-                    {u.group_ids.map((g) => groups.find((x) => x.id === g)?.name)
-                      .filter(Boolean).join(', ') || '—'}
+                    {u.group_ids.length ? u.group_ids.map((g) => {
+                      const n = groups.find((x) => x.id === g)?.name
+                      const ldap = (u.verzeichnis_group_ids ?? []).includes(g)
+                      return n ? <span key={g} title={ldap ? tr('aus dem Verzeichnis') : undefined}
+                        style={{ marginRight: 6 }}>{n}{ldap ? ' ·L' : ''}</span> : null
+                    }) : <span className="chip">{tr('ohne Gruppe')}</span>}
                   </td>
                   <td className="data" style={{ color: 'var(--mute)', fontSize: 12 }}>
                     {u.last_login_at ? ago(new Date(u.last_login_at).getTime()) : tr('noch nie')}
@@ -387,7 +461,14 @@ export function People({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad') 
                       ? g.permissions.map((k) => permissions.find((p) => p.key === k)?.text ?? k).join(', ')
                       : tr('nur eigenes Dashboard')}
                   </td>
-                  <td className="data" style={{ color: 'var(--label)' }}>{g.member_count}</td>
+                  <td className="data" style={{ color: 'var(--label)' }}>
+                    {g.member_count}
+                    {g.ldap_gruppen?.length > 0 && (
+                      <span className="silk" style={{ marginLeft: 8 }} title={tr('Mitglieder aus dem Verzeichnis')}>
+                        ← {g.ldap_gruppen.join(', ')}
+                      </span>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>

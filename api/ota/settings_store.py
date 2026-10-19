@@ -74,6 +74,14 @@ FIREWALL_GLOBAL = "firewall.global"
 # API waehrend des Updates neu startet — die Datenbank nicht.
 WARTUNG_UPDATE = "wartung.update"
 
+# Verzeichnisgruppen (Kapitel 08): wie oft abgeglichen wird (Minuten, 0 =
+# aus), was der letzte Lauf ergab, und was ein Konto ohne jede Gruppe auf
+# seinem Dashboard liest.
+VERZEICHNIS_INTERVALL = "verzeichnis.intervall"
+VERZEICHNIS_INTERVALL_STUFEN = (0, 15, 60, 360, 1440)
+VERZEICHNIS_LETZTER = "verzeichnis.letzter_abgleich"
+OHNE_GRUPPE_HINWEIS = "dashboard.ohne_gruppe_hinweis"
+
 REPO_MODUS = "repo.modus"
 REPO_BAU_SNAPSHOT = "repo.bau_snapshot"
 REPO_ALTER_GELB = "repo.alter_gelb"
@@ -91,6 +99,10 @@ DEFAULTS: dict[str, Any] = {
     BRAND_ACCENT: "#06B6D4",
     BRAND_LOGO: None,
     FIREWALL_GLOBAL: [],
+    VERZEICHNIS_INTERVALL: 60,
+    VERZEICHNIS_LETZTER: None,
+    OHNE_GRUPPE_HINWEIS: ("Dir ist noch nichts zugewiesen. Wende dich an die Verwaltung, "
+                          "damit sie dich einer Gruppe zuordnet."),
     REPO_MODUS: "zuerst",
     REPO_BAU_SNAPSHOT: "",
     REPO_ALTER_GELB: 7,

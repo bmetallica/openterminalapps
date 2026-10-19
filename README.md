@@ -296,8 +296,14 @@ dabei **nicht** zurückwandert, ist die Datenbank: Neue Spalten bleiben stehen. 
   Absender)** — sie lässt sich damit nicht gegen einen Kollegen richten
 - Ein Verzeichniseintrag kann **kein bestehendes Konto übernehmen** — auch nicht mit demselben Namen
 - **Fremde Web-Anwendungen** im Katalog (Open WebUI, Grafana, …): OTA legt den OIDC-Zugang an und
-  entscheidet, wer die Kachel sieht. Was jemand darin darf, entscheidet die Anwendung — OTA baut
-  ihr Rechtemodell nicht nach
+  entscheidet, wer die Kachel sieht **und wer sich dort anmelden darf**. Keycloak prüft das selbst,
+  auch beim direkten Aufruf der Adresse; ohne Gruppe kommt niemand hinein. Die OTA-Gruppen stehen
+  im Token, sodass die Anwendung daran etwas hängen kann, etwa einen MCP-Server in Open WebUI.
+  Was jemand darin darf, entscheidet die Anwendung. OTA baut ihr Rechtemodell nicht nach
+- **Gruppen aus dem Verzeichnis** (OpenLDAP oder AD): Eine OTA-Gruppe bezieht ihre Mitglieder aus
+  LDAP-Gruppen, zusätzlich zu den von Hand Aufgenommenen. Das gilt sofort bei der Anmeldung und
+  per Abgleich im einstellbaren Takt (15 Min. bis 1 Tag) oder auf Knopfdruck. Wer im Verzeichnis
+  fehlt, wird deaktiviert, nie gelöscht. Konten ohne Gruppe sehen ein leeres Dashboard mit Hinweis
 - Anmeldefrist einstellbar (30 min bis 48 h), rollend — wer arbeitet, wird nicht abgemeldet
 - Oberfläche auf Deutsch und Englisch, **dunkel oder hell** (oder wie der Rechner) — beides
   umschaltbar auch vor der Anmeldung
@@ -466,6 +472,7 @@ make test
 | `test-konten.sh` | Konten der zentralen Anmeldung: Anlegen in OTA legt in Keycloak an (samt Pflicht zum Passwortwechsel), lokal kommt es nicht herein; Ändern, Passwort, zweiter Faktor, Sperren und Löschen wirken in Keycloak; Mein Konto führt über Keycloak; ein lokales Bestandskonto zieht mit seinem Passwort um, das Notfallkonto nicht |
 | `test-clipboard-bridge.sh` | Kopieren zwischen zwei Anwendungen im selben Arbeitsplatz: beide Richtungen, Umlaute, ein Bild, ein Megabyte, nach Pause, und abgeschaltet |
 | `tests/e2e.mjs` | Die Oberfläche in einem echten Browser — bis zur Frage, ob der Stream wirklich verbindet |
+| `test-verzeichnis.sh` | Gruppen aus dem Verzeichnis: beide LDAP-Gruppenformen werden erkannt, eine gekoppelte OTA-Gruppe bekommt ihre Mitglieder bei der Anmeldung und beim Abgleich, von Hand Aufgenommene bleiben, eine LDAP-Gruppe „admins“ macht niemanden zum Admin, Konten ohne Gruppe bekommen den Hinweis; eine Anwendung lässt nur ihre Gruppen herein, über das Formular **und** die SSO-Sitzung, ohne Gruppe niemanden; wer im Verzeichnis fehlt, wird deaktiviert |
 | `test-ldap.sh` | Verzeichnis-Anbindung **über Keycloak** gegen ein echtes OpenLDAP im Container — vor allem, dass ein Verzeichniseintrag kein lokales Konto übernimmt und ein Ausfall den Notzugang nicht mitreisst |
 | `test-streaming.sh` | Der Medienweg mit einer eigenen Vorlage auf dem aktuellen Basisimage: Ein Browser in einem fremden Netz zählt die **dekodierten Bilder** — auf dem Arbeitsplatz und auf dem Bildschirm einer Anwendung (Selkies 2.0, WebSockets durch Traefik); Umlaute, Shift und AltGr einer deutschen Tastatur kommen richtig an. Ist TURN eingerichtet (nur noch für Golden Images mit Selkies 1.6.2), wird er mitgeprüft, samt Sperrliste und NAT |
 | `test-firewall.sh` | Die Netzabsicherung, **von innen gemessen**: Nachbar, Wirt, Firmennetz, TURN, Namensdienst, Internet je Stufe, Freigabe nach Namen, Portfreigabe — und alles noch einmal nach einem Neustart des Routers |

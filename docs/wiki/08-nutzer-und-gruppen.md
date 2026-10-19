@@ -270,6 +270,68 @@ Wie das im Einzelnen geht, steht in [Kapitel 18](18-zentrale-anmeldung.md#ein-ac
 > waren einer zu viel, und der alte war der, den niemand mehr gepflegt hat
 > (`auth-roadmap.md`, Entscheidung 4).
 
+### Gruppen aus dem Verzeichnis ✅
+
+*Seit dem 2026-10-19.* Eine OTA-Gruppe kann ihre Mitglieder aus Gruppen des Verzeichnisses
+beziehen. Beispiel: Die OTA-Gruppe `ki1` bekommt alle aus der LDAP-Gruppe `cn=ki-team`. Über die
+Gruppe `ki1` bekommen sie dann ihre Workspaces und Rechte, und in angebundenen Anwendungen wie
+Open WebUI auch ihren MCP-Server (siehe [Kapitel 18](18-zentrale-anmeldung.md#gruppen-in-der-anwendung-open-webui-)).
+
+**Einrichten**, in dieser Reihenfolge:
+
+1. **Verzeichnis → Gruppen aus dem Verzeichnis:** Basis der Gruppen eintragen (z. B.
+   `ou=groups,dc=firma,dc=de`), Form auf *Automatisch* lassen, **Speichern und Gruppen holen**.
+   - OTA probiert die drei üblichen Formen (`groupOfNames`, `groupOfUniqueNames`, `posixGroup`)
+     und nimmt die erste, unter der Gruppen auftauchen.
+   - Die Antwort nennt die gefundenen Gruppen. Ein Filter wie `(cn=ki-*)` schränkt die Liste ein.
+2. **Nutzer und Gruppen → Gruppe → Mitglieder aus dem Verzeichnis:** eine oder mehrere
+   Verzeichnisgruppen wählen.
+   - Vor dem Speichern zeigt OTA, wer dazukommt und wer wegfällt.
+   - Beim Speichern gleicht OTA gleich ab.
+3. **Verzeichnis → Abgleich:** den Takt wählen (aus, 15 Min., 1 Std., 6 Std., 1 Tag; Vorgabe
+   1 Std.). **Jetzt abgleichen** läuft sofort.
+
+**Von Hand und aus dem Verzeichnis zugleich.** Jede Mitgliedschaft weiss, woher sie kommt:
+
+| | gesetzt von | entfernt von |
+|---|---|---|
+| **von Hand** | der Verwaltung (Nutzer → Gruppen) | der Verwaltung |
+| **aus dem Verzeichnis** | dem Abgleich bzw. der Anmeldung | dem Abgleich bzw. der Anmeldung |
+
+- Wer von Hand aufgenommen ist, bleibt drin, auch wenn das Verzeichnis ihn nicht nennt.
+- Was das Verzeichnis vergibt, lässt sich in OTA nicht wegnehmen. Der Nutzer-Editor zeigt es
+  gesperrt mit „LDAP“, die Nutzerliste mit „·L“.
+- Das Notfallkonto lässt sich weiterhin von Hand in `admins` halten.
+
+**Wann eine Änderung im Verzeichnis wirkt:**
+
+- **Bei der nächsten Anmeldung in OTA, sofort.** Keycloak liest die Gruppen dafür live aus dem
+  Verzeichnis (`cachePolicy: NO_CACHE`, das setzt OTA beim Einrichten selbst).
+- **Beim Abgleich**, auch für alle, die sich gerade nicht anmelden. Ihre Gruppen gehen dabei gleich
+  nach Keycloak, sodass angebundene Anwendungen sie bei der nächsten Anmeldung dort sehen.
+- **Eine laufende Sitzung in einer fremden Anwendung** endet dadurch nicht. Das kann nur die
+  Anwendung selbst.
+
+**Wer im Verzeichnis fehlt**, wird beim Abgleich in OTA **deaktiviert, nie gelöscht**.
+Sein Zuhause und seine Arbeitsplätze bleiben. Würde ein Abgleich mehr als die Hälfte aller
+Verzeichniskonten deaktivieren, hält er an und meldet das. So sieht ein falscher Filter oder ein
+halb erreichbares Verzeichnis aus, und ohne diese Bremse wäre die halbe Belegschaft ausgesperrt.
+
+**Eine Verzeichnisgruppe gibt von sich aus nichts.** Keycloak führt sie als Rollen eines eigenen
+Clients `ota-verzeichnis`, nicht als Gruppen. Deshalb stehen sie nicht im Token unter `groups`.
+Eine LDAP-Gruppe namens `admins` macht niemanden zum OTA-Admin, solange sie nicht ausdrücklich an
+die OTA-Gruppe `admins` gekoppelt ist. Das Testverzeichnis enthält genau so eine Gruppe, und die
+Prüfreihe besteht darauf, dass sie nichts bewirkt.
+
+**Konten ohne Gruppe** melden sich an und sehen ein leeres Dashboard mit einem Hinweis. Den Text
+stellst du unter **Verzeichnis → Konten ohne Gruppe** ein. In der Nutzerliste stehen sie mit
+„ohne Gruppe“, und der Schalter **Nur Konten ohne Gruppe** zeigt nur sie.
+
+> **Bis zum 2026-10-19** übernahm OTA bei jeder Anmeldung die Gruppen aus dem Token. Jetzt rechnet
+> OTA sie selbst aus: von Hand vergebene aus der eigenen Datenbank, die übrigen aus dem
+> Verzeichnis. Danach trägt OTA das Ergebnis nach Keycloak. Wer in Keycloak selbst Konten in
+> `/ota/…`-Gruppen schiebt, ändert damit in OTA nichts mehr.
+
 ### Die Regel, die über allem steht
 
 > **Ein lokales Konto wird niemals über das Verzeichnis angemeldet, und ein Verzeichniseintrag kann
@@ -291,6 +353,7 @@ dass er **nicht** hereinkommt — weder bei OTA noch bei Keycloak.
 ```bash
 scripts/ldap-test-server.sh start     # OpenLDAP mit vier Einträgen
 scripts/test-ldap.sh                  # die ganze Reihe, von Anbinden bis Ausfall
+scripts/test-verzeichnis.sh           # Gruppen, Abgleich, Zugang zu Anwendungen
 scripts/ldap-test-server.sh stop
 ```
 

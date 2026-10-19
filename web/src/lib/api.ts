@@ -17,6 +17,8 @@ export type Me = {
   recovery_left: number
   /** Eine Gruppe verlangt den zweiten Faktor, er ist aber nicht eingerichtet. */
   must_setup_totp: boolean
+  /** Gesetzt, wenn das Konto in keiner Gruppe ist: der Text fürs Dashboard. */
+  ohne_gruppe_hinweis?: string | null
 }
 
 export type App = {
@@ -153,6 +155,37 @@ export type Group = {
   is_system: boolean
   /** Mitglieder ohne zweiten Faktor können keinen Arbeitsplatz starten. */
   require_totp: boolean
+  /** Verzeichnisgruppen, aus denen diese Gruppe Mitglieder bezieht. */
+  ldap_gruppen: string[]
+  /** Nach dem Speichern einer geänderten Kopplung: was der Abgleich ergab. */
+  abgleich?: VerzeichnisAbgleich | null
+}
+
+/** Ein Lauf des Verzeichnisabgleichs. `gruppen`: je Gruppe [dazu, weg]. */
+export type VerzeichnisAbgleich = {
+  zeit?: string
+  ok: boolean
+  anlass?: string
+  konten?: number
+  geaendert?: number
+  gruppen?: Record<string, [number, number]>
+  deaktiviert?: string[]
+  fehler?: string | null
+}
+
+export type VerzeichnisGruppen = {
+  eingerichtet: boolean
+  gruppen_dn?: string
+  form?: string
+  filter?: string
+  gruppen: string[]
+}
+
+export type KopplungVorschau = {
+  im_verzeichnis: number
+  dazu: string[]
+  weg: string[]
+  noch_nie_angemeldet: string[]
 }
 
 export type User = {
@@ -165,6 +198,10 @@ export type User = {
   auth_provider: string
   last_login_at: string | null
   group_ids: string[]
+  /** Davon von Hand vergeben — nur diese ändert die Verwaltung. */
+  hand_group_ids: string[]
+  /** Davon aus dem Verzeichnis — ändert nur das Verzeichnis. */
+  verzeichnis_group_ids: string[]
 }
 
 export type Permission = { key: string; text: string }
@@ -246,6 +283,8 @@ export type GlobalSettings = {
   disk_floor_gb: number
   /** Wohin Web-Anwendungen ihre Anmeldung schicken dürfen. Leer: nirgends. */
   app_origins: string[]
+  /** Was ein Konto ohne jede Gruppe auf seinem Dashboard liest. */
+  ohne_gruppe_hinweis: string
 }
 
 /** Ein Programm, wie es im Image gefunden wurde. */
@@ -403,6 +442,8 @@ export type WebApp = {
   is_enabled: boolean
   sort_order: number
   group_ids: string[]
+  /** Jeder Angemeldete darf hinein. Sonst nur die Gruppen — ohne Gruppe niemand. */
+  fuer_alle: boolean
   /** Nur beim Anlegen gefüllt — danach steht es allein in Keycloak. */
   client_secret: string | null
 }
@@ -417,6 +458,7 @@ export type WebAppIn = {
   is_enabled: boolean
   sort_order: number
   group_ids?: string[] | null
+  fuer_alle?: boolean | null
 }
 
 export type SharedListing = {
@@ -845,6 +887,25 @@ export const api = {
       '/admin/identity/keycloak/verzeichnis/test', { method: 'POST', body: JSON.stringify(b) }),
   kcVerzeichnisWeg: () =>
     call<KcVerzeichnis>('/admin/identity/keycloak/verzeichnis', { method: 'DELETE' }),
+  verzeichnisGruppen: () =>
+    call<VerzeichnisGruppen>('/admin/identity/keycloak/verzeichnis/gruppen'),
+  verzeichnisGruppenSetzen: (b: { gruppen_dn: string; form: string; filter: string }) =>
+    call<VerzeichnisGruppen>('/admin/identity/keycloak/verzeichnis/gruppen', {
+      method: 'PUT', body: JSON.stringify(b),
+    }),
+  verzeichnisGruppenWeg: () =>
+    call<VerzeichnisGruppen>('/admin/identity/keycloak/verzeichnis/gruppen', { method: 'DELETE' }),
+  verzeichnisTakt: () =>
+    call<{ intervall: number; stufen: number[]; letzter: VerzeichnisAbgleich | null }>(
+      '/admin/identity/verzeichnis/abgleich'),
+  verzeichnisTaktSetzen: (intervall: number) =>
+    call<{ intervall: number; stufen: number[]; letzter: VerzeichnisAbgleich | null }>(
+      '/admin/identity/verzeichnis/abgleich', { method: 'PUT', body: JSON.stringify({ intervall }) }),
+  verzeichnisAbgleichen: () =>
+    call<VerzeichnisAbgleich>('/admin/identity/verzeichnis/abgleich', { method: 'POST' }),
+  kopplungVorschau: (groupId: string, ldap: string[]) =>
+    call<KopplungVorschau>(
+      `/admin/groups/${groupId}/vorschau?ldap=${encodeURIComponent(ldap.join(','))}`),
   kcVerzeichnisAbgleich: (voll = false) =>
     call<{ added?: number; updated?: number; failed?: number; status?: string }>(
       `/admin/identity/keycloak/verzeichnis/abgleich?voll=${voll}`, { method: 'POST' }),

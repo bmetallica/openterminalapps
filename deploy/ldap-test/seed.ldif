@@ -95,3 +95,25 @@ dn: cn=hausmeisterei,ou=groups,dc=ota,dc=test
 objectClass: groupOfNames
 cn: hausmeisterei
 member: uid=piet.holm,ou=people,dc=ota,dc=test
+
+# Gruppen in der zweiten verbreiteten Form: posixGroup mit memberUid
+# (Kontoname statt DN). OTA muss beide lesen können (Kapitel 08,
+# Verzeichnisgruppen) — ob ein OpenLDAP die eine oder die andere nutzt,
+# weiss der Betreiber oft selbst nicht.
+dn: ou=posix,dc=ota,dc=test
+objectClass: organizationalUnit
+ou: posix
+
+dn: cn=ki-posix,ou=posix,dc=ota,dc=test
+objectClass: posixGroup
+cn: ki-posix
+gidNumber: 6001
+memberUid: piet.holm
+
+# Namensgleich mit der Systemgruppe in OTA. Absicht: Eine Verzeichnisgruppe
+# „admins" darf niemanden zum OTA-Admin machen, solange sie nicht
+# ausdrücklich an die OTA-Gruppe gekoppelt ist.
+dn: cn=admins,ou=groups,dc=ota,dc=test
+objectClass: groupOfNames
+cn: admins
+member: uid=piet.holm,ou=people,dc=ota,dc=test
