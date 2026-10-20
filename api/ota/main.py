@@ -254,6 +254,17 @@ async def _scheduler() -> None:
                              weg["verhalten"], weg["verwaltung"])
             except Exception as exc:  # noqa: BLE001 — derselbe Grund wie oben
                 log.warning("Protokoll nicht aufgeraeumt: %s", exc)
+            # Speicherabbilder abgestuerzter Programme aus den Zuhausen
+            # (agent/otaagent/kerne.py). Beim Messen vor einem Start raeumt
+            # der Agent ohnehin das eine Zuhause; das hier haelt die Anzeige
+            # in der Verwaltung ehrlich.
+            try:
+                weg = await asyncio.to_thread(agent_client.kerne_raeumen)
+                if weg.get("dateien"):
+                    log.info("Speicherabbilder entfernt: %d Dateien, %.1f MB",
+                             weg["dateien"], weg["bytes"] / 1024 ** 2)
+            except Exception as exc:  # noqa: BLE001 — derselbe Grund wie oben
+                log.warning("Speicherabbilder nicht entfernt: %s", exc)
 
         try:
             stand = await asyncio.to_thread(_verzeichnis_takt)

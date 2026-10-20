@@ -851,6 +851,13 @@ Siehe die Tabelle am Ende von [Kapitel 25](25-root-arbeitsplatz.md). Die häufig
 fehlt (`docker info | grep -i runtimes`), das Recht „Root-Arbeitsplatz nutzen" fehlt, die
 Platzgrenze ist erreicht, oder das Image ist nicht `ota/base-desktop-root:1`.
 
+**„Dein Zuhause belegt … GB", obwohl `du` im Container viel weniger zeigt.** Gezählt wird der
+ganze Ordner des Kontos, also die Zuhause aller Vorlagen und Arbeitsplätze, auch gelöschter.
+Bis 2026-10-20 kamen Speicherabbilder (`core.<pid>`) abgestürzter Programme dazu, bis zu mehreren
+GB je Stück; die räumt OTA inzwischen selbst ([Kapitel 11](11-betrieb.md#speicherabbilder-räumt-ota-selbst-)).
+Wo der Rest liegt: `du -sh /srv/ota/profiles/<kennung>/* | sort -h`. Als Administrator lässt sich
+der Arbeitsplatz unter Betrieb trotzdem starten — dort gilt die Grenze nicht.
+
 **`apt install sysbox-ce` verlangt `docker rm $(docker ps -a -q) -f`.** Nicht ausführen — das löscht
 jeden Container des Wirts. `scripts/sysbox-einrichten.sh` richtet Sysbox ohne Neustart ein.
 

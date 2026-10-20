@@ -447,6 +447,37 @@ Die Meldung beim Start nennt Zahl und Ausweg:
 In der **Nutzerverwaltung** steht der Verbrauch je Konto — dort frisch gemessen, weil jemand
 ausdrücklich nachsieht.
 
+**Gezählt wird der ganze Ordner des Kontos**, `/srv/ota/profiles/<kennung>/`: das gemeinsame
+Zuhause `user/` und das eigene Zuhause jeder Vorlage und jedes Root-Arbeitsplatzes, auch von
+gelöschten Arbeitsplätzen (das Zuhause bleibt beim Löschen immer). Im Container sieht der Nutzer
+nur eines davon. Wer wissen will, wo der Platz liegt:
+
+```bash
+du -sh /srv/ota/profiles/<kennung>/* | sort -h
+```
+
+### Speicherabbilder räumt OTA selbst ✅
+
+`dockerd` läuft mit `LimitCORE=infinity`, jeder Container erbte das, und der Wirt schreibt mit
+`core_pattern = core` ein Abbild jedes abgestürzten Programms als `core.<pid>` ins aktuelle
+Verzeichnis — fast immer das Zuhause. Gemessen am 2026-10-20: 24 Abbilder von
+Firefox-Unterprozessen in einem Zuhause, die beim Anhalten jeder Sitzung sterben; auf einer
+Anlage ein einzelnes von 4,3 GB. Niemand hat sie angelegt, und sie sperrten den Nutzer aus.
+
+Seither:
+
+- **Neue Container** starten mit `ulimit -c 0` — es entstehen keine Abbilder mehr. Ein bestehender
+  Root-Arbeitsplatz behält seinen Container und damit die alte Grenze; ihn räumt der zweite Punkt.
+- **Vor jeder Messung** (also vor jedem Start) entfernt der Agent die Abbilder im Ordner des
+  Kontos, und **einmal am Tag** in allen Zuhausen. Das Protokoll der API nennt Anzahl und Größe.
+- Gelöscht wird **nur, was nachweislich ein Abbild ist**: Name `core` oder `core.<Zahl>`, eine
+  gewöhnliche Datei (kein Verweis), älter als fünf Minuten und im Kopf eine ELF-Datei vom Typ
+  `ET_CORE`. Eine Datei des Nutzers, die zufällig `core` heisst, bleibt liegen.
+
+Wer ein Abbild zur Fehlersuche braucht, holt es sich innerhalb der fünf Minuten oder schaltet es im
+Root-Arbeitsplatz mit `ulimit -c unlimited` für diese Shell an — der tägliche Lauf räumt es danach
+trotzdem.
+
 ## Rückfall auf Kasm
 
 Solange Kasm parallel installiert ist, ist der Rückweg kurz:

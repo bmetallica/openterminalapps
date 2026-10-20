@@ -83,6 +83,11 @@ def profile_usage(username: str, fresh: bool = False) -> dict[str, Any]:
     return _call("GET", f"/profiles/{username}/usage{suffix}")
 
 
+def kerne_raeumen() -> dict[str, Any]:
+    # Geht durch alle Zuhause; auf einer grossen Anlage dauert das.
+    return _call("POST", "/profiles/kerne-raeumen", timeout=900.0)
+
+
 def list_images() -> list[dict[str, Any]]:
     return _call("GET", "/images")
 

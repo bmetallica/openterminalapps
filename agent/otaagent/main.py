@@ -37,6 +37,7 @@ from . import backup as backup_ops
 from . import builder
 from . import freeze as freeze_ops
 from . import skeleton as skeleton_ops
+from . import kerne
 from . import clipboard as clip_scripts
 from . import discover
 from . import registry as registry_reader
@@ -1281,6 +1282,11 @@ def start_container(req: StartRequest) -> dict[str, Any]:
             runtime="sysbox-runc" if ist_root else None,
             user=start_als,
             pids_limit=4096,
+            # Keine Speicherabbilder. dockerd vererbt `LimitCORE=infinity`,
+            # und jedes abstuerzende Programm legte sonst ein `core.<pid>`
+            # ins Zuhause — gemessen bis 4,3 GB, auf die Platzgrenze
+            # angerechnet (siehe kerne.py).
+            ulimits=[docker.types.Ulimit(name="core", soft=0, hard=0)],
             restart_policy={"Name": "no"},
             # Wie viel Protokoll dieser Container behalten darf.
             #
@@ -2850,6 +2856,15 @@ def _du(path: str) -> int:
         return 0
 
 
+@app.post("/profiles/kerne-raeumen", dependencies=[Depends(require_token)])
+def kerne_raeumen() -> dict[str, int]:
+    """Speicherabbilder aus allen Zuhausen. Ruft die API einmal am Tag."""
+    ergebnis = kerne.raeumen(PROFILES_ROOT)
+    if ergebnis["dateien"]:
+        _usage.clear()
+    return ergebnis
+
+
 @app.get("/profiles/{username}/usage", dependencies=[Depends(require_token)])
 def profile_usage(username: str, fresh: bool = False) -> dict[str, Any]:
     """Wie viel Platz das Zuhause eines Nutzers belegt.
@@ -2866,6 +2881,9 @@ def profile_usage(username: str, fresh: bool = False) -> dict[str, Any]:
     if not fresh and hit is not None and now - hit[0] < _USAGE_TTL:
         return {"username": username, "bytes": hit[1], "gemessen": "gepuffert"}
 
+    # Erst die Speicherabbilder weg — sie hat niemand angelegt, und sie
+    # sollen niemanden aussperren (kerne.py).
+    kerne.raeumen(root)
     size = _du(root)
     _usage[username] = (now, size)
     return {"username": username, "bytes": size, "gemessen": "jetzt"}
