@@ -138,6 +138,9 @@ def anmelden(db: DbSession, angaben: dict) -> User:
     # auseinander — und eine Verzeichnisgruppe, die zufaellig „admins"
     # heisst, haette darin wie die OTA-Gruppe ausgesehen.
     verzeichnis.bei_anmeldung(db, user)
+    # OTA-Git (Kapitel 27): Konto anlegen, sperren oder nachbenennen.
+    from . import git
+    git.bei_anmeldung(db, user)
     user.last_login_at = datetime.now(timezone.utc)
     user.failed_logins = 0
     db.flush()

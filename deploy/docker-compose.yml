@@ -203,6 +203,10 @@ services:
       OTA_KEYCLOAK_URL: "${OTA_KEYCLOAK_URL:-}"
       OTA_KEYCLOAK_REALM: "${OTA_KEYCLOAK_REALM:-ota}"
       OTA_KEYCLOAK_SECRET: "${OTA_KEYCLOAK_SECRET:-}"
+      # OTA-Git (Kapitel 27): Notzugang in Forgejo, über den OTA die Konten
+      # pflegt, und das Passwort der eigenen Datenbank, die OTA anlegt.
+      OTA_GIT_ADMIN_PW: "${OTA_GIT_ADMIN_PW:-}"
+      OTA_GIT_DB_PW: "${OTA_GIT_DB_PW:-}"
       # Paketquellen (Kapitel 26): Das eigene Repository laeuft immer, der
       # Spiegel ist ein Zusatz. OTA_REPO=1 war bis zum 2026-10-08 der Schalter
       # fuer beides und gilt weiter als Spiegel.
@@ -348,6 +352,13 @@ services:
       # Routers: Eine falsche Uhr bricht TLS, und der Fehler sieht nach allem
       # aus ausser nach der Uhr. Leer heisst: keine Zeile dafuer.
       OTA_NTP_HOST: "${OTA_NTP_HOST:-}"
+      # OTA-Git (Kapitel 27). Den Container legt der Agent an, wenn Git im
+      # Menü eingeschaltet wird — nicht Compose, sonst ließe er sich nicht aus
+      # der Oberfläche schalten. Die Fassung steht hier fest.
+      OTA_GIT_IMAGE: "${OTA_GIT_IMAGE:-codeberg.org/forgejo/forgejo:15.0.10}"
+      OTA_GIT_DB_PW: "${OTA_GIT_DB_PW:-}"
+      OTA_GIT_ADMIN_PW: "${OTA_GIT_ADMIN_PW:-}"
+      POSTGRES_DB: "${POSTGRES_DB:-ota}"
     volumes:
       # Der einzige Dienst mit Schreibzugriff auf den Docker-Socket.
       # Die API bekommt ihn bewusst nicht — sie verarbeitet Nutzereingaben.
@@ -366,6 +377,13 @@ services:
       # lässt es sich später ohne Änderung an OTA durch einen NFS-Mount
       # ersetzen — die Anwendung sieht weiterhin nur diesen Pfad.
       - ${OTA_BACKUP_ROOT:-/srv/ota/backups}:${OTA_BACKUP_ROOT:-/srv/ota/backups}
+      # Traefiks Dateien für OTA-Git: Zertifikat der Subdomain und dessen
+      # Eintrag (ota-git.yml, git/). Nur diese schreibt der Agent; Traefik
+      # liest das Verzeichnis und merkt Änderungen von selbst.
+      - ./traefik/dynamic:/ota/traefik-dynamic
+      # Die OTA-CA, nur lesbar: Mit ihr stellt der Agent das Zertifikat der
+      # Git-Subdomain aus. Die API bekommt den Schlüssel bewusst nicht.
+      - ./certs:/ota/certs:ro
     networks:
       # Kein "public": Von aussen ist der Agent nicht erreichbar.
       #

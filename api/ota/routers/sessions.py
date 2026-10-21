@@ -15,7 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DbSession
 
-from .. import agent_client, audit, paketquellen, ressourcen, settings_store
+from .. import agent_client, audit, git, paketquellen, ressourcen, settings_store
 from .firewall import schieben as firewall_schieben
 from ..config import settings
 from ..db import get_db
@@ -669,6 +669,8 @@ def start_session(
             "klasse": tpl.klasse,
             # Das eigene Paket-Repository (Kapitel 26). Leer: Modul aus.
             "repo": paketquellen.fuer_container(db),
+            # OTA-Git vorkonfiguriert (Kapitel 27). Leer: nichts, bzw. weg.
+            "git": git.fuer_sitzung(db, sess, user, tpl),
         })
     except HTTPException:
         sess.status = "failed"
@@ -791,7 +793,8 @@ def platz_fortsetzen(db: DbSession, sess: SessionModel, request: Request | None,
     sess.status = "starting"
     db.commit()
     try:
-        agent_client.fortsetzen(sess.container_id, paketquellen.fuer_container(db))
+        agent_client.fortsetzen(sess.container_id, paketquellen.fuer_container(db),
+                                git.fuer_sitzung(db, sess, sess.user, sess.template))
     except HTTPException as exc:
         if exc.status_code == status.HTTP_404_NOT_FOUND:
             # Der Container ist weg (von Hand geloescht, Docker zurueckgesetzt).
@@ -838,6 +841,7 @@ def platz_ohne_lauf(sess: SessionModel, grund: str) -> None:
     sess.status = ANGEHALTEN
     sess.ended_at = datetime.now(timezone.utc)
     sess.end_reason = grund
+    git.widerrufen(db, sess.id)
 
 
 def platz_anhalten(db: DbSession, sess: SessionModel, request: Request | None,
@@ -850,6 +854,7 @@ def platz_anhalten(db: DbSession, sess: SessionModel, request: Request | None,
     sess.status = ANGEHALTEN
     sess.ended_at = datetime.now(timezone.utc)
     sess.end_reason = grund
+    git.widerrufen(db, sess.id)
     audit.record(db, "platz.angehalten", actor=actor, object_type="session",
                  object_id=str(sess.id), request=request,
                  template=sess.template.slug, nutzer=sess.user.username, grund=grund)
@@ -959,6 +964,7 @@ def delete_session(
     sess.status = "stopped"
     sess.ended_at = datetime.now(timezone.utc)
     sess.end_reason = "user"
+    git.widerrufen(db, sess.id)
     audit.record(db, "session.deleted", actor=user, object_type="session",
                  object_id=str(sess.id), request=request)
     db.commit()

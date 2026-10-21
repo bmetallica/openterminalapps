@@ -37,6 +37,7 @@ from . import backup as backup_ops
 from . import builder
 from . import freeze as freeze_ops
 from . import skeleton as skeleton_ops
+from . import git_dienst
 from . import software as software_ops
 from . import kerne
 from . import clipboard as clip_scripts
@@ -433,6 +434,9 @@ class StartRequest(BaseModel):
     # Das eigene Paket-Repository (Kapitel 26): Modus, Quellen, Schluessel,
     # CA. Leer heisst: nichts eintragen. Siehe paketquelle.py.
     repo: dict[str, Any] = {}
+    # OTA-Git (Kapitel 27): Subdomain, Token, Name, CA. Leer heisst: nichts
+    # einrichten bzw. Reste entfernen. Siehe git_dienst.im_container.
+    git: dict[str, Any] = {}
     # Wem die eigene Ablage gehoert, die eingehaengt werden soll. Leer heisst:
     # keine. Die Vorlage kann das abschalten, und die API entscheidet es —
     # der Agent haengt nur ein, was ihm gesagt wird.
@@ -1320,6 +1324,7 @@ def start_container(req: StartRequest) -> dict[str, Any]:
     # Der Proxy an die Stellen, die kein Programm aus der Umgebung liest.
     _proxy_einrichten(container)
     _repo_einrichten(container, req.repo)
+    git_dienst.im_container(container, req.git, netz_ops.traefik_adresse(subnetz), _run_as_root)
 
     # Selkies hoert auf 8080, KasmVNC auf 6901.
     _wait_for_vnc(container, port=8080 if req.engine == "selkies" else 6901)
@@ -1754,6 +1759,7 @@ def _umgebung_schreiben(session_id: str) -> str:
 
 class FortsetzenRequest(BaseModel):
     repo: dict[str, Any] = {}
+    git: dict[str, Any] = {}
 
 
 def _repo_einrichten(container, repo: dict[str, Any]) -> None:
@@ -2174,6 +2180,13 @@ def fortsetzen(cid: str, body: "FortsetzenRequest | None" = None) -> dict[str, A
     # haben, waehrend der Platz angehalten war.
     repo = body.repo if body else {}
     _repo_einrichten(c, repo)
+    # Mit frischem Token; die Subdomain kann sich geändert haben.
+    try:
+        traefik_ip = netz_ops.traefik_adresse(netz_ops._subnetz(client, netz_ops.netzname(sid)))
+    except ValueError:
+        traefik_ip = ""
+    git_dienst.im_container(c, (body.git if body else {}) if traefik_ip else {}, traefik_ip,
+                            _run_as_root)
     # Auch hier: Ein Root-Arbeitsplatz von vor dieser Aenderung bekommt die
     # fehlende `.bashrc` beim naechsten Fortsetzen.
     _grundausstattung(c, _heimat_container(c))
@@ -2324,6 +2337,54 @@ async def terminal(ws: WebSocket, cid: str) -> None:
             await ws.close()
         except Exception:  # noqa: BLE001
             pass
+
+
+# --------------------------------------------------------------------------
+# OTA-Git (git_dienst.py, Handbuch Kapitel 27)
+# --------------------------------------------------------------------------
+
+class GitAnRequest(BaseModel):
+    domain: str
+    umgebung: dict[str, str] = {}
+
+
+class GitEinrichtenRequest(BaseModel):
+    oauth: dict[str, str]
+
+
+@app.get("/git", dependencies=[Depends(require_token)])
+def git_status() -> dict[str, Any]:
+    return git_dienst.status(dc())
+
+
+@app.post("/git/an", dependencies=[Depends(require_token)])
+def git_an(req: GitAnRequest) -> dict[str, Any]:
+    client = dc()
+    try:
+        ergebnis = git_dienst.an(client, req.domain, req.umgebung)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+    except APIError as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Docker meldet: {exc}") from exc
+    if not git_dienst.warten(client):
+        raise HTTPException(status.HTTP_504_GATEWAY_TIMEOUT,
+                            "Forgejo meldet sich nicht gesund. Protokoll: docker logs ota-git")
+    return {**ergebnis, **git_dienst.status(client)}
+
+
+@app.post("/git/aus", dependencies=[Depends(require_token)])
+def git_aus() -> dict[str, Any]:
+    return git_dienst.aus(dc())
+
+
+@app.post("/git/einrichten", dependencies=[Depends(require_token)])
+def git_einrichten(req: GitEinrichtenRequest) -> dict[str, Any]:
+    try:
+        return git_dienst.einrichten(dc(), os.environ.get("OTA_GIT_ADMIN_PW", ""), req.oauth)
+    except (RuntimeError, NotFound, APIError) as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
 
 
 @app.get("/software", dependencies=[Depends(require_token)])
@@ -2815,6 +2876,17 @@ class DatabaseBackupRequest(BaseModel):
     db_container: str
     db_user: str
     db_name: str
+
+
+@app.post("/backups/git", dependencies=[Depends(require_token)])
+def backup_git(req: DatabaseBackupRequest) -> dict[str, Any]:
+    try:
+        return backup_ops.backup_git(dc(), req.db_container, req.db_user)
+    except NotFound as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"OTA-Git: {exc}") from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR,
+                            f"Sicherung von OTA-Git fehlgeschlagen: {exc}") from exc
 
 
 @app.post("/backups/database", dependencies=[Depends(require_token)])

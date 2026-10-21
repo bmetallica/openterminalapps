@@ -82,6 +82,13 @@ VERZEICHNIS_INTERVALL_STUFEN = (0, 15, 60, 360, 1440)
 VERZEICHNIS_LETZTER = "verzeichnis.letzter_abgleich"
 OHNE_GRUPPE_HINWEIS = "dashboard.ohne_gruppe_hinweis"
 
+# OTA-Git (Kapitel 27): an/aus, Subdomain, berechtigte Gruppen (Kennungen)
+# und die Adresse, unter der Browser OTA sehen — Forgejo findet Keycloak dort.
+GIT_AN = "git.an"
+GIT_DOMAIN = "git.domain"
+GIT_GRUPPEN = "git.gruppen"
+GIT_OTA_URL = "git.ota_url"
+
 # Softwaremonitoring (Kapitel 11): was die letzte stündliche Erfassung ergab.
 SOFTWARE_LETZTE = "software.letzte_erfassung"
 
@@ -107,6 +114,10 @@ DEFAULTS: dict[str, Any] = {
     OHNE_GRUPPE_HINWEIS: ("Dir ist noch nichts zugewiesen. Wende dich an die Verwaltung, "
                           "damit sie dich einer Gruppe zuordnet."),
     SOFTWARE_LETZTE: None,
+    GIT_AN: False,
+    GIT_DOMAIN: "",
+    GIT_GRUPPEN: [],
+    GIT_OTA_URL: "",
     REPO_MODUS: "zuerst",
     REPO_BAU_SNAPSHOT: "",
     REPO_ALTER_GELB: 7,
@@ -138,7 +149,10 @@ def put(db: DbSession, key: str, value: Any) -> None:
         db.add(row)
     else:
         row.value = {"v": value}
-    _cache.pop(key, None)
+    # Den neuen Wert merken, nicht nur den alten vergessen: Die Sitzungen
+    # laufen ohne autoflush, und ein `get` vor dem Commit las sonst die alte
+    # Zeile aus der Datenbank — und hielt sie fünf Sekunden lang fest.
+    _cache[key] = (time.monotonic(), value)
 
 
 def idle_minutes(db: DbSession) -> int:

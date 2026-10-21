@@ -426,6 +426,57 @@ def backup_database(container, db_user: str, db_name: str) -> dict[str, Any]:
     }
 
 
+def backup_git(client, db_container: str, db_user: str) -> dict[str, Any]:
+    """OTA-Git sichern (Handbuch Kapitel 27): die Datenbank `forgejo` und das
+    Verzeichnis /data des Containers — Repositories, Anhänge, Schlüssel.
+
+    /data kommt über die Docker-Schnittstelle (wie `docker cp`); das geht
+    auch, wenn Git gerade aus ist. Wiederhergestellt wird von Hand, die
+    Schritte stehen im Handbuch.
+    """
+    ensure_root()
+    ziel = BACKUP_ROOT / "git" / stamp()
+    ziel.mkdir(parents=True, exist_ok=True)
+    try:
+        ziel.chmod(0o700)
+    except OSError:
+        pass
+
+    db = client.containers.get(db_container)
+    code, ausgabe = db.exec_run(["pg_dump", "-U", db_user, "-d", "forgejo", "--clean",
+                                 "--if-exists", "--no-owner", "--no-privileges"], demux=True)
+    stdout, stderr = ausgabe if isinstance(ausgabe, tuple) else (ausgabe, b"")
+    if code != 0 or not stdout:
+        raise RuntimeError(f"pg_dump forgejo endete mit {code}: "
+                           f"{(stderr or b'').decode('utf-8', 'replace')[:300]}")
+    sql = ziel / "forgejo.sql.zst"
+    sql.write_bytes(subprocess.run(["zstd", "-q", "-3", "-c"], input=stdout,
+                                   capture_output=True, check=True).stdout)
+
+    git = client.containers.get("ota-git")
+    strom, _ = git.get_archive("/data")
+    daten = ziel / "daten.tar.zst"
+    with open(daten, "wb") as fh:
+        proc = subprocess.Popen(["zstd", "-q", "-3", "-c"], stdin=subprocess.PIPE, stdout=fh)
+        assert proc.stdin is not None
+        for stueck in strom:
+            proc.stdin.write(stueck)
+        proc.stdin.close()
+        if proc.wait() != 0:
+            raise RuntimeError("zstd über /data scheiterte.")
+    for f in (sql, daten):
+        try:
+            f.chmod(0o600)
+        except OSError:
+            pass
+    groesse = sql.stat().st_size + daten.stat().st_size
+    return {
+        "path": str(ziel), "size_bytes": groesse, "file_count": 2,
+        "log": (f"OTA-Git: forgejo.sql.zst {sql.stat().st_size / 1024:.0f} KB, "
+                f"daten.tar.zst {daten.stat().st_size / 1024 ** 2:.1f} MB\nZiel: {ziel}"),
+    }
+
+
 def list_files() -> list[dict[str, Any]]:
     ensure_root()
     out = []
@@ -447,5 +498,11 @@ def delete_file(path: str) -> dict[str, str]:
     target = Path(path)
     if BACKUP_ROOT not in target.parents:
         raise ValueError("Nur Dateien im Sicherungsverzeichnis dürfen entfernt werden.")
+    # Eine Sicherung von OTA-Git ist ein Ordner mit genau zwei Dateien.
+    if target.is_dir() and target.parent == BACKUP_ROOT / "git":
+        for name in ("forgejo.sql.zst", "daten.tar.zst"):
+            (target / name).unlink(missing_ok=True)
+        target.rmdir()
+        return {"status": "entfernt"}
     target.unlink(missing_ok=True)
     return {"status": "entfernt"}

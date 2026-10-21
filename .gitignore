@@ -17,6 +17,10 @@ deploy/turn/turnserver.conf
 deploy/turn/.vorher
 # Erzeugt von scripts/traefik-config.sh, wie traefik.yml daneben.
 deploy/traefik/dynamic/anmeldebremse.yml
+deploy/traefik/.vorher
+# Erzeugt vom Agent, wenn OTA-Git an ist (Zertifikat und Schlüssel).
+deploy/traefik/dynamic/ota-git.yml
+deploy/traefik/dynamic/git/
 
 # Auslagerungsdateien von Editoren (nano, vim)
 *.swp

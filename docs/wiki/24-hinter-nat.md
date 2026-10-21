@@ -171,6 +171,42 @@ server {
 
 Mit Caddy steht das Beispiel in [Kapitel 10](10-zertifikate-und-https.md).
 
+### Und die Subdomain von OTA-Git
+
+Ist [OTA-Git](27-git.md) an, kommt ein zweiter `server` dazu, **auf dasselbe Ziel**. Traefik
+trennt OTA und Git am Namen. Zwei Zeilen kommen dazu: Der Name muss auch im TLS-Handshake zu OTA
+stehen (SNI). Das Zertifikat dort stellt OTA für die Subdomain selbst aus, von derselben CA.
+
+```nginx
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name git.ai.vermkv.local;
+    ssl_certificate     /etc/nginx/certs/ai.vermkv.local.crt;
+    ssl_certificate_key /etc/nginx/certs/ai.vermkv.local.key;
+
+    location / {
+        proxy_pass https://192.168.1.22:8443;
+        proxy_ssl_trusted_certificate /etc/nginx/certs/ota-ca.crt;
+        proxy_ssl_verify on;
+        proxy_ssl_server_name on;
+        proxy_ssl_name $host;
+
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Port 443;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        client_max_body_size 0;      # große Pushes
+        proxy_read_timeout 1h;
+    }
+}
+```
+
+SSH für Git geht nur aus den Arbeitsplätzen. Am Proxy und an der Firewall gibt es dafür nichts
+einzurichten.
+
 **Welche Adresse in `OTA_TRUSTED_PROXIES` gehört**, zeigt Traefik selbst — nachsehen statt raten:
 
 ```bash

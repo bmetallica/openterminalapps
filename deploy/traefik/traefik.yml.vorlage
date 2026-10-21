@@ -58,6 +58,20 @@ entryPoints:
     #
     # Die erste Spalte ist der Absender.
 @@FORWARDED_HEADERS@@
+  # OTA-Git aus den Arbeitsplätzen (Handbuch Kapitel 27). Beide Eingänge
+  # werden **nicht** auf dem Host veröffentlicht: Erreichbar sind sie nur in
+  # den Sitzungsnetzen, in denen Traefik ohnehin hängt.
+  #
+  # 443, weil die Adresse von Git keinen Port trägt (https://git.firma.de) —
+  # Browser kommen über den Reverse Proxy, Arbeitsplätze direkt hierher. Der
+  # Name zeigt im Arbeitsplatz auf Traefiks Adresse im Sitzungsnetz.
+  git-intern:
+    address: ":443"
+    http:
+      tls: {}
+  # Git über SSH, nur aus den Arbeitsplätzen.
+  git-ssh:
+    address: ":2222"
   # Dashboard. Der Name MUSS "traefik" lauten — an diesen Entrypoint bindet
   # sich api.insecure fest. Im Compose nur an 127.0.0.1 gebunden.
   traefik:

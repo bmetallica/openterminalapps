@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session as DbSession
 
-from .. import agent_client, audit, keycloak, verknuepfen, verzeichnis
+from .. import agent_client, audit, git, keycloak, verknuepfen, verzeichnis
 import os
 import re
 from ..db import get_db
@@ -217,6 +217,7 @@ def create_user(
                  object_id=user.username, request=request,
                  keycloak="verknüpft" if verknuepft else "angelegt")
     db.commit()
+    git.nach_aenderung(db, user)
     return _user_out(user)
 
 
@@ -317,6 +318,7 @@ def update_user(
     audit.record(db, "user.updated", actor=actor, object_type="user",
                  object_id=user.username, request=request)
     db.commit()
+    git.nach_aenderung(db, user)
     return _user_out(user)
 
 
@@ -464,6 +466,7 @@ def delete_user(
         except (keycloak.KeycloakFehler, httpx.HTTPError) as exc:
             log.warning("Konto %s in Keycloak nicht gesperrt: %s", name, exc)
             gesperrt = " Achtung: In der zentralen Anmeldung liess es sich nicht sperren."
+    git.vor_dem_loeschen(db, user)
     db.delete(user)
     audit.record(db, "user.deleted", actor=actor, object_type="user",
                  object_id=name, request=request)
@@ -500,6 +503,7 @@ def domaenenkonto_zuordnen(user_id: uuid.UUID, body: dict, request: Request,
                  vorher=ergebnis["vorher"], nachher=ergebnis["username"],
                  entfernt=(ergebnis["entfernt"] or {}).get("username"))
     db.commit()
+    git.nach_aenderung(db, user)
     return ergebnis
 
 
@@ -556,6 +560,7 @@ def create_group(
     data.member_count = len(group.members)
     data.ldap_gruppen = verzeichnis.gekoppelt_an(db, group)
     data.abgleich = abgleich
+    git.nach_aenderung(db)
     return data
 
 
@@ -633,6 +638,7 @@ def update_group(
     data.member_count = len(group.members)
     data.ldap_gruppen = gekoppelt
     data.abgleich = abgleich
+    git.nach_aenderung(db)
     return data
 
 
@@ -684,6 +690,7 @@ def delete_group(
 
     zugang_alle()
     tail = f" {freed} Anwendung(en) sind wieder für alle sichtbar." if freed else ""
+    git.nach_aenderung(db)
     return {"status": f"{name} gelöscht. {members} Mitgliedschaft(en) sind entfallen.{tail}"}
 
 

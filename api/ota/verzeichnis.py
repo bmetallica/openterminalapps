@@ -247,6 +247,9 @@ def abgleichen(db: DbSession, *, actor: User | None = None,
                  gruppen=ergebnis["gruppen"], deaktiviert=ergebnis["deaktiviert"],
                  fehler=ergebnis["fehler"])
     db.commit()
+    # Gruppen können sich geändert haben — und damit, wer in OTA-Git darf.
+    from . import git
+    git.nach_aenderung(db)
     return ergebnis
 
 

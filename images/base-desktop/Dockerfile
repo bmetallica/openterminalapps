@@ -144,6 +144,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # blockiert, bis sich die Zwischenablage ändert — genau das, was eine Brücke
 # sonst im halben Sekundentakt abfragen müsste. Die Übersetzerkette fliegt in
 # derselben Schicht wieder raus, sonst läge sie im fertigen Image.
+#
+# **git bleibt** (seit 2026-10-21): OTA-Git richtet es in jedem Arbeitsplatz
+# ein (Kapitel 27) — ohne git im Image gäbe es dort nichts einzurichten.
 RUN --mount=type=bind,from=ota-dateien,target=/mnt/ota-dateien \
     apt-get update && apt-get install -y --no-install-recommends \
       wmctrl xdotool xsel xclip autocutsel \
@@ -157,7 +160,8 @@ RUN --mount=type=bind,from=ota-dateien,target=/mnt/ota-dateien \
  && make -C /tmp/clipnotify \
  && install -m 0755 /tmp/clipnotify/clipnotify /usr/local/bin/clipnotify \
  && rm -rf /tmp/clipnotify \
- && apt-get purge -y build-essential libx11-dev libxfixes-dev git \
+ && apt-get purge -y build-essential libx11-dev libxfixes-dev \
+ && apt-mark manual git > /dev/null \
  && apt-get autoremove -y \
  && apt-get clean && rm -rf /var/lib/apt/lists/*
 

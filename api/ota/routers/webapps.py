@@ -113,6 +113,14 @@ def liste(user: User = Depends(current_user),
     ]
 
 
+def _nicht_verwaltet(app: WebApp) -> None:
+    """Einträge, die OTA selbst führt (OTA-Git), ändert man dort, wo sie
+    herkommen — sonst liefen Kachel und Dienst auseinander."""
+    if app.verwaltet == "git":
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            "Diese Anwendung gehört zu OTA-Git. Ändern unter Einstellungen → Git.")
+
+
 def _zugang(app: WebApp) -> None:
     """Traegt in Keycloak ein, wer sich anmelden darf. Wirft `KeycloakFehler`."""
     keycloak.anwendung_zugang(app.client_id, sorted(g.name for g in app.groups),
@@ -184,6 +192,7 @@ def aendern(app_id: uuid.UUID, body: WebAppIn, request: Request,
     app = db.get(WebApp, app_id)
     if not app:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Anwendung nicht gefunden")
+    _nicht_verwaltet(app)
 
     if body.redirect_uri != app.redirect_uri:
         # Die heikelste Änderung überhaupt: Sie verlegt, wohin Token fliessen.
@@ -225,6 +234,7 @@ def entfernen(app_id: uuid.UUID, request: Request,
     app = db.get(WebApp, app_id)
     if not app:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Anwendung nicht gefunden")
+    _nicht_verwaltet(app)
     try:
         keycloak.anwendung_fluss_entfernen(app.client_id)
         keycloak.client_entfernen(app.client_id)
@@ -248,6 +258,7 @@ def neues_geheimnis(app_id: uuid.UUID, request: Request,
     app = db.get(WebApp, app_id)
     if not app:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Anwendung nicht gefunden")
+    _nicht_verwaltet(app)
     try:
         neu = keycloak.client_neues_geheimnis(app.client_id)
     except keycloak.KeycloakFehler as exc:

@@ -225,6 +225,8 @@ class TemplateOut(BaseModel):
     skeleton_enforce: list[str] = []
     user_shelf: bool = True
     group_shelf: bool = True
+    # OTA-Git im Arbeitsplatz vorkonfigurieren (Kapitel 27).
+    git_vorkonfig: bool = True
     # "selkies" (Vorgabe) oder "kasmvnc". Siehe `Template.stream_engine`.
     stream_engine: str = "selkies"
     klasse: str = "standard"
@@ -261,6 +263,8 @@ class TemplateIn(BaseModel):
     skeleton_enforce: list[str] = []
     user_shelf: bool = True
     group_shelf: bool = True
+    # OTA-Git im Arbeitsplatz vorkonfigurieren (Kapitel 27).
+    git_vorkonfig: bool = True
     # **Nicht angegeben heisst: aus dem Image ableiten.** OTAs eigenes
     # Basisimage setzt `SELKIES_HOME`, Kasm-Images nicht — daran erkennt der
     # Agent, welche Maschine drinsteckt. Ohne diese Ableitung bekaeme ein
@@ -354,6 +358,8 @@ class WebAppOut(BaseModel):
     group_ids: list[uuid.UUID] = []
     # Jeder Angemeldete darf hinein. Sonst nur die Gruppen — ohne Gruppe niemand.
     fuer_alle: bool = False
+    # Von OTA selbst geführt ("git") — im Katalog nur zu sehen, nicht zu ändern.
+    verwaltet: str | None = None
     # Nur beim Anlegen gefuellt. Danach steht es allein in Keycloak — ein
     # zweiter Ort waere ein zweiter Ort, an dem es verlorengehen kann.
     client_secret: str | None = None

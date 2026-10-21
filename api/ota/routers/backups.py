@@ -142,6 +142,30 @@ def run_database_backup(db: DbSession, trigger: str, actor: str | None) -> Backu
     return backup
 
 
+def run_git_backup(db: DbSession, trigger: str, actor: str | None) -> Backup:
+    """OTA-Git: Datenbank `forgejo` und /data (Kapitel 27)."""
+    from ..config import settings
+
+    backup = Backup(kind="git", trigger=trigger, actor=actor, status="running")
+    db.add(backup)
+    db.commit()
+    s = settings()
+    try:
+        result = agent_client.backup_git(s.db_container, s.db_user)
+        backup.path = result["path"]
+        backup.size_bytes = result["size_bytes"]
+        backup.file_count = result["file_count"]
+        backup.log = result["log"]
+        backup.status = "ok"
+    except HTTPException as exc:
+        backup.status = "failed"
+        backup.error = str(exc.detail)
+    finally:
+        backup.finished_at = datetime.now(timezone.utc)
+        db.commit()
+    return backup
+
+
 STALE_AFTER = timedelta(hours=2)
 
 
@@ -263,13 +287,22 @@ def run_scheduled(trigger: str = "schedule", actor: str | None = None) -> dict[s
                 counts["database"] = 1
             else:
                 counts["failed"] += 1
+            # OTA-Git gehört zur Anlage wie die Datenbank — wenn es je an war.
+            from .. import settings_store
+            if settings_store.get(db, "git.quelle"):
+                backup = run_git_backup(db, trigger, actor)
+                if backup.status == "ok":
+                    counts["git"] = 1
+                else:
+                    counts["failed"] += 1
 
         counts["removed"] = apply_retention(db, policy)
 
         policy.last_run_at = datetime.now(timezone.utc)
         policy.last_result = (
             f"{counts['profiles']} Profile, {counts['containers']} Container, "
-            f"{counts['database']} Datenbank, {counts['skipped']} ohne Profil, "
+            f"{counts['database']} Datenbank, {counts.get('git', 0)} Git, "
+            f"{counts['skipped']} ohne Profil, "
             f"{counts['failed']} Fehler, {counts['removed']} aufgeräumt"
         )
         db.commit()

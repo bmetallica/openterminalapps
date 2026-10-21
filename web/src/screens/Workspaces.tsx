@@ -65,6 +65,7 @@ function toPayload(d: Draft) {
     skeleton_enforce: d.skeleton_enforce,
     user_shelf: d.user_shelf,
     group_shelf: d.group_shelf,
+    git_vorkonfig: d.git_vorkonfig ?? true,
     is_enabled: d.is_enabled,
     group_ids: d.group_ids,
   }
@@ -448,6 +449,14 @@ function Editor({ tpl, host, groups, images, netzprofile, onSaved, onClose, onTo
               name={tr('Gruppenlaufwerke einhängen')}
               note={tr('Der übliche Weg, im Team an denselben Dateien zu arbeiten')}
               onChange={(v) => set('group_shelf', v)} />
+          </Field>
+
+          <Field label={tr('OTA-Git')}
+            hint={tr('Wenn OTA-Git eingeschaltet ist und der Nutzer darf: Anmeldung ohne Passwort, Zertifikat und Name — nur für die Adresse von OTA-Git. Andere Git-Server bleiben unberührt.')}>
+            <Toggle on={draft.git_vorkonfig ?? true}
+              name={tr('Git vorkonfigurieren')}
+              note={tr('Ein Token je Arbeitsplatz, widerrufen, wenn er endet')}
+              onChange={(v) => set('git_vorkonfig', v)} />
           </Field>
 
           <Field label={tr('Persistentes Profil')}

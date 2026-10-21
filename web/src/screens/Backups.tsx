@@ -13,6 +13,7 @@ const KIND_TEXT: Record<string, string> = {
   profile: 'Profil',
   container: 'Container',
   database: 'Datenbank',
+  git: 'OTA-Git',
 }
 
 const TRIGGER_TEXT: Record<string, string> = {
@@ -260,7 +261,7 @@ export function Backups({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad')
                 note={tr('Nur was ausserhalb des Home verändert wurde. Meist aus dem Golden Image reproduzierbar.')}
                 onChange={(v) => void savePolicy({ ...policy, include_containers: v })} />
               <Toggle on={policy.include_database} name={tr('Datenbank')}
-                note={tr('Nutzer, Gruppen, Workspaces, Zuweisungen und das Audit-Log. Klein und schnell.')}
+                note={tr('Nutzer, Gruppen, Workspaces, Zuweisungen und das Audit-Log. Klein und schnell. Ist OTA-Git eingerichtet, kommen dessen Datenbank und Repositories mit.')}
                 onChange={(v) => void savePolicy({ ...policy, include_database: v })} />
             </Field>
 

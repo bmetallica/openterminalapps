@@ -49,6 +49,7 @@ Werden zur Laufzeit als Images bezogen oder beim Bauen installiert. Sie sind
 | nginx | BSD-2-Clause | Auslieferung der Oberfläche |
 | coturn | BSD-3-Clause | Vermittelt den Medienstrom (TURN) |
 | Keycloak | Apache-2.0 | Identitätsanbieter, mitgeliefert |
+| Forgejo | GPL-3.0-or-later | OTA-Git (Kapitel 27), eigener Container, nur wenn im Menü eingeschaltet; unverändert betrieben |
 
 ### Im Router der Arbeitsplätze (`ota-firewall`)
 

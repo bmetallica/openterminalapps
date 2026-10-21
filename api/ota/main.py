@@ -21,7 +21,7 @@ from .routers import (
     recipes as recipes_router, webapps,
     registries as registries_router,
     sessions, shared as shared_router, skeleton as skeleton_router,
-    software as software_router, templates,
+    software as software_router, git as git_router, templates,
 )
 
 log = logging.getLogger("ota")
@@ -246,6 +246,27 @@ def _software_takt() -> dict | None:
             return None
 
 
+_git_zuletzt = 0.0
+
+
+def _git_takt() -> None:
+    """Alle 15 Minuten: Konten von OTA-Git abgleichen und Tokens beendeter
+    Arbeitsplätze widerrufen — für alles, was an der Anmeldung vorbeigeht
+    (Gruppen im Verzeichnis, ein Arbeitsplatz, den der Aufräumer schloss)."""
+    global _git_zuletzt
+    import time as _t
+    from . import git
+
+    if _t.monotonic() - _git_zuletzt < 900:
+        return
+    _git_zuletzt = _t.monotonic()
+    with SessionLocal() as db:
+        if not git.an(db):
+            return
+        git.tokens_aufraeumen(db)
+        git.konten_abgleichen(db)
+
+
 async def _scheduler() -> None:
     from .routers.backups import run_scheduled
 
@@ -287,6 +308,11 @@ async def _scheduler() -> None:
                              weg["dateien"], weg["bytes"] / 1024 ** 2)
             except Exception as exc:  # noqa: BLE001 — derselbe Grund wie oben
                 log.warning("Speicherabbilder nicht entfernt: %s", exc)
+
+        try:
+            await asyncio.to_thread(_git_takt)
+        except Exception as exc:  # noqa: BLE001 — derselbe Grund wie oben
+            log.warning("OTA-Git-Abgleich fehlgeschlagen: %s", exc)
 
         try:
             await asyncio.to_thread(_software_takt)
@@ -428,6 +454,7 @@ app.include_router(registries_router.router)
 app.include_router(internal.router)
 app.include_router(monitoring.router)
 app.include_router(software_router.router)
+app.include_router(git_router.router)
 
 
 @app.exception_handler(Exception)

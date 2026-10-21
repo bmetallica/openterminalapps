@@ -217,6 +217,10 @@ fuellen OTA_KEYCLOAK_SECRET 48 "OTA → Keycloak"
 # Vorlage sagte „erzeugen mit openssl rand", also ein Schritt, den man genau
 # einmal vergisst; danach steht die Sitzung, und im Browser steht nichts.
 fuellen OTA_TURN_SECRET 48 "Medienweg (TURN)"
+# OTA-Git (Kapitel 27). Auch wenn Git aus ist: Wer es später im Menü
+# einschaltet, soll nicht erst die .env anfassen müssen.
+fuellen OTA_GIT_DB_PW 32 "OTA-Git → Datenbank"
+fuellen OTA_GIT_ADMIN_PW 32 "OTA-Git, Notzugang ota-admin"
 
 # Nur für die Prüfungen; ohne Wert wird `make test` es einfordern.
 if ! grep -qE "^OTA_TEST_ADMIN_PW=.+" "$ENV"; then

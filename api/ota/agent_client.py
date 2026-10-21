@@ -142,10 +142,30 @@ def ressourcen(cid: str, cores: float, memory_bytes: int) -> dict[str, Any]:
                  json={"cores": cores, "memory_bytes": memory_bytes})
 
 
-def fortsetzen(cid: str, repo: dict[str, Any] | None = None) -> dict[str, Any]:
+def fortsetzen(cid: str, repo: dict[str, Any] | None = None,
+               git: dict[str, Any] | None = None) -> dict[str, Any]:
     """Einen angehaltenen Root-Arbeitsplatz wieder starten."""
-    return _call("POST", f"/containers/{cid}/fortsetzen", json={"repo": repo or {}},
-                 timeout=180.0)
+    return _call("POST", f"/containers/{cid}/fortsetzen",
+                 json={"repo": repo or {}, "git": git or {}}, timeout=180.0)
+
+
+# --- OTA-Git (git.py) -----------------------------------------------------
+
+def git_status() -> dict[str, Any]:
+    return _call("GET", "/git")
+
+
+def git_an(payload: dict[str, Any]) -> dict[str, Any]:
+    # Das erste Mal holt der Agent das Image und wartet, bis Forgejo gesund ist.
+    return _call("POST", "/git/an", json=payload, timeout=600.0)
+
+
+def git_aus() -> dict[str, Any]:
+    return _call("POST", "/git/aus", timeout=60.0)
+
+
+def git_einrichten(oauth: dict[str, str]) -> dict[str, Any]:
+    return _call("POST", "/git/einrichten", json={"oauth": oauth}, timeout=120.0)
 
 
 def platz(cid: str) -> dict[str, Any]:
@@ -382,6 +402,12 @@ def restore_container(container_id: str, archive: str) -> dict[str, Any]:
 
 def delete_backup_file(path: str) -> dict[str, Any]:
     return _call("DELETE", "/backups/file", params={"path": path})
+
+
+def backup_git(db_container: str, db_user: str) -> dict[str, Any]:
+    return _call("POST", "/backups/git", json={"db_container": db_container,
+                                               "db_user": db_user, "db_name": "forgejo"},
+                 timeout=1800.0)
 
 
 def backup_database(db_container: str, db_user: str, db_name: str) -> dict[str, Any]:

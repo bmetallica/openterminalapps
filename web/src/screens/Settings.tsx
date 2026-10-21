@@ -4,6 +4,7 @@ import { ApiError, api, type GlobalSettings } from '../lib/api'
 import { VORGABE, setzeMarke, useMarke } from '../lib/branding'
 import { idleLabel } from '../lib/format'
 import { Directory } from './Directory'
+import { GitEinstellungen } from '../components/GitEinstellungen'
 import { t, useLang } from '../lib/i18n'
 
 /**
@@ -129,6 +130,13 @@ export function Settings({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad'
       <div style={{ maxWidth: 620 }}>
         <ErlaubteZiele ziele={data.app_origins}
           speichern={(neu, note) => save({ app_origins: neu }, note)} />
+      </div>
+
+      <div className="section__head" style={{ marginTop: 30 }} id="git">
+        <span className="silk">{t('Git')}</span><span className="section__rule" />
+      </div>
+      <div style={{ maxWidth: 620 }}>
+        <GitEinstellungen onToast={onToast} />
       </div>
 
       <div className="section__head" style={{ marginTop: 30 }}>

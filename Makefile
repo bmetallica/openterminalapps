@@ -46,6 +46,7 @@ setup:
 up:
 	@# Traefiks statische Konfiguration haengt an einem Wert aus deploy/.env
 	@# und wird deshalb vor jedem Start neu erzeugt. Siehe die Vorlage daneben.
+	@cp deploy/traefik/traefik.yml deploy/traefik/.vorher 2>/dev/null || true
 	@./scripts/traefik-config.sh
 	@# Die Konfiguration des TURN-Servers haengt an den **echten** Subnetzen
 	@# dieser Anlage, nicht an geratenen. Beim allerersten Lauf gibt es die
@@ -55,6 +56,11 @@ up:
 	@# Zweiter Durchgang: Jetzt stehen die Netze. Aendert sich dabei etwas,
 	@# bekommt der TURN-Dienst seine Datei und wird einmal neu gestartet —
 	@# das kostet einen Moment Bildstrom und sonst nichts.
+	@# Traefik liest seine statische Konfiguration (Eingänge) nur beim Start.
+	@# Hat sie sich geändert, einmal neu starten — sonst fehlt etwa der Eingang
+	@# für OTA-Git, und niemand merkt, warum.
+	@if [ -f deploy/traefik/.vorher ] && ! cmp -s deploy/traefik/traefik.yml deploy/traefik/.vorher; then \
+	  echo "  traefik.yml geändert — Traefik startet neu"; docker restart ota-traefik >/dev/null; fi
 	@cp deploy/turn/turnserver.conf deploy/turn/.vorher 2>/dev/null || true
 	@./scripts/turn-config.sh >/dev/null
 	@if ! cmp -s deploy/turn/turnserver.conf deploy/turn/.vorher; then \
@@ -230,6 +236,7 @@ test:
 	@# Geaenderte CPU/RAM erreichen vorhandene Container (docker update).
 	@./scripts/test-ressourcen.sh
 	@./scripts/test-software.sh
+	@./scripts/test-git.sh
 	@echo
 	@./scripts/test-clipboard-bridge.sh || \
 	  echo "  (übersprungen — dafür muss ein Arbeitsplatz mit zwei Apps laufen)"

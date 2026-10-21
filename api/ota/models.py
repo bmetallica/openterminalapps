@@ -234,6 +234,13 @@ class Template(Base):
     group_shelf: Mapped[bool] = mapped_column(Boolean, default=True,
                                               server_default="true")
 
+    # OTA-Git im Arbeitsplatz vorkonfigurieren (git.py, Handbuch Kapitel 27):
+    # Anmeldung ohne Passwort, Zertifikat und Name — nur für die Adresse von
+    # OTA-Git, andere Git-Server bleiben unberührt. Wirkt nur, wenn Git
+    # eingeschaltet ist und der Mensch in einer berechtigten Gruppe steht.
+    git_vorkonfig: Mapped[bool] = mapped_column(Boolean, default=True,
+                                                server_default="true")
+
     # Welche Streaming-Maschine den Bildschirm überträgt.
     #
     # `kasmvnc` ist die Vorgabe und bleibt es: Sie trägt heute jeden
@@ -440,6 +447,9 @@ class WebApp(Base):
     # Der Client in Keycloak. Das Geheimnis steht **nicht** hier: Es wird beim
     # Anlegen einmal gezeigt und danach nur noch in Keycloak gehalten.
     client_id: Mapped[str] = mapped_column(String(128))
+    # Von OTA selbst verwaltet, z. B. "git" für OTA-Git. Solche Einträge
+    # ändert man dort, wo sie herkommen, nicht im Katalog.
+    verwaltet: Mapped[str | None] = mapped_column(String(32))
     is_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
@@ -927,4 +937,33 @@ class SoftwareFreigabe(Base):
     titel: Mapped[str] = mapped_column(String(200), default="")
     quelle: Mapped[str] = mapped_column(String(16), default="")
     von: Mapped[str] = mapped_column(String(128), default="")
+    am: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+# --------------------------------------------------------------------------
+# OTA-Git (git.py, Handbuch Kapitel 27)
+# --------------------------------------------------------------------------
+
+class GitKonto(Base):
+    """Welches Forgejo-Konto zu welchem OTA-Konto gehört.
+
+    Über die Kennung, nicht den Namen: Wird jemand im Verzeichnis umbenannt
+    oder einem alten Konto zugeordnet, benennt OTA das Forgejo-Konto nach.
+    """
+
+    __tablename__ = "git_konten"
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    forgejo_name: Mapped[str] = mapped_column(String(128))
+    gesperrt: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class GitToken(Base):
+    """Das Token eines Arbeitsplatzes für OTA-Git. Widerrufen, wenn er endet."""
+
+    __tablename__ = "git_tokens"
+    session_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    forgejo_name: Mapped[str] = mapped_column(String(128))
+    token_id: Mapped[int] = mapped_column(Integer)
     am: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

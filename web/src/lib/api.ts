@@ -89,6 +89,8 @@ export type Template = {
   skeleton_enforce: string[]
   user_shelf: boolean
   group_shelf: boolean
+  /** OTA-Git im Arbeitsplatz vorkonfigurieren (Kapitel 27). */
+  git_vorkonfig?: boolean
   env: Record<string, string>
   is_enabled: boolean
   apps: App[]
@@ -255,6 +257,20 @@ export type SoftwareStand = {
   arbeitsplaetze: (SoftwareOrt & { zuletzt: string; anwendungen: SoftwareAnwendung[] })[]
   meldungen: SoftwareMeldung[]
   whitelist: { name: string; titel: string; quelle: string; von: string; am: string }[]
+}
+
+/** Einstellungen → Git (api/ota/git.py). */
+export type GitStand = {
+  an: boolean
+  domain: string
+  gruppen: string[]
+  ota_url: string
+  dienst: { container: string; gesund?: string | null; bild?: string }
+  dns: string
+  konten: number
+  gesperrt: number
+  tokens: number
+  ergebnis?: unknown
 }
 
 export type Permission = { key: string; text: string }
@@ -497,6 +513,8 @@ export type WebApp = {
   group_ids: string[]
   /** Jeder Angemeldete darf hinein. Sonst nur die Gruppen — ohne Gruppe niemand. */
   fuer_alle: boolean
+  /** Von OTA selbst geführt, z. B. "git" — im Katalog nicht änderbar. */
+  verwaltet?: string | null
   /** Nur beim Anlegen gefüllt — danach steht es allein in Keycloak. */
   client_secret: string | null
 }
@@ -1169,6 +1187,12 @@ export const api = {
     call<User>(`/admin/users/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   deleteUser: (id: string) =>
     call<{ status: string }>(`/admin/users/${id}`, { method: 'DELETE' }),
+  git: () => call<GitStand>('/admin/git'),
+  gitEinstellen: (body: { domain?: string; gruppen?: string[]; ota_url?: string }) =>
+    call<GitStand>('/admin/git', { method: 'PUT', body: JSON.stringify(body) }),
+  gitAn: () => call<GitStand>('/admin/git/an', { method: 'POST' }),
+  gitAus: () => call<GitStand>('/admin/git/aus', { method: 'POST' }),
+  gitAbgleich: () => call<Record<string, unknown>>('/admin/git/abgleich', { method: 'POST' }),
   software: () => call<SoftwareStand>('/admin/software'),
   softwareMeldungen: () => call<SoftwareMeldung[]>('/admin/software/meldungen'),
   softwareErfassen: () =>

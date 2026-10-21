@@ -191,8 +191,15 @@ export function WebApps({ onToast, zuEinstellungen }: {
                 ? <span style={{ color: 'var(--halt, #b91c1c)' }}>{tr('niemand — keine Gruppe zugewiesen')}</span>
                 : gruppen.filter((g) => a.group_ids.includes(g.id)).map((g) => g.name).join(', ')}
           </p>
-          <Konfiguration app={a} geheimnis={geheimnis?.fuer === a.name ? geheimnis.wert : undefined} />
+          {a.verwaltet !== 'git' && (
+            <Konfiguration app={a} geheimnis={geheimnis?.fuer === a.name ? geheimnis.wert : undefined} />
+          )}
 
+          {a.verwaltet === 'git' ? (
+            <p className="field__hint" style={{ marginTop: 12 }}>
+              {tr('Gehört zu OTA-Git. Subdomain und Gruppen stellst du unter Einstellungen → Git ein.')}
+            </p>
+          ) : (
           <div className="viewer__row" style={{ marginTop: 12 }}>
             <button className="btn btn--sm" onClick={() => bearbeiten(a)}>{tr('Bearbeiten')}</button>
             <button className="btn btn--sm" onClick={() => {
@@ -207,6 +214,7 @@ export function WebApps({ onToast, zuEinstellungen }: {
                 .catch(() => onToast(tr('Löschen fehlgeschlagen'), 'bad'))
             }}>{tr('Löschen')}</button>
           </div>
+          )}
         </div>
       ))}
 

@@ -298,6 +298,13 @@ dabei **nicht** zurückwandert, ist die Datenbank: Neue Spalten bleiben stehen. 
   demselben Namen. Die Verwaltung kann aber ein **Domänenkonto einem bestehenden Konto zuordnen**:
   Danach meldet sich das alte Konto über das Verzeichnis an und behält Container, Zuhause und
   Ablagen.
+- **OTA-Git (Forgejo)**, im Menü ein- und ausschaltbar:
+  - Läuft unter einer eigenen Subdomain hinter demselben Eingang wie OTA.
+  - Anmeldung mit den OTA-Zugangsdaten über Keycloak, nur für berechtigte Gruppen.
+  - OTA legt die Konten an, sperrt statt zu löschen. OTA-Admins sind auch dort Admins.
+  - Arbeitsplätze und Root-Arbeitsplätze bekommen Git vorkonfiguriert: Token je Arbeitsplatz,
+    widerrufen bei Ende; SSH nur im Containernetz. Andere Git-Server bleiben unberührt.
+  - Siehe [Kapitel 27](docs/wiki/27-git.md).
 - **Softwaremonitoring:** Stündlich wird erfasst, welche Anwendungen in jedem laufenden
   Arbeitsplatz installiert sind (apt, Startmenü, Flatpak, Snap), ohne Versionen. Dazu gibt es eine
   Whitelist, befüllbar aus dem aktuellen Stand. Was nicht darauf steht, sehen Administratoren auf
@@ -478,6 +485,7 @@ make test
 | `test-authz.sh` | Ein normaler Nutzer kann beweisbar nichts Administratives tun und an keinem fremden Bildschirm sitzen; dazu Container-Härtung, Kennzahlen, Kontingente und zweiter Faktor |
 | `test-ressourcen.sh` | Geänderte CPU und RAM erreichen vorhandene Container, laufend und pausiert; RAM unter dem Verbrauch wartet bis zum nächsten Start, die CPU nicht |
 | `test-software.sh` | Softwaremonitoring: Die Erfassung liest einen laufenden Arbeitsplatz (Debian-Pakete wie `apt-mark showmanual`, Starteinträge systemweit und im Zuhause, versteckte nicht); nach dem Befüllen der Whitelist keine Meldung; eine neue Anwendung wird mit Nutzer gemeldet; deinstalliert oder freigegeben verschwindet die Meldung, entzogen kommt sie wieder |
+| `test-git.sh` | OTA-Git: Ein- und Ausschalten (Daten bleiben), Subdomain hinter Traefik mit OTA-CA, OTA unberührt, Eingänge für Arbeitsplätze nicht auf dem Host; Anmeldung über Keycloak nur für berechtigte Gruppen, vorab angelegtes Konto wird verknüpft, Admins sind Admins, gesperrt statt gelöscht; im Arbeitsplatz clone/push ohne Passwort, eigene .gitconfig gewinnt, fremder Server bekommt nichts, SSH über 2222, Token widerrufen bei Ende, Root-Arbeitsplatz mit neuem Token nach dem Fortsetzen; andere Subdomain; nginx als Reverse Proxy; Sicherung mit Repositories |
 | `test-konten.sh` | Konten der zentralen Anmeldung: Anlegen in OTA legt in Keycloak an (samt Pflicht zum Passwortwechsel), lokal kommt es nicht herein; Ändern, Passwort, zweiter Faktor, Sperren und Löschen wirken in Keycloak; Mein Konto führt über Keycloak; ein lokales Bestandskonto zieht mit seinem Passwort um, das Notfallkonto nicht |
 | `test-clipboard-bridge.sh` | Kopieren zwischen zwei Anwendungen im selben Arbeitsplatz: beide Richtungen, Umlaute, ein Bild, ein Megabyte, nach Pause, und abgeschaltet |
 | `tests/e2e.mjs` | Die Oberfläche in einem echten Browser — bis zur Frage, ob der Stream wirklich verbindet |
