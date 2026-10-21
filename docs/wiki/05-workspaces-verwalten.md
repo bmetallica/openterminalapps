@@ -88,6 +88,11 @@ Beim Arbeitsplatz gelten die Werte für den **Container als Ganzes**, nicht je A
 | **Pro Workspace** | Getrenntes Home je Typ. Wenn Konfigurationen sich stören |
 | **Flüchtig** | Nichts wird gespeichert. Jeder Start beginnt beim Golden Image |
 
+**OTA-Git** (unter Ressourcen): Ist [OTA-Git](27-git.md) an, bekommen Arbeitsplätze aus diesem
+Workspace Git für die Git-Subdomain vorkonfiguriert: Adresse, Token, Name und E-Mail. Vorgabe ist
+an. Ausschalten lohnt sich für Workspaces, die mit Git nichts zu tun haben. Es wirkt beim nächsten
+Start eines Arbeitsplatzes.
+
 ### Rechte
 Zwischenablage, Dateien, Geräte, Sonstiges — gruppiert, mit Erklärung je Schalter.
 Siehe [Kapitel 4](04-zwischenablage.md).

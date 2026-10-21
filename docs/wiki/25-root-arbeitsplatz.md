@@ -151,6 +151,11 @@ Werkzeug für Entwickler, kein Verwaltungsrecht.
 - **Docker:** `docker`, `docker compose`, `docker buildx` ohne `sudo`. Ein veröffentlichter Port
   (`ports: ["8080:80"]`) ist im Browser des Arbeitsplatzes unter `http://localhost:8080` erreichbar.
   Von ausserhalb des Arbeitsplatzes über eine befristete Portfreigabe („+ NAT", [Kapitel 23](23-netz.md)).
+- **Git:** Ist [OTA-Git](27-git.md) an, richtet OTA es bei jedem Start **und jedem Fortsetzen**
+  ein, wie in jedem Arbeitsplatz. Das Token wird beim Anhalten widerrufen, beim Fortsetzen gibt es
+  ein neues. Eine neue Git-Subdomain kommt ebenfalls mit dem Fortsetzen an, ohne „Neu aufsetzen“.
+  Voraussetzung ist `git` im Platz: Das Basisimage hat es seit dem 2026-10-21, sonst einmal
+  `apt install git`.
 - **Leerlauf:** Ein Root-Arbeitsplatz wird bei Leerlauf **angehalten**, nie gelöscht — gleich, was
   in der Vorlage unter „Was dann passiert" steht.
 - **Beendet sich der Container von selbst** (der Desktop darin ist abgestürzt), steht der

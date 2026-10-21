@@ -10,6 +10,7 @@
 | **Container** | Nur was ausserhalb des Home verändert wurde, ermittelt über `docker diff` | aus |
 | **Datenbank** | Nutzer, Gruppen, Workspaces, Zuweisungen, Audit-Log | **an** |
 | **Inhalte** | Skeleton-Profile, gemeinsame Ablage, die eigenen Ablagen der Nutzer, die Gruppenlaufwerke | **an** (nur `make backup`) |
+| **Git** | Die Datenbank von [OTA-Git](27-git.md) und alle Repositories, unter `/srv/ota/backups/git/` | **an**, sobald OTA-Git einmal eingerichtet war; läuft mit der Datenbank |
 
 **Das Netz ist dabei, ohne eigene Zeile.** Netzprofile, globale Freigaben und Portfreigaben stehen
 in der Datenbank und wandern mit ihrem Abzug. Der Router selbst hält nichts fest, was er nicht

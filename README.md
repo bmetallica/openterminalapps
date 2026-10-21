@@ -272,7 +272,10 @@ dabei **nicht** zurückwandert, ist die Datenbank: Neue Spalten bleiben stehen. 
 **Verwaltung**
 - Ressourcen **je Nutzer und Workspace**: Nutzer A bekommt 2 Kerne, Nutzer B einen
 - **Kontingent je Zuhause** und eine Untergrenze für den freien Plattenplatz — eine verständliche
-  Ablehnung statt eines Containers, der mitten in der Arbeit beim Schreiben stehenbleibt
+  Ablehnung statt eines Containers, der mitten in der Arbeit beim Schreiben stehenbleibt.
+  **Speicherabbilder** abgestürzter Programme (`core.<pid>`) füllen kein Zuhause mehr: Neue
+  Container erzeugen keine, und was in bestehenden noch entsteht, räumt OTA vor jeder Messung und
+  täglich weg ([Kapitel 11](docs/wiki/11-betrieb.md#speicherabbilder-räumt-ota-selbst-))
 - **Sichtbarkeit je Anwendung und Gruppe**, für den Fall, dass eine Lizenz nicht für alle reicht
 - **Zwei-Faktor je Gruppe erzwingbar**, wahlweise mit **Passkey** (Fingerabdruck, Gesicht,
   Sicherheitsschlüssel) oder Einmalkennwort — angeboten, nicht verlangt; `/healthz` und `/metrics`
