@@ -11,7 +11,8 @@ Subdomain. Unter **Einstellungen → Git** schaltest du sie ein und aus. Ist sie
   Admins**;
 - bekommt jeder berechtigte **Arbeitsplatz Git vorkonfiguriert**, auch ein Root-Arbeitsplatz.
   Andere Git-Server bleiben daneben nutzbar;
-- erscheint eine Kachel **Git** im Anwendungskatalog.
+- erscheint eine Kachel **Git** im Anwendungskatalog. Sie startet gleich die Anmeldung über
+  Keycloak; mit der Sitzung aus OTA ist man ohne Zwischenschritt drin.
 
 Ausschalten hält nur an. Repositories, Konten und Datenbank bleiben, und ein erneutes Einschalten
 macht weiter, wo es aufgehört hat.
@@ -176,7 +177,9 @@ docker exec ota-db psql -U ota -c 'DROP DATABASE forgejo' -c 'DROP ROLE forgejo'
 | Nach der Anmeldung bei Keycloak wieder auf der Anmeldeseite von Forgejo | Die Anmeldequelle ist nicht auf dem Stand. Einmal aus- und einschalten; OTA startet Forgejo nach jeder Änderung der Quelle neu (der laufende Server liest sie nur beim Start) |
 | „Kein Zugang zu dieser Anwendung“ | Nicht in einer berechtigten Gruppe, oder deaktiviert |
 | Browser: Zertifikat passt nicht | Ohne Proxy: Der Browser muss der OTA-CA vertrauen. Mit Proxy: Zertifikat am Proxy prüfen |
-| Unter der Subdomain erscheint OTA | Der Proxy schickt den Namen nicht mit (`Host`, SNI) |
+| Unter der Subdomain erscheint OTA, oder Keycloak meldet `Invalid parameter: redirect_uri` | Der Proxy schickt den Namen nicht mit (`Host`, SNI). Caddy in der OPNsense: im Handler Protokoll `https://` und einen Header „nach oben“ `Host` = `{host}`. Nginx Proxy Manager: Scheme `https`, der `Host` stimmt dort von selbst |
+| Nach der Anmeldung eine 404 auf `/sw.js` | Ein Browser, der unter der Subdomain einmal OTA gesehen hat, behält dessen Service Worker. Einmal die Website-Daten der Subdomain löschen (F12 → Application → Clear site data) |
+| Keycloak fragt beim Weg von OTA nach Git noch einmal nach dem Passwort | Die „Adresse von OTA“ ist nicht die, unter der der Browser OTA aufruft |
 | Im Arbeitsplatz fragt git nach Benutzer und Passwort | `git` fehlte beim Start, die Vorlage hat es abgeschaltet, oder der Mensch ist nicht berechtigt. Prüfen: `git config --show-origin --get-regexp credential` |
 | Forgejo startet nicht | `docker logs ota-git`. Oft die Datenbank: `OTA_GIT_DB_PW` in `deploy/.env` gesetzt? |
 
