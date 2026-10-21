@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ApiError, api, type Me } from '../lib/api'
 import { useMarke } from '../lib/branding'
-import { setLang, t, useLang, type Lang } from '../lib/i18n'
+import { getLang, setLang, t, useLang, type Lang } from '../lib/i18n'
 import { setTheme, useTheme, type Theme } from '../lib/theme'
 
 export function Login({ onDone, notfall = false, fehler }: {
@@ -42,7 +42,7 @@ export function Login({ onDone, notfall = false, fehler }: {
 
   function zentral(name = '') {
     const hint = name ? `&login_hint=${encodeURIComponent(name)}` : ''
-    window.location.replace(`/api/auth/oidc/start?next=/${hint}`)
+    window.location.replace(`/api/auth/oidc/start?next=/${hint}&lang=${getLang()}`)
   }
 
   async function submit(e: React.FormEvent) {

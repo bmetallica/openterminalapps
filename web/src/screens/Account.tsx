@@ -63,7 +63,7 @@ export function Account({ me, onMe, onToast }: {
 // zweite Stufe gelten wie beim Anmelden.
 
 function zuKeycloak(aktion: string) {
-  window.location.href = `/api/auth/oidc/start?next=/&aktion=${encodeURIComponent(aktion)}`
+  window.location.href = `/api/auth/oidc/start?next=/&aktion=${encodeURIComponent(aktion)}&lang=${getLang()}`
 }
 
 function ZentralPasswort({ konto }: { konto: KontoArt }) {

@@ -58,7 +58,7 @@ def hole(url: str):
 
 code, ziel, seite = hole(f"https://{name}/user/oauth2/ota")
 aus: dict = {"ergebnis": "?"}
-if "Kein Zugang" in seite:
+if "Kein Zugang" in seite or "No access to this application" in seite:
     aus["ergebnis"] = "VERWEIGERT"
 else:
     # Die API nimmt die Browser-Sitzung nicht an; die Seite sagt, wer man ist.

@@ -20,6 +20,8 @@
  * Die Adresse bleibt in der Leiste stehen, es wird nichts umgeleitet.
  */
 
+import { getLang } from './i18n'
+
 export type Route =
   | { kind: 'app' }
   | { kind: 'login'; fehler?: string }
@@ -108,5 +110,6 @@ export function anmeldePfad(): string {
   // bei jeder Runde tiefer zu verschachteln (2026-10-08: Schleife bis 414).
   const pfad = window.location.pathname
   const hier = /^\/(api|auth)(\/|$)/.test(pfad) ? '/' : pfad + window.location.search
-  return `/api/auth/oidc/start?next=${encodeURIComponent(hier)}`
+  // Die Sprache geht mit, damit Keycloak dieselbe spricht wie OTA.
+  return `/api/auth/oidc/start?next=${encodeURIComponent(hier)}&lang=${getLang()}`
 }

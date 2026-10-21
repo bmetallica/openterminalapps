@@ -19,7 +19,7 @@ import { StandaloneViewer } from './screens/StandaloneViewer'
 import { anmeldePfad, openInTab, parseRoute, viewPath, type Route } from './lib/routes'
 import { ApiError, api, type Host, type Me, type Session, type Stream, type Template } from './lib/api'
 import { gb } from './lib/format'
-import { setLang, t, useLang, type Lang } from './lib/i18n'
+import { setKontoLang, setLang, t, useLang, type Lang } from './lib/i18n'
 import { setTheme, useTheme, type Theme } from './lib/theme'
 import './styles/app.css'
 
@@ -92,6 +92,11 @@ export default function App() {
   useEffect(() => {
     api.me().then(setMe).catch(() => setMe(null)).finally(() => setChecking(false))
   }, [])
+
+  // Die am Konto gemerkte Sprache — gilt, wenn dieser Browser keine eigene Wahl hat.
+  useEffect(() => {
+    setKontoLang(me?.locale_gewaehlt && (me.locale === 'de' || me.locale === 'en') ? me.locale : null)
+  }, [me])
 
   // Host-Auslastung nur für Admins — normale Nutzer bekommen dafür keine Rechte.
   useEffect(() => {
@@ -253,7 +258,6 @@ export default function App() {
           <span className="rail__cap">{t('Mein Konto')}</span>
         </button>
 
-        <LangSwitch />
         <ThemeSwitch />
 
         <button className="rail__btn" onClick={() => void logout()}
@@ -275,6 +279,7 @@ export default function App() {
       </nav>
 
       <main className="main">
+        <LangSwitch />
         {me.must_change_password && (
           <PasswordGate onDone={() => setMe({ ...me, must_change_password: false })} onToast={toast} />
         )}
@@ -323,21 +328,27 @@ export default function App() {
   )
 }
 
-/** Sprachumschalter in der Leiste.
+/** Sprachumschalter, oben rechts über dem Inhalt.
  *
  * Bewusst zwei sichtbare Schalter statt eines Klapp-Menüs: Bei genau zwei
  * Möglichkeiten ist die aktuelle Sprache damit auf einen Blick zu sehen, und
- * der Wechsel kostet einen Klick statt zwei.
+ * der Wechsel kostet einen Klick statt zwei. Die Wahl gilt in diesem
+ * Browser; wer nie wählt, bekommt die Standardsprache aus den Einstellungen.
  */
 function LangSwitch() {
   const current = useLang()
   return (
-    <div className="rail__lang" role="radiogroup" aria-label={t('Sprache')}>
+    <div className="lang-ecke" role="radiogroup" aria-label={t('Sprache')}>
       {(['de', 'en'] as Lang[]).map((l) => (
         <button key={l} type="button" role="radio" aria-checked={current === l}
-          className={`rail__langopt${current === l ? ' is-on' : ''}`}
+          className={`lang-ecke__opt${current === l ? ' is-on' : ''}`}
           title={l === 'de' ? 'Deutsch' : 'English'}
-          onClick={() => setLang(l)}>
+          onClick={() => {
+            setLang(l)
+            // Auch am Konto merken, für den nächsten Rechner. Scheitert das,
+            // gilt die Wahl trotzdem hier.
+            api.setLocale(l).catch(() => { /* nicht schlimm */ })
+          }}>
           {l.toUpperCase()}
         </button>
       ))}

@@ -204,6 +204,17 @@ server {
 }
 ```
 
+Mit anderen Proxys gilt dasselbe (Caddy so eingerichtet am 2026-10-21, der Nginx Proxy Manager
+nach seiner Vorgabe-Konfiguration):
+
+- **Nginx Proxy Manager:** ein eigener Proxy Host für die Subdomain, Scheme `https`, dasselbe Ziel
+  wie für OTA. Den `Host` reicht er von selbst durch. Unter *Advanced* die vier Zeilen
+  `proxy_ssl_server_name on;`, `proxy_ssl_name $host;`, `client_max_body_size 0;` und
+  `proxy_read_timeout 1h;`.
+- **Caddy in der OPNsense:** Handler mit Protokoll **`https://`** (nicht `http://`, Port 8443 nimmt
+  nur HTTPS), dazu ein Header „nach oben“ `Host` = `{host}`. Ohne diesen Header erscheint unter der
+  Subdomain OTA, und Keycloak meldet `Invalid parameter: redirect_uri`.
+
 SSH für Git geht nur aus den Arbeitsplätzen. Am Proxy und an der Firewall gibt es dafür nichts
 einzurichten.
 

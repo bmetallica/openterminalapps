@@ -20,6 +20,11 @@
  * Die Sprache liegt im Browser des Nutzers (`localStorage`), nicht am Konto:
  * Sie ist eine Frage des Arbeitsplatzes, nicht der Identität — dieselbe Person
  * am englischen Rechner will Englisch sehen, ohne ihr Konto zu ändern.
+ *
+ * Wer nie umgeschaltet hat, bekommt die **Standardsprache der Anlage**
+ * (Einstellungen → Sprache, kommt mit `/api/branding`). Sie wird im Browser
+ * zwischengespeichert, damit beim nächsten Laden nichts in der falschen
+ * Sprache aufblitzt. Bis zum 2026-10-22 entschied hier die Browsersprache.
  */
 
 import { useEffect, useState } from 'react'
@@ -27,37 +32,94 @@ import { EN } from './i18n.en'
 
 export type Lang = 'de' | 'en'
 
+/** Die Wahl des Menschen. Fehlt sie, gilt die Standardsprache der Anlage. */
 const KEY = 'ota.lang'
+/** Die Standardsprache der Anlage, wie sie zuletzt vom Server kam. */
+const KEY_STANDARD = 'ota.lang.standard'
 
-function initial(): Lang {
+function gelesen(key: string): Lang | null {
   try {
-    const saved = localStorage.getItem(KEY)
-    if (saved === 'de' || saved === 'en') return saved
-  } catch { /* privater Modus — dann eben die Browsersprache */ }
-  return navigator.language?.toLowerCase().startsWith('de') ? 'de' : 'en'
+    const wert = localStorage.getItem(key)
+    if (wert === 'de' || wert === 'en') return wert
+  } catch { /* privater Modus — dann eben die Vorgabe */ }
+  return null
 }
 
-let lang: Lang = initial()
+let lang: Lang = gelesen(KEY) ?? gelesen(KEY_STANDARD) ?? 'de'
+/** Die am Konto gemerkte Wahl — gilt vor der Standardsprache, nach der des Browsers. */
+let konto: Lang | null = null
 const listeners = new Set<(l: Lang) => void>()
 
 export function getLang(): Lang {
   return lang
 }
 
-export function setLang(next: Lang): void {
+function wechseln(next: Lang): void {
   if (next === lang) return
   lang = next
-  try { localStorage.setItem(KEY, next) } catch { /* nicht schlimm */ }
   document.documentElement.lang = next
   listeners.forEach((fn) => fn(next))
 }
 
+/** Der Umschalter: Die Wahl gilt in diesem Browser, bis wieder umgeschaltet wird. */
+export function setLang(next: Lang): void {
+  try { localStorage.setItem(KEY, next) } catch { /* nicht schlimm */ }
+  wechseln(next)
+}
+
+/** Die Standardsprache der Anlage. Wirkt nur, wo niemand selbst gewählt hat. */
+export function setStandardLang(standard: Lang): void {
+  try { localStorage.setItem(KEY_STANDARD, standard) } catch { /* nicht schlimm */ }
+  if (!gelesen(KEY) && !konto) wechseln(standard)
+}
+
+/** Nach der Anmeldung: die am Konto gemerkte Wahl, falls dieser Browser keine hat. */
+export function setKontoLang(gewaehlt: Lang | null): void {
+  konto = gewaehlt
+  if (konto && !gelesen(KEY)) wechseln(konto)
+}
+
+function einsetzen(text: string, vars?: Record<string, string | number>): string {
+  if (!vars) return text
+  return text.replace(/\{(\w+)\}/g, (whole: string, name: string) =>
+    name in vars ? String(vars[name]) : whole)
+}
+
 /** Übersetzt und setzt Platzhalter ein. */
 export function t(text: string, vars?: Record<string, string | number>): string {
-  const out = lang === 'de' ? text : (EN[text] ?? text)
-  if (!vars) return out
-  return out.replace(/\{(\w+)\}/g, (whole: string, name: string) =>
-    name in vars ? String(vars[name]) : whole)
+  return einsetzen(lang === 'de' ? text : (EN[text] ?? text), vars)
+}
+
+/* Meldungen des Servers. Viele tragen einen Namen oder eine Zahl in sich
+   („„git.x“ ist kein gültiger Name …“) und stehen deshalb mit Platzhaltern im
+   Wörterbuch. Passt der Satz nicht wörtlich, wird er gegen diese Muster
+   gehalten; ein Platzhalter steht dabei für beliebigen Text. */
+let muster: { re: RegExp; namen: string[]; ziel: string }[] | null = null
+
+function musterBauen() {
+  muster = Object.entries(EN)
+    .filter(([de]) => /\{\w+\}/.test(de))
+    .map(([de, ziel]) => {
+      const namen: string[] = []
+      const quelle = de.split(/(\{\w+\})/).map((teil) => {
+        const m = /^\{(\w+)\}$/.exec(teil)
+        if (m) { namen.push(m[1]); return '([\\s\\S]+?)' }
+        return teil.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      }).join('')
+      return { re: new RegExp(`^${quelle}$`), namen, ziel }
+    })
+  return muster
+}
+
+/** Übersetzt eine Meldung des Servers — wörtlich oder über ein Muster. */
+export function tServer(text: string): string {
+  if (lang === 'de' || !text) return text
+  if (EN[text] !== undefined) return EN[text]
+  for (const { re, namen, ziel } of muster ?? musterBauen()) {
+    const m = re.exec(text)
+    if (m) return einsetzen(ziel, Object.fromEntries(namen.map((n, i) => [n, m[i + 1]])))
+  }
+  return text
 }
 
 /**

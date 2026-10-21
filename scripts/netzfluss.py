@@ -14,13 +14,69 @@ beachten — wer Bewegung abgestellt hat, bekommt dasselbe Bild mit stehenden
 Paketen, nicht ein leeres.
 
 Aufruf:  python3 scripts/netzfluss.py
+         OTA_NETZFLUSS_SPRACHE=en python3 scripts/netzfluss.py   # nach docs/wiki/en/bilder
 """
 from __future__ import annotations
 
 import io
 import os
 
-ZIEL = os.environ.get("OTA_NETZFLUSS", "docs/wiki/bilder")
+SPRACHE = os.environ.get("OTA_NETZFLUSS_SPRACHE", "de")
+ZIEL = os.environ.get("OTA_NETZFLUSS",
+                      "docs/wiki/en/bilder" if SPRACHE == "en" else "docs/wiki/bilder")
+
+# Die Beschriftungen auf Englisch, für das englische Handbuch. Der deutsche
+# Satz ist der Schlüssel, wie in der Oberfläche (web/src/lib/i18n.ts).
+EN = {
+    "Arbeitsplatz": "Workspace",
+    "Stufe „Internet“ — die Vorgabe": "Level “Internet” — the default",
+    "Stufe: internet": "level: internet",
+    "NAT auf die Wirtsadresse": "NAT to host address",
+    "Das Internet": "The internet",
+    "z. B. 93.184.x.x": "e.g. 93.184.x.x",
+    "erlaubt": "allowed",
+    "Das Firmennetz": "Company network",
+    "verworfen": "dropped",
+    "Nachbar-Arbeitsplatz": "Neighbour workspace",
+    "kein Weg": "no path",
+    "Öffentliche Ziele gehen durch, alles Private ist zu — zum Nachbarn führt keine Leitung.":
+        "Public destinations go through, everything private is closed — there is no line to the neighbour.",
+    "Stufe „Abgeschottet“": "Level “Isolated”",
+    "Stufe: abgeschottet": "level: isolated",
+    "nur der Grundregelsatz": "base rule set only",
+    "der Grundregelsatz": "the base rule set",
+    "Nur was OTA für sich selbst braucht — sonst käme nicht einmal ein Bild an.":
+        "Only what OTA needs for itself — otherwise not even a picture would arrive.",
+    "Stufe „Aus“ — alles durch": "Level “Off” — everything through",
+    "Stufe: aus": "level: off",
+    "keine Filterung": "no filtering",
+    "Der Router filtert nicht mehr — aber er bleibt der Weg. Auch hier kein Nachbar.":
+        "The router no longer filters — but it remains the path. No neighbour here either.",
+    "Eine Freigabe nach Namen": "A rule by name",
+    "Namensdienst + Regelwerk": "name service + rule set",
+    "die Antwort füllt die Menge": "the answer fills the set",
+    "git.firma.de": "git.company.com",
+    "freigegeben": "allowed",
+    "Der Namensdienst": "The name service",
+    "der Router selbst": "the router itself",
+    "beantwortet": "answered",
+    "wiki.firma.de": "wiki.company.com",
+    "nicht freigegeben": "not allowed",
+    "Der Router beantwortet den Namen und trägt seine eigene Antwort ins Regelwerk ein.":
+        "The router answers the name and enters its own answer into the rule set.",
+    "Eine Portfreigabe („+ NAT“)": "A port forward (“+ NAT”)",
+    "Weiterleitung 30003": "forward 30003",
+    "Der Wirt, Port 30003": "The host, port 30003",
+    "von aussen erreichbar": "reachable from outside",
+    "hinein": "in",
+    "Ein anderer Port": "Another port",
+    "Die Gegenrichtung: herein nur über einen freigegebenen Port, und nur solange die Frist läuft.":
+        "The opposite direction: in only through a forwarded port, and only while the time limit runs.",
+}
+
+
+def _t(text: str) -> str:
+    return EN.get(text, text) if SPRACHE == "en" else text
 
 # Die Farben der Anwendung (web/src/styles/app.css).
 GRUND, FLAECHE, HOCH = "#090D16", "#0F172A", "#1B2436"
@@ -132,8 +188,12 @@ def bau(datei: str, titel: str, router_unter, ziele, hinweis: str) -> None:
     Leitungen ueber die Beschriftung der Kaesten — das war der erste Entwurf.
     """
     leitungen, kaesten, urteile, pakete, keyframes = [], [], [], [], []
+    titel, hinweis = _t(titel), _t(hinweis)
+    router_unter = [_t(z) for z in router_unter]
+    ziele = [(platz, _t(name), _t(unter), _t(urteil), art)
+             for platz, name, unter, urteil, art in ziele]
 
-    kaesten.append(_kasten(*AP, "Arbeitsplatz", ["10.99.7.10"], rahmen=RAND_HELL,
+    kaesten.append(_kasten(*AP, _t("Arbeitsplatz"), ["10.99.7.10"], rahmen=RAND_HELL,
                            fuellung=HOCH))
     kaesten.append(_kasten(*RT, "ota-firewall", router_unter, rahmen=AKZENT,
                            fuellung=HOCH, dick=2))

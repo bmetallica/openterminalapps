@@ -60,6 +60,10 @@ BREAKGLASS = "auth.breakglass"
 BRAND_NAME = "brand.name"
 BRAND_ACCENT = "brand.accent"
 BRAND_LOGO = "brand.logo"
+# Die Sprache fuer alle, die nicht selbst umschalten: Oberflaeche, Anmeldeseite
+# von Keycloak, Handbuch. Kommt mit /api/branding, weil die Anmeldemaske sie
+# braucht, bevor jemand angemeldet ist.
+UI_SPRACHE = "ui.sprache"
 
 # Freigaben, die fuer **alle** Arbeitsplaetze gelten — der Dateiserver, das
 # interne Rechenzentrum, der Paketspiegel. An einer Stelle gepflegt statt in
@@ -108,6 +112,7 @@ DEFAULTS: dict[str, Any] = {
     # gefragt hat — und beim Zuruecksetzen soll genau diese herauskommen.
     BRAND_ACCENT: "#06B6D4",
     BRAND_LOGO: None,
+    UI_SPRACHE: "de",
     FIREWALL_GLOBAL: [],
     VERZEICHNIS_INTERVALL: 60,
     VERZEICHNIS_LETZTER: None,

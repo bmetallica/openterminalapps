@@ -427,6 +427,7 @@ def _me(user: User) -> MeOut:
         permissions=sorted(user.permissions),
         groups=sorted(g.slug for g in user.groups),
         locale=user.locale,
+        locale_gewaehlt=bool(user.locale_gewaehlt),
         must_change_password=user.must_change_password,
         totp_enabled=bool(user.totp_secret),
         recovery_left=len(user.totp_recovery or []),
@@ -581,13 +582,14 @@ def set_locale(body: LocaleIn, user: User = Depends(current_user),
                db: DbSession = Depends(get_db)) -> MeOut:
     """Merkt sich die Sprache am Konto.
 
-    Der Umschalter in der Leiste wirkt sofort und liegt im Browser. Hier
+    Der Umschalter oben rechts wirkt sofort und liegt im Browser. Hier
     landet er zusaetzlich am Konto, damit er an einem anderen Rechner wieder
     gilt — ohne dass jemand ihn dort erneut sucht.
     """
     if body.locale not in ("de", "en"):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Diese Sprache gibt es nicht.")
     user.locale = body.locale
+    user.locale_gewaehlt = True
     db.commit()
     return _me(user)
 
@@ -711,12 +713,13 @@ def _sicheres_ziel(next_: str | None) -> str:
 
 @router.get("/oidc/start")
 def oidc_start(request: Request, next: str = "/", aktion: str = "",
-               login_hint: str = "") -> Response:
+               login_hint: str = "", lang: str = "") -> Response:
     """Schickt den Browser zur Anmeldung bei Keycloak.
 
     `aktion` laesst Keycloak dabei etwas ausfuehren — Passwort aendern,
     Einmalkennwort oder Passkey einrichten (Mein Konto, 2026-10-08).
     `login_hint` fuellt den Namen vor, wenn er schon bekannt ist.
+    `lang` ist die Sprache der Oberflaeche; Keycloak spricht dann dieselbe.
     """
     if aktion and aktion not in keycloak.AKTIONEN:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Unbekannte Aktion.")
@@ -742,7 +745,7 @@ def oidc_start(request: Request, next: str = "/", aktion: str = "",
 
     antwort = RedirectResponse(
         keycloak.authorize_url(redirect_uri, state, challenge, f"{basis}/auth",
-                               aktion=aktion, login_hint=login_hint),
+                               aktion=aktion, login_hint=login_hint, sprache=lang),
         status_code=status.HTTP_303_SEE_OTHER,
     )
     antwort.set_cookie(

@@ -13,6 +13,8 @@
  * Schreibrecht auf `docs/wiki/` es versuchen würde.
  */
 
+import { getLang } from './i18n'
+
 const esc = (s: string): string =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 
@@ -38,7 +40,7 @@ function inline(raw: string): string {
   // die Datei aus, und ihr Name muss die Prüfung dort ebenfalls bestehen.
   s = s.replace(/!\[([^\]]*)\]\(bilder\/([a-z0-9-]+\.svg)\)/g,
     (_m, alt: string, datei: string) =>
-      `<img class="md-bild" src="/api/help/bild/${datei}" alt="${alt}" loading="lazy" />`)
+      `<img class="md-bild" src="/api/help/bild/${datei}?lang=${getLang()}" alt="${alt}" loading="lazy" />`)
 
   s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_m, text: string, href: string) => {
     // Verweise zwischen Kapiteln bleiben im Programm; alles andere geht auf.

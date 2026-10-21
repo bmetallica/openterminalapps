@@ -1,7 +1,13 @@
 # OpenTerminalApps — Handbuch
 
+**Deutsch** · [English](en/README.md)
+
 Dieses Handbuch wird im Programm selbst unter **Hilfe** ausgeliefert. Es beschreibt Bedienung,
 Verwaltung und Betrieb von OTA.
+
+Jedes Kapitel gibt es auch auf Englisch, in [`en/`](en/README.md) unter demselben Dateinamen. Das
+Programm zeigt die Fassung in der Sprache der Oberfläche; wer ein Kapitel ändert, ändert beide —
+`scripts/i18n-pruefen.py` vergleicht den Aufbau.
 
 Welche Kapitel jemand dort sieht, hängt an den Rechten: Anwender bekommen Überblick, Arbeitsplatz,
 Zwischenablage und Lizenzen; Verwaltung und Betrieb bleiben Administratoren vorbehalten. Diese

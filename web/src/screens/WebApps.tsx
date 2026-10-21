@@ -37,7 +37,7 @@ function Konfiguration({ app, geheimnis }: { app: WebApp; geheimnis?: string }) 
   const herkunft = window.location.origin
   const block = [
     `OAUTH_CLIENT_ID=${app.client_id}`,
-    `OAUTH_CLIENT_SECRET=${geheimnis ?? '<beim Anlegen gezeigt>'}`,
+    `OAUTH_CLIENT_SECRET=${geheimnis ?? tr('<beim Anlegen gezeigt>')}`,
     `OPENID_PROVIDER_URL=${herkunft}/auth/realms/ota/.well-known/openid-configuration`,
     'OAUTH_PROVIDER_NAME=OpenTerminalApps',
     `WEBUI_URL=${app.url.replace(/\/$/, '')}`,

@@ -64,7 +64,8 @@ def hole(url: str, daten: dict | None = None):
 def deute(code: int, seite: str, ziel: str | None) -> str:
     if ziel and ziel.startswith(redirect) and "code=" in ziel:
         return "ZUGANG"
-    if "Kein Zugang" in seite or (ziel and "error=access_denied" in ziel):
+    if ("Kein Zugang" in seite or "No access to this application" in seite
+            or (ziel and "error=access_denied" in ziel)):
         return "VERWEIGERT"
     if 'id="kc-form-login"' in seite:
         return "FORMULAR"

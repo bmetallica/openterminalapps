@@ -40,6 +40,7 @@
 
 
 import { extensionPresent, isFirefox, readViaExtension, writeViaExtension } from "./firefoxClipboard"
+import { t } from "./i18n"
 
 const PANEL_ID = "noVNC_clipboard_text"
 const POLL_MS = 700
@@ -208,10 +209,9 @@ export function startClipboardBridge(
         if (!ok) pending = value
         if (!ok && !notifiedDenied) {
           notifiedDenied = true
-          opts.onNote?.(
-            "Der Browser gibt die Zwischenablage nicht frei. Kopierter Text " +
-            "steht im Feld der Kontrollleiste.",
-          )
+          opts.onNote?.(t(
+            'Der Browser gibt die Zwischenablage nicht frei. Kopierter Text steht im Feld der Kontrollleiste.',
+          ))
         }
       })
     }
@@ -261,10 +261,9 @@ export function startClipboardBridge(
       if (yes) {
         state.canRead = state.canWrite = true
       } else {
-        opts.onNote?.(
-          "Firefox gibt die Zwischenablage nicht frei. Einfügen geht mit " +
-          "Strg+V, für den bequemen Weg gibt es die OTA-Erweiterung.",
-        )
+        opts.onNote?.(t(
+          'Firefox gibt die Zwischenablage nicht frei. Einfügen geht mit Strg+V, für den bequemen Weg gibt es die OTA-Erweiterung.',
+        ))
       }
     })
   }

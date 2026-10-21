@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import logging
 import re
 
 from fastapi import (
@@ -29,11 +30,13 @@ from fastapi import (
 )
 from sqlalchemy.orm import Session as DbSession
 
-from .. import audit, settings_store
+from .. import audit, keycloak, settings_store
 from ..db import get_db
 from ..deps import require_permission
 from ..models import User
 from ..schemas import BrandingIn, BrandingOut
+
+log = logging.getLogger("ota.branding")
 
 router = APIRouter(prefix="/api/branding", tags=["branding"])
 
@@ -106,6 +109,7 @@ def _aus(db: DbSession) -> BrandingOut:
         # Bild darf lange zwischengespeichert werden, sein Name aendert sich.
         logo_url=f"/api/branding/logo?v={logo['etag']}" if logo else None,
         has_logo=bool(logo),
+        sprache=settings_store.get(db, settings_store.UI_SPRACHE) or "de",
     )
 
 
@@ -166,9 +170,20 @@ def write(body: BrandingIn, request: Request,
                 f"„{body.accent}“ ist keine Farbe. Erwartet wird #RRGGBB.")
         settings_store.put(db, settings_store.BRAND_ACCENT, body.accent.upper())
 
+    if body.sprache is not None:
+        if body.sprache not in ("de", "en"):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Diese Sprache gibt es nicht.")
+        settings_store.put(db, settings_store.UI_SPRACHE, body.sprache)
+        # Auch die Anmeldeseite. Ist Keycloak gerade nicht da, holt der Start
+        # der API das nach — die Einstellung selbst gilt trotzdem.
+        try:
+            keycloak.sprache_setzen(body.sprache)
+        except keycloak.KeycloakFehler as exc:
+            log.warning("Keycloak-Sprache nicht gesetzt: %s", exc)
+
     audit.record(db, "branding.updated", actor=actor, object_type="branding",
                  object_id="global", request=request,
-                 name=body.name, accent=body.accent)
+                 name=body.name, accent=body.accent, sprache=body.sprache)
     db.commit()
     return _aus(db)
 

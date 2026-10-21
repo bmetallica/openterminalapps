@@ -61,6 +61,12 @@ up:
 	@# für OTA-Git, und niemand merkt, warum.
 	@if [ -f deploy/traefik/.vorher ] && ! cmp -s deploy/traefik/traefik.yml deploy/traefik/.vorher; then \
 	  echo "  traefik.yml geändert — Traefik startet neu"; docker restart ota-traefik >/dev/null; fi
+	@# Keycloak hält sein Thema im Speicher (KEYCLOAK_THEME_CACHE). Neue Texte
+	@# oder Meldungen darin kämen sonst erst mit dem nächsten Neustart an.
+	@S=$$(find deploy/keycloak-theme -type f ! -name .stand -exec sha1sum {} + | sort | sha1sum | cut -c1-12); \
+	  if [ "$$S" != "$$(cat deploy/keycloak-theme/.stand 2>/dev/null)" ]; then \
+	    echo "  Keycloak-Thema geändert — Keycloak startet neu"; docker restart ota-keycloak >/dev/null; \
+	    echo "$$S" > deploy/keycloak-theme/.stand; fi
 	@cp deploy/turn/turnserver.conf deploy/turn/.vorher 2>/dev/null || true
 	@./scripts/turn-config.sh >/dev/null
 	@if ! cmp -s deploy/turn/turnserver.conf deploy/turn/.vorher; then \
@@ -227,6 +233,9 @@ export OTA_TEST_ADMIN_PW
 export OTA_KEYCLOAK_SECRET
 
 test:
+	@# Zweisprachigkeit: Oberfläche, Servermeldungen, Handbuch (Sekunden, ohne Stack).
+	@python3 scripts/i18n-pruefen.py
+	@echo
 	@./scripts/test-authz.sh
 	@echo
 	@# Konten der zentralen Anmeldung: Anlegen in Keycloak, Mein Konto ueber

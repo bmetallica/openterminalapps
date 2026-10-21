@@ -323,9 +323,11 @@ dabei **nicht** zurückwandert, ist die Datenbank: Neue Spalten bleiben stehen. 
   per Abgleich im einstellbaren Takt (15 Min. bis 1 Tag) oder auf Knopfdruck. Wer im Verzeichnis
   fehlt, wird deaktiviert, nie gelöscht. Konten ohne Gruppe sehen ein leeres Dashboard mit Hinweis
 - Anmeldefrist einstellbar (30 min bis 48 h), rollend — wer arbeitet, wird nicht abgemeldet
-- Oberfläche auf Deutsch und Englisch, **dunkel oder hell** (oder wie der Rechner) — beides
-  umschaltbar auch vor der Anmeldung
-- Das Handbuch liegt **im Programm**, gefiltert nach Rechten
+- Oberfläche auf Deutsch und Englisch, umschaltbar oben rechts; eine **Standardsprache** für alle,
+  die nicht selbst umschalten (Einstellungen → Sprache), die auch für die Anmeldeseite von Keycloak
+  und das Handbuch gilt. **Dunkel oder hell** (oder wie der Rechner) — beides umschaltbar auch vor
+  der Anmeldung
+- Das Handbuch liegt **im Programm**, auf Deutsch und Englisch, gefiltert nach Rechten
 - **Mein Konto** für jeden: Passwort selbst ändern, Zwei-Faktor mit Rückfallcodes einrichten
 
 **Das Netz der Arbeitsplätze**
@@ -454,13 +456,14 @@ nicht — dieselbe Trennung gilt für das Dateisystem des Hosts.
 | `deploy/` | Compose-Stack, Traefik, Registry, Zertifikate |
 | `firewall/` | Der Router aller Arbeitsplätze: nftables, NAT, Namensdienst, Portfreigaben |
 | `extension/` | Firefox-Erweiterung für die Zwischenablage |
-| `docs/wiki/` | Handbuch — wird im Programm als Hilfe ausgeliefert |
+| `docs/wiki/` | Handbuch — wird im Programm als Hilfe ausgeliefert; Englisch in `docs/wiki/en/` |
 | `images/` | Eigene Basisimages: `base-desktop` (Debian + XFCE + Selkies, Vorgabe) und `base-xfce` (Ubuntu + KasmVNC) |
 | `tests/`, `scripts/` | Prüfungen, Zertifikat, Migration aus Kasm, Stückliste |
 
 ## Dokumentation
 
-- **[Handbuch](docs/wiki/README.md)** — Bedienung, Verwaltung, Betrieb, Fehlersuche (26 Kapitel)
+- **[Handbuch](docs/wiki/README.md)** — Bedienung, Verwaltung, Betrieb, Fehlersuche (27 Kapitel;
+  [English](docs/wiki/en/README.md))
 - **[plan.md](plan.md)** — Architektur **und die Begründungen dahinter**, samt der Sackgassen
 - **[docs/adr/](docs/adr/README.md)** — Entscheidungen, die teuer rückgängig zu machen sind, mit den
   Alternativen, die nicht getragen hätten
@@ -491,6 +494,7 @@ make test
 | `test-git.sh` | OTA-Git: Ein- und Ausschalten (Daten bleiben), Subdomain hinter Traefik mit OTA-CA, OTA unberührt, Eingänge für Arbeitsplätze nicht auf dem Host; Anmeldung über Keycloak nur für berechtigte Gruppen, vorab angelegtes Konto wird verknüpft, Admins sind Admins, gesperrt statt gelöscht; im Arbeitsplatz clone/push ohne Passwort, eigene .gitconfig gewinnt, fremder Server bekommt nichts, SSH über 2222, Token widerrufen bei Ende, Root-Arbeitsplatz mit neuem Token nach dem Fortsetzen; andere Subdomain; nginx als Reverse Proxy; Sicherung mit Repositories |
 | `test-konten.sh` | Konten der zentralen Anmeldung: Anlegen in OTA legt in Keycloak an (samt Pflicht zum Passwortwechsel), lokal kommt es nicht herein; Ändern, Passwort, zweiter Faktor, Sperren und Löschen wirken in Keycloak; Mein Konto führt über Keycloak; ein lokales Bestandskonto zieht mit seinem Passwort um, das Notfallkonto nicht |
 | `test-clipboard-bridge.sh` | Kopieren zwischen zwei Anwendungen im selben Arbeitsplatz: beide Richtungen, Umlaute, ein Bild, ein Megabyte, nach Pause, und abgeschaltet |
+| `test-i18n` (`scripts/i18n-pruefen.py`) | Zweisprachigkeit: Jeder Text der Oberfläche und jede Meldung des Servers hat einen englischen Eintrag, kein deutscher Text geht an der Übersetzung vorbei, und jedes Kapitel des Handbuchs gibt es auf Englisch mit demselben Aufbau |
 | `tests/e2e.mjs` | Die Oberfläche in einem echten Browser — bis zur Frage, ob der Stream wirklich verbindet |
 | `test-verzeichnis.sh` | Gruppen aus dem Verzeichnis: beide LDAP-Gruppenformen werden erkannt, eine gekoppelte OTA-Gruppe bekommt ihre Mitglieder bei der Anmeldung und beim Abgleich, von Hand Aufgenommene bleiben, eine LDAP-Gruppe „admins“ macht niemanden zum Admin, Konten ohne Gruppe bekommen den Hinweis; eine Anwendung lässt nur ihre Gruppen herein, über das Formular **und** die SSO-Sitzung, ohne Gruppe niemanden; wer im Verzeichnis fehlt, wird deaktiviert |
 | `test-verknuepfen.sh` | Domänenkonto einem bestehenden Konto zuordnen: Danach gibt es nur das alte Konto, mit derselben Kennung, Sitzung und demselben Zuhause, unter dem Namen aus dem Verzeichnis; das Konto aus der ersten Domänenanmeldung ist weg; das alte Passwort und das alte Keycloak-Konto gelten nicht mehr; das Notfallkonto lässt sich nicht verknüpfen; für Konten aus Keycloak und für lokale Bestandskonten |

@@ -1204,7 +1204,7 @@ try {
   // ----------------------------------------------------------- Sprache
   console.log('\nSprache')
   await page.evaluate(() => {
-    const b = [...document.querySelectorAll('.rail__langopt')].find((x) => x.textContent === 'EN')
+    const b = [...document.querySelectorAll('.lang-ecke__opt')].find((x) => x.textContent === 'EN')
     b?.click()
   })
   await new Promise((r) => setTimeout(r, 400))
@@ -1215,8 +1215,31 @@ try {
   check(!/[äöüß]/i.test(labelEn ?? ''), `Auch die Felder übersetzen ("${labelEn}")`)
   await shot(page, '17-englisch')
 
+  // Das Handbuch kommt auf Englisch aus docs/wiki/en/, und Meldungen des
+  // Servers mit eingesetzten Werten werden über ihr Muster übersetzt.
+  const handbuch = await page.evaluate(async () => {
+    const r = await fetch('/api/help/01-ueberblick?lang=en')
+    return r.ok ? (await r.json()).title : null
+  })
+  check(handbuch === '1 · Overview — what OTA is', `Handbuch auf Englisch ("${handbuch}")`)
+  // Abgewiesen wird vor dem Speichern; an der Anlage ändert sich nichts.
+  const feld = await page.$('input[aria-label="Subdomain"]')
+  let meldung = ''
+  if (feld) {
+    const vorher = await page.$eval('input[aria-label="Subdomain"]', (e) => e.value)
+    await feld.click({ clickCount: 3 })
+    await feld.type('kein name!')
+    await page.evaluate(() => [...document.querySelectorAll('button')].find((b) => b.textContent === 'Save')?.click())
+    await new Promise((r) => setTimeout(r, 1200))
+    meldung = await page.evaluate(() => document.querySelector('.toasts')?.textContent ?? '')
+    await feld.click({ clickCount: 3 })
+    await feld.type(vorher || ' ')
+    if (!vorher) await page.keyboard.press('Backspace')
+  }
+  check(meldung.includes('is not a valid name'), `Servermeldung mit Wert übersetzt ("${meldung.slice(0, 60)}")`)
+
   await page.evaluate(() => {
-    const b = [...document.querySelectorAll('.rail__langopt')].find((x) => x.textContent === 'DE')
+    const b = [...document.querySelectorAll('.lang-ecke__opt')].find((x) => x.textContent === 'DE')
     b?.click()
   })
   await new Promise((r) => setTimeout(r, 400))

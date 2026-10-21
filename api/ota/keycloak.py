@@ -333,7 +333,7 @@ AKTIONEN = ("UPDATE_PASSWORD", "CONFIGURE_TOTP", "webauthn-register")
 
 def authorize_url(redirect_uri: str, state: str, challenge: str,
                   oeffentlich: str | None = None, *, aktion: str = "",
-                  login_hint: str = "") -> str:
+                  login_hint: str = "", sprache: str = "") -> str:
     """Wohin der Browser geschickt wird, um sich anzumelden.
 
     `oeffentlich` ist die Adresse, unter der **der Browser** Keycloak sieht.
@@ -359,6 +359,8 @@ def authorize_url(redirect_uri: str, state: str, challenge: str,
         **({"kc_action": aktion} if aktion in AKTIONEN else {}),
         # Der Name ist schon bekannt (etwa von /login): nicht zweimal tippen.
         **({"login_hint": login_hint} if login_hint else {}),
+        # Dieselbe Sprache wie in OTA, nicht die des Browsers.
+        **({"ui_locales": sprache} if sprache in ("de", "en") else {}),
     })
     return f"{basis}/realms/{_realm()}/protocol/openid-connect/auth?{frage}"
 
@@ -452,6 +454,22 @@ def sitzungsfristen_setzen(leerlauf_minuten: int) -> None:
     })
     if resp.status_code not in (200, 204):
         raise KeycloakFehler(f"Sitzungsfristen nicht gesetzt: {resp.text[:200]}")
+
+
+def sprache_setzen(standard: str) -> None:
+    """Die Anmeldeseite spricht Deutsch und Englisch; ohne Wahl die der Anlage.
+
+    Welche gilt, sagt OTA bei jeder Anmeldung mit (`ui_locales`). Die
+    Standardsprache greift, wenn jemand Keycloak ohne OTA aufruft — etwa über
+    eine angebundene Anwendung.
+    """
+    resp = ruf("PUT", "", json={
+        "internationalizationEnabled": True,
+        "supportedLocales": ["de", "en"],
+        "defaultLocale": standard if standard in ("de", "en") else "de",
+    })
+    if resp.status_code not in (200, 204):
+        raise KeycloakFehler(f"Sprache nicht gesetzt: {resp.text[:200]}")
 
 
 def tausche_code(code: str, redirect_uri: str, verifier: str) -> dict[str, Any]:
@@ -1252,6 +1270,12 @@ def verzeichnisgruppen_von(sub: str) -> list[str]:
 
 ZUGANG_ROLLE = "zugang"
 FLUSS_PRAEFIX = "ota-app"
+# Geht in den Fingerabdruck ein: Ändert sich, wie OTA einen Fluss baut, baut
+# der nächste Start alle neu. 2 = die Meldung kommt zweisprachig aus dem Thema.
+FLUSS_FASSUNG = 2
+# Ein Schlüssel aus dem Thema (deploy/keycloak-theme/ota/login/messages/),
+# kein fester Text: Keycloak setzt ihn in der Sprache der Anmeldeseite ein.
+KEIN_ZUGANG = "otaKeinZugang"
 
 
 def _q(text: str) -> str:
@@ -1275,7 +1299,7 @@ def _vorbild() -> tuple[str, str]:
     schritte = ruf("GET", f"/authentication/flows/{_q(alias)}/executions").json()
     kern = [(s.get("level"), s.get("index"), s.get("providerId") or s.get("displayName"),
              s.get("requirement"), bool(s.get("authenticationConfig"))) for s in schritte]
-    return alias, hashlib.sha1(_json.dumps(kern).encode()).hexdigest()[:8]
+    return alias, hashlib.sha1(_json.dumps([FLUSS_FASSUNG, kern]).encode()).hexdigest()[:8]
 
 
 def _fluss_bauen(alias: str, vorbild: str, rolle: str) -> str:
@@ -1321,9 +1345,7 @@ def _fluss_bauen(alias: str, vorbild: str, rolle: str) -> str:
         pflicht(nein["id"], "REQUIRED")
         ruf("POST", f"/authentication/executions/{nein['id']}/config",
             json={"alias": f"{name} meldung",
-                  "config": {"denyErrorMessage":
-                             "Kein Zugang zu dieser Anwendung. Die Verwaltung von "
-                             "OpenTerminalApps kann ihn freigeben."}})
+                  "config": {"denyErrorMessage": KEIN_ZUGANG}})
 
     oben = [x for x in schritte() if x["level"] == 0]
     formular = next((x for x in oben if x.get("authenticationFlow")

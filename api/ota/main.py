@@ -355,6 +355,10 @@ async def _keycloak_fristen() -> None:
                 minuten = settings_store.idle_minutes(db)
             await asyncio.to_thread(keycloak.sitzungsfristen_setzen, minuten)
             log.info("Keycloak-Sitzungsfrist angeglichen: %d Minuten", minuten)
+            # Die Anmeldeseite zweisprachig, Vorgabe wie in OTA.
+            with SessionLocal() as db:
+                sprache = settings_store.get(db, settings_store.UI_SPRACHE)
+            await asyncio.to_thread(keycloak.sprache_setzen, sprache)
             # Und der Zugang der Anwendungen: nach einem Update (der Bestand
             # bekommt „fuer alle") und wenn sich der Anmeldefluss des Realms
             # geaendert hat, auf dem die Fluesse der Anwendungen aufbauen.

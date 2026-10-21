@@ -177,10 +177,12 @@ braucht keine Verwaltungsrechte — es geht um die eigene Person.
 | **Zwei-Faktor** | Bei Konten der zentralen Anmeldung: Authenticator-App oder Passkey in Keycloak einrichten. Beim Notfallkonto: OTAs eigener (unten) |
 | **Sprache** | Deutsch oder Englisch, am Konto gemerkt statt nur im Browser |
 
-Daneben, unten in der Leiste und **auch schon auf der Anmeldemaske**: die Sprache und das
-**Gewand** — dunkel, hell oder „wie der Rechner". Beide liegen im Browser und nicht am Konto: Sie
-sind eine Frage des Arbeitsplatzes, nicht der Identität. Dieselbe Person am hellen Bildschirm im
-Büro und am dunklen zu Hause soll dafür nicht ihr Konto umstellen müssen.
+Daneben die Sprache oben rechts und unten in der Leiste das **Gewand** — dunkel, hell oder „wie
+der Rechner". Beides gibt es **auch schon auf der Anmeldemaske**. Gewand und Sprache liegen im
+Browser: Sie sind eine Frage des Arbeitsplatzes, nicht der Identität. Dieselbe Person am hellen
+Bildschirm im Büro und am dunklen zu Hause soll dafür nicht ihr Konto umstellen müssen. Die Sprache
+wird zusätzlich am Konto gemerkt; wer nie wählt, bekommt die Standardsprache der Anlage
+(Einstellungen → Sprache).
 
 „Wie der Rechner" ist die Vorgabe und folgt dem Betriebssystem, auch wenn es abends von selbst
 umschaltet. Wer sich festlegt, überschreibt das dauerhaft.

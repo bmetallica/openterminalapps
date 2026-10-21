@@ -1,7 +1,7 @@
 /** Typisierter Zugriff auf die OTA-API. */
 
 import type { Marke } from './branding'
-import { t } from './i18n'
+import { t, tServer } from './i18n'
 
 export type Me = {
   id: string
@@ -11,6 +11,8 @@ export type Me = {
   permissions: string[]
   groups: string[]
   locale: string
+  /** Selbst gewählt? Sonst gilt die Standardsprache der Anlage. */
+  locale_gewaehlt?: boolean
   must_change_password: boolean
   /** Ist der zweite Faktor eingerichtet? Das Geheimnis selbst kommt nie hierher. */
   totp_enabled: boolean
@@ -792,7 +794,7 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
       (data && typeof data === 'object' && 'detail' in data && typeof data.detail === 'string')
         ? data.detail
         : t('Unerwarteter Fehler ({code})', { code: res.status })
-    throw new ApiError(res.status, t(detail))
+    throw new ApiError(res.status, tServer(detail))
   }
   return data as T
 }
@@ -833,8 +835,8 @@ export const api = {
 
   templates: () => call<Template[]>('/templates'),
 
-  help: () => call<HelpChapter[]>('/help'),
-  helpPage: (slug: string) => call<HelpPage>(`/help/${slug}`),
+  help: (lang: string) => call<HelpChapter[]>(`/help?lang=${lang}`),
+  helpPage: (slug: string, lang: string) => call<HelpPage>(`/help/${slug}?lang=${lang}`),
   createTemplate: (body: unknown) =>
     call<Template>('/templates', { method: 'POST', body: JSON.stringify(body) }),
   updateTemplate: (id: string, body: unknown) =>
@@ -1115,7 +1117,7 @@ export const api = {
     call<{ status: string }>(`/firewall/forwards/${id}`, { method: 'DELETE' }),
 
   branding: () => call<Marke>('/branding'),
-  saveBranding: (body: { name?: string; accent?: string }) =>
+  saveBranding: (body: { name?: string; accent?: string; sprache?: 'de' | 'en' }) =>
     call<Marke>('/branding', { method: 'PUT', body: JSON.stringify(body) }),
   uploadLogo: (datei: File) => {
     const body = new FormData()

@@ -395,7 +395,7 @@ input[type="color"] {
    Layout
    ============================================================ */
 
-.main { flex: 1; overflow-y: auto; }
+.main { flex: 1; overflow-y: auto; position: relative; }
 .wrap { max-width: 1180px; margin: 0 auto; padding: 30px 32px 64px; }
 
 .topbar {
@@ -1190,7 +1190,26 @@ input[type="color"] {
    Sprachumschalter
    Zwei sichtbare Schalter statt eines Klappmenüs: Bei genau zwei
    Sprachen ist die aktuelle damit auf einen Blick zu erkennen.
+   Oben rechts über dem Inhalt, seit dem 2026-10-22 — unten in der
+   Leiste fiel er bei vielen Menüpunkten aus dem Bild. Er sitzt im
+   Rand über der Kopfzeile (`.wrap` lässt oben 30px) und rollt mit.
    ============================================================ */
+.lang-ecke {
+  position: absolute; top: 6px; right: 16px; z-index: 5;
+  display: flex; gap: 3px;
+  padding: 3px; border-radius: var(--r-ctl); background: var(--well);
+}
+.lang-ecke__opt {
+  min-width: 26px; padding: 4px 0;
+  background: none; border: 0; border-radius: 5px;
+  font: 600 9.5px/1 "IBM Plex Mono", ui-monospace, monospace;
+  letter-spacing: .08em; color: var(--mute); cursor: pointer;
+  transition: background .14s var(--ease), color .14s var(--ease);
+}
+.lang-ecke__opt:hover { color: var(--label); }
+.lang-ecke__opt.is-on { background: var(--bay-2); color: var(--accent); }
+
+/* Dieselbe Form für das Gewand, unten in der Leiste. */
 .rail__lang {
   display: flex; gap: 3px; margin-bottom: 8px;
   padding: 3px; border-radius: var(--r-ctl); background: var(--well);
@@ -1200,7 +1219,6 @@ input[type="color"] {
   background: none; border: 0; border-radius: 5px;
   font: 600 9.5px/1 "IBM Plex Mono", ui-monospace, monospace;
   letter-spacing: .08em; color: var(--mute); cursor: pointer;
-  transition: background .14s var(--ease), color .14s var(--ease);
 }
 .rail__langopt:hover { color: var(--label); }
 .rail__langopt.is-on { background: var(--bay-2); color: var(--accent); }

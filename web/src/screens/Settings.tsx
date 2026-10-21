@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { CapacityFader, Field } from '../components/controls'
+import { CapacityFader, Field, Segmented } from '../components/controls'
 import { ApiError, api, type GlobalSettings } from '../lib/api'
 import { VORGABE, setzeMarke, useMarke } from '../lib/branding'
 import { idleLabel } from '../lib/format'
 import { Directory } from './Directory'
 import { GitEinstellungen } from '../components/GitEinstellungen'
-import { t, useLang } from '../lib/i18n'
+import { t, useLang, type Lang } from '../lib/i18n'
 
 /**
  * Was im laufenden Betrieb umstellbar ist.
@@ -58,6 +58,13 @@ export function Settings({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad'
           <h1 className="h-page">{t('Einstellungen')}</h1>
         </div>
       </header>
+
+      <div className="section__head">
+        <span className="silk">{t('Sprache')}</span><span className="section__rule" />
+      </div>
+      <div style={{ maxWidth: 620, marginBottom: 26 }}>
+        <Standardsprache onToast={onToast} />
+      </div>
 
       <div className="section__head">
         <span className="silk">{t('Anmeldung')}</span><span className="section__rule" />
@@ -334,6 +341,45 @@ function MarkeAendern({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad') =
               if (datei) void tun(() => api.uploadLogo(datei), t('Zeichen übernommen'))
             }} />
         </div>
+      </Field>
+    </div>
+  )
+}
+
+/**
+ * Die Sprache, in der OTA spricht, solange niemand selbst umschaltet.
+ *
+ * Sie gilt für die Oberfläche, die Anmeldeseite von Keycloak und das
+ * Handbuch. Wer oben rechts umschaltet, behält seine Wahl — im Browser und
+ * am Konto. Sie liegt bei der Marke, weil auch die Anmeldemaske sie braucht,
+ * bevor jemand angemeldet ist.
+ */
+function Standardsprache({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad') => void }) {
+  const marke = useMarke()
+  const [busy, setBusy] = useState(false)
+
+  async function waehlen(sprache: Lang) {
+    setBusy(true)
+    try {
+      setzeMarke(await api.saveBranding({ sprache }))
+      onToast(t('Standardsprache gespeichert.'))
+    } catch (err) {
+      onToast(err instanceof ApiError ? err.message : t('Speichern fehlgeschlagen'), 'bad')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="panel" style={{ padding: '18px 20px' }}>
+      <Field label={t('Standardsprache')}
+        hint={t('Für alle, die nicht selbst umschalten: Oberfläche, Anmeldeseite und Handbuch. Wer oben rechts eine Sprache wählt, behält sie.')}>
+        <Segmented label={t('Standardsprache')} value={marke.sprache}
+          options={[
+            { value: 'de' as Lang, label: 'Deutsch' },
+            { value: 'en' as Lang, label: 'English' },
+          ]}
+          onChange={(v) => { if (!busy && v !== marke.sprache) void waehlen(v) }} />
       </Field>
     </div>
   )

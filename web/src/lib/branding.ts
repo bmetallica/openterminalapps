@@ -18,12 +18,15 @@
  */
 
 import { useSyncExternalStore } from 'react'
+import { setStandardLang, type Lang } from './i18n'
 
 export type Marke = {
   name: string
   accent: string
   logo_url: string | null
   has_logo: boolean
+  /** Standardsprache der Anlage — für alle, die nicht selbst umgeschaltet haben. */
+  sprache: Lang
 }
 
 export const VORGABE: Marke = {
@@ -31,6 +34,7 @@ export const VORGABE: Marke = {
   accent: '#06B6D4',
   logo_url: null,
   has_logo: false,
+  sprache: 'de',
 }
 
 let marke: Marke = VORGABE
@@ -90,6 +94,7 @@ function anwenden(m: Marke): void {
 export function setzeMarke(m: Marke): void {
   marke = m
   anwenden(m)
+  if (m.sprache === 'de' || m.sprache === 'en') setStandardLang(m.sprache)
   for (const fn of hoerer) fn()
 }
 

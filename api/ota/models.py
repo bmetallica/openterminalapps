@@ -83,6 +83,11 @@ class User(Base):
     totp_recovery: Mapped[list] = mapped_column(JSONB, default=list)
 
     locale: Mapped[str] = mapped_column(String(8), default="de")
+    # Hat der Mensch die Sprache selbst gewählt? Sonst gilt die
+    # Standardsprache der Anlage (Einstellungen → Sprache) und `locale` ist
+    # nur die Vorgabe der Spalte. Erst seit dem 2026-10-22 unterschieden.
+    locale_gewaehlt: Mapped[bool] = mapped_column(Boolean, default=False,
+                                                  server_default="false")
     theme: Mapped[str] = mapped_column(String(16), default="dark")
 
     failed_logins: Mapped[int] = mapped_column(Integer, default=0)

@@ -19,7 +19,8 @@ Zu finden unter **Einstellungen → Marke**. Es braucht das Recht `settings.mana
 
 Alles gilt sofort und für alle — es ist eine Einstellung der Anlage, keine des einzelnen Browsers.
 Genau andersherum als **Gewand** (dunkel/hell) und **Sprache**: Die liegen im Browser, weil sie zum
-Arbeitsplatz gehören und nicht zur Anlage.
+Arbeitsplatz gehören und nicht zur Anlage. (Wer nie umschaltet, bekommt bei der Sprache die
+Standardsprache der Anlage, unter Einstellungen → Sprache.)
 
 ## Das Zeichen
 

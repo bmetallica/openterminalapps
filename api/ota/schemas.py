@@ -143,6 +143,8 @@ class MeOut(BaseModel):
     permissions: list[str]
     groups: list[str]
     locale: str
+    # Nur wenn das stimmt, gilt `locale` vor der Standardsprache der Anlage.
+    locale_gewaehlt: bool = False
     must_change_password: bool
     # Ist der zweite Faktor eingerichtet, und wie viele Rueckfallcodes sind
     # noch uebrig? Das Geheimnis selbst verlaesst den Server nie.
@@ -331,6 +333,7 @@ class BrandingIn(BaseModel):
 
     name: str | None = None
     accent: str | None = None
+    sprache: str | None = None
 
 
 class BrandingOut(BaseModel):
@@ -340,6 +343,8 @@ class BrandingOut(BaseModel):
     # Adresse bekommt und kein Browser das alte weiterzeigt.
     logo_url: str | None = None
     has_logo: bool = False
+    # Die Standardsprache der Anlage (Einstellungen → Sprache).
+    sprache: str = "de"
 
 
 class WebAppOut(BaseModel):

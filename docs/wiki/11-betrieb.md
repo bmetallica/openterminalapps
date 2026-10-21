@@ -154,10 +154,28 @@ with SessionLocal() as db: print(audit.aufraeumen(db))"
 
 ## Was unter „Einstellungen" steht ✅
 
-Vier Dinge gelten für die ganze Anlage und nicht für eine Sitzung: die **Anmeldefrist** und der
-**Platz** (beide unten in diesem Kapitel), das **Verzeichnis**
-([Kapitel 8](08-nutzer-und-gruppen.md)) und die **Marke** — Name, Farbe und Zeichen der Anlage,
-[Kapitel 22](22-marke.md). Alles davon braucht das Recht `settings.manage`.
+Fünf Dinge gelten für die ganze Anlage und nicht für eine Sitzung: die **Sprache** für alle, die
+nicht selbst umschalten, die **Anmeldefrist** und der **Platz** (beide unten in diesem Kapitel),
+das **Verzeichnis** ([Kapitel 8](08-nutzer-und-gruppen.md)) und die **Marke** — Name, Farbe und
+Zeichen der Anlage, [Kapitel 22](22-marke.md). Alles davon braucht das Recht `settings.manage`.
+
+## Sprache ✅
+
+**Verwaltung → Einstellungen → Sprache → Standardsprache.**
+
+OTA spricht Deutsch und Englisch. Jeder schaltet mit dem kleinen Umschalter **DE | EN** oben rechts
+um; die Wahl gilt in diesem Browser und wird am Konto gemerkt, damit sie an einem anderen Rechner
+wieder gilt. Die **Standardsprache** gilt für alle, die nie gewählt haben:
+
+- die Oberfläche, auch die Anmeldeseite von OTA selbst,
+- die Anmeldeseite von Keycloak — OTA gibt die Sprache bei jeder Anmeldung mit (`ui_locales`) und
+  setzt die Vorgabe des Realms für den Fall, dass Keycloak ohne OTA aufgerufen wird,
+- das Handbuch: Kapitel kommen auf Englisch aus `docs/wiki/en/`, sonst aus `docs/wiki/`.
+
+Meldungen des Servers stehen im Quelltext auf Deutsch und werden im Browser übersetzt, genau wie die
+Oberfläche (`web/src/lib/i18n.en.ts`). Wer einen Text hinzufügt, prüft mit
+`python3 scripts/i18n-pruefen.py`, dass er einen englischen Eintrag hat; `make test` läuft diese
+Prüfung als Erstes.
 
 ## Anmeldefrist ✅
 

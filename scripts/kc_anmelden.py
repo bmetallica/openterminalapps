@@ -70,7 +70,9 @@ def fehlermeldung(seite: str) -> str:
     return "unbekannt"
 
 
-frage = {"next": "/"}
+# Englisch, weil hier Meldungen von Keycloak ausgewertet werden ("disabled"):
+# Wer Text auswertet, legt die Sprache fest.
+frage = {"next": "/", "lang": "en"}
 if a.aktion:
     frage["aktion"] = a.aktion
 url, seite = holen(f"{a.basis}/api/auth/oidc/start?{urllib.parse.urlencode(frage)}")

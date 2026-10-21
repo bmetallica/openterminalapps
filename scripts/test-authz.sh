@@ -891,7 +891,7 @@ print(t[0] if t else 'FEHLT')"; }
         rm -f /tmp/pk.jar
         URL='$KC_INT/realms/ota/protocol/openid-connect/auth?client_id=ota&redirect_uri=$(python3 -c "
 import urllib.parse, os
-print(urllib.parse.quote('http://ota-keycloak:8080/cb'))")&response_type=code&scope=openid&state=p'
+print(urllib.parse.quote('http://ota-keycloak:8080/cb'))")&response_type=code&scope=openid&state=p&ui_locales=en'
         curl -s -c /tmp/pk.jar -b /tmp/pk.jar -o /tmp/pk1.html \"\$URL\"
         A=\$(grep -o 'action=\"[^\"]*\"' /tmp/pk1.html | head -1 | sed 's/action=\"//;s/\"\$//;s/&amp;/\&/g')
         curl -s -c /tmp/pk.jar -b /tmp/pk.jar -L -o /tmp/pk2.html -w '%{url_effective}' -X POST \"\$A\" \

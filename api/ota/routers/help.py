@@ -67,6 +67,19 @@ SECTIONS: dict[str, tuple[str, bool]] = {
 SLUG_OK = re.compile(r"^[0-9a-z-]+$")
 
 
+def _datei(name: str, lang: str) -> Path:
+    """Die englische Fassung aus `docs/wiki/en/`, wenn es eine gibt.
+
+    Fehlt sie, gilt die deutsche: Ein Kapitel, das noch nicht übersetzt ist,
+    soll nicht aus dem Handbuch verschwinden.
+    """
+    if lang == "en":
+        en = WIKI_DIR / "en" / name
+        if en.is_file():
+            return en
+    return WIKI_DIR / name
+
+
 def _title_of(path: Path) -> str:
     """Die erste Ueberschrift der Datei, ohne die Raute."""
     try:
@@ -79,7 +92,7 @@ def _title_of(path: Path) -> str:
     return path.stem
 
 
-def _chapters(user: User) -> list[HelpChapter]:
+def _chapters(user: User, lang: str = "") -> list[HelpChapter]:
     if not WIKI_DIR.is_dir():
         return []
     out: list[HelpChapter] = []
@@ -91,19 +104,19 @@ def _chapters(user: User) -> list[HelpChapter]:
             continue
         out.append(HelpChapter(
             slug=path.stem,
-            title=_title_of(path),
+            title=_title_of(_datei(path.name, lang)),
             section=section,
         ))
     return out
 
 
 @router.get("", response_model=list[HelpChapter])
-def list_chapters(user: User = Depends(current_user)) -> list[HelpChapter]:
-    return _chapters(user)
+def list_chapters(lang: str = "", user: User = Depends(current_user)) -> list[HelpChapter]:
+    return _chapters(user, lang)
 
 
 @router.get("/{slug}", response_model=HelpPage)
-def read_chapter(slug: str, user: User = Depends(current_user)) -> HelpPage:
+def read_chapter(slug: str, lang: str = "", user: User = Depends(current_user)) -> HelpPage:
     # Der Name kommt aus der Adresse. Ohne diese Pruefung liesse sich mit
     # "../../etc/passwd" alles lesen, was der Prozess lesen darf.
     if not SLUG_OK.match(slug):
@@ -113,7 +126,7 @@ def read_chapter(slug: str, user: User = Depends(current_user)) -> HelpPage:
     if slug not in allowed:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Kapitel nicht gefunden")
 
-    path = WIKI_DIR / f"{slug}.md"
+    path = _datei(f"{slug}.md", lang)
     try:
         text = path.read_text(encoding="utf-8")
     except OSError:
@@ -130,7 +143,7 @@ BILD_OK = re.compile(r"^[0-9a-z-]+\.svg$")
 
 
 @router.get("/bild/{datei}")
-def read_bild(datei: str, user: User = Depends(current_user)) -> Response:
+def read_bild(datei: str, lang: str = "", user: User = Depends(current_user)) -> Response:
     """Ein Bild aus `docs/wiki/bilder/`.
 
     Nur SVG, nur aus diesem einen Ordner, und der Name muss aus Kleinbuchstaben,
@@ -146,7 +159,8 @@ def read_bild(datei: str, user: User = Depends(current_user)) -> Response:
     if not BILD_OK.match(datei):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Bild nicht gefunden")
 
-    pfad = WIKI_DIR / "bilder" / datei
+    # Bilder mit Beschriftung gibt es auch auf Englisch, in `bilder/en/`.
+    pfad = _datei(f"bilder/{datei}", lang)
     try:
         inhalt = pfad.read_bytes()
     except OSError:

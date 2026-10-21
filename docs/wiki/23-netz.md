@@ -179,7 +179,8 @@ sind es ab Werk zwanzig und nicht tausend.
 
 Die fünf Diagramme oben erzeugt `python3 scripts/netzfluss.py` — sie unterscheiden sich nur in den
 Urteilen an den Leitungen, und von Hand wären es fünf Dateien, die auseinanderlaufen, sobald jemand
-eine Farbe ändert. Animiert sind sie mit CSS und nicht mit SMIL; nur so lässt sich
+eine Farbe ändert. Die englischen Fassungen entstehen mit `OTA_NETZFLUSS_SPRACHE=en` in
+`docs/wiki/en/bilder/`. Animiert sind sie mit CSS und nicht mit SMIL; nur so lässt sich
 `prefers-reduced-motion` beachten. **Wer Bewegung abgestellt hat, sieht dasselbe Bild mit stehenden
 Paketen** — nicht ein leeres.
 

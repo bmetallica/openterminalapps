@@ -6,9 +6,9 @@ import { t, useLang } from '../lib/i18n'
 /**
  * Das Handbuch im Programm.
  *
- * Die Kapitel kommen aus `docs/wiki/`. Welche jemand sieht, entscheidet die
- * API anhand der Rechte — hier wird nichts ausgeblendet, was der Server
- * ausliefern würde.
+ * Die Kapitel kommen aus `docs/wiki/`, auf Englisch aus `docs/wiki/en/`.
+ * Welche jemand sieht, entscheidet die API anhand der Rechte — hier wird
+ * nichts ausgeblendet, was der Server ausliefern würde.
  */
 export function Help({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad') => void }) {
   const lang = useLang()
@@ -20,18 +20,18 @@ export function Help({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad') =>
   const body = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    api.help()
+    api.help(lang)
       .then((c) => { setChapters(c); setSlug((s) => s ?? c[0]?.slug ?? null) })
       .catch((err) => setFailed(err instanceof ApiError ? err.message : t('Handbuch konnte nicht geladen werden')))
-  }, [])
+  }, [lang])
 
   useEffect(() => {
     if (!slug) return
     setPage(null)
-    api.helpPage(slug)
+    api.helpPage(slug, lang)
       .then(setPage)
       .catch((err) => onToast(err instanceof ApiError ? err.message : t('Handbuch konnte nicht geladen werden'), 'bad'))
-  }, [slug, onToast])
+  }, [slug, lang, onToast])
 
   // Nach jedem Kapitelwechsel oben anfangen — sonst landet man mitten im Text.
   useEffect(() => { body.current?.scrollTo({ top: 0 }) }, [page])
@@ -78,12 +78,6 @@ export function Help({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad') =>
           <h1 className="h-page">{t('Hilfe')}</h1>
         </div>
       </header>
-
-      {lang === 'en' && (
-        <p className="sub" style={{ marginBottom: 16 }}>
-          The handbook itself is written in German. The interface follows your language setting.
-        </p>
-      )}
 
       <div className="book">
         <aside className="book__index" aria-label={t('Kapitel')}>

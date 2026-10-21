@@ -584,15 +584,14 @@ function Editor({ tpl, host, groups, images, netzprofile, onSaved, onClose, onTo
             <span className="section__rule" />
           </div>
           <p className="sub" style={{ marginBottom: 14 }}>
-            Ohne eigene Zuteilung gilt die Vorgabe der Vorlage. Das Spezifischste gewinnt:
-            Vorlage, dann Gruppe, dann Nutzer. Änderungen wirken auf die nächste Session.
+            {tr('Ohne eigene Zuteilung gilt die Vorgabe der Vorlage. Das Spezifischste gewinnt: Vorlage, dann Gruppe, dann Nutzer. Änderungen wirken auf die nächste Session.')}
           </p>
 
           {allocs === null ? (
-            <p className="sub">Wird geladen…</p>
+            <p className="sub">{tr('Wird geladen…')}</p>
           ) : allocs.length === 0 ? (
             <p className="assign__empty">
-              Erst eine Gruppe zuweisen und speichern — dann erscheinen hier deren Mitglieder.
+              {tr('Erst eine Gruppe zuweisen und speichern — dann erscheinen hier deren Mitglieder.')}
             </p>
           ) : (
             <div className="alloc">
