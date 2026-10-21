@@ -894,3 +894,37 @@ class Recipe(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow
     )
+
+
+# --------------------------------------------------------------------------
+# Softwaremonitoring (software.py, Handbuch Kapitel 11)
+# --------------------------------------------------------------------------
+
+class SoftwareFund(Base):
+    """Eine Anwendung, die in einem Arbeitsplatz gefunden wurde.
+
+    Je Sitzung der **aktuelle** Stand: Was bei der nächsten Erfassung fehlt,
+    ist deinstalliert und verschwindet hier — und mit ihm die Meldung.
+    `erstmals` bleibt, solange die Anwendung ununterbrochen da ist.
+    """
+
+    __tablename__ = "software_funde"
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("sessions.id", ondelete="CASCADE"), primary_key=True
+    )
+    name: Mapped[str] = mapped_column(String(200), primary_key=True)
+    quelle: Mapped[str] = mapped_column(String(16), default="apt")
+    titel: Mapped[str] = mapped_column(String(200), default="")
+    erstmals: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    zuletzt: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class SoftwareFreigabe(Base):
+    """Ein Eintrag der Whitelist. Gilt für alle Arbeitsplätze, ohne Version."""
+
+    __tablename__ = "software_freigaben"
+    name: Mapped[str] = mapped_column(String(200), primary_key=True)
+    titel: Mapped[str] = mapped_column(String(200), default="")
+    quelle: Mapped[str] = mapped_column(String(16), default="")
+    von: Mapped[str] = mapped_column(String(128), default="")
+    am: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

@@ -3,7 +3,8 @@ import { AppIcon } from '../components/AppIcon'
 import { Led, stateClass } from '../components/controls'
 import {
   ApiError, api,
-  type Me, type MyStorage, type RepoKurz, type Session, type Stream, type Template,
+  type Me, type MyStorage, type RepoKurz, type Session, type SoftwareMeldung, type Stream,
+  type Template,
   type WebApp as WebAppT,
 } from '../lib/api'
 import { ago, duration, gb } from '../lib/format'
@@ -281,10 +282,11 @@ function ShortcutSection({ templates }: { templates: Template[] }) {
   )
 }
 
-export function Dashboard({ me, onOpen, onToast }: {
+export function Dashboard({ me, onOpen, onToast, onSoftware }: {
   me: Me
   onOpen: (s: Session, stream?: Stream) => void
   onToast: (m: string, tone?: 'ok' | 'bad') => void
+  onSoftware?: () => void
 }) {
   useLang()
   const [sessions, setSessions] = useState<Session[] | null>(null)
@@ -305,6 +307,12 @@ export function Dashboard({ me, onOpen, onToast }: {
   const [repo, setRepo] = useState<RepoKurz | null>(null)
   useEffect(() => {
     if (me.is_admin) api.repoKurz().then(setRepo).catch(() => {})
+  }, [me.is_admin])
+
+  // Anwendungen außerhalb der Whitelist (Kapitel 11), nur für Administratoren.
+  const [software, setSoftware] = useState<SoftwareMeldung[]>([])
+  useEffect(() => {
+    if (me.is_admin) api.softwareMeldungen().then(setSoftware).catch(() => {})
   }, [me.is_admin])
 
   async function load() {
@@ -465,6 +473,25 @@ export function Dashboard({ me, onOpen, onToast }: {
             {space.level === 'voll'
               ? tr('Bis du aufräumst, startet kein Arbeitsplatz mehr.')
               : tr('Downloads, Caches und alte Abbilder sind meist die Größten.')}
+          </span>
+        </div>
+      )}
+
+      {software.length > 0 && (
+        <div className="gate-note" role="status">
+          <b>
+            {software.length === 1
+              ? tr('Eine Anwendung steht nicht auf der Whitelist.')
+              : tr('{n} Anwendungen stehen nicht auf der Whitelist.', { n: software.length })}
+          </b>
+          <span>
+            {software.slice(0, 4).map((m) =>
+              `${m.name} (${[...new Set(m.orte.map((o) => o.user))].join(', ')})`).join(' · ')}
+            {software.length > 4 ? ' · …' : ''}
+            {' '}
+            {onSoftware
+              ? <button className="btn btn--sm" onClick={onSoftware}>{tr('Zum Softwaremonitoring')}</button>
+              : tr('Unter Softwaremonitoring freigeben.')}
           </span>
         </div>
       )}

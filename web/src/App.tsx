@@ -14,6 +14,7 @@ import { Account } from './screens/Account'
 import { useMarke } from './lib/branding'
 import { Registries } from './screens/Registries'
 import { Paketquellen } from './screens/Paketquellen'
+import { Softwaremonitoring } from './screens/Softwaremonitoring'
 import { StandaloneViewer } from './screens/StandaloneViewer'
 import { anmeldePfad, openInTab, parseRoute, viewPath, type Route } from './lib/routes'
 import { ApiError, api, type Host, type Me, type Session, type Stream, type Template } from './lib/api'
@@ -23,7 +24,7 @@ import { setTheme, useTheme, type Theme } from './lib/theme'
 import './styles/app.css'
 
 type View = 'dashboard' | 'workspaces' | 'webapps' | 'images' | 'registries' | 'paketquellen' | 'storage'
-  | 'files' | 'people' | 'monitor' | 'netz' | 'settings' | 'account' | 'help'
+  | 'files' | 'people' | 'monitor' | 'software' | 'netz' | 'settings' | 'account' | 'help'
 type Toast = { id: number; msg: string; tone: 'ok' | 'bad' }
 
 const NAV: { id: View; glyph: string; cap: string; adminOnly: boolean }[] = [
@@ -49,6 +50,9 @@ const NAV: { id: View; glyph: string; cap: string; adminOnly: boolean }[] = [
   { id: 'storage', glyph: '▦', cap: 'Gemeinsame Ablage', adminOnly: true },
   { id: 'people', glyph: '◔', cap: 'Nutzer', adminOnly: true },
   { id: 'monitor', glyph: '◈', cap: 'Betrieb', adminOnly: true },
+  // Welche Anwendung in welchem Arbeitsplatz steckt, und was nicht auf der
+  // Whitelist steht (Kapitel 11). Gegen Wildwuchs, nicht gegen Menschen.
+  { id: 'software', glyph: '◫', cap: 'Software', adminOnly: true },
   // Eigener Punkt und kein Winkel in „Einstellungen": Hier steht, wer gerade
   // unter welcher Adresse arbeitet — das schaut man im Betrieb nach, nicht
   // beim Einrichten.
@@ -287,7 +291,8 @@ export default function App() {
           </div>
         )}
         {current === 'dashboard' && (
-          <Dashboard me={me} onOpen={openSession} onToast={toast} />
+          <Dashboard me={me} onOpen={openSession} onToast={toast}
+            onSoftware={() => setView('software')} />
         )}
         {current === 'workspaces' && <Workspaces onToast={toast} />}
         {current === 'webapps' && <WebApps onToast={toast}
@@ -306,6 +311,7 @@ export default function App() {
         {current === 'people' && <People onToast={toast} />}
         {current === 'monitor' && <Monitor onToast={toast}
           darfTerminal={!!me && (me.is_admin || me.permissions.includes('arbeitsplatz.terminal'))} />}
+        {current === 'software' && <Softwaremonitoring onToast={toast} />}
         {current === 'netz' && <Netz onToast={toast} />}
         {current === 'settings' && <Settings onToast={toast} />}
         {current === 'account' && <Account me={me} onMe={setMe} onToast={toast} />}

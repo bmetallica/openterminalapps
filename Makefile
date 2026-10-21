@@ -229,6 +229,7 @@ test:
 	@echo
 	@# Geaenderte CPU/RAM erreichen vorhandene Container (docker update).
 	@./scripts/test-ressourcen.sh
+	@./scripts/test-software.sh
 	@echo
 	@./scripts/test-clipboard-bridge.sh || \
 	  echo "  (übersprungen — dafür muss ein Arbeitsplatz mit zwei Apps laufen)"

@@ -298,6 +298,11 @@ dabei **nicht** zurückwandert, ist die Datenbank: Neue Spalten bleiben stehen. 
   demselben Namen. Die Verwaltung kann aber ein **Domänenkonto einem bestehenden Konto zuordnen**:
   Danach meldet sich das alte Konto über das Verzeichnis an und behält Container, Zuhause und
   Ablagen.
+- **Softwaremonitoring:** Stündlich wird erfasst, welche Anwendungen in jedem laufenden
+  Arbeitsplatz installiert sind (apt, Startmenü, Flatpak, Snap), ohne Versionen. Dazu gibt es eine
+  Whitelist, befüllbar aus dem aktuellen Stand. Was nicht darauf steht, sehen Administratoren auf
+  dem Dashboard und geben es per Knopfdruck frei. Wird es deinstalliert, verschwindet die Meldung
+  von selbst
 - **Fremde Web-Anwendungen** im Katalog (Open WebUI, Grafana, …): OTA legt den OIDC-Zugang an und
   entscheidet, wer die Kachel sieht **und wer sich dort anmelden darf**. Keycloak prüft das selbst,
   auch beim direkten Aufruf der Adresse; ohne Gruppe kommt niemand hinein. Die OTA-Gruppen stehen
@@ -472,6 +477,7 @@ make test
 |---|---|
 | `test-authz.sh` | Ein normaler Nutzer kann beweisbar nichts Administratives tun und an keinem fremden Bildschirm sitzen; dazu Container-Härtung, Kennzahlen, Kontingente und zweiter Faktor |
 | `test-ressourcen.sh` | Geänderte CPU und RAM erreichen vorhandene Container, laufend und pausiert; RAM unter dem Verbrauch wartet bis zum nächsten Start, die CPU nicht |
+| `test-software.sh` | Softwaremonitoring: Die Erfassung liest einen laufenden Arbeitsplatz (Debian-Pakete wie `apt-mark showmanual`, Starteinträge systemweit und im Zuhause, versteckte nicht); nach dem Befüllen der Whitelist keine Meldung; eine neue Anwendung wird mit Nutzer gemeldet; deinstalliert oder freigegeben verschwindet die Meldung, entzogen kommt sie wieder |
 | `test-konten.sh` | Konten der zentralen Anmeldung: Anlegen in OTA legt in Keycloak an (samt Pflicht zum Passwortwechsel), lokal kommt es nicht herein; Ändern, Passwort, zweiter Faktor, Sperren und Löschen wirken in Keycloak; Mein Konto führt über Keycloak; ein lokales Bestandskonto zieht mit seinem Passwort um, das Notfallkonto nicht |
 | `test-clipboard-bridge.sh` | Kopieren zwischen zwei Anwendungen im selben Arbeitsplatz: beide Richtungen, Umlaute, ein Bild, ein Megabyte, nach Pause, und abgeschaltet |
 | `tests/e2e.mjs` | Die Oberfläche in einem echten Browser — bis zur Frage, ob der Stream wirklich verbindet |

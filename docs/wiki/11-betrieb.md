@@ -478,6 +478,47 @@ Wer ein Abbild zur Fehlersuche braucht, holt es sich innerhalb der fünf Minuten
 Root-Arbeitsplatz mit `ulimit -c unlimited` für diese Shell an — der tägliche Lauf räumt es danach
 trotzdem.
 
+## Softwaremonitoring ✅
+
+Unter **Verwaltung → Softwaremonitoring** steht, welche Anwendung in welchem Arbeitsplatz welches
+Nutzers installiert ist. Ziel ist, Wildwuchs zu bemerken, nicht ihn zu verhindern: Installiert
+werden kann weiter, was die Rechte des Arbeitsplatzes erlauben.
+
+**Einmal je Stunde** liest OTA jeden **laufenden** Arbeitsplatz, auf Knopfdruck auch sofort
+(**Jetzt erfassen**). Erfasst werden Anwendungen, keine Versionen:
+
+| Herkunft | Was |
+|---|---|
+| apt | Von Hand installierte Debian-Pakete, wie `apt-mark showmanual`. Was apt als automatisch mitinstalliert vermerkt hat, fällt weg. Ein per `dpkg -i` eingespieltes `.deb` zählt mit |
+| Startmenü | Programme mit Starteintrag (`*.desktop`), systemweit und im Zuhause, etwa AppImages. Versteckte Einträge (`NoDisplay`) zählen nicht |
+| Flatpak, Snap | Erkannt an den Starteinträgen, die beide anlegen |
+
+Massgeblich ist nur der Name: Das Paket `gimp` und der Starteintrag `gimp.desktop` sind dieselbe
+Anwendung.
+
+**Gelesen, nicht ausgeführt.** Der Agent holt die Statusdateien von dpkg und apt über die
+Docker-Schnittstelle (wie `docker cp`) und liest das Zuhause direkt auf dem Wirt. Im Container
+läuft dafür kein Befehl. Ein `apt-mark` aufzurufen hiesse, einem Programm zu glauben, das in einem
+Root-Arbeitsplatz der Nutzer selbst austauschen kann.
+
+### Whitelist und Meldungen
+
+- **Eine Whitelist für alle Arbeitsplätze.** Auch was das Image mitbringt, muss darauf stehen.
+- **Aus dem aktuellen Stand befüllen** nimmt alles auf, was gerade irgendwo installiert ist.
+  Das ist der Startpunkt. Ein Arbeitsplatz-Image bringt schnell einige hundert Pakete mit.
+- Was nicht darauf steht, erscheint unter **Nicht auf der Whitelist**, mit Nutzer, Vorlage und
+  Zeitpunkt. Administratoren sehen es zusätzlich auf ihrem **Dashboard**.
+- Nach Rücksprache mit dem Nutzer gibt es zwei Wege:
+  - **In die Whitelist** übernehmen.
+  - Der Nutzer deinstalliert die Anwendung. Bei der nächsten Erfassung fehlt sie dann, und
+    die Meldung verschwindet von selbst.
+- Ein angehaltener Root-Arbeitsplatz wird nicht gelesen und behält seinen letzten Stand. Ein
+  beendeter Arbeitsplatz verliert ihn, weil es seinen Container nicht mehr gibt.
+
+Sehen darf das Softwaremonitoring, wer alle Sitzungen sehen darf. Die Whitelist ändert, wer die
+Einstellungen ändert. Jede Änderung steht im Protokoll: `software.freigegeben`,
+`software.entzogen` und `software.whitelist_befuellt`.
+
 ## Rückfall auf Kasm
 
 Solange Kasm parallel installiert ist, ist der Rückweg kurz:

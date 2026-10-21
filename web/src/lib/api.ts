@@ -227,6 +227,36 @@ export type Domaenenkonto = {
   ist_ziel: boolean
 }
 
+/** Softwaremonitoring (api/ota/software.py). */
+export type SoftwareOrt = {
+  session_id: string
+  user: string
+  vorlage: string
+  klasse: string
+  status: string
+}
+export type SoftwareAnwendung = {
+  name: string
+  titel: string
+  quelle: string
+  frei: boolean
+  erstmals: string
+}
+export type SoftwareMeldung = {
+  name: string
+  titel: string
+  quelle: string
+  erstmals: string
+  orte: (SoftwareOrt & { erstmals: string })[]
+}
+export type SoftwareStand = {
+  letzte: { zeit: string; ok: boolean; anlass: string; container?: number; fehler?: string | string[] } | null
+  intervall_minuten: number
+  arbeitsplaetze: (SoftwareOrt & { zuletzt: string; anwendungen: SoftwareAnwendung[] })[]
+  meldungen: SoftwareMeldung[]
+  whitelist: { name: string; titel: string; quelle: string; von: string; am: string }[]
+}
+
 export type Permission = { key: string; text: string }
 
 /** Was eine Sitzung im Netz darf. Durchgesetzt wird es im Router, nicht hier. */
@@ -1139,6 +1169,16 @@ export const api = {
     call<User>(`/admin/users/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   deleteUser: (id: string) =>
     call<{ status: string }>(`/admin/users/${id}`, { method: 'DELETE' }),
+  software: () => call<SoftwareStand>('/admin/software'),
+  softwareMeldungen: () => call<SoftwareMeldung[]>('/admin/software/meldungen'),
+  softwareErfassen: () =>
+    call<NonNullable<SoftwareStand['letzte']>>('/admin/software/erfassen', { method: 'POST' }),
+  softwareFreigeben: (namen: string[]) =>
+    call<{ neu: string[] }>('/admin/software/whitelist', { method: 'POST', body: JSON.stringify({ namen }) }),
+  softwareErstbefuellen: () =>
+    call<{ neu: string[] }>('/admin/software/whitelist/erstbefuellen', { method: 'POST' }),
+  softwareEntziehen: (name: string) =>
+    call<{ entfernt: string }>(`/admin/software/whitelist/${encodeURIComponent(name)}`, { method: 'DELETE' }),
   domaenenkonten: (id: string, q: string) =>
     call<Domaenenkonto[]>(`/admin/users/${id}/domaenenkonten?q=${encodeURIComponent(q)}`),
   domaenenkontoZuordnen: (id: string, sub: string) =>

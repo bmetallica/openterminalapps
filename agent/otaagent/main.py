@@ -37,6 +37,7 @@ from . import backup as backup_ops
 from . import builder
 from . import freeze as freeze_ops
 from . import skeleton as skeleton_ops
+from . import software as software_ops
 from . import kerne
 from . import clipboard as clip_scripts
 from . import discover
@@ -2323,6 +2324,27 @@ async def terminal(ws: WebSocket, cid: str) -> None:
             await ws.close()
         except Exception:  # noqa: BLE001
             pass
+
+
+@app.get("/software", dependencies=[Depends(require_token)])
+def software() -> list[dict[str, Any]]:
+    """Die Anwendungen in jedem **laufenden** Arbeitsplatz (software.py).
+
+    Ein angehaltener Container wird nicht gelesen; die API behält, was sie
+    zuletzt von ihm wusste. Scheitert einer, steht der Fehler bei ihm, und
+    die anderen kommen trotzdem.
+    """
+    out = []
+    for c in dc().containers.list(filters={"label": "ota.session_id", "status": "running"}):
+        eintrag: dict[str, Any] = {"session_id": c.labels.get("ota.session_id", ""),
+                                   "container_id": c.id}
+        try:
+            eintrag["anwendungen"] = software_ops.inventar(c)
+        except Exception as exc:  # noqa: BLE001 — ein Container darf die Runde nicht anhalten
+            log.warning("Software in %s nicht lesbar: %s", c.name, exc)
+            eintrag["fehler"] = str(exc)[:200]
+        out.append(eintrag)
+    return out
 
 
 @app.get("/orphans", dependencies=[Depends(require_token)])

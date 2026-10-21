@@ -82,6 +82,9 @@ VERZEICHNIS_INTERVALL_STUFEN = (0, 15, 60, 360, 1440)
 VERZEICHNIS_LETZTER = "verzeichnis.letzter_abgleich"
 OHNE_GRUPPE_HINWEIS = "dashboard.ohne_gruppe_hinweis"
 
+# Softwaremonitoring (Kapitel 11): was die letzte stündliche Erfassung ergab.
+SOFTWARE_LETZTE = "software.letzte_erfassung"
+
 REPO_MODUS = "repo.modus"
 REPO_BAU_SNAPSHOT = "repo.bau_snapshot"
 REPO_ALTER_GELB = "repo.alter_gelb"
@@ -103,6 +106,7 @@ DEFAULTS: dict[str, Any] = {
     VERZEICHNIS_LETZTER: None,
     OHNE_GRUPPE_HINWEIS: ("Dir ist noch nichts zugewiesen. Wende dich an die Verwaltung, "
                           "damit sie dich einer Gruppe zuordnet."),
+    SOFTWARE_LETZTE: None,
     REPO_MODUS: "zuerst",
     REPO_BAU_SNAPSHOT: "",
     REPO_ALTER_GELB: 7,

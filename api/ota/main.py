@@ -20,7 +20,8 @@ from .routers import (
     files, groupfiles, paketquellen as paketquellen_router, pwa,
     recipes as recipes_router, webapps,
     registries as registries_router,
-    sessions, shared as shared_router, skeleton as skeleton_router, templates,
+    sessions, shared as shared_router, skeleton as skeleton_router,
+    software as software_router, templates,
 )
 
 log = logging.getLogger("ota")
@@ -224,6 +225,27 @@ def _verzeichnis_takt() -> dict | None:
         return verzeichnis.abgleichen(db, anlass="takt")
 
 
+def _software_takt() -> dict | None:
+    """Die stündliche Erfassung der Anwendungen (software.py). Fällig nach
+    dem Zeitpunkt der letzten, damit ein Neustart der API sie weder
+    verdoppelt noch um eine Stunde verschiebt."""
+    from . import software
+
+    with SessionLocal() as db:
+        letzte = settings_store.get(db, settings_store.SOFTWARE_LETZTE) or {}
+        try:
+            alter = (datetime.now(timezone.utc)
+                     - datetime.fromisoformat(letzte["zeit"])).total_seconds()
+        except (KeyError, TypeError, ValueError):
+            alter = None
+        if alter is not None and alter < software.INTERVALL_SEKUNDEN:
+            return None
+        try:
+            return software.erfassen(db, "takt")
+        except software.LaeuftSchon:
+            return None
+
+
 async def _scheduler() -> None:
     from .routers.backups import run_scheduled
 
@@ -265,6 +287,11 @@ async def _scheduler() -> None:
                              weg["dateien"], weg["bytes"] / 1024 ** 2)
             except Exception as exc:  # noqa: BLE001 — derselbe Grund wie oben
                 log.warning("Speicherabbilder nicht entfernt: %s", exc)
+
+        try:
+            await asyncio.to_thread(_software_takt)
+        except Exception as exc:  # noqa: BLE001 — derselbe Grund wie oben
+            log.warning("Softwareerfassung fehlgeschlagen: %s", exc)
 
         try:
             stand = await asyncio.to_thread(_verzeichnis_takt)
@@ -400,6 +427,7 @@ app.include_router(identity_router.router)
 app.include_router(registries_router.router)
 app.include_router(internal.router)
 app.include_router(monitoring.router)
+app.include_router(software_router.router)
 
 
 @app.exception_handler(Exception)

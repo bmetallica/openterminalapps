@@ -160,6 +160,11 @@ def terminal_url(cid: str) -> tuple[str, dict[str, str]]:
     return f"{ws}/containers/{cid}/terminal", _headers()
 
 
+def software() -> list[dict[str, Any]]:
+    # Liest jeden laufenden Arbeitsplatz; bei vielen dauert das.
+    return _call("GET", "/software", timeout=600.0)
+
+
 def orphans() -> list[dict[str, Any]]:
     return _call("GET", "/orphans")
 
