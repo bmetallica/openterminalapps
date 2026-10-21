@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session as DbSession
 
-from .. import agent_client, audit, keycloak, verzeichnis
+from .. import agent_client, audit, keycloak, verknuepfen, verzeichnis
 import os
 import re
 from ..db import get_db
@@ -451,16 +451,8 @@ def delete_user(
                             "Das ist der letzte Administrator und kann nicht gelöscht werden.")
 
     name = user.username
-    # Seine Root-Arbeitsplaetze gehen mit — samt Docker-Daten. Die Zeilen
-    # verschwinden mit dem Konto; blieben die Container stehen, raeumte sie
-    # der Aufraeumer zwar weg, ihre Docker-Volumes aber nie.
-    for sess in db.scalars(select(SessionModel).where(
-            SessionModel.user_id == user.id)).all():
-        if sess.container_id and sess.template and sess.template.klasse == "root":
-            try:
-                agent_client.remove_container(sess.container_id, daten=True)
-            except HTTPException as exc:
-                log.warning("Root-Arbeitsplatz %s nicht entfernt: %s", sess.id, exc.detail)
+    # Seine Root-Arbeitsplaetze gehen mit — samt Docker-Daten.
+    verknuepfen.root_plaetze_entfernen(db, user)
     # In Keycloak wird gesperrt, nicht geloescht (keycloak.py: „Nichts
     # loeschen"). Ohne die Sperre legte die naechste Anmeldung das Konto hier
     # einfach wieder an.
@@ -477,6 +469,38 @@ def delete_user(
                  object_id=name, request=request)
     db.commit()
     return {"status": f"{name} gelöscht.{gesperrt} Das Profil auf der Platte bleibt bestehen."}
+
+
+# --------------------------------------------------------------------------
+# Domänenkonto zuordnen (verknuepfen.py)
+# --------------------------------------------------------------------------
+
+@router.get("/users/{user_id}/domaenenkonten", dependencies=[Depends(manage_users)])
+def domaenenkonten(user_id: uuid.UUID, q: str = "",
+                   db: DbSession = Depends(get_db)) -> list[dict]:
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Nutzer nicht gefunden")
+    return verknuepfen.kandidaten(db, user, q)
+
+
+@router.post("/users/{user_id}/domaenenkonto", dependencies=[Depends(manage_users)])
+def domaenenkonto_zuordnen(user_id: uuid.UUID, body: dict, request: Request,
+                           actor: User = Depends(current_user),
+                           db: DbSession = Depends(get_db)) -> dict:
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Nutzer nicht gefunden")
+    sub = str(body.get("sub") or "").strip()
+    if not sub:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Welches Domänenkonto?")
+    ergebnis = verknuepfen.verknuepfen(db, user, sub, actor)
+    audit.record(db, "user.domaene_verknuepft", actor=actor, object_type="user",
+                 object_id=str(user.id), request=request,
+                 vorher=ergebnis["vorher"], nachher=ergebnis["username"],
+                 entfernt=(ergebnis["entfernt"] or {}).get("username"))
+    db.commit()
+    return ergebnis
 
 
 # --------------------------------------------------------------------------

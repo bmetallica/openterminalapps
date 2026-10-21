@@ -294,7 +294,10 @@ dabei **nicht** zurückwandert, ist die Datenbank: Neue Spalten bleiben stehen. 
   eine Anlage nach einer kaputten Anmeldekonfiguration nicht mehr zu betreten. Davor eine Bremse
   (zehn Versuche je Minute und Absender), und die Sperre nach Fehlversuchen gilt je **(Konto,
   Absender)** — sie lässt sich damit nicht gegen einen Kollegen richten
-- Ein Verzeichniseintrag kann **kein bestehendes Konto übernehmen** — auch nicht mit demselben Namen
+- Ein Verzeichniseintrag kann **kein bestehendes Konto von selbst übernehmen**, auch nicht mit
+  demselben Namen. Die Verwaltung kann aber ein **Domänenkonto einem bestehenden Konto zuordnen**:
+  Danach meldet sich das alte Konto über das Verzeichnis an und behält Container, Zuhause und
+  Ablagen.
 - **Fremde Web-Anwendungen** im Katalog (Open WebUI, Grafana, …): OTA legt den OIDC-Zugang an und
   entscheidet, wer die Kachel sieht **und wer sich dort anmelden darf**. Keycloak prüft das selbst,
   auch beim direkten Aufruf der Adresse; ohne Gruppe kommt niemand hinein. Die OTA-Gruppen stehen
@@ -473,6 +476,7 @@ make test
 | `test-clipboard-bridge.sh` | Kopieren zwischen zwei Anwendungen im selben Arbeitsplatz: beide Richtungen, Umlaute, ein Bild, ein Megabyte, nach Pause, und abgeschaltet |
 | `tests/e2e.mjs` | Die Oberfläche in einem echten Browser — bis zur Frage, ob der Stream wirklich verbindet |
 | `test-verzeichnis.sh` | Gruppen aus dem Verzeichnis: beide LDAP-Gruppenformen werden erkannt, eine gekoppelte OTA-Gruppe bekommt ihre Mitglieder bei der Anmeldung und beim Abgleich, von Hand Aufgenommene bleiben, eine LDAP-Gruppe „admins“ macht niemanden zum Admin, Konten ohne Gruppe bekommen den Hinweis; eine Anwendung lässt nur ihre Gruppen herein, über das Formular **und** die SSO-Sitzung, ohne Gruppe niemanden; wer im Verzeichnis fehlt, wird deaktiviert |
+| `test-verknuepfen.sh` | Domänenkonto einem bestehenden Konto zuordnen: Danach gibt es nur das alte Konto, mit derselben Kennung, Sitzung und demselben Zuhause, unter dem Namen aus dem Verzeichnis; das Konto aus der ersten Domänenanmeldung ist weg; das alte Passwort und das alte Keycloak-Konto gelten nicht mehr; das Notfallkonto lässt sich nicht verknüpfen; für Konten aus Keycloak und für lokale Bestandskonten |
 | `test-ldap.sh` | Verzeichnis-Anbindung **über Keycloak** gegen ein echtes OpenLDAP im Container — vor allem, dass ein Verzeichniseintrag kein lokales Konto übernimmt und ein Ausfall den Notzugang nicht mitreisst |
 | `test-streaming.sh` | Der Medienweg mit einer eigenen Vorlage auf dem aktuellen Basisimage: Ein Browser in einem fremden Netz zählt die **dekodierten Bilder** — auf dem Arbeitsplatz und auf dem Bildschirm einer Anwendung (Selkies 2.0, WebSockets durch Traefik); Umlaute, Shift und AltGr einer deutschen Tastatur kommen richtig an. Ist TURN eingerichtet (nur noch für Golden Images mit Selkies 1.6.2), wird er mitgeprüft, samt Sperrliste und NAT |
 | `test-firewall.sh` | Die Netzabsicherung, **von innen gemessen**: Nachbar, Wirt, Firmennetz, TURN, Namensdienst, Internet je Stufe, Freigabe nach Namen, Portfreigabe — und alles noch einmal nach einem Neustart des Routers |

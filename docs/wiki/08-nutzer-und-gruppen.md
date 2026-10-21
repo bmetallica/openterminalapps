@@ -332,6 +332,40 @@ stellst du unter **Verzeichnis → Konten ohne Gruppe** ein. In der Nutzerliste 
 > Verzeichnis. Danach trägt OTA das Ergebnis nach Keycloak. Wer in Keycloak selbst Konten in
 > `/ota/…`-Gruppen schiebt, ändert damit in OTA nichts mehr.
 
+### Domänenkonto einem bestehenden Konto zuordnen ✅
+
+Ein Beispiel: Jemand hat ein OTA-Konto mit Arbeitsplätzen und meldet sich jetzt mit dem
+Domänenkonto aus AD oder LDAP an. OTA kennt dieses Domänenkonto noch nicht und legt dafür ein
+**neues, leeres Konto** an. So läuft die Zuordnung:
+
+1. Der Mensch meldet sich mit dem Domänenkonto an, sieht ein leeres Dashboard und sagt der
+   Verwaltung Bescheid.
+2. Du öffnest unter **Nutzer und Gruppen** sein **altes** Konto. Unter **Domänenkonto zuordnen**
+   suchst du nach Name, Anmeldename oder E-Mail. Die Suche zeigt nur Konten aus dem Verzeichnis.
+   Hat sich jemand schon angemeldet, steht das Konto aus dieser Anmeldung dabei.
+3. Mit **Zuordnen** gibt es danach nur noch das alte Konto. Es heisst wie im Verzeichnis und
+   meldet sich nur noch über die Domäne an.
+
+Was mitkommt: Sitzungen und Root-Arbeitsplätze, Zuhause, eigene Ablage, Gruppen und Kontingente.
+Das alles hängt an der Kennung des Kontos, nicht am Namen.
+
+Was sich ändert:
+
+- **Das lokale Passwort und OTAs zweiter Faktor entfallen.** Sonst bliebe ein zweiter Weg hinein,
+  an Keycloak und an einer Sperre im Verzeichnis vorbei.
+- **Das Konto aus der ersten Domänenanmeldung wird entfernt.** Läuft darin noch eine Sitzung, wird
+  nichts angefasst; erst beenden. Sein Zuhause bleibt auf der Platte.
+- **Hatte OTA dem alten Konto ein Konto in Keycloak angelegt, wird es dort deaktiviert, nicht
+  gelöscht.** Das Domänenkonto gehört dem Verzeichnis und bleibt, wie es ist.
+- Angemeldete Sitzungen des alten Kontos laufen ab. Die Arbeitsplätze laufen weiter.
+
+Nicht zuordnen lassen sich das Notfallkonto, das eigene Konto und ein Konto, das sich schon über
+das Verzeichnis anmeldet. Im Protokoll steht `user.domaene_verknuepft` mit altem und neuem Namen.
+
+**Rückweg:** `POST /api/admin/identity/uebernahme/zuruecknehmen` mit Name und neuem Passwort macht
+das Konto wieder lokal. Das Domänenkonto bleibt dabei aktiv; meldet es sich wieder an, wird es
+abgewiesen, weil der Name schon vergeben ist.
+
 ### Die Regel, die über allem steht
 
 > **Ein lokales Konto wird niemals über das Verzeichnis angemeldet, und ein Verzeichniseintrag kann

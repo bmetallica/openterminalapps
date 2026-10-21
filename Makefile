@@ -243,6 +243,7 @@ test:
 	@# Gruppen aus dem Verzeichnis und der Zugang zu fremden Anwendungen.
 	@# Dasselbe Wegwerf-Verzeichnis, ebenso danach wieder weg.
 	@./scripts/test-verzeichnis.sh
+	@./scripts/test-verknuepfen.sh
 	@echo
 	@# Der Medienweg. Eigene Reihe, weil die teuersten Fehler dieses Projekts
 	@# genau dort lagen und keine andere sie gefunden haette — sie sahen im

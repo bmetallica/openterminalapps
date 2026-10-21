@@ -323,7 +323,11 @@ def uebernahme_zurueck(body: dict, request: Request,
 
     if konto.external_id:
         try:
-            keycloak.konto_sperren(konto.external_id, True)
+            # Ein Domänenkonto gehört dem Verzeichnis, nicht uns — es bleibt,
+            # wie es ist (verknuepfen.py). Meldet es sich wieder an, trifft es
+            # auf das nun lokale Konto gleichen Namens und wird abgewiesen.
+            if not keycloak.aus_verzeichnis(keycloak.konto_lesen(konto.external_id)):
+                keycloak.konto_sperren(konto.external_id, True)
         except keycloak.KeycloakFehler:
             # Keycloak schweigt womöglich — und genau dann braucht man diesen
             # Weg. Das darf ihn nicht blockieren.

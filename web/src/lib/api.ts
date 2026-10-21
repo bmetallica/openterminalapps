@@ -204,6 +204,29 @@ export type User = {
   verzeichnis_group_ids: string[]
 }
 
+/** Was ein Konto in OTA hat — vor dem Verknüpfen angezeigt. */
+export type KontoBericht = {
+  id: string
+  username: string
+  angelegt: string | null
+  letzte_anmeldung: string | null
+  sitzungen: number
+  laufend: number
+  is_admin: boolean
+}
+
+/** Ein Konto aus dem Verzeichnis, das sich einem OTA-Konto zuordnen lässt. */
+export type Domaenenkonto = {
+  sub: string
+  username: string
+  name: string | null
+  email: string | null
+  aktiv: boolean
+  /** Das Konto, das OTA bei seiner ersten Anmeldung angelegt hat. Es verschwindet. */
+  ota_konto: KontoBericht | null
+  ist_ziel: boolean
+}
+
 export type Permission = { key: string; text: string }
 
 /** Was eine Sitzung im Netz darf. Durchgesetzt wird es im Router, nicht hier. */
@@ -1116,6 +1139,11 @@ export const api = {
     call<User>(`/admin/users/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   deleteUser: (id: string) =>
     call<{ status: string }>(`/admin/users/${id}`, { method: 'DELETE' }),
+  domaenenkonten: (id: string, q: string) =>
+    call<Domaenenkonto[]>(`/admin/users/${id}/domaenenkonten?q=${encodeURIComponent(q)}`),
+  domaenenkontoZuordnen: (id: string, sub: string) =>
+    call<{ username: string; vorher: string; entfernt: KontoBericht | null }>(
+      `/admin/users/${id}/domaenenkonto`, { method: 'POST', body: JSON.stringify({ sub }) }),
   createGroup: (body: unknown) =>
     call<Group>('/admin/groups', { method: 'POST', body: JSON.stringify(body) }),
   updateGroup: (id: string, body: unknown) =>

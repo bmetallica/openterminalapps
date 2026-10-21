@@ -3,12 +3,108 @@ import { ChipSelect, Drawer, Field, Led, Toggle } from '../components/controls'
 import { abgleichSatz } from '../components/VerzeichnisGruppen'
 import {
   ApiError, api,
-  type Group, type KopplungVorschau, type Permission, type User,
+  type Domaenenkonto, type Group, type KopplungVorschau, type Permission, type User,
 } from '../lib/api'
 import { ago } from '../lib/format'
 import { t as tr, useLang } from '../lib/i18n'
 
 type Tab = 'Nutzer' | 'Gruppen'
+
+/**
+ * Ein Domänenkonto diesem OTA-Konto zuordnen (api/ota/verknuepfen.py).
+ *
+ * Der Ablauf im Betrieb: Der Mensch meldet sich mit dem Domänenkonto an,
+ * OTA legt dafür ein leeres Konto an, er sagt der Verwaltung Bescheid — und
+ * die ordnet hier das Domänenkonto seinem alten Konto zu. Danach gibt es nur
+ * noch das alte, mit allen Containern und Zuhausen.
+ */
+function DomaenenZuordnung({ user, onSaved, onToast }: {
+  user: User
+  onSaved: () => void
+  onToast: (m: string, tone?: 'ok' | 'bad') => void
+}) {
+  const [q, setQ] = useState('')
+  const [treffer, setTreffer] = useState<Domaenenkonto[] | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  async function suchen() {
+    setBusy(true)
+    try {
+      setTreffer(await api.domaenenkonten(user.id, q.trim()))
+    } catch (err) {
+      onToast(err instanceof ApiError ? err.message : tr('Suche fehlgeschlagen'), 'bad')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function zuordnen(k: Domaenenkonto) {
+    const doppel = k.ota_konto
+    const frage = [
+      tr('„{alt}“ meldet sich danach nur noch als „{neu}“ über das Verzeichnis an. Das lokale Passwort und der zweite Faktor in OTA entfallen.',
+        { alt: user.username, neu: k.username }),
+      doppel ? tr('Das Konto „{d}“, das bei der Domänenanmeldung entstanden ist, wird entfernt ({n} Sitzungen). Sein Zuhause bleibt auf der Platte.',
+        { d: doppel.username, n: doppel.sitzungen }) : '',
+      tr('Fortfahren?'),
+    ].filter(Boolean).join('\n\n')
+    if (!window.confirm(frage)) return
+    setBusy(true)
+    try {
+      const r = await api.domaenenkontoZuordnen(user.id, k.sub)
+      onToast(tr('{alt} ist jetzt {neu} und meldet sich über das Verzeichnis an.',
+        { alt: r.vorher, neu: r.username }))
+      onSaved()
+    } catch (err) {
+      onToast(err instanceof ApiError ? err.message : tr('Zuordnen fehlgeschlagen'), 'bad')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Field label={tr('Domänenkonto zuordnen')}
+      hint={tr('Für jemanden, der dieses Konto schon hatte und sich jetzt über das Verzeichnis (AD/LDAP) anmeldet. Container, Zuhause und Ablagen bleiben bei diesem Konto.')}>
+      <div className="row-item">
+        <input value={q} placeholder={tr('Name, Anmeldename oder E-Mail')}
+          aria-label={tr('Domänenkonto suchen')}
+          onChange={(e) => setQ(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter' && q.trim().length >= 2) void suchen() }} />
+        <button className="btn btn--sm" disabled={busy || q.trim().length < 2}
+          onClick={() => void suchen()}>{tr('Suchen')}</button>
+      </div>
+      {treffer && treffer.length === 0 && (
+        <p className="field__hint">{tr('Kein Konto aus dem Verzeichnis gefunden.')}</p>
+      )}
+      {treffer?.map((k) => (
+        <div key={k.sub} className="panel" style={{ padding: '10px 12px', marginTop: 8 }}>
+          <div className="viewer__row" style={{ alignItems: 'center' }}>
+            <div style={{ marginRight: 'auto' }}>
+              <strong>{k.username}</strong>
+              {k.name && <> · {k.name}</>}
+              {k.email && <span className="silk"> · {k.email}</span>}
+              {!k.aktiv && <span className="silk"> · {tr('deaktiviert')}</span>}
+            </div>
+            <button className="btn btn--sm btn--primary"
+              disabled={busy || k.ist_ziel || (k.ota_konto?.laufend ?? 0) > 0}
+              onClick={() => void zuordnen(k)}>
+              {k.ist_ziel ? tr('schon zugeordnet') : tr('Zuordnen')}
+            </button>
+          </div>
+          {k.ota_konto && (
+            <p className={k.ota_konto.laufend ? 'note-warn' : 'field__hint'} style={{ margin: '6px 0 0' }}>
+              {k.ota_konto.laufend
+                ? tr('Hat schon ein OTA-Konto „{d}“ mit {n} laufenden Sitzungen — erst beenden.',
+                  { d: k.ota_konto.username, n: k.ota_konto.laufend })
+                : tr('Hat schon ein OTA-Konto „{d}“ ({n} Sitzungen, angemeldet {w}). Es wird beim Zuordnen entfernt.',
+                  { d: k.ota_konto.username, n: k.ota_konto.sitzungen,
+                    w: k.ota_konto.letzte_anmeldung ? ago(new Date(k.ota_konto.letzte_anmeldung).getTime()) : '—' })}
+            </p>
+          )}
+        </div>
+      ))}
+    </Field>
+  )
+}
 
 /** Nutzer anlegen und ändern. */
 function UserEditor({ user, groups, onSaved, onClose, onToast }: {
@@ -178,6 +274,8 @@ function UserEditor({ user, groups, onSaved, onClose, onToast }: {
                          : tr('Anmeldung gesperrt, Daten bleiben erhalten.')}
           onChange={setIsActive} />
       </Field>
+
+      {!isNew && user && <DomaenenZuordnung user={user} onSaved={onSaved} onToast={onToast} />}
 
       {!isNew && (
         <Field label={tr('Zweiter Faktor')}
