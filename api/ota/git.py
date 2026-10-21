@@ -171,6 +171,13 @@ def _umgebung(name: str) -> dict[str, str]:
             for abschnitt, paare in werte.items() for k, v in paare.items()}
 
 
+def _kachel_url(name: str) -> str:
+    """Die Kachel startet gleich die Anmeldung über Keycloak. Mit der
+    Sitzung aus OTA ist man ohne Zwischenschritt drin; die Anmeldeseite von
+    Forgejo sähe man nur über die nackte Adresse."""
+    return f"https://{name}/user/oauth2/{QUELLE}"
+
+
 def _katalog(db: DbSession, name: str) -> tuple[WebApp, str | None]:
     """Die Kachel im Anwendungskatalog — und der Client in Keycloak dazu.
 
@@ -182,10 +189,10 @@ def _katalog(db: DbSession, name: str) -> tuple[WebApp, str | None]:
     app = db.scalar(select(WebApp).where(WebApp.verwaltet == "git"))
     if app is None:
         app = WebApp(slug=SLUG, name="Git", description="Repositories, Forgejo",
-                     icon="⎇", url=f"https://{name}/", redirect_uri=rueck,
+                     icon="⎇", url=_kachel_url(name), redirect_uri=rueck,
                      client_id=CLIENT_ID, verwaltet="git", fuer_alle=False, sort_order=0)
         db.add(app)
-    app.url, app.redirect_uri, app.is_enabled = f"https://{name}/", rueck, True
+    app.url, app.redirect_uri, app.is_enabled = _kachel_url(name), rueck, True
     app.groups = zugangsgruppen(db)
     try:
         keycloak.client_entfernen(CLIENT_ID)
@@ -249,6 +256,7 @@ def zugang_nachziehen(db: DbSession) -> None:
     app = db.scalar(select(WebApp).where(WebApp.verwaltet == "git"))
     if app is None:
         return
+    app.url = _kachel_url(domain(db))
     app.groups = zugangsgruppen(db)
     keycloak.anwendung_zugang(CLIENT_ID, sorted(g.name for g in app.groups), False)
 

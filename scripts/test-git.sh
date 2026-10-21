@@ -146,6 +146,8 @@ expect "200" "$(curl -sk -o /dev/null -w '%{http_code}' "$B/healthz")" "OTA selb
 expect "401" "$(curl -sk -o /dev/null -w '%{http_code}' "$B/api/auth/me")" "… und /api gehört weiter OTA"
 PORTS=$(docker port ota-traefik | grep -cE '^(443|2222)/')
 expect "0" "$PORTS" "Die Eingänge für Arbeitsplätze (443, 2222) sind auf dem Host nicht veröffentlicht"
+expect "https://$DOMAIN/user/oauth2/ota" "$(api "$B/api/webapps" | jqp "next((a['url'] for a in d if a.get('verwaltet') == 'git'), '')")" \
+  "Die Kachel startet gleich die Anmeldung über Keycloak"
 
 # ------------------------------------------------------------------ Konten
 echo
