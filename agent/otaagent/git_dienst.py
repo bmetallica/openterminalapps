@@ -25,6 +25,7 @@ import os
 import re
 import time
 from typing import Any
+from urllib.parse import urlparse
 
 import docker
 from docker.errors import APIError, ImageNotFound, NotFound
@@ -38,6 +39,9 @@ RUNTIME_ROOT = os.environ.get("OTA_RUNTIME_ROOT", "/srv/ota/runtime")
 TRAEFIK_DYNAMIC = "/ota/traefik-dynamic"
 OEFFENTLICH = os.environ.get("OTA_PUBLIC_NETWORK", "ota_public")
 INTERN = "ota_internal"
+# Der Weg von Forgejo zu Keycloak (Abschnitt „Anmeldung ohne DNS“ unten).
+ANMELDENETZ = "ota_git_anmeldung"
+TRAEFIK = os.environ.get("OTA_TRAEFIK_CONTAINER", "ota-traefik")
 DOMAIN_OK = re.compile(r"[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+")
 
 
@@ -48,7 +52,7 @@ def _ca_ordner() -> str:
 CERTS = "/ota/certs"
 
 
-def _zertifikat(domain: str) -> None:
+def _zertifikat(domain: str, weitere: tuple[str, ...] = ()) -> None:
     """Ein Serverzertifikat für die Subdomain, ausgestellt von der OTA-CA.
 
     **Hier und nicht in der API:** Den Schlüssel der CA liest nur, wer ihn
@@ -69,7 +73,7 @@ def _zertifikat(domain: str) -> None:
         noch = subprocess.run(["openssl", "x509", "-in", crt, "-noout", "-checkend",
                                str(30 * 86400)], capture_output=True).returncode == 0
         namen = [t.strip() for t in san.replace("\n", ",").split(",")]
-        if f"DNS:{domain}" in namen and noch:
+        if all(f"DNS:{n}" in namen for n in (domain, *weitere)) and noch:
             return
     with tempfile.TemporaryDirectory() as tmp:
         ext = os.path.join(tmp, "ext")
@@ -77,7 +81,7 @@ def _zertifikat(domain: str) -> None:
             fh.write("basicConstraints=critical,CA:FALSE\n"
                      "keyUsage=critical,digitalSignature,keyEncipherment\n"
                      "extendedKeyUsage=serverAuth\n"
-                     f"subjectAltName=DNS:{domain}\n")
+                     "subjectAltName=" + ",".join(f"DNS:{n}" for n in (domain, *weitere)) + "\n")
         csr = os.path.join(tmp, "csr")
         schritte = [
             ["openssl", "genrsa", "-out", key + ".neu", "2048"],
@@ -101,17 +105,41 @@ def _zertifikat(domain: str) -> None:
     log.info("OTA-Git: Zertifikat für %s ausgestellt", domain)
 
 
-def _dateien_schreiben(domain: str) -> None:
-    """Zertifikat für Traefik und die CA, der Forgejo trauen soll."""
-    _zertifikat(domain)
+def _deckt(crt: str, name: str) -> bool:
+    """Gilt das Zertifikat für diesen Namen? (Auch über einen Platzhalter.)"""
+    import subprocess
+    return subprocess.run(["openssl", "x509", "-in", crt, "-noout", "-checkhost", name],
+                          capture_output=True, text=True).stdout.find("does match") >= 0
+
+
+def _dateien_schreiben(domain: str, ota_name: str = "", anmeldesubnetz: str = "") -> None:
+    """Zertifikat für Traefik und die CA, der Forgejo trauen soll.
+
+    Mit `ota_name` zusätzlich der Weg zu Keycloak (siehe `anmeldeweg`): ein
+    Router auf `git-intern`, der nur Anfragen aus dem Anmeldenetz annimmt.
+    Deckt das Zertifikat von OTA den Namen nicht ab, kommt er mit in das
+    der Subdomain — sonst lehnte Forgejo die Verbindung ab. Ein eigenes
+    Zertifikat für den Namen bleibt unangetastet.
+    """
+    weitere = ()
+    if ota_name and not _deckt(f"{CERTS}/ota.crt", ota_name):
+        weitere = (ota_name,)
+    _zertifikat(domain, weitere)
     with open(f"{CERTS}/ota-ca.crt", encoding="utf-8") as fh:
         ca = fh.read()
     yml = os.path.join(TRAEFIK_DYNAMIC, "ota-git.yml")
+    text = ("# ERZEUGT vom Agent, solange OTA-Git an ist (Kapitel 27).\n"
+            "tls:\n  certificates:\n"
+            "    - certFile: /etc/traefik/dynamic/git/ota-git.crt\n"
+            "      keyFile: /etc/traefik/dynamic/git/ota-git.key\n")
+    if ota_name and anmeldesubnetz:
+        text += ("http:\n  routers:\n    ota-git-anmeldung:\n"
+                 f"      rule: \"ClientIP(`{anmeldesubnetz}`) && PathPrefix(`/auth`)\"\n"
+                 "      entryPoints: [git-intern]\n"
+                 "      service: ota-keycloak@docker\n"
+                 "      tls: {}\n")
     with open(yml + ".neu", "w", encoding="utf-8") as fh:
-        fh.write("# ERZEUGT vom Agent, solange OTA-Git an ist (Kapitel 27).\n"
-                 "tls:\n  certificates:\n"
-                 "    - certFile: /etc/traefik/dynamic/git/ota-git.crt\n"
-                 "      keyFile: /etc/traefik/dynamic/git/ota-git.key\n")
+        fh.write(text)
     os.replace(yml + ".neu", yml)
 
     os.makedirs(_ca_ordner(), exist_ok=True)
@@ -125,6 +153,82 @@ def _subnetz(client, netz: str) -> str:
         return str(cfg[0].get("Subnet") or "")
     except (NotFound, APIError, IndexError):
         return ""
+
+
+# --------------------------------------------------------------------------
+# Anmeldung ohne DNS
+# --------------------------------------------------------------------------
+#
+# Forgejo holt die Angaben von Keycloak selbst, serverseitig, unter der
+# Adresse, die auch Browser sehen (https://ota.firma.de/auth/...). Über DNS
+# klappt das nur, wenn der OTA-Host seinen eigenen öffentlichen Namen auflöst
+# und der Reverse Proxy Anfragen von innen zurücknimmt. Im Betrieb gemessen
+# am 2026-10-22: „lookup ota… on 127.0.0.11:53: no such host“.
+#
+# Deshalb ein eigenes, kleines Netz nur für Forgejo und Traefik. Darin trägt
+# Traefik den Namen von OTA als Alias; nur Forgejo löst ihn so auf, kein
+# anderer Container. Traefik reicht /auth auf 443 (`git-intern`) an Keycloak
+# weiter, aber nur aus diesem Netz — die Arbeitsplätze, die an `git-intern`
+# ebenfalls hängen, bekommen dort weiterhin nur Git. Keycloak sieht dabei
+# Name, https und 443 wie beim Browser und nennt denselben Aussteller.
+#
+# Nur für Adressen ohne Port oder mit 8443 — auf anderen Ports hört Traefik
+# nicht, dort bleibt es beim DNS.
+
+
+def ota_name(ota_url: str) -> str:
+    try:
+        teile = urlparse(ota_url)
+        port = teile.port
+    except ValueError:
+        return ""
+    if teile.scheme != "https" or not teile.hostname or port not in (None, 443, 8443):
+        return ""
+    name = teile.hostname.lower()
+    # Eine IP fragt niemand beim DNS — da gibt es nichts umzuleiten.
+    if not DOMAIN_OK.fullmatch(name) or re.fullmatch(r"[0-9.]+", name):
+        return ""
+    return name
+
+
+def _anmeldenetz(client):
+    try:
+        return client.networks.get(ANMELDENETZ)
+    except NotFound:
+        return client.networks.create(ANMELDENETZ, driver="bridge", internal=True,
+                                      labels={"ota.dienst": "git"})
+
+
+def anmeldeweg(client, name: str | None = None) -> bool:
+    """Traefik mit dem Alias `name` im Anmeldenetz — nachziehen, was fehlt.
+
+    Ohne `name` der aus dem laufenden Container. Ein neu erzeugtes Traefik
+    (`make update`) hat nur die Netze aus Compose; deshalb gehört das in
+    jeden Abgleich. Gibt zurück, ob etwas nachgezogen wurde.
+    """
+    if name is None:
+        try:
+            c = client.containers.get(NAME)
+        except NotFound:
+            return False
+        if c.status != "running":
+            return False
+        name = (c.labels or {}).get("ota.git.ota_name", "")
+    if not name:
+        return False
+    netz = _anmeldenetz(client)
+    try:
+        t = client.containers.get(TRAEFIK)
+    except NotFound:
+        return False
+    drin = (t.attrs.get("NetworkSettings", {}).get("Networks") or {}).get(ANMELDENETZ)
+    if drin is not None and name in (drin.get("Aliases") or []):
+        return False
+    if drin is not None:
+        netz.disconnect(t, force=True)
+    netz.connect(t, aliases=[name])
+    log.info("OTA-Git: Traefik im Anmeldenetz als %s", name)
+    return True
 
 
 def _beschriftung(domain: str, fingerabdruck: str) -> dict[str, str]:
@@ -167,13 +271,19 @@ def status(client) -> dict[str, Any]:
             "domain": (c.labels or {}).get("ota.git.domain", "")}
 
 
-def an(client, domain: str, umgebung: dict[str, str]) -> dict[str, Any]:
+def an(client, domain: str, umgebung: dict[str, str], ota_url: str = "") -> dict[str, Any]:
     """Den Container nach diesen Angaben laufen lassen — anlegen oder ersetzen."""
     domain = domain.strip().lower()
     if not DOMAIN_OK.fullmatch(domain):
         raise ValueError(f"„{domain}“ ist kein gültiger Name.")
     _bild(client)
-    _dateien_schreiben(domain)
+    name = ota_name(ota_url)
+    subnetz = ""
+    if name:
+        _anmeldenetz(client)
+        subnetz = _subnetz(client, ANMELDENETZ)
+        anmeldeweg(client, name)
+    _dateien_schreiben(domain, name, subnetz)
 
     env = {str(k): str(v) for k, v in umgebung.items()}
     env["FORGEJO__database__PASSWD"] = os.environ.get("OTA_GIT_DB_PW", "")
@@ -184,7 +294,7 @@ def an(client, domain: str, umgebung: dict[str, str]) -> dict[str, Any]:
     env.setdefault("USER_GID", "1000")
 
     fingerabdruck = hashlib.sha256(json.dumps(
-        {"bild": BILD, "domain": domain, "env": sorted(env.items())}, sort_keys=True
+        {"bild": BILD, "domain": domain, "ota": name, "env": sorted(env.items())}, sort_keys=True
     ).encode()).hexdigest()[:16]
 
     try:
@@ -201,6 +311,7 @@ def an(client, domain: str, umgebung: dict[str, str]) -> dict[str, Any]:
 
     beschriftung = _beschriftung(domain, fingerabdruck)
     beschriftung["ota.git.domain"] = domain
+    beschriftung["ota.git.ota_name"] = name
     c = client.containers.create(
         BILD, name=NAME, hostname=NAME, detach=True,
         environment=env, labels=beschriftung,
@@ -214,6 +325,8 @@ def an(client, domain: str, umgebung: dict[str, str]) -> dict[str, Any]:
         log_config={"Type": "json-file", "Config": {"max-size": "10m", "max-file": "3"}},
     )
     client.networks.get(INTERN).connect(c)
+    if name:
+        _anmeldenetz(client).connect(c)
     c.start()
     return {"neu": True, **status(client)}
 

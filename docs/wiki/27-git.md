@@ -71,6 +71,15 @@ Hinter dem Proxy vertraut Traefik den weitergereichten Kopfzeilen wie bisher nur
 auf den Host. Die Einstellungen zeigen, ob der OTA-Host den Namen auflöst. Arbeitsplätze
 brauchen keinen Eintrag, siehe unten.
 
+**Forgejo zu Keycloak** braucht kein DNS. Forgejo fragt Keycloak serverseitig unter der „Adresse
+von OTA“. Dafür hängen Forgejo und Traefik in einem eigenen kleinen Netz `ota_git_anmeldung`, in dem
+Traefik den Namen von OTA trägt. Nur Forgejo löst ihn so auf. Traefik reicht dort auf 443 nur
+`/auth` an Keycloak weiter, und nur aus diesem Netz; die Arbeitsplätze sehen auf 443 weiter nur Git.
+Deckt das Zertifikat von OTA den Namen nicht ab, nimmt der Agent ihn in das Zertifikat der
+Subdomain auf. Das gilt für Adressen ohne Port oder mit 8443; auf anderen Ports bleibt es beim
+DNS des Hosts. Ein neu erzeugtes Traefik hängt der Agent beim nächsten Abgleich wieder ein,
+spätestens nach 15 Minuten.
+
 ## Im Arbeitsplatz
 
 Wenn Git an ist, der Mensch darf und die Vorlage **Git vorkonfigurieren** nicht abschaltet
@@ -179,8 +188,9 @@ docker exec ota-db psql -U ota -c 'DROP DATABASE forgejo' -c 'DROP ROLE forgejo'
 | Browser: Zertifikat passt nicht | Ohne Proxy: Der Browser muss der OTA-CA vertrauen. Mit Proxy: Zertifikat am Proxy prüfen |
 | Unter der Subdomain erscheint OTA, oder Keycloak meldet `Invalid parameter: redirect_uri` | Der Proxy schickt den Namen nicht mit (`Host`, SNI). Caddy in der OPNsense: im Handler Protokoll `https://` und einen Header „nach oben“ `Host` = `{host}`. Nginx Proxy Manager: Scheme `https`, der `Host` stimmt dort von selbst |
 | Nach der Anmeldung eine 404 auf `/sw.js` | Ein Browser, der unter der Subdomain einmal OTA gesehen hat, behält dessen Service Worker. Einmal die Website-Daten der Subdomain löschen (F12 → Application → Clear site data) |
+| Einschalten meldet `Anmeldequelle: … lookup <name> … no such host` | Stand vor dem 2026-10-22: Forgejo suchte Keycloak über DNS. Mit `git pull && sudo make update` aktualisieren und einmal einschalten. Auf einem anderen Port als 443 oder 8443: Der OTA-Host muss den Namen auflösen |
 | Keycloak fragt beim Weg von OTA nach Git noch einmal nach dem Passwort | Die „Adresse von OTA“ ist nicht die, unter der der Browser OTA aufruft |
 | Im Arbeitsplatz fragt git nach Benutzer und Passwort | `git` fehlte beim Start, die Vorlage hat es abgeschaltet, oder der Mensch ist nicht berechtigt. Prüfen: `git config --show-origin --get-regexp credential` |
 | Forgejo startet nicht | `docker logs ota-git`. Oft die Datenbank: `OTA_GIT_DB_PW` in `deploy/.env` gesetzt? |
 
-Prüfreihe: `scripts/test-git.sh` (47 Prüfungen, auch hinter einem nginx als Reverse Proxy).
+Prüfreihe: `scripts/test-git.sh` (52 Prüfungen, auch hinter einem nginx als Reverse Proxy).

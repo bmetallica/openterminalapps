@@ -270,6 +270,25 @@ expect "$DOMAIN2" "$(jqp "d['dienst'].get('domain')" <<<"$R")" "Forgejo läuft u
 expect "ZUGANG" "$(jqp "d['ergebnis']" <<<"$(sso "$MIT" "$DOMAIN2")")" "Anmeldung unter der neuen Subdomain"
 api -X PUT "$B/api/admin/git" -d "{\"domain\":\"$DOMAIN\"}" >/dev/null
 
+# ------------------------------------------------------------------ Anmeldeweg
+echo
+echo "Keycloak ohne DNS"
+# Ein Name, den kein DNS kennt: Forgejo erreicht Keycloak trotzdem — über den
+# Alias im Netz ota_git_anmeldung (Kapitel 27, „Ways in and ports“).
+OHNE_DNS="ota-ohne-dns.ota.test"
+api -X PUT "$B/api/admin/git" -d "{\"ota_url\":\"https://$OHNE_DNS\"}" >/dev/null
+R=$(api -X POST "$B/api/admin/git/an")
+expect "True" "$(jqp "str(d.get('an'))" <<<"$R")" "Anmeldequelle eingerichtet, obwohl $OHNE_DNS nirgends auflösbar ist"
+expect "https://$OHNE_DNS/auth/realms/ota" \
+  "$(docker exec ota-git curl -s --cacert /etc/ota-ca/ota-ca.crt "https://$OHNE_DNS/auth/realms/ota/.well-known/openid-configuration" | jqp "d['issuer']")" \
+  "… Forgejo sieht denselben Aussteller wie ein Browser"
+expect "404" "$(docker exec ota-git curl -s -o /dev/null -w '%{http_code}' --cacert /etc/ota-ca/ota-ca.crt "https://$OHNE_DNS/api/auth/me")" \
+  "… und unter dem Namen nur /auth, nicht OTA"
+expect "404" "$(im "curl -s -o /dev/null -w '%{http_code}' -k --resolve $OHNE_DNS:443:\$(getent hosts $DOMAIN | cut -d' ' -f1) https://$OHNE_DNS/auth/" 2>/dev/null || true)" \
+  "Aus dem Arbeitsplatz ist Keycloak über git-intern nicht erreichbar" 
+api -X PUT "$B/api/admin/git" -d "{\"ota_url\":\"$B\"}" >/dev/null
+api -X POST "$B/api/admin/git/an" >/dev/null
+
 # ------------------------------------------------------------------ Aus/an
 echo
 echo "Aus und wieder an"

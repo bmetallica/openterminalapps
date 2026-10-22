@@ -69,6 +69,14 @@ only trusts Traefik.
 without a proxy to the host. The settings show whether the OTA host resolves the name. Workspaces
 need no entry, see below.
 
+**Forgejo to Keycloak** needs no DNS. Forgejo asks Keycloak server-side under the "OTA address".
+For that, Forgejo and Traefik share a small network of their own, `ota_git_anmeldung`, in which
+Traefik carries OTA's name. Only Forgejo resolves it that way. There Traefik forwards on 443 only
+`/auth` to Keycloak, and only from this network; the workspaces still see only Git on 443. If OTA's
+certificate does not cover the name, the agent adds it to the subdomain's certificate. This applies
+to addresses without a port or with 8443; on other ports it stays with the host's DNS. A newly
+created Traefik is attached again by the agent at the next sync, after 15 minutes at the latest.
+
 ## In the workspace
 
 If Git is on, the person is entitled and the template does not turn off **Preconfigure Git**
@@ -176,8 +184,9 @@ docker exec ota-db psql -U ota -c 'DROP DATABASE forgejo' -c 'DROP ROLE forgejo'
 | Browser: certificate does not match | Without a proxy: the browser must trust the OTA CA. With a proxy: check the certificate at the proxy |
 | OTA appears under the subdomain, or Keycloak reports `Invalid parameter: redirect_uri` | The proxy does not send the name along (`Host`, SNI). Caddy on OPNsense: in the handler protocol `https://` and an "upstream" header `Host` = `{host}`. Nginx Proxy Manager: scheme `https`, the `Host` is right there by itself |
 | After sign-in a 404 on `/sw.js` | A browser that once saw OTA under the subdomain keeps its service worker. Clear the subdomain's site data once (F12 → Application → Clear site data) |
+| Turning it on reports `Anmeldequelle: … lookup <name> … no such host` | State before 2026-10-22: Forgejo looked up Keycloak via DNS. Update with `git pull && sudo make update` and turn it on once. On a port other than 443 or 8443: the OTA host must resolve the name |
 | Keycloak asks for the password again on the way from OTA to Git | The "OTA address" is not the one under which the browser opens OTA |
 | In the workspace git asks for user and password | `git` was missing at start, the template turned it off, or the person is not entitled. Check: `git config --show-origin --get-regexp credential` |
 | Forgejo does not start | `docker logs ota-git`. Often the database: is `OTA_GIT_DB_PW` set in `deploy/.env`? |
 
-Test suite: `scripts/test-git.sh` (47 checks, also behind an nginx as reverse proxy).
+Test suite: `scripts/test-git.sh` (52 checks, also behind an nginx as reverse proxy).

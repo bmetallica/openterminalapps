@@ -215,15 +215,16 @@ def einschalten(db: DbSession) -> dict:
     name = domain(db)
     if not name:
         raise GitFehler("Erst eine Subdomain eintragen.")
+    ota_url = _ota_url(db)
     _datenbank_sorgen()
     app, geheimnis = _katalog(db, name)
     db.flush()
     # Das Zertifikat der Subdomain stellt der Agent aus: Den Schlüssel der
     # CA darf die API nicht lesen.
-    agent_client.git_an({"domain": name, "umgebung": _umgebung(name)})
+    agent_client.git_an({"domain": name, "umgebung": _umgebung(name), "ota_url": ota_url})
     erg = agent_client.git_einrichten({
         "name": QUELLE, "key": CLIENT_ID, "secret": geheimnis or "",
-        "discovery": f"{_ota_url(db)}/auth/realms/{keycloak._realm()}/.well-known/openid-configuration",
+        "discovery": f"{ota_url}/auth/realms/{keycloak._realm()}/.well-known/openid-configuration",
     })
     settings_store.put(db, settings_store.GIT_AN, True)
     settings_store.put(db, "git.quelle", int(erg["quelle"]))

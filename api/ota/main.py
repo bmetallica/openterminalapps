@@ -6,7 +6,7 @@ import logging
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta, timezone
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import select
 
@@ -263,6 +263,10 @@ def _git_takt() -> None:
     with SessionLocal() as db:
         if not git.an(db):
             return
+        try:
+            agent_client.git_status()  # zieht im Agent den Weg zu Keycloak nach
+        except HTTPException as exc:
+            log.warning("OTA-Git: Agent nicht erreichbar: %s", exc.detail)
         git.tokens_aufraeumen(db)
         git.konten_abgleichen(db)
 

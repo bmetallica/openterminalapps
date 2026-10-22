@@ -918,6 +918,10 @@ def _firewall_abgleich(client=None) -> dict:
     # wieder hoch (`netz.router_wiederbeleben`). Stand sie dahinter, blieb er
     # liegen, weil er lag.
     netz_ops.anbindung_sichern(client)
+    try:
+        git_dienst.anmeldeweg(client)
+    except (APIError, NotFound) as exc:
+        log.warning("OTA-Git: Anmeldeweg nicht nachgezogen: %s", exc)
     if not fwclient.erreichbar():
         log.warning("Firewall-Dienst nicht erreichbar (%s) — Regeln unveraendert",
                     fwclient.SOCKET)
@@ -2346,6 +2350,7 @@ async def terminal(ws: WebSocket, cid: str) -> None:
 class GitAnRequest(BaseModel):
     domain: str
     umgebung: dict[str, str] = {}
+    ota_url: str = ""
 
 
 class GitEinrichtenRequest(BaseModel):
@@ -2354,14 +2359,20 @@ class GitEinrichtenRequest(BaseModel):
 
 @app.get("/git", dependencies=[Depends(require_token)])
 def git_status() -> dict[str, Any]:
-    return git_dienst.status(dc())
+    client = dc()
+    # Nebenbei der Weg zu Keycloak: Ein neu erzeugtes Traefik hat ihn verloren.
+    try:
+        git_dienst.anmeldeweg(client)
+    except (APIError, NotFound) as exc:
+        log.warning("OTA-Git: Anmeldeweg nicht nachgezogen: %s", exc)
+    return git_dienst.status(client)
 
 
 @app.post("/git/an", dependencies=[Depends(require_token)])
 def git_an(req: GitAnRequest) -> dict[str, Any]:
     client = dc()
     try:
-        ergebnis = git_dienst.an(client, req.domain, req.umgebung)
+        ergebnis = git_dienst.an(client, req.domain, req.umgebung, req.ota_url)
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
     except RuntimeError as exc:
