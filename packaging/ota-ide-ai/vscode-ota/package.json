@@ -1,0 +1,17 @@
+{
+  "name": "ota-ide-ai",
+  "publisher": "ota",
+  "displayName": "OTA IDE-AI",
+  "description": "Continue rechts in der zweiten Seitenleiste öffnen, den eingebauten Copilot aus.",
+  "version": "1.0.0",
+  "license": "Apache-2.0",
+  "engines": { "vscode": "^1.90.0" },
+  "main": "./extension.js",
+  "activationEvents": ["onStartupFinished"],
+  "extensionDependencies": ["Continue.continue"],
+  "contributes": {
+    "configurationDefaults": {
+      "chat.disableAIFeatures": true
+    }
+  }
+}

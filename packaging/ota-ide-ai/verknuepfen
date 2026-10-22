@@ -16,16 +16,21 @@
 # Im Paket ota-ide-ai-vscode als /usr/lib/ota-ide-ai/verknuepfen-vscode.
 set -e
 WEG=""; [ "${1:-}" = "weg" ] && WEG=1
-VS=/usr/share/ota-ide-ai/vscode/continue
+VS=/usr/share/ota-ide-ai/vscode
 
+# ota-continue: Continue selbst. ota-ide-ai: die kleine Erweiterung daneben,
+# die Continue rechts öffnet und den eingebauten Copilot abschaltet.
 for d in /usr/share/codium /usr/share/code /opt/visual-studio-code /opt/vscodium; do
   e="$d/resources/app/extensions"
   [ -d "$e" ] || continue
-  if [ -n "$WEG" ] || [ ! -d "$VS" ]; then
-    [ -L "$e/ota-continue" ] && rm -f "$e/ota-continue" && echo "weg: $e"
-  elif [ "$(readlink "$e/ota-continue" 2>/dev/null)" != "$VS" ]; then
-    ln -sfn "$VS" "$e/ota-continue" && echo "verknüpft: $e"
-  fi
+  for paar in ota-continue:continue ota-ide-ai:ota; do
+    l="$e/${paar%%:*}"; q="$VS/${paar#*:}"
+    if [ -n "$WEG" ] || [ ! -d "$q" ]; then
+      [ -L "$l" ] && rm -f "$l" && echo "weg: $l"
+    elif [ "$(readlink "$l" 2>/dev/null)" != "$q" ]; then
+      ln -sfn "$q" "$l" && echo "verknüpft: $l"
+    fi
+  done
 done
 
 exit 0

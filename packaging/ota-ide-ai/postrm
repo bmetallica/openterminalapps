@@ -6,6 +6,9 @@ case "$1" in
     for l in /usr/share/codium/resources/app/extensions/ota-continue \
              /usr/share/code/resources/app/extensions/ota-continue \
              /opt/*/resources/app/extensions/ota-continue \
+             /usr/share/codium/resources/app/extensions/ota-ide-ai \
+             /usr/share/code/resources/app/extensions/ota-ide-ai \
+             /opt/*/resources/app/extensions/ota-ide-ai \
              /opt/*/plugins/ota-continue /opt/*/*/plugins/ota-continue /usr/share/*/plugins/ota-continue; do
       [ -L "$l" ] && [ ! -e "$l" ] && rm -f "$l"
     done ;;

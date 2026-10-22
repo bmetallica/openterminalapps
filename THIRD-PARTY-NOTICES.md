@@ -283,9 +283,13 @@ Mit Originalzitaten geprüft in [Handbuch, Kapitel 13](docs/wiki/13-lizenzen.md)
 
 Die Erweiterung für VS Code/VSCodium (Open VSX, `Continue.continue`) und das
 Plugin für JetBrains-IDEs (JetBrains Marketplace, Plugin 22707) verteilt OTA
-unverändert in den Paketen `ota-ide-ai-vscode` und `ota-ide-ai-jetbrains`
-(`scripts/build-ide-ai-deb.sh`, Handbuch Kapitel 28). Weggelassen werden nur
-die Teile für andere Plattformen als Linux x64. Die Lizenz liegt jeweils als
+in den Paketen `ota-ide-ai-vscode` und `ota-ide-ai-jetbrains`
+(`scripts/build-ide-ai-deb.sh`, Handbuch Kapitel 28). Weggelassen werden die
+Teile für andere Plattformen als Linux x64. Eine Änderung: In der
+`package.json` der VS-Code-Erweiterung steht Continue in der zweiten
+Seitenleiste (rechts) statt in der Aktivitätsleiste; das ist im
+`copyright` des Pakets vermerkt, wie Apache-2.0 §4 es verlangt. Die kleine
+Erweiterung `ota-ide-ai` daneben ist OTAs eigene. Die Lizenz liegt jeweils als
 `/usr/share/doc/ota-ide-ai-*/copyright` bei; Apache-2.0 erlaubt die
 Weitergabe, auch in Images, solange Lizenz und Hinweise mitgehen.
 

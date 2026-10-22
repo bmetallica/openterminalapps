@@ -109,6 +109,27 @@ with zipfile.ZipFile(quelle) as z:
         os.chmod(pfad, 0o755 if modus & 0o111 else 0o644)
 PY
 find $P/usr/share/ota-ide-ai -type d -exec chmod 0755 {} +
+if [ "$ART" = vscode ]; then
+  # Continue rechts in die zweite Seitenleiste, wo VS Code sonst seinen Chat
+  # hat — nicht links zwischen Explorer und Suche. Wer es verschiebt, dem
+  # merkt sich der Editor das selbst. Daneben eine kleine eigene Erweiterung
+  # (packaging/ota-ide-ai/vscode-ota): Sie öffnet die Leiste und schaltet den
+  # eingebauten Copilot ab.
+  python3 - $P/usr/share/ota-ide-ai/vscode/continue/package.json <<"PY"
+import json, sys
+p = sys.argv[1]
+d = json.load(open(p, encoding="utf-8"))
+vc = d["contributes"]["viewsContainers"]
+rechts = [c for c in vc.get("activitybar", []) if c.get("id") == "continue"]
+vc["activitybar"] = [c for c in vc.get("activitybar", []) if c.get("id") != "continue"]
+if not vc["activitybar"]:
+    del vc["activitybar"]
+vc["secondarySidebar"] = vc.get("secondarySidebar", []) + rechts
+json.dump(d, open(p, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+PY
+  mkdir -p $P/usr/share/ota-ide-ai/vscode/ota
+  install -m 0644 /paket/vscode-ota/package.json /paket/vscode-ota/extension.js $P/usr/share/ota-ide-ai/vscode/ota/
+fi
 if [ "$ART" = jetbrains ]; then
   # Im Archiv fehlt das Ausfuehrungsrecht; Continue setzt es sonst selbst
   # beim ersten Start — in einem Verzeichnis, das root gehoert, ginge das nicht.

@@ -5,7 +5,7 @@
 IDE-AI bringt einen KI-Assistenten in die Editoren der Arbeitsplätze, verbunden mit **eurem eigenen
 KI-Server**. Dahinter steckt [Continue](https://continue.dev) (Apache-2.0):
 
-- **Chat** in einer Seitenleiste, mit Auswahl des Modells,
+- **Chat** rechts in der Seitenleiste, wo VS Code sonst seinen Chat hat, mit Auswahl des Modells,
 - **Bearbeiten** markierten Codes,
 - **Agent-Modus**: Das Modell liest und ändert Dateien und schlägt Befehle vor, jeweils mit
   Bestätigung,
@@ -73,7 +73,7 @@ Bei jedem Start und Fortsetzen, als root:
 
 | Paket | Für | Wie verknüpft |
 |---|---|---|
-| `ota-ide-ai-vscode` | VS Code, VSCodium | als mitgelieferte Erweiterung unter `resources/app/extensions/ota-continue`, für alle Nutzer |
+| `ota-ide-ai-vscode` | VS Code, VSCodium | als mitgelieferte Erweiterungen unter `resources/app/extensions/ota-continue` und `ota-ide-ai`, für alle Nutzer |
 | `ota-ide-ai-jetbrains` | PyCharm, IntelliJ IDEA und jede andere JetBrains-IDE unter `/opt` | im Plugin-Verzeichnis des Zuhauses, `~/.local/share/JetBrains/<IDE><Fassung>/ota-continue` |
 
 Der Agent holt die Paketdatei selbst aus der [eigenen Paketquelle](26-paketquellen.md) und spielt sie
@@ -91,6 +91,19 @@ Warum JetBrains im Zuhause: Neuere JetBrains-IDEs laden aus ihrem eigenen `plugi
 vorberechneten `plugins/plugin-classpath.txt` steht. Ein Plugin daneben erscheint nicht einmal im
 Protokoll (gemessen mit PyCharm 2026.2). Im Zuhause liegt nur die Verknüpfung, das Plugin selbst
 bleibt mit rund 180 MB im Paket.
+
+### Continue rechts, Copilot aus (VS Code, VSCodium)
+
+- **Continue sitzt rechts** in der zweiten Seitenleiste, nicht links zwischen Explorer und Suche.
+  Dafür ändert der Paketbau in Continues `package.json` den Platz (`viewsContainers.secondarySidebar`).
+- **Die Leiste geht von selbst auf**, einmal je Ordner. Das erledigt OTAs kleine Erweiterung
+  `ota-ide-ai` daneben: Von allein bliebe die Leiste zu, weil sie beim Start noch leer ist (Continue
+  lädt erst danach) und VS Code eine leere Leiste schliesst. Wer sie zumacht, dem bleibt sie zu;
+  `Strg+Alt+B` öffnet sie wieder.
+- **Der eingebaute Copilot ist aus**, solange IDE-AI an ist. `ota-ide-ai` setzt dafür
+  `chat.disableAIFeatures` als Vorgabe. Wer Copilot doch will, setzt die Einstellung in den eigenen
+  Einstellungen auf `false`. Ist IDE-AI aus, entfernt OTA die Verknüpfung, und Copilot ist wieder da.
+- Wer Continue woandershin zieht, behält diesen Platz.
 
 ## Die Konfiguration gehört OTA, bis jemand sie übernimmt
 
@@ -113,6 +126,9 @@ models:
 **Wer die erste Zeile löscht, pflegt die Datei selbst.** OTA fasst sie danach nicht mehr an, auch
 nicht beim Ausschalten. Wer zu OTAs Fassung zurück will, löscht die Datei; beim nächsten Start ist
 sie wieder da.
+
+Ausnahme: Die leere Datei, die Continue selbst anlegt, wenn es ohne Konfiguration startet
+(`name: Main Config`, `models: []`), gehört niemandem. Die ersetzt OTA beim nächsten Start.
 
 Welches Modell jemand gerade gewählt hat, merkt sich Continue selbst. Die Auswahl bleibt über
 Neustarts erhalten.
@@ -172,10 +188,12 @@ Die Einstellungsseite zeigt, welche Fassungen in der Paketquelle liegen.
 | Im Editor kein Continue | Der Arbeitsplatz lief schon, als IDE-AI eingeschaltet wurde: neu starten. Beim allerersten Start kann die Installation eine halbe Minute nach dem Start fertig werden: Editor einmal neu öffnen. Protokoll: `docker logs ota-agent 2>&1 \| grep IDE-AI` |
 | „Die Pakete fehlen in der Paketquelle“ | `scripts/build-ide-ai-deb.sh --hochladen` auf dem Host |
 | Continue zeigt eine andere Konfiguration | Die erste Zeile von `~/.continue/config.yaml` fehlt: Die Datei gehört dem Menschen. Löschen, neu starten |
+| Continue zeigt `Main Config` ohne Modelle | Continue lief, bevor OTA die Konfiguration schrieb. Arbeitsplatz neu starten, Root-Workspace anhalten und fortsetzen. Im Protokoll steht dann „Konfiguration gesetzt“ |
 | Keine Antwort, Zeitüberschreitung | Erreicht der Arbeitsplatz den Server? `curl http://<server>/v1/models` im Terminal. Ein Modell, das erst geladen wird, braucht länger: Zeitlimit erhöhen |
 | Antwort bricht ab, oder nur „Thought for …“ ohne Text | Die Antwortlänge reicht nicht; denkende Modelle verbrauchen sie mit der Überlegung. Größer stellen |
 | „context length exceeded“ oder ähnlich vom Server | Das Kontextfenster in OTA ist größer als im Server. Kleiner stellen |
 | Agent-Modus ruft keine Werkzeuge auf | Der Server kann keine Werkzeugaufrufe: vLLM `--enable-auto-tool-choice --tool-call-parser …`, llama.cpp `--jinja`. Oder **Werkzeuge** aus |
+| Continue rechts nicht zu sehen | `Strg+Alt+B` öffnet die rechte Leiste. Von selbst öffnet OTA sie nur einmal je Ordner |
 | PyCharm zeigt Continue nicht | Gibt es `~/.local/share/JetBrains/<IDE><Fassung>/ota-continue`? Der Name kommt aus `product-info.json` der IDE |
 
 Prüfreihe: `scripts/test-ide-ai.sh`. Sie startet jede Vorlage mit einem passenden Editor und fragt

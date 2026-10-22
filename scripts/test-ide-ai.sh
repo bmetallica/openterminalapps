@@ -11,6 +11,7 @@
 #     und VSCodium im Editor, JetBrains im Zuhause. Die Firewall lässt den
 #     KI-Server durch, und eine Frage aus dem Arbeitsplatz bekommt Antwort.
 #   * Eine eigene config.yaml (ohne Marke) bleibt unangetastet.
+#   * Continues leere Standarddatei (models: []) ersetzt OTA.
 #   * Ausgeschaltet: Verknüpfungen und OTAs Konfiguration sind beim nächsten
 #     Start weg, die Firewall gibt den Server nicht mehr frei.
 #
@@ -146,6 +147,12 @@ for zeile in $TPLS; do
     expect "/usr/share/ota-ide-ai/vscode/continue" \
       "$(docker exec "$C" sh -c 'readlink /usr/share/codium/resources/app/extensions/ota-continue || readlink /usr/share/code/resources/app/extensions/ota-continue')" \
       "Continue in VS Code/VSCodium verknüpft"
+    expect "/usr/share/ota-ide-ai/vscode/ota" \
+      "$(docker exec "$C" sh -c 'readlink /usr/share/codium/resources/app/extensions/ota-ide-ai || readlink /usr/share/code/resources/app/extensions/ota-ide-ai')" \
+      "… und OTAs Erweiterung daneben (Continue rechts, Copilot aus)"
+    expect "secondarySidebar" \
+      "$(docker exec "$C" python3 -c 'import json;print(*json.load(open("/usr/share/ota-ide-ai/vscode/continue/package.json"))["contributes"]["viewsContainers"])' 2>/dev/null | grep -o secondarySidebar)" \
+      "Continue sitzt in der zweiten Seitenleiste"
   fi
   for JBDIR in $(docker exec "$C" sh -c 'for f in /opt/*/product-info.json; do [ -f "$f" ] && sed -n "s/.*\"dataDirectoryName\": *\"\([^\"]*\)\".*/\1/p" "$f" | head -1; done'); do
     expect "/usr/share/ota-ide-ai/jetbrains/continue-intellij-extension" \
@@ -164,6 +171,12 @@ for zeile in $TPLS; do
   # Das Zuhause bleibt: nächster Start, gleiche Datei.
   SID=$(starten "$T"); C=$(container_von "$SID")
   expect "name: meins" "$(docker exec "$C" head -1 "$H/.continue/config.yaml" 2>/dev/null)" "Eine eigene config.yaml bleibt unangetastet"
+  # Continues eigene Leerdatei (Continue lief, bevor IDE-AI an war): OTA ersetzt sie.
+  docker exec -u 1000 "$C" sh -c "printf 'name: Main Config\nversion: 1.0.0\nschema: v1\nmodels: []\n' > '$H/.continue/config.yaml'"
+  beenden "$SID"; SID=""
+  SID=$(starten "$T"); C=$(container_von "$SID")
+  expect "# Verwaltet von OTA (IDE-AI). Änderungen hier überschreibt OTA beim nächsten Start." \
+    "$(docker exec "$C" head -1 "$H/.continue/config.yaml" 2>/dev/null)" "Continues leere Standarddatei ersetzt OTA"
   docker exec "$C" rm -f "$H/.continue/config.yaml"
   beenden "$SID"; SID=""
 done
@@ -184,6 +197,8 @@ if [ -n "$T" ]; then
   SID=$(starten "$T"); C=$(container_von "$SID"); H=$(heim "$C")
   expect "nein" "$(docker exec "$C" sh -c "test -e '$H/.continue/config.yaml' && echo ja || echo nein")" "Keine config.yaml"
   expect "0" "$(docker exec "$C" sh -c "ls -d '$H'/.local/share/JetBrains/*/ota-continue 2>/dev/null | wc -l")" "Keine Verknüpfung im Zuhause"
+  expect "0" "$(docker exec "$C" sh -c 'ls -d /usr/share/code*/resources/app/extensions/ota-* 2>/dev/null | wc -l')" \
+    "Keine Verknüpfung in VS Code/VSCodium (Copilot wieder da)"
   expect "000" "$(docker exec -u 1000 "$C" curl -s -m 8 -o /dev/null -w '%{http_code}' "$KI/v1/models")" \
     "Die Firewall gibt den KI-Server nicht mehr frei"
   beenden "$SID"; SID=""

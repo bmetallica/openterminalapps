@@ -7,11 +7,14 @@ Files: usr/share/ota-ide-ai/*
 Copyright: 2023-2026 Continue Dev, Inc. and contributors
 License: Apache-2.0
 Comment:
- Unverändert aus Open VSX (Continue.continue, Linux x64) bzw. dem JetBrains
- Marketplace (Plugin 22707). Weggelassen sind nur die Teile für andere
- Plattformen. Mitgelieferte Bibliotheken bringen ihre eigenen Hinweise mit.
+ Aus Open VSX (Continue.continue, Linux x64) bzw. dem JetBrains Marketplace
+ (Plugin 22707). Weggelassen sind die Teile für andere Plattformen.
+ Geändert von OpenTerminalApps: In vscode/continue/package.json steht der
+ Bereich von Continue unter viewsContainers.secondarySidebar statt
+ viewsContainers.activitybar (rechts statt links). Sonst unverändert.
+ Mitgelieferte Bibliotheken bringen ihre eigenen Hinweise mit.
 
-Files: usr/lib/ota-ide-ai/* debian/*
+Files: usr/lib/ota-ide-ai/* usr/share/ota-ide-ai/vscode/ota/* debian/*
 Copyright: 2026 OpenTerminalApps
 License: Apache-2.0
 

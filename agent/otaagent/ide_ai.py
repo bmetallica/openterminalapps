@@ -95,7 +95,13 @@ if [ -z "$K" ]; then
   jetbrains weg
   exit 0
 fi
-if [ -f "$F" ] && ! head -1 "$F" | grep -qF "$M"; then
+# Continues eigene Leerdatei (startet es ohne Konfiguration, legt es eine mit
+# models: [] an) gehört niemandem — die darf OTA ersetzen.
+leer() {
+  [ "$(grep -v '^[[:space:]]*$' "$F" | sed 's/[[:space:]]*$//' | grep -v '^name: ' | tr '\n' ' ')" \
+    = "version: 1.0.0 schema: v1 models: [] " ] && [ "$(grep -c '^name: ' "$F")" = 1 ]
+}
+if [ -f "$F" ] && ! head -1 "$F" | grep -qF "$M" && ! leer; then
   echo "konfig-eigen"
 else
   mkdir -p "$D" && chown "$B" "$D"
@@ -212,6 +218,8 @@ def im_container(container, angaben: dict[str, Any], heim: str, run_as_root: Cal
             log.warning("IDE-AI in %s: %s", container.name, out.strip()[-300:])
         elif "konfig-eigen" in out:
             log.info("IDE-AI in %s: eigene config.yaml — bleibt unverändert", container.name)
+        elif "konfig-gesetzt" in out:
+            log.info("IDE-AI in %s: Konfiguration gesetzt", container.name)
     except Exception as exc:  # noqa: BLE001 — darf keinen Start kippen
         log.warning("IDE-AI in %s nicht eingerichtet: %s", container.name, exc)
         return
