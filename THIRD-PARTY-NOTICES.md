@@ -279,6 +279,20 @@ Nicht-Microsoft-Editor auf Microsofts Marktplatz zeigt.
 
 Mit Originalzitaten geprüft in [Handbuch, Kapitel 13](docs/wiki/13-lizenzen.md).
 
+### Continue — Apache-2.0, als Paket aus OTAs Paketquelle (IDE-AI)
+
+Die Erweiterung für VS Code/VSCodium (Open VSX, `Continue.continue`) und das
+Plugin für JetBrains-IDEs (JetBrains Marketplace, Plugin 22707) verteilt OTA
+unverändert in den Paketen `ota-ide-ai-vscode` und `ota-ide-ai-jetbrains`
+(`scripts/build-ide-ai-deb.sh`, Handbuch Kapitel 28). Weggelassen werden nur
+die Teile für andere Plattformen als Linux x64. Die Lizenz liegt jeweils als
+`/usr/share/doc/ota-ide-ai-*/copyright` bei; Apache-2.0 erlaubt die
+Weitergabe, auch in Images, solange Lizenz und Hinweise mitgehen.
+
+Beide bringen ihrerseits Bibliotheken mit (u. a. `ripgrep`, MIT/Unlicense;
+`sqlite3`; im JetBrains-Plugin `posthog-java` und `sentry`, deren Telemetrie
+OTA abschaltet). Deren Hinweise stehen in den Paketen selbst.
+
 ### Darf das Basisimage weitergegeben werden? — Ja, mit vier Pflichten
 
 Gemeint ist `ota/base-desktop`: Debian 13 + XFCE + Selkies, **ohne KasmVNC und

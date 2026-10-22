@@ -125,6 +125,12 @@ up:
 	@# diesen Schritt fehlte es nach einem Update ohne Neubau des Basisimages.
 	@./scripts/build-selkies-deb.sh --hochladen --wenn-noetig || \
 	  echo "  (ota-selkies nicht in der Paketquelle — von Hand: scripts/build-selkies-deb.sh --hochladen)"
+	@# **Die Pakete von IDE-AI** (Kapitel 28), ebenso nur, wenn sie fehlen.
+	@# Beim ersten Mal holt das Continue aus dem Internet (rund 450 MB, danach
+	@# zwischengespeichert in dist/ide-ai-quellen). Scheitert es, laeuft OTA
+	@# weiter — nur IDE-AI kommt dann nicht in die Arbeitsplaetze.
+	@./scripts/build-ide-ai-deb.sh --hochladen --wenn-noetig || \
+	  echo "  (IDE-AI nicht in der Paketquelle — von Hand: scripts/build-ide-ai-deb.sh --hochladen)"
 	@# **Das Root-Image, wenn der Host es tragen kann** (Kapitel 25). Nur mit
 	@# Sysbox: Ohne startet ein Root-Arbeitsplatz ohnehin nicht, und ein Image,
 	@# das niemand benutzen kann, kostet nur Platz. Gebaut wird nur, wenn es
@@ -246,6 +252,8 @@ test:
 	@./scripts/test-ressourcen.sh
 	@./scripts/test-software.sh
 	@./scripts/test-git.sh
+	@# IDE-AI gegen den KI-Server in OTA_TEST_KI_URL (Kapitel 28).
+	@./scripts/test-ide-ai.sh
 	@echo
 	@./scripts/test-clipboard-bridge.sh || \
 	  echo "  (übersprungen — dafür muss ein Arbeitsplatz mit zwei Apps laufen)"

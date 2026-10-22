@@ -1,0 +1,12 @@
+Package: ota-ide-ai-jetbrains
+Version: @VERSION@
+Architecture: amd64
+Maintainer: OpenTerminalApps <ota@ota.invalid>
+Installed-Size: @GROESSE@
+Section: devel
+Priority: optional
+Homepage: https://github.com/continuedev/continue
+Description: IDE-AI für OpenTerminalApps: Continue in PyCharm und IntelliJ IDEA
+ Das Plugin Continue (Apache-2.0) für alle Nutzer, im Plugin-Verzeichnis
+ jeder JetBrains-IDE unter /opt. Den Chat mit dem eigenen KI-Server richtet
+ OTA im Zuhause ein (~/.continue/config.yaml).

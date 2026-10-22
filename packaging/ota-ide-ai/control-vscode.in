@@ -1,0 +1,15 @@
+Package: ota-ide-ai-vscode
+Version: @VERSION@
+Architecture: amd64
+Maintainer: OpenTerminalApps <ota@ota.invalid>
+Installed-Size: @GROESSE@
+Section: devel
+Priority: optional
+Homepage: https://github.com/continuedev/continue
+Description: IDE-AI für OpenTerminalApps: Continue in VS Code und VSCodium
+ Die Erweiterung Continue (Apache-2.0) für alle Nutzer, als mitgelieferte
+ Erweiterung von VS Code und VSCodium. Den Chat mit dem eigenen KI-Server
+ richtet OTA im Zuhause ein (~/.continue/config.yaml).
+ .
+ Ist der Editor beim Installieren noch nicht da, verknüpft der Agent sie
+ beim nächsten Start des Arbeitsplatzes (/usr/lib/ota-ide-ai/verknuepfen).

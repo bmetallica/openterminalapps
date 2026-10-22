@@ -37,7 +37,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile, status
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import FileResponse, PlainTextResponse
 from pydantic import BaseModel
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -352,21 +352,45 @@ def quellen() -> dict[str, Any]:
         if not SPIEGEL_AN and basis != EIGEN["prefix"]:
             continue
         raus.append({"prefix": prefix, "dist": dist, "comp": komps.get(basis, "main")})
-    return {"quellen": raus, "schluessel": schluessel(), "selkies": _selkies_fassung()}
+    return {"quellen": raus, "schluessel": schluessel(), "selkies": _fassung("ota-selkies"),
+            # IDE-AI (Kapitel 28): der Agent hebt jeden Arbeitsplatz darauf.
+            "ide_ai": {art: _fassung(f"ota-ide-ai-{art}") for art in ("vscode", "jetbrains")}}
 
 
-def _selkies_fassung() -> str:
-    """Die neueste Fassung von ota-selkies im eigenen Repository, oder "".
-    Der Agent hebt Root-Arbeitsplätze beim Fortsetzen darauf an."""
-    aus = _lauf(["aptly", "repo", "search", "ota", "Name (= ota-selkies)"], pruefen=False)
+def _fassung(name: str) -> str:
+    """Die neueste Fassung eines Pakets im eigenen Repository, oder "".
+    Der Agent hebt Arbeitsplätze darauf an (ota-selkies, ota-ide-ai-*)."""
+    aus = _lauf(["aptly", "repo", "search", "ota", f"Name (= {name})"], pruefen=False)
     beste = ""
     for zeile in aus.splitlines():
         teile = zeile.strip().split("_")
-        if len(teile) != 3 or teile[0] != "ota-selkies":
+        if len(teile) != 3 or teile[0] != name:
             continue
         if not beste or subprocess.run(["dpkg", "--compare-versions", teile[1], "gt", beste]).returncode == 0:
             beste = teile[1]
     return beste
+
+
+@app.get("/pakete/{name}/{version}/datei", dependencies=[Depends(require_token)])
+def paket_datei(name: str, version: str) -> FileResponse:
+    """Die .deb-Datei einer Fassung, aus dem veröffentlichten Stand.
+
+    Für den Agent, der IDE-AI auch in Arbeitsplätze ohne eingetragene
+    Paketquelle bringt (Ubuntu, Kasm-Images): Er holt die Datei hier und
+    installiert sie mit dpkg. Nur Pakete des eigenen Repositorys.
+    """
+    if not re.fullmatch(r"[a-z0-9][a-z0-9+.-]{1,80}", name) \
+            or not re.fullmatch(r"[0-9A-Za-z.+~:-]{1,80}", version):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Ungültiger Name oder ungültige Fassung.")
+    ordner = PUBLIC / EIGEN["prefix"] / "pool" / EIGEN["comp"] / name[0] / name
+    for datei in sorted(ordner.glob("*.deb")) if ordner.is_dir() else []:
+        felder = subprocess.run(["dpkg-deb", "-f", str(datei), "Package", "Version"],
+                                capture_output=True, text=True).stdout
+        werte = dict(z.split(": ", 1) for z in felder.splitlines() if ": " in z)
+        if werte.get("Package") == name and werte.get("Version") == version:
+            return FileResponse(datei, media_type="application/vnd.debian.binary-package",
+                                filename=f"{name}_{version}.deb")
+    raise HTTPException(status.HTTP_404_NOT_FOUND, f"{name} {version} liegt nicht in der Paketquelle.")
 
 
 @app.get("/schluessel", response_class=PlainTextResponse)

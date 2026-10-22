@@ -1830,3 +1830,8 @@ input[type="color"] {
   box-shadow: 0 2px 10px rgba(0, 0, 0, .35);
   pointer-events: none;
 }
+
+/* Einstellungen → IDE-AI: die Modelltabelle ist zum Bearbeiten, nicht zum Anklicken. */
+.ide-ai__modelle tbody tr { cursor: default; }
+.ide-ai__modelle tbody tr:hover { background: none; }
+.ide-ai__modelle td { vertical-align: top; padding: 10px 10px; }

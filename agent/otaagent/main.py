@@ -38,6 +38,7 @@ from . import builder
 from . import freeze as freeze_ops
 from . import skeleton as skeleton_ops
 from . import git_dienst
+from . import ide_ai
 from . import software as software_ops
 from . import kerne
 from . import clipboard as clip_scripts
@@ -437,6 +438,9 @@ class StartRequest(BaseModel):
     # OTA-Git (Kapitel 27): Subdomain, Token, Name, CA. Leer heisst: nichts
     # einrichten bzw. Reste entfernen. Siehe git_dienst.im_container.
     git: dict[str, Any] = {}
+    # IDE-AI (Kapitel 28): Fassungen der Pakete und Continues Konfiguration.
+    # Leer heisst: nichts einrichten bzw. Reste entfernen. Siehe ide_ai.py.
+    ide_ai: dict[str, Any] = {}
     # Wem die eigene Ablage gehoert, die eingehaengt werden soll. Leer heisst:
     # keine. Die Vorlage kann das abschalten, und die API entscheidet es —
     # der Agent haengt nur ein, was ihm gesagt wird.
@@ -1336,6 +1340,10 @@ def start_container(req: StartRequest) -> dict[str, Any]:
         _tastatur_setzen(container)
 
     _grundausstattung(container, heimat)
+    # Nach der Grundausstattung, vor dem Startskript: Continue findet seine
+    # Konfiguration, sobald jemand den Editor oeffnet. Die Pakete kommen im
+    # Hintergrund nach.
+    ide_ai.im_container(container, req.ide_ai, heimat, _run_as_root)
     # Reihenfolge mit Absicht: erst das Skeleton, dann der Verweis auf die
     # Ablage, dann das Startskript. Das Skeleton legt den Grundstand; das
     # Skript darf ihn ueberschreiben, denn es ist das spezifischere Werkzeug.
@@ -1764,6 +1772,7 @@ def _umgebung_schreiben(session_id: str) -> str:
 class FortsetzenRequest(BaseModel):
     repo: dict[str, Any] = {}
     git: dict[str, Any] = {}
+    ide_ai: dict[str, Any] = {}
 
 
 def _repo_einrichten(container, repo: dict[str, Any]) -> None:
@@ -2194,6 +2203,8 @@ def fortsetzen(cid: str, body: "FortsetzenRequest | None" = None) -> dict[str, A
     # Auch hier: Ein Root-Arbeitsplatz von vor dieser Aenderung bekommt die
     # fehlende `.bashrc` beim naechsten Fortsetzen.
     _grundausstattung(c, _heimat_container(c))
+    # IDE-AI: Konfiguration und, im Hintergrund, die neueste Fassung der Pakete.
+    ide_ai.im_container(c, body.ide_ai if body else {}, _heimat_container(c), _run_as_root)
     # Und Selkies auf den Stand der Paketquelle heben (Kapitel 20). Hat sich
     # etwas geaendert, einmal neu starten: Das laufende Selkies ist noch das
     # alte, und das Startskript liest die neuen Dateien nur beim Start. Der

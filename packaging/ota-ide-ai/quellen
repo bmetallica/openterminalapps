@@ -1,0 +1,19 @@
+# Was in die Pakete ota-ide-ai-vscode und ota-ide-ai-jetbrains kommt
+# (Handbuch Kapitel 28). Fassung, Adresse und Prüfsumme gehören zusammen:
+# Der Bau holt die Datei und bricht ab, wenn die Prüfsumme nicht stimmt.
+#
+# Eine neue Fassung von Continue: alle drei Werte ändern, `revision` auf 1
+# zurück, bauen mit scripts/build-ide-ai-deb.sh --hochladen.
+
+# Continue für VS Code und VSCodium, von Open VSX (Apache-2.0), nur Linux x64.
+VSCODE_FASSUNG=2.1.0
+VSCODE_URL=https://open-vsx.org/api/Continue/continue/linux-x64/2.1.0/file/Continue.continue-2.1.0@linux-x64.vsix
+VSCODE_SHA256=3b62f9c538f4e2d158454a2506863b29fb4d4bfa8f03944890ea4bd1aafda77f
+
+# Continue für JetBrains (PyCharm, IntelliJ IDEA), vom JetBrains Marketplace
+# (Apache-2.0). Seit 2026 von der Gemeinschaft gepflegt, nicht mehr von
+# Continue selbst. Das Archiv bringt Teile für fünf Plattformen mit; ins
+# Paket kommt nur Linux x64.
+JETBRAINS_FASSUNG=1.0.67
+JETBRAINS_URL=https://plugins.jetbrains.com/files/22707/999438/continue-intellij-extension-1.0.67.zip
+JETBRAINS_SHA256=8409563c7d5b75fe1d89d9d484e21536ebb2aefb2091301beb65442e0b227489

@@ -261,6 +261,30 @@ export type SoftwareStand = {
   whitelist: { name: string; titel: string; quelle: string; von: string; am: string }[]
 }
 
+/** Ein Modell, das IDE-AI anbietet (api/ota/ide_ai.py). */
+export type IdeAiModell = { id: string; titel: string; kontext: number; max_tokens: number }
+
+/** Einstellungen → IDE-AI (api/ota/ide_ai.py, Handbuch Kapitel 28). */
+export type IdeAiStand = {
+  an: boolean
+  url: string
+  api_key_gesetzt: boolean
+  gruppen: string[]
+  modelle: IdeAiModell[]
+  standard: string
+  autocomplete: string
+  temperatur: number | null
+  werkzeuge: boolean
+  zeitlimit: number
+  regeln: string
+  ohne_proxy: boolean
+  /** Neueste Fassungen in der Paketquelle; leer, wenn sie dort fehlen. */
+  fassungen: { vscode?: string; jetbrains?: string }
+}
+
+/** Was der KI-Server anbietet. `kontext` nur, wenn er es verrät. */
+export type IdeAiServerModell = { id: string; titel: string; beschreibung: string; kontext: number | null }
+
 /** Einstellungen → Git (api/ota/git.py). */
 export type GitStand = {
   an: boolean
@@ -1194,6 +1218,14 @@ export const api = {
     call<GitStand>('/admin/git', { method: 'PUT', body: JSON.stringify(body) }),
   gitAn: () => call<GitStand>('/admin/git/an', { method: 'POST' }),
   gitAus: () => call<GitStand>('/admin/git/aus', { method: 'POST' }),
+  ideAi: () => call<IdeAiStand>('/admin/ide-ai'),
+  ideAiEinstellen: (body: Partial<Omit<IdeAiStand, 'api_key_gesetzt' | 'fassungen'>> & { api_key?: string }) =>
+    call<IdeAiStand>('/admin/ide-ai', { method: 'PUT', body: JSON.stringify(body) }),
+  ideAiModelle: (url: string, api_key?: string) =>
+    call<IdeAiServerModell[]>('/admin/ide-ai/modelle', { method: 'POST', body: JSON.stringify({ url, api_key }) }),
+  ideAiTesten: (modell: string) =>
+    call<{ ok: boolean; ms: number; antwort: string; denkt: boolean; abbruch: string }>(
+      '/admin/ide-ai/testen', { method: 'POST', body: JSON.stringify({ modell }) }),
   gitAbgleich: () => call<Record<string, unknown>>('/admin/git/abgleich', { method: 'POST' }),
   software: () => call<SoftwareStand>('/admin/software'),
   softwareMeldungen: () => call<SoftwareMeldung[]>('/admin/software/meldungen'),

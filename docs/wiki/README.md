@@ -61,6 +61,7 @@ heute schon funktioniert.
 24. [Betrieb hinter einer Firewall mit NAT](24-hinter-nat.md)
 26. [Die eigene Paketquelle](26-paketquellen.md)
 27. [OTA-Git (Forgejo)](27-git.md)
+28. [IDE-AI: KI-Assistent in VS Code, VSCodium und PyCharm](28-ide-ai.md)
 
 Die Nummern sind die Reihenfolge, in der die Kapitel entstanden sind, nicht die, in der man sie
 liest — deshalb stehen 16 bis 23 zwischen 9 und 10, und 24 und 26 stehen unter Betrieb. Umnummerieren würde jeden Verweis brechen, der

@@ -8,7 +8,9 @@ OTA bringt eine **eigene Paketquelle für Debian 13** mit:
 - **Immer:** eigene `.deb`-Pakete, festgehaltene Stände, und darin das Paket **`ota-selkies`** —
   der Streaming-Server der Arbeitsplätze. Über sie kommt er ins Basisimage, in angehobene Golden
   Images und, beim Fortsetzen, in Root-Arbeitsplätze ([Kapitel 20](20-selkies-versuch.md#das-paket-ota-selkies)).
-  Sie braucht kaum Platz.
+  Sie braucht kaum Platz. Seit dem 2026-10-22 liegen dort auch die Pakete von **IDE-AI**
+  (`ota-ide-ai-vscode`, `ota-ide-ai-jetbrains`, [Kapitel 28](28-ide-ai.md)); die holt der Agent
+  selbst und bringt sie auch in Arbeitsplätze ohne Debian 13.
 - **Als Zusatz:** einen **Spiegel** der offiziellen Debian-Quellen und von Dockers Paketquelle
   (`OTA_REPO_SPIEGEL=1`). Arbeitsplätze und Bildbauer installieren dann auch Debian-Pakete von hier.
 

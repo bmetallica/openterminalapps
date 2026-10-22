@@ -1,0 +1,31 @@
+#!/bin/sh
+# Continue mit VS Code und VSCodium verknüpfen, soweit es sie in diesem System
+# gibt — oder, mit "weg", die Verknüpfungen wieder entfernen. Aufgerufen vom
+# Paket selbst und vom Agent bei jedem Start: Ein Editor kann nach dem Paket
+# kommen.
+#
+# VS Code und VSCodium laden alles unter resources/app/extensions als
+# mitgelieferte Erweiterung — für alle Nutzer, ohne etwas im Zuhause.
+#
+# **JetBrains-IDEs nicht.** Sie laden aus ihrem eigenen plugins/ nur, was in
+# der vorberechneten plugins/plugin-classpath.txt steht (gemessen mit PyCharm
+# 2026.2: ein Plugin daneben erscheint nicht einmal im Protokoll). Das Plugin
+# verknüpft der Agent deshalb im Plugin-Verzeichnis des Zuhauses
+# (~/.local/share/JetBrains/<IDE><Fassung>), siehe agent/otaagent/ide_ai.py.
+#
+# Im Paket ota-ide-ai-vscode als /usr/lib/ota-ide-ai/verknuepfen-vscode.
+set -e
+WEG=""; [ "${1:-}" = "weg" ] && WEG=1
+VS=/usr/share/ota-ide-ai/vscode/continue
+
+for d in /usr/share/codium /usr/share/code /opt/visual-studio-code /opt/vscodium; do
+  e="$d/resources/app/extensions"
+  [ -d "$e" ] || continue
+  if [ -n "$WEG" ] || [ ! -d "$VS" ]; then
+    [ -L "$e/ota-continue" ] && rm -f "$e/ota-continue" && echo "weg: $e"
+  elif [ "$(readlink "$e/ota-continue" 2>/dev/null)" != "$VS" ]; then
+    ln -sfn "$VS" "$e/ota-continue" && echo "verknüpft: $e"
+  fi
+done
+
+exit 0

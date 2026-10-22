@@ -5,6 +5,7 @@ import { VORGABE, setzeMarke, useMarke } from '../lib/branding'
 import { idleLabel } from '../lib/format'
 import { Directory } from './Directory'
 import { GitEinstellungen } from '../components/GitEinstellungen'
+import { IdeAiEinstellungen } from '../components/IdeAiEinstellungen'
 import { t, useLang, type Lang } from '../lib/i18n'
 
 /**
@@ -144,6 +145,13 @@ export function Settings({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad'
       </div>
       <div style={{ maxWidth: 620 }}>
         <GitEinstellungen onToast={onToast} />
+      </div>
+
+      <div className="section__head" style={{ marginTop: 30 }} id="ide-ai">
+        <span className="silk">{t('IDE-AI')}</span><span className="section__rule" />
+      </div>
+      <div style={{ maxWidth: 760 }}>
+        <IdeAiEinstellungen onToast={onToast} />
       </div>
 
       <div className="section__head" style={{ marginTop: 30 }}>

@@ -61,6 +61,7 @@ configuration decisions can be made with foresight — but it always says what a
 24. [Operating behind a firewall with NAT](24-hinter-nat.md)
 26. [The own package repository](26-paketquellen.md)
 27. [OTA Git (Forgejo)](27-git.md)
+28. [IDE-AI: AI assistant in VS Code, VSCodium and PyCharm](28-ide-ai.md)
 
 The numbers are the order in which the chapters were written, not the order in which you read them
 — that is why 16 to 23 sit between 9 and 10, and 24 and 26 are under operations. Renumbering would

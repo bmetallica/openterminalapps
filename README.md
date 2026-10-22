@@ -308,6 +308,15 @@ dabei **nicht** zurückwandert, ist die Datenbank: Neue Spalten bleiben stehen. 
   - Arbeitsplätze und Root-Arbeitsplätze bekommen Git vorkonfiguriert: Token je Arbeitsplatz,
     widerrufen bei Ende; SSH nur im Containernetz. Andere Git-Server bleiben unberührt.
   - Siehe [Kapitel 27](docs/wiki/27-git.md).
+- **IDE-AI**, unter Einstellungen ein- und ausschaltbar: ein KI-Assistent (Continue) in VS Code,
+  VSCodium und PyCharm, verbunden mit dem eigenen KI-Server (vLLM, llama.cpp oder jeder andere mit
+  OpenAI-Schnittstelle):
+  - Modelle als Auswahlliste, je Modell Kontextfenster und Antwortlänge; dazu Werkzeuge
+    (Agent-Modus), Temperatur, Zeitlimit, Regeln und berechtigte Gruppen.
+  - Die Pakete kommen aus der eigenen Paketquelle in jeden Arbeitsplatz mit passendem Editor, auch
+    in Ubuntu- und Kasm-Images; Root-Arbeitsplätze heben sich beim Fortsetzen an.
+  - Die Firewall gibt den KI-Server frei, solange IDE-AI an ist. Telemetrie von Continue aus.
+  - Siehe [Kapitel 28](docs/wiki/28-ide-ai.md).
 - **Softwaremonitoring:** Stündlich wird erfasst, welche Anwendungen in jedem laufenden
   Arbeitsplatz installiert sind (apt, Startmenü, Flatpak, Snap), ohne Versionen. Dazu gibt es eine
   Whitelist, befüllbar aus dem aktuellen Stand. Was nicht darauf steht, sehen Administratoren auf
@@ -462,7 +471,7 @@ nicht — dieselbe Trennung gilt für das Dateisystem des Hosts.
 
 ## Dokumentation
 
-- **[Handbuch](docs/wiki/README.md)** — Bedienung, Verwaltung, Betrieb, Fehlersuche (27 Kapitel;
+- **[Handbuch](docs/wiki/README.md)** — Bedienung, Verwaltung, Betrieb, Fehlersuche (28 Kapitel;
   [English](docs/wiki/en/README.md))
 - **[plan.md](plan.md)** — Architektur **und die Begründungen dahinter**, samt der Sackgassen
 - **[docs/adr/](docs/adr/README.md)** — Entscheidungen, die teuer rückgängig zu machen sind, mit den
@@ -492,6 +501,7 @@ make test
 | `test-ressourcen.sh` | Geänderte CPU und RAM erreichen vorhandene Container, laufend und pausiert; RAM unter dem Verbrauch wartet bis zum nächsten Start, die CPU nicht |
 | `test-software.sh` | Softwaremonitoring: Die Erfassung liest einen laufenden Arbeitsplatz (Debian-Pakete wie `apt-mark showmanual`, Starteinträge systemweit und im Zuhause, versteckte nicht); nach dem Befüllen der Whitelist keine Meldung; eine neue Anwendung wird mit Nutzer gemeldet; deinstalliert oder freigegeben verschwindet die Meldung, entzogen kommt sie wieder |
 | `test-git.sh` | OTA-Git: Ein- und Ausschalten (Daten bleiben), Subdomain hinter Traefik mit OTA-CA, OTA unberührt, Eingänge für Arbeitsplätze nicht auf dem Host; Anmeldung über Keycloak nur für berechtigte Gruppen, vorab angelegtes Konto wird verknüpft, Admins sind Admins, gesperrt statt gelöscht; im Arbeitsplatz clone/push ohne Passwort, eigene .gitconfig gewinnt, fremder Server bekommt nichts, SSH über 2222, Token widerrufen bei Ende, Root-Arbeitsplatz mit neuem Token nach dem Fortsetzen; andere Subdomain; nginx als Reverse Proxy; Sicherung mit Repositories |
+| `test-ide-ai.sh` | IDE-AI: Modelle vom KI-Server abrufen, falsche Eingaben abgewiesen, API-Schlüssel bleibt auf dem Server, Testfrage; Pakete in der Paketquelle, nur der Agent bekommt die Datei; in jeder Vorlage mit Editor config.yaml mit Marke, Kontextfenster und Antwortlänge, Telemetrie aus, Continue in VS Code/VSCodium und JetBrains verknüpft, Firewall lässt den KI-Server durch, Frage aus dem Arbeitsplatz bekommt Antwort, eigene config.yaml bleibt; ausgeschaltet ist alles wieder weg |
 | `test-konten.sh` | Konten der zentralen Anmeldung: Anlegen in OTA legt in Keycloak an (samt Pflicht zum Passwortwechsel), lokal kommt es nicht herein; Ändern, Passwort, zweiter Faktor, Sperren und Löschen wirken in Keycloak; Mein Konto führt über Keycloak; ein lokales Bestandskonto zieht mit seinem Passwort um, das Notfallkonto nicht |
 | `test-clipboard-bridge.sh` | Kopieren zwischen zwei Anwendungen im selben Arbeitsplatz: beide Richtungen, Umlaute, ein Bild, ein Megabyte, nach Pause, und abgeschaltet |
 | `test-i18n` (`scripts/i18n-pruefen.py`) | Zweisprachigkeit: Jeder Text der Oberfläche und jede Meldung des Servers hat einen englischen Eintrag, kein deutscher Text geht an der Übersetzung vorbei, und jedes Kapitel des Handbuchs gibt es auf Englisch mit demselben Aufbau |

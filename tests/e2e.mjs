@@ -1201,6 +1201,31 @@ try {
   check(/min|h/.test(idle ?? ''), `Anmeldefrist einstellbar (${idle})`)
   await shot(page, '16-einstellungen')
 
+  // IDE-AI (Kapitel 28): Modelle abrufen, ohne etwas zu speichern. Der
+  // KI-Server der Testanlage; OTA_TEST_KI_URL=aus überspringt das.
+  const ki = process.env.OTA_TEST_KI_URL ?? 'http://192.168.66.225:8080'
+  check(!!(await page.$('#ide-ai')), 'Einstellungen → IDE-AI vorhanden')
+  if (ki !== 'aus') {
+    const url = await page.$('input[aria-label="Adresse des KI-Servers"]')
+    const vorher = url ? await page.$eval('input[aria-label="Adresse des KI-Servers"]', (e) => e.value) : ''
+    if (url) {
+      await url.click({ clickCount: 3 })
+      await url.type(ki)
+      await page.evaluate(() => [...document.querySelectorAll('button')]
+        .find((b) => b.textContent === 'Modelle abrufen')?.click())
+      await page.waitForSelector('.ide-ai__modelle tbody tr', { timeout: 30000 }).catch(() => null)
+    }
+    const zeilen = await page.$$eval('.ide-ai__modelle tbody tr', (els) => els.length).catch(() => 0)
+    check(zeilen > 0, `IDE-AI: Modelle vom KI-Server abgerufen (${zeilen})`)
+    await page.$eval('.ide-ai__modelle', (e) => e.scrollIntoView()).catch(() => null)
+    await shot(page, '16b-ide-ai')
+    // Nichts speichern: Entwurf verwerfen.
+    if (url && vorher !== ki) {
+      await page.evaluate(() => [...document.querySelectorAll('button')]
+        .find((b) => b.textContent === 'Verwerfen')?.click())
+    }
+  }
+
   // ----------------------------------------------------------- Sprache
   console.log('\nSprache')
   await page.evaluate(() => {

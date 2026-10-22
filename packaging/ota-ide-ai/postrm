@@ -1,0 +1,13 @@
+#!/bin/sh
+# Nach dem Entfernen: Verknüpfungen, die jetzt ins Leere zeigen, wegräumen.
+set -e
+case "$1" in
+  remove|purge)
+    for l in /usr/share/codium/resources/app/extensions/ota-continue \
+             /usr/share/code/resources/app/extensions/ota-continue \
+             /opt/*/resources/app/extensions/ota-continue \
+             /opt/*/plugins/ota-continue /opt/*/*/plugins/ota-continue /usr/share/*/plugins/ota-continue; do
+      [ -L "$l" ] && [ ! -e "$l" ] && rm -f "$l"
+    done ;;
+esac
+exit 0

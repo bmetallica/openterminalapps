@@ -8,7 +8,10 @@ OTA brings **its own package repository for Debian 13**:
 - **Always:** your own `.deb` packages, pinned snapshots, and in it the package **`ota-selkies`** —
   the workspaces' streaming server. Through it, it gets into the base image, into upgraded golden
   images and, when resuming, into root workspaces
-  ([chapter 20](20-selkies-versuch.md#the-package-ota-selkies)). It needs hardly any space.
+  ([chapter 20](20-selkies-versuch.md#the-package-ota-selkies)). It needs hardly any space. Since
+  2026-10-22 it also holds the packages of **IDE-AI** (`ota-ide-ai-vscode`, `ota-ide-ai-jetbrains`,
+  [chapter 28](28-ide-ai.md)); the agent fetches them itself and also brings them into workspaces
+  without Debian 13.
 - **As an add-on:** a **mirror** of the official Debian sources and of Docker's package repository
   (`OTA_REPO_SPIEGEL=1`). Workspaces and the image builder then also install Debian packages from
   here.

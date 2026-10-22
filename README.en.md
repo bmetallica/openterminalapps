@@ -303,6 +303,15 @@ that did not exist before is simply there.
   - Workspaces and root workspaces get Git preconfigured: a token per workspace, revoked when it
     ends; SSH only inside the container network. Other Git servers stay untouched.
   - See [chapter 27](docs/wiki/en/27-git.md).
+- **IDE-AI**, can be turned on and off under Settings: an AI assistant (Continue) in VS Code,
+  VSCodium and PyCharm, connected to your own AI server (vLLM, llama.cpp or any other with an
+  OpenAI interface):
+  - Models as a drop-down, context window and response length per model; plus tools
+    (agent mode), temperature, timeout, rules and entitled groups.
+  - The packages come from the own package source into every workspace with a matching editor,
+    also into Ubuntu and Kasm images; root workspaces move up when resuming.
+  - The firewall allows the AI server while IDE-AI is on. Continue's telemetry off.
+  - See [chapter 28](docs/wiki/en/28-ide-ai.md).
 - **Software monitoring:** every hour OTA records which applications are installed in each running
   workspace (apt, start menu, Flatpak, Snap), without versions. There is a whitelist that can be
   filled from the current state. Whatever is not on it, administrators see on the dashboard and
@@ -458,7 +467,7 @@ socket — the same separation applies to the host's file system.
 ## Documentation
 
 - **[Manual](docs/wiki/en/README.md)** — usage, administration, operations, troubleshooting
-  (27 chapters; [German](docs/wiki/README.md))
+  (28 chapters; [German](docs/wiki/README.md))
 - **[plan.md](plan.md)** — architecture **and the reasoning behind it**, including the dead ends
   (German)
 - **[docs/adr/](docs/adr/README.md)** — decisions that are expensive to undo, with the alternatives
@@ -488,6 +497,7 @@ make test
 | `test-ressourcen.sh` | Changed CPU and RAM reach existing containers, running and paused; RAM below current usage waits until the next start, CPU does not |
 | `test-software.sh` | Software monitoring: the inventory reads a running workspace (Debian packages like `apt-mark showmanual`, start entries system-wide and in the home, hidden ones not); after filling the whitelist no alert; a new application is reported with its user; uninstalled or approved, the alert disappears, revoked it comes back |
 | `test-git.sh` | OTA Git: switching on and off (data stays), subdomain behind Traefik with the OTA CA, OTA untouched, workspace entrances not on the host; sign-in through Keycloak only for entitled groups, a pre-created account is linked, admins are admins, locked instead of deleted; in the workspace clone/push without password, your own .gitconfig wins, a foreign server gets nothing, SSH via 2222, token revoked at the end, root workspace with a new token after resuming; a different subdomain; nginx as reverse proxy; backup including repositories |
+| `test-ide-ai.sh` | IDE-AI: fetch models from the AI server, wrong input refused, API key stays on the server, test question; packages in the package source, only the agent gets the file; in every template with an editor config.yaml with mark, context window and response length, telemetry off, Continue linked in VS Code/VSCodium and JetBrains, firewall lets the AI server through, a question from the workspace gets an answer, own config.yaml stays; turned off, everything is gone again |
 | `test-konten.sh` | Central sign-in accounts: creating in OTA creates in Keycloak (including the required password change), locally it does not get in; changes, password, second factor, locking and deleting take effect in Keycloak; My account goes through Keycloak; a local legacy account moves over with its password, the emergency account does not |
 | `test-clipboard-bridge.sh` | Copying between two applications in the same workspace: both directions, umlauts, an image, a megabyte, after a pause, and switched off |
 | `test-i18n` (`scripts/i18n-pruefen.py`) | Bilingual: every interface text and every server message has an English entry, no German text bypasses the translation, and every manual chapter exists in English with the same structure |

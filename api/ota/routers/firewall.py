@@ -19,7 +19,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session as DbSession
 
-from .. import agent_client, audit, settings_store
+from .. import agent_client, audit, ide_ai, settings_store
 from ..config import settings
 from ..db import get_db
 from ..deps import require_permission
@@ -312,7 +312,9 @@ def _schieben(db: DbSession) -> None:
 
     try:
         agent_client.firewall_global({
-            "freigaben": settings_store.get(db, settings_store.FIREWALL_GLOBAL) or [],
+            # Dazu der KI-Server von IDE-AI, solange es an ist (Kapitel 28).
+            "freigaben": (settings_store.get(db, settings_store.FIREWALL_GLOBAL) or [])
+            + [f for f in [ide_ai.freigabe(db)] if f],
             "weiterleitungen": weiter,
         })
     except Exception:  # noqa: BLE001 — die Firewall darf keine Anfrage kippen

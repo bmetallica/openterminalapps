@@ -1,0 +1,30 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: Continue
+Upstream-Contact: https://github.com/continuedev/continue
+Source: https://github.com/continuedev/continue
+
+Files: usr/share/ota-ide-ai/*
+Copyright: 2023-2026 Continue Dev, Inc. and contributors
+License: Apache-2.0
+Comment:
+ Unverändert aus Open VSX (Continue.continue, Linux x64) bzw. dem JetBrains
+ Marketplace (Plugin 22707). Weggelassen sind nur die Teile für andere
+ Plattformen. Mitgelieferte Bibliotheken bringen ihre eigenen Hinweise mit.
+
+Files: usr/lib/ota-ide-ai/* debian/*
+Copyright: 2026 OpenTerminalApps
+License: Apache-2.0
+
+License: Apache-2.0
+ Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ use this file except in compliance with the License. You may obtain a copy
+ of the License at https://www.apache.org/licenses/LICENSE-2.0
+ .
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+ License for the specific language governing permissions and limitations
+ under the License.
+ .
+ On Debian and Ubuntu systems, the complete text of the Apache License,
+ Version 2.0 can be found in /usr/share/common-licenses/Apache-2.0.

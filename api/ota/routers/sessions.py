@@ -15,7 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DbSession
 
-from .. import agent_client, audit, git, paketquellen, ressourcen, settings_store
+from .. import agent_client, audit, git, ide_ai, paketquellen, ressourcen, settings_store
 from .firewall import schieben as firewall_schieben
 from ..config import settings
 from ..db import get_db
@@ -671,6 +671,8 @@ def start_session(
             "repo": paketquellen.fuer_container(db),
             # OTA-Git vorkonfiguriert (Kapitel 27). Leer: nichts, bzw. weg.
             "git": git.fuer_sitzung(db, sess, user, tpl),
+            # IDE-AI (Kapitel 28). Leer: nichts, bzw. weg.
+            "ide_ai": ide_ai.fuer_sitzung(db, user),
         })
     except HTTPException:
         sess.status = "failed"
@@ -794,7 +796,8 @@ def platz_fortsetzen(db: DbSession, sess: SessionModel, request: Request | None,
     db.commit()
     try:
         agent_client.fortsetzen(sess.container_id, paketquellen.fuer_container(db),
-                                git.fuer_sitzung(db, sess, sess.user, sess.template))
+                                git.fuer_sitzung(db, sess, sess.user, sess.template),
+                                ide_ai.fuer_sitzung(db, sess.user))
     except HTTPException as exc:
         if exc.status_code == status.HTTP_404_NOT_FOUND:
             # Der Container ist weg (von Hand geloescht, Docker zurueckgesetzt).

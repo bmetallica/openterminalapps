@@ -111,7 +111,9 @@ def fuer_container(db: DbSession) -> dict[str, Any]:
     return {"modus": modus, "quellen": quellen,
             "schluessel": daten.get("schluessel", ""), "ca": ca,
             # Die Fassung, auf die der Agent einen Root-Arbeitsplatz hebt.
-            "selkies": daten.get("selkies", "")}
+            "selkies": daten.get("selkies", ""),
+            # Die Fassungen der Pakete von IDE-AI (ide_ai.py, Kapitel 28).
+            "ide_ai": daten.get("ide_ai", {})}
 
 
 def zwischenspeicher_leeren() -> None:
