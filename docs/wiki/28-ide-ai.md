@@ -170,7 +170,11 @@ scripts/build-ide-ai-deb.sh --hochladen
 Die Einstellungsseite zeigt, welche Fassungen in der Paketquelle liegen.
 
 > **Zum JetBrains-Plugin:** Continue pflegt es seit 2026 nicht mehr selbst, sondern überlässt es der
-> Gemeinschaft; die Fassung 1.0.67 ist vom März 2026. In PyCharm 2026.2 lädt sie fehlerfrei.
+> Gemeinschaft; die Fassung 1.0.67 ist vom März 2026. Für PyCharm 2026.2 passt OTA sie beim Paketbau
+> an: Ab 2026.2 steckt JCEF, der Browser, in dem Continue seinen Chat zeigt, in einem eigenen Plugin.
+> Ohne angemeldete Abhängigkeit bliebe das Fenster leer („Nothing to show“). Ausserdem gibt der Agent
+> `continue-binary` dem Menschen des Arbeitsplatzes, denn Continue setzt dessen Rechte bei jedem
+> Start selbst.
 > Für VS Code und VSCodium entwickelt Continue weiter.
 
 ## Datenschutz
@@ -194,6 +198,7 @@ Die Einstellungsseite zeigt, welche Fassungen in der Paketquelle liegen.
 | „context length exceeded“ oder ähnlich vom Server | Das Kontextfenster in OTA ist größer als im Server. Kleiner stellen |
 | Agent-Modus ruft keine Werkzeuge auf | Der Server kann keine Werkzeugaufrufe: vLLM `--enable-auto-tool-choice --tool-call-parser …`, llama.cpp `--jinja`. Oder **Werkzeuge** aus |
 | Continue rechts nicht zu sehen | `Strg+Alt+B` öffnet die rechte Leiste. Von selbst öffnet OTA sie nur einmal je Ordner |
+| PyCharm zeigt bei Continue nur „Nothing to show“ | Paket `ota-ide-ai-jetbrains` älter als `1.0.67-ota5`: `make update`, dann Arbeitsplatz neu starten. Im Protokoll (`~/.cache/JetBrains/*/log/idea.log`) steht dann `NoClassDefFoundError: com/intellij/ui/jcef/JBCefApp` oder `continue-binary: Die Operation ist nicht erlaubt` |
 | PyCharm zeigt Continue nicht | Gibt es `~/.local/share/JetBrains/<IDE><Fassung>/ota-continue`? Der Name kommt aus `product-info.json` der IDE |
 
 Prüfreihe: `scripts/test-ide-ai.sh`. Sie startet jede Vorlage mit einem passenden Editor und fragt

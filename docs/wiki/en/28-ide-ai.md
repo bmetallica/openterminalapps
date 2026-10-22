@@ -174,7 +174,11 @@ scripts/build-ide-ai-deb.sh --hochladen
 The settings page shows which versions are in the package source.
 
 > **About the JetBrains plugin:** since 2026 Continue no longer maintains it itself but leaves it to
-> the community; version 1.0.67 is from March 2026. In PyCharm 2026.2 it loads without errors.
+> the community; version 1.0.67 is from March 2026. For PyCharm 2026.2, OTA adapts it during the
+> package build: from 2026.2 on, JCEF, the browser in which Continue shows its chat, is a plugin of its
+> own. Without the dependency declared, the window would stay empty ("Nothing to show"). In addition,
+> the agent gives `continue-binary` to the person of the workspace, because Continue sets its
+> permissions itself at every start.
 > For VS Code and VSCodium, Continue keeps developing.
 
 ## Privacy
@@ -198,6 +202,7 @@ The settings page shows which versions are in the package source.
 | "context length exceeded" or similar from the server | The context window in OTA is larger than in the server. Lower it |
 | Agent mode calls no tools | The server cannot do tool calls: vLLM `--enable-auto-tool-choice --tool-call-parser …`, llama.cpp `--jinja`. Or turn **Tools** off |
 | Continue not visible on the right | `Ctrl+Alt+B` opens the right side bar. OTA opens it by itself only once per folder |
+| PyCharm shows only "Nothing to show" for Continue | Package `ota-ide-ai-jetbrains` older than `1.0.67-ota5`: `make update`, then restart the workspace. The log (`~/.cache/JetBrains/*/log/idea.log`) then says `NoClassDefFoundError: com/intellij/ui/jcef/JBCefApp` or `continue-binary: Operation not permitted` |
 | PyCharm does not show Continue | Is there `~/.local/share/JetBrains/<IDE><version>/ota-continue`? The name comes from the IDE's `product-info.json` |
 
 Test suite: `scripts/test-ide-ai.sh`. It starts every template with a matching editor and asks the

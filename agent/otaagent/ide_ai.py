@@ -72,6 +72,10 @@ JB=/usr/share/ota-ide-ai/jetbrains/continue-intellij-extension
 # nicht aus ihrem eigenen plugins/ (packaging/ota-ide-ai/verknuepfen). Dort
 # liegt nur eine Verknüpfung; das Plugin selbst bleibt im Paket.
 jetbrains() {
+  # Continue setzt bei jedem Start die Rechte auf continue-binary neu — das
+  # darf nur, wem die Datei gehört. Jeder Arbeitsplatz hat sein eigenes
+  # Dateisystem, also bekommt sie der Mensch dieses Arbeitsplatzes.
+  [ "$1" = an ] && [ -f "$JB/core/linux-x64/continue-binary" ] && chown "$B" "$JB/core/linux-x64/continue-binary"
   for f in /opt/*/product-info.json /opt/*/*/product-info.json /usr/share/*/product-info.json; do
     [ -f "$f" ] || continue
     n=$(sed -n 's/.*"dataDirectoryName": *"\([A-Za-z0-9._-]*\)".*/\1/p' "$f" | head -1)

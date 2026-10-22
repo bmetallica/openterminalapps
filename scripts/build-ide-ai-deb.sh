@@ -135,6 +135,27 @@ if [ "$ART" = jetbrains ]; then
   # beim ersten Start — in einem Verzeichnis, das root gehoert, ginge das nicht.
   chmod 0755 $P/usr/share/ota-ide-ai/jetbrains/continue-intellij-extension/core/linux-x64/continue-binary \
              $P/usr/share/ota-ide-ai/jetbrains/continue-intellij-extension/core/linux-x64/rg
+  # Ab 2026.2 steckt JCEF (der Browser, in dem Continue seine Oberflaeche
+  # zeigt) in einem eigenen Plugin. Continue meldet die Abhaengigkeit nicht an
+  # und bleibt dann leer ("Nothing to show", NoClassDefFoundError JBCefApp).
+  # Optional nachgetragen: Aeltere IDEs ohne dieses Plugin laden Continue weiter.
+  python3 - $P/usr/share/ota-ide-ai/jetbrains/continue-intellij-extension/lib <<"PY"
+import glob, os, sys, zipfile
+jar, = [j for j in glob.glob(os.path.join(sys.argv[1], "continue-intellij-extension-*.jar"))
+        if "META-INF/plugin.xml" in zipfile.ZipFile(j).namelist()]
+alt = zipfile.ZipFile(jar)
+xml = alt.read("META-INF/plugin.xml").decode("utf-8")
+anker = "<depends>com.intellij.modules.platform</depends>"
+assert anker in xml and "com.intellij.modules.jcef" not in xml, "plugin.xml unerwartet"
+xml = xml.replace(anker, anker + "\n  <depends optional=\"true\" config-file=\"ota-jcef.xml\">com.intellij.modules.jcef</depends>", 1)
+with zipfile.ZipFile(jar + ".neu", "w", zipfile.ZIP_DEFLATED) as neu:
+    for i in alt.infolist():
+        neu.writestr(i, xml if i.filename == "META-INF/plugin.xml" else alt.read(i))
+    neu.writestr("META-INF/ota-jcef.xml", "<idea-plugin/>\n")
+alt.close()
+os.replace(jar + ".neu", jar)
+os.chmod(jar, 0o644)
+PY
 fi
 install -m 0644 /paket/copyright $P/usr/share/doc/ota-ide-ai-$ART/copyright
 # Mit VS Code und VSCodium verknuepft das Paket selbst; ein JetBrains-Plugin

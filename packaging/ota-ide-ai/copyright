@@ -11,7 +11,10 @@ Comment:
  (Plugin 22707). Weggelassen sind die Teile für andere Plattformen.
  Geändert von OpenTerminalApps: In vscode/continue/package.json steht der
  Bereich von Continue unter viewsContainers.secondarySidebar statt
- viewsContainers.activitybar (rechts statt links). Sonst unverändert.
+ viewsContainers.activitybar (rechts statt links). Im JetBrains-Plugin
+ meldet META-INF/plugin.xml zusätzlich, optional, das Plugin
+ com.intellij.modules.jcef an (ab 2026.2 nötig, sonst bleibt Continue leer);
+ dazu die leere META-INF/ota-jcef.xml. Sonst unverändert.
  Mitgelieferte Bibliotheken bringen ihre eigenen Hinweise mit.
 
 Files: usr/lib/ota-ide-ai/* usr/share/ota-ide-ai/vscode/ota/* debian/*

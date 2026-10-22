@@ -158,6 +158,19 @@ for zeile in $TPLS; do
     expect "/usr/share/ota-ide-ai/jetbrains/continue-intellij-extension" \
       "$(docker exec "$C" readlink "$H/.local/share/JetBrains/$JBDIR/ota-continue")" "Continue für $JBDIR im Zuhause verknüpft"
   done
+  if docker exec "$C" test -d /usr/share/ota-ide-ai/jetbrains/continue-intellij-extension; then
+    J=/usr/share/ota-ide-ai/jetbrains/continue-intellij-extension
+    # Continue setzt die Rechte auf continue-binary selbst — nur als Eigentümer.
+    expect "$(docker exec "$C" stat -c %u "$H")" "$(docker exec "$C" stat -c %u "$J/core/linux-x64/continue-binary")" \
+      "continue-binary gehört dem Menschen"
+    # Ab 2026.2 ist JCEF ein eigenes Plugin; ohne die Abhängigkeit bleibt Continue leer.
+    expect "com.intellij.modules.jcef" \
+      "$(docker exec "$C" python3 -c 'import glob,zipfile
+for j in glob.glob("'"$J"'/lib/continue-intellij-extension-*.jar"):
+    z=zipfile.ZipFile(j)
+    if "META-INF/plugin.xml" in z.namelist() and "com.intellij.modules.jcef" in z.read("META-INF/plugin.xml").decode(): print("com.intellij.modules.jcef")' 2>/dev/null)" \
+      "JetBrains-Plugin meldet JCEF an"
+  fi
   expect "200" "$(docker exec -u 1000 "$C" curl -s -m 15 -o /dev/null -w '%{http_code}' "$KI/v1/models")" \
     "Die Firewall lässt den KI-Server durch"
   A=$(docker exec -u 1000 "$C" curl -s -m 180 "$KI/v1/chat/completions" -H 'Content-Type: application/json' \
