@@ -9,6 +9,13 @@
 # ist.
 FROM debian:13
 
+# Sicherheitsupdates der Basis. `OTA_PAKETSTAND` wechselt jede Woche
+# (Makefile) und baut diese Schicht damit spaetestens woechentlich neu —
+# sonst hielte der Build-Cache sie auf dem Stand vom ersten Bau.
+ARG OTA_PAKETSTAND=
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y \
+ && apt-get clean && rm -rf /var/lib/apt/lists/*
+
 ARG DEBIAN_FRONTEND=noninteractive
 # `python3-python-multipart`, nicht `python3-multipart`: Das zweite ist ein
 # anderes Paket gleichen Zwecks, und FastAPI lehnt Uploads damit ab — der

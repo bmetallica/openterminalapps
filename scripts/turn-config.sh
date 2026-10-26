@@ -97,8 +97,8 @@ mkdir -p "$(dirname "$ZIEL")"
   echo "use-auth-secret"
   echo "static-auth-secret=${OTA_TURN_SECRET:-}"
   echo "no-tls"
-  echo "no-dtls"
-  echo "no-cli"
+  # Kein `no-dtls`, kein `no-cli`: Seit coturn 4.7 sind DTLS und die
+  # Verwaltungs-CLI ab Werk aus, und 4.18 meldet beide Zeilen als Fehler.
   echo "no-multicast-peers"
   echo
   echo "# Universell unbrauchbar."

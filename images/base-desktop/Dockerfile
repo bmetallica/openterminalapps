@@ -50,6 +50,11 @@ FROM scratch AS ota-pakete
 FROM debian:13
 
 ARG DEBIAN_FRONTEND=noninteractive
+# Wechselt jede Woche (scripts/build-desktop-image.sh) und baut damit alle
+# Schichten darunter neu — mit den Sicherheitsupdates der Woche aus dem
+# `apt-get upgrade` weiter unten. Sonst hielte der Build-Cache die Pakete
+# auf dem Stand des ersten Baus.
+ARG OTA_PAKETSTAND=
 
 LABEL org.opencontainers.image.title="OpenTerminalApps Basisimage (Debian/XFCE/Selkies)" \
       org.opencontainers.image.description="Debian 13 + XFCE + Selkies 2.0 über WebSockets, ohne KasmVNC" \
@@ -98,7 +103,8 @@ ENV HOME=/home/ota \
 # einem unbekannten Aussteller scheitert. `ca-certificates` kommt dafür
 # vorgezogen; der Rest folgt unten.
 COPY ca/ /tmp/ota-ca/
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+RUN apt-get update && apt-get upgrade -y \
+ && apt-get install -y --no-install-recommends ca-certificates \
  && if ls /tmp/ota-ca/*.crt > /dev/null 2>&1; then \
       install -d /usr/local/share/ca-certificates/ota \
       && cp /tmp/ota-ca/*.crt /usr/local/share/ca-certificates/ota/ \

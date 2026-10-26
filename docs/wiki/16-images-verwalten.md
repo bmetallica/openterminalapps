@@ -49,7 +49,7 @@ Alte Fassungen eigener Images werden ohnehin begrenzt: Je Workspace bleiben die 
 
 ## Die eigene Registry ✅
 
-Im Stack läuft `registry:2` als Dienst `ota-registry`. Jedes gebaute Golden Image landet dort
+Im Stack läuft `registry:3` als Dienst `ota-registry`. Jedes gebaute Golden Image landet dort
 zusätzlich zum Docker-Store, und die Adresse der Fassung wird die Adresse in der Registry:
 
 ```

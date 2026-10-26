@@ -286,6 +286,13 @@ def _run_build(build_id: str, tag: str, dockerfile: str, setup_script: str,
                      "--load",                 # ins Image-Store uebernehmen
                      "--progress", "plain",    # zeilenweise statt Fortschrittsbalken
                      "--pull=false",
+                     # Ohne Cache: Wer baut, will die Pakete von heute. Mit
+                     # Cache bekam eine Bauanleitung, die einer früheren
+                     # glich, deren `apt-get install`-Schicht — samt alter
+                     # Fassungen (gemessen 2026-10-26: ota-selkies ota1,
+                     # obwohl ota2 in der Paketquelle lag). Gebaut werden nur
+                     # die eigenen Schritte über dem Basisimage.
+                     "--no-cache",
                      *_proxy_argumente(),
                      "-t", tag, "."],
                     cwd=ctx,

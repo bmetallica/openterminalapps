@@ -5,6 +5,10 @@
 
 SHELL := /bin/bash
 COMPOSE := docker compose -f deploy/docker-compose.yml --env-file deploy/.env
+# Kalenderwoche als Build-Argument: Die Schicht mit den Paket-Upgrades in den
+# eigenen Images wird damit spaetestens woechentlich neu gebaut (siehe
+# api/Dockerfile). Gleich fuer `up` und `update`, sonst baute jeder Wechsel neu.
+export OTA_PAKETSTAND ?= $(shell date +%G-%V)
 
 .PHONY: help
 help:
@@ -18,6 +22,7 @@ help:
 	@echo "  make identity  Keycloak-Realm einrichten oder ergänzen"
 	@echo "  make logs      Logs aller Dienste mitlesen"
 	@echo "  make ps        Zustand aller Dienste"
+	@echo "  make cve       Behebbare Sicherheitslücken in allen Images (grype)"
 	@echo "  make admin     Ersten Administrator anlegen (NAME=... setzen)"
 	@echo "  make test      Alle Prüfreihen (Rechte, Konten, Zwischenablage, Oberfläche,"
 	@echo "                 Verzeichnis, Medienweg, Netz, Root-Arbeitsplatz, Paketquelle,"
@@ -166,6 +171,15 @@ update:
 	@# Scheitert ein Schritt, bleibt es stehen: dann ist die Meldung wahr.
 	@./scripts/wartung.sh an
 	@./scripts/setup-env.sh
+	@# Frische Images, damit Sicherheitsupdates ankommen: die fremden Dienste
+	@# (Postgres, Keycloak, Traefik … — innerhalb ihrer Versionsreihe) und
+	@# die Basis der eigenen (python, nginx, debian). Ohne das baute `up`
+	@# immer wieder auf dem Stand vom ersten Tag. Ohne Netz geht es mit dem
+	@# weiter, was da ist.
+	@$(COMPOSE) pull --ignore-buildable --quiet \
+	  || echo "  Hinweis: Dienst-Images nicht aktualisiert (kein Netz?) — weiter mit den vorhandenen."
+	@$(COMPOSE) build --pull --quiet \
+	  || { echo "  Hinweis: Basis-Images nicht aktualisiert — weiter mit den vorhandenen."; $(COMPOSE) build --quiet; }
 	@$(MAKE) --no-print-directory up
 	@./scripts/wartung.sh aus
 	@echo
@@ -307,6 +321,11 @@ test:
 # anderes läuft. Ergebnisse landen in `docs/messungen/`.
 messung:
 	@./scripts/mess-streaming.sh $(SELKIES) $(KASMVNC)
+
+.PHONY: cve
+cve:
+	@# Behebbare Sicherheitslücken in allen Images der Anlage (grype).
+	@./scripts/cve-pruefen.sh
 
 .PHONY: sbom
 # Stückliste je Image — nötig, sobald ein Image das Haus verlässt.

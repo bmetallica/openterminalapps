@@ -20,6 +20,11 @@ RUN npx tsc -b && npx vite build
 # ---------- Stufe 2: ausliefern ----------
 FROM nginx:alpine AS runtime
 
+# Sicherheitsupdates der Basis — das Alpine im nginx-Image hinkt seinen
+# Paketen hinterher. Zum Wochenstempel siehe api/Dockerfile.
+ARG OTA_PAKETSTAND=
+RUN apk upgrade --no-cache
+
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY --from=build /app/dist/index.html /usr/share/nginx/html/index.html
 

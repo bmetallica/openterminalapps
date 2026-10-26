@@ -74,7 +74,7 @@ else
   RAEDER="${OTA_REPO_ROOT:-/srv/ota/repo}/aptly/public/dateien/selkies/${UPSTREAM}/raeder"
   VORRAT=()
   if [ -d "$RAEDER" ]; then
-    echo "  Abhängigkeiten aus dem Datei-Vorrat ($RAEDER)"
+    echo "  Abhängigkeiten aus dem Datei-Vorrat ($RAEDER), fehlende von PyPI"
     VORRAT=(-v "$RAEDER:/raeder:ro")
   else
     echo "  Abhängigkeiten von PyPI (geprüft gegen ota-abhaengigkeiten.txt)"
@@ -94,7 +94,11 @@ else
     "$BAUBILD" -c '
 set -euo pipefail
 QUELLE=""
-[ -d /raeder ] && QUELLE="--no-index --find-links /raeder"
+# Erst der Vorrat, dann PyPI: Ist der Vorrat älter als die Liste (neue
+# Fassungen wegen Sicherheitslücken), fehlt dort eine Datei — ohne Netz
+# bricht der Bau dann mit pips Meldung ab, mit Netz kommt sie von PyPI. Die
+# Prüfsummen gelten so oder so.
+[ -d /raeder ] && QUELLE="--find-links /raeder"
 # Die Umgebung entsteht an ihrem endgültigen Ort, damit die Pfade in den
 # Startern und in pyvenv.cfg stimmen, wenn das Paket ausgepackt ist.
 python3 -m venv /opt/selkies

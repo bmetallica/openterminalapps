@@ -1,4 +1,11 @@
-FROM python:3.12-slim AS runtime
+FROM python:3.13-slim AS runtime
+
+# Sicherheitsupdates der Basis. `OTA_PAKETSTAND` wechselt jede Woche
+# (Makefile) und baut diese Schicht damit spaetestens woechentlich neu —
+# sonst hielte der Build-Cache sie auf dem Stand vom ersten Bau.
+ARG OTA_PAKETSTAND=
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y \
+ && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -7,7 +14,7 @@ ENV PYTHONUNBUFFERED=1 \
 WORKDIR /app
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip && pip install --no-cache-dir -r requirements.txt
 
 COPY ota ./ota
 COPY alembic.ini .

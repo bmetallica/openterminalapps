@@ -93,7 +93,20 @@ services:
   # vorher fehlte: mehr als eine Selkies-Sitzung je Host. Der Portbereich
   # wird nicht mehr je Container veroeffentlicht, sondern einmal geteilt.
   turn:
-    image: coturn/coturn:4.6-alpine
+    build:
+      context: ../images/turn
+      dockerfile: Dockerfile
+      args:
+        http_proxy: "${OTA_HTTP_PROXY:-}"
+        https_proxy: "${OTA_HTTPS_PROXY:-}"
+        no_proxy: "${OTA_NO_PROXY:-}"
+        HTTP_PROXY: "${OTA_HTTP_PROXY:-}"
+        HTTPS_PROXY: "${OTA_HTTPS_PROXY:-}"
+        NO_PROXY: "${OTA_NO_PROXY:-}"
+        # Wochenstempel aus dem Makefile: erneuert die Paket-Upgrade-Schicht
+        # spätestens wöchentlich, statt sie im Build-Cache einzufrieren.
+        OTA_PAKETSTAND: "${OTA_PAKETSTAND:-}"
+    image: ota/turn:${OTA_VERSION:-dev}
     container_name: ota-turn
     logging: *protokoll
     restart: unless-stopped
@@ -125,6 +138,9 @@ services:
         HTTP_PROXY: "${OTA_HTTP_PROXY:-}"
         HTTPS_PROXY: "${OTA_HTTPS_PROXY:-}"
         NO_PROXY: "${OTA_NO_PROXY:-}"
+        # Wochenstempel aus dem Makefile: erneuert die Paket-Upgrade-Schicht
+        # spätestens wöchentlich, statt sie im Build-Cache einzufrieren.
+        OTA_PAKETSTAND: "${OTA_PAKETSTAND:-}"
     image: ota/web:${OTA_VERSION:-dev}
     container_name: ota-web
     logging: *protokoll
@@ -166,6 +182,9 @@ services:
         HTTP_PROXY: "${OTA_HTTP_PROXY:-}"
         HTTPS_PROXY: "${OTA_HTTPS_PROXY:-}"
         NO_PROXY: "${OTA_NO_PROXY:-}"
+        # Wochenstempel aus dem Makefile: erneuert die Paket-Upgrade-Schicht
+        # spätestens wöchentlich, statt sie im Build-Cache einzufrieren.
+        OTA_PAKETSTAND: "${OTA_PAKETSTAND:-}"
     image: ota/api:${OTA_VERSION:-dev}
     container_name: ota-api
     logging: *protokoll
@@ -269,6 +288,9 @@ services:
         HTTP_PROXY: "${OTA_HTTP_PROXY:-}"
         HTTPS_PROXY: "${OTA_HTTPS_PROXY:-}"
         NO_PROXY: "${OTA_NO_PROXY:-}"
+        # Wochenstempel aus dem Makefile: erneuert die Paket-Upgrade-Schicht
+        # spätestens wöchentlich, statt sie im Build-Cache einzufrieren.
+        OTA_PAKETSTAND: "${OTA_PAKETSTAND:-}"
     image: ota/agent:${OTA_VERSION:-dev}
     container_name: ota-agent
     logging: *protokoll
@@ -433,6 +455,9 @@ services:
         HTTP_PROXY: "${OTA_HTTP_PROXY:-}"
         HTTPS_PROXY: "${OTA_HTTPS_PROXY:-}"
         NO_PROXY: "${OTA_NO_PROXY:-}"
+        # Wochenstempel aus dem Makefile: erneuert die Paket-Upgrade-Schicht
+        # spätestens wöchentlich, statt sie im Build-Cache einzufrieren.
+        OTA_PAKETSTAND: "${OTA_PAKETSTAND:-}"
     image: ota/firewall:${OTA_VERSION:-dev}
     container_name: ota-firewall
     logging: *protokoll
@@ -488,7 +513,7 @@ services:
       retries: 3
 
   registry:
-    image: registry:2
+    image: registry:3
     container_name: ota-registry
     logging: *protokoll
     restart: unless-stopped
@@ -565,7 +590,7 @@ services:
       - internal
 
   keycloak:
-    image: quay.io/keycloak/keycloak:26.7
+    image: quay.io/keycloak/keycloak:26.8
     container_name: ota-keycloak
     logging: *protokoll
     restart: unless-stopped
@@ -674,6 +699,9 @@ services:
         HTTP_PROXY: "${OTA_HTTP_PROXY:-}"
         HTTPS_PROXY: "${OTA_HTTPS_PROXY:-}"
         NO_PROXY: "${OTA_NO_PROXY:-}"
+        # Wochenstempel aus dem Makefile: erneuert die Paket-Upgrade-Schicht
+        # spätestens wöchentlich, statt sie im Build-Cache einzufrieren.
+        OTA_PAKETSTAND: "${OTA_PAKETSTAND:-}"
     image: ota/repo:${OTA_VERSION:-dev}
     container_name: ota-repo
     logging: *protokoll

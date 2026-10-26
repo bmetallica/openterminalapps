@@ -93,7 +93,10 @@ bauen() {
   else
     echo "  Ohne Datei-Vorrat — alles aus dem Internet."
   fi
-  docker build $(proxy_argumente) $(vorrat_argumente) \
+  # `--pull` und der Wochenstempel: frisches Debian und die Sicherheitsupdates
+  # der Woche, statt der Schichten vom ersten Bau aus dem Cache.
+  docker build --pull $(proxy_argumente) $(vorrat_argumente) \
+    --build-arg OTA_PAKETSTAND="$(date +%G-%V)" \
     --build-context ota-pakete="$paket" \
     -t "$TAG" "$ROOT/images/base-desktop" || { rm -rf "$paket"; return 1; }
   rm -rf "$paket"

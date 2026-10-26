@@ -47,7 +47,7 @@ Old versions of your own images are limited anyway: per workspace the last three
 
 ## The own registry ✅
 
-In the stack, `registry:2` runs as the service `ota-registry`. Every built golden image lands there
+In the stack, `registry:3` runs as the service `ota-registry`. Every built golden image lands there
 in addition to the Docker store, and the version's reference becomes the reference in the registry:
 
 ```

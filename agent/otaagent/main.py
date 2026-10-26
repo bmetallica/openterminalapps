@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import contextlib
 import ipaddress
 import json
 import logging
@@ -285,7 +286,15 @@ def _umleitungen() -> list[dict]:
 
 log = logging.getLogger("ota.agent")
 
-app = FastAPI(title="OTA Agent", docs_url=None, redoc_url=None)
+@contextlib.asynccontextmanager
+async def _lifespan(_: FastAPI):
+    # Statt `@app.on_event("startup")`: Starlette 1.0 kennt das nicht mehr,
+    # FastAPI nur noch als veralteten Umweg.
+    _firewall_start()
+    yield
+
+
+app = FastAPI(title="OTA Agent", docs_url=None, redoc_url=None, lifespan=_lifespan)
 _client: docker.DockerClient | None = None
 
 
@@ -872,7 +881,6 @@ def _weiterleitungen_aufloesen(client) -> list[dict]:
     return raus
 
 
-@app.on_event("startup")
 def _firewall_start() -> None:
     """Was die API gesetzt hat, wieder aufnehmen — und einmal abgleichen."""
     _verwaltung_laden()

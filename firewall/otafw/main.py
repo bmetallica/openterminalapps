@@ -15,6 +15,7 @@ Port, keine Adresse, es entscheiden die Dateirechte.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
@@ -38,7 +39,15 @@ POOL = os.environ.get("OTA_SESSION_POOL", "10.99.0.0/16")
 ZUSTAND_DATEI = Path(os.environ.get("OTA_FW_STATE", "/var/lib/ota-firewall/zustand.json"))
 ABGLEICH = int(os.environ.get("OTA_FW_RESYNC", "30"))
 
-app = FastAPI(title="OTA Firewall", version="2")
+@contextlib.asynccontextmanager
+async def _lifespan(_: FastAPI):
+    # Statt `@app.on_event("startup")`: Starlette 1.0 kennt das nicht mehr,
+    # FastAPI nur noch als veralteten Umweg.
+    start()
+    yield
+
+
+app = FastAPI(title="OTA Firewall", version="2", lifespan=_lifespan)
 
 _zustand: dict[str, Any] = {"pool": POOL, "sitzungen": []}
 _sperre = threading.Lock()
@@ -314,7 +323,6 @@ def _abgleichschleife() -> None:
             log.error("Abgleich fehlgeschlagen: %s", exc)
 
 
-@app.on_event("startup")
 def start() -> None:
     _laden()
     if not netns.erreichbar():

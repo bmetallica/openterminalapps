@@ -258,6 +258,40 @@ sudo make update     # complete .env, build, start
 Migrations run by themselves when the API starts and are never destructive. What `make update` does
 in detail and what it does not touch is in the README under *Updating*.
 
+### Security vulnerabilities (CVEs) ✅
+
+*Since 2026-10-26.* `make update` brings security updates:
+
+* **Third-party services** (Postgres, Keycloak, Traefik, Registry …) are pulled again —
+  within the version line named in `deploy/docker-compose.yml` (`postgres:16-alpine` stays 16).
+* **Own images** (api, agent, web, firewall, repo, turn) are built on a fresh base (`--pull`) and
+  with `apt-get upgrade` or `apk upgrade`. So that the build cache does not freeze this layer, it
+  depends on the calendar week (`OTA_PAKETSTAND`): it is rebuilt at least weekly.
+* **The workspaces' base image** is built the same way by `scripts/build-desktop-image.sh
+  --pruefen`, the root base image by `make root-image`. Then rebuild the workspace images under
+  **Software**.
+
+What remains is shown by
+
+```bash
+make cve                              # overview per image
+scripts/cve-pruefen.sh --liste        # every affected package with the fixing version
+```
+
+Scanning uses [grype](https://github.com/anchore/grype) as a throwaway container and counts only
+what can be fixed. Its database lives under `/srv/ota/runtime/grype`. What remains after an update
+sits in third-party programs — e.g. Go libraries in `registry` or in Docker's `buildx` — and comes
+with their next version.
+
+The Python dependencies are pinned in `api/requirements.txt`, `agent/requirements.txt`,
+`firewall/requirements.txt` and — with checksums — `third_party/selkies/ota-abhaengigkeiten.txt`.
+They can be checked without the stack:
+
+```bash
+docker run --rm -v "$PWD/api/requirements.txt:/r.txt:ro" python:3.13-slim \
+  sh -c 'pip install -q pip-audit && pip-audit -r /r.txt'
+```
+
 ### The banner during an update ✅
 
 *Since 2026-10-12.* From the first step of `make update`, **every OTA page** shows a banner at the

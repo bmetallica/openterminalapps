@@ -262,6 +262,40 @@ sudo make update     # .env ergänzen, bauen, starten
 Migrationen laufen beim Start der API von selbst und nie destruktiv. Was `make update` im Einzelnen
 tut und was es nicht anfasst, steht in der README unter *Aktualisieren*.
 
+### Sicherheitslücken (CVEs) ✅
+
+*Seit dem 2026-10-26.* `make update` bringt Sicherheitsupdates mit:
+
+* **Fremde Dienste** (Postgres, Keycloak, Traefik, Registry …) zieht es neu — innerhalb
+  der Versionsreihe, die `deploy/docker-compose.yml` nennt (`postgres:16-alpine` bleibt 16).
+* **Eigene Images** (api, agent, web, firewall, repo, turn) baut es auf frischer Basis
+  (`--pull`) und mit `apt-get upgrade` bzw. `apk upgrade`. Damit der Build-Cache diese Schicht
+  nicht einfriert, hängt sie an der Kalenderwoche (`OTA_PAKETSTAND`): Sie wird spätestens
+  wöchentlich neu gebaut.
+* **Das Basisimage der Arbeitsplätze** baut `scripts/build-desktop-image.sh --pruefen` ebenso, das
+  Root-Basisimage `make root-image`. Danach die Arbeitsplatz-Images unter **Software** neu bauen.
+
+Was übrig bleibt, zeigt
+
+```bash
+make cve                              # Übersicht je Image
+scripts/cve-pruefen.sh --liste        # jedes betroffene Paket mit behebender Fassung
+```
+
+Gescannt wird mit [grype](https://github.com/anchore/grype) als Wegwerf-Container, gezählt nur,
+was sich beheben lässt. Seine Datenbank liegt unter `/srv/ota/runtime/grype`. Was nach einem
+Update bleibt, steckt in fremden Programmen — etwa Go-Bibliotheken in `registry` oder in Dockers
+`buildx` — und kommt mit deren nächster Fassung.
+
+Die Python-Abhängigkeiten stehen fest in `api/requirements.txt`, `agent/requirements.txt`,
+`firewall/requirements.txt` und — mit Prüfsumme — `third_party/selkies/ota-abhaengigkeiten.txt`.
+Prüfen lassen sie sich ohne Stack:
+
+```bash
+docker run --rm -v "$PWD/api/requirements.txt:/r.txt:ro" python:3.13-slim \
+  sh -c 'pip install -q pip-audit && pip-audit -r /r.txt'
+```
+
 ### Das Banner während des Updates ✅
 
 *Seit dem 2026-10-12.* Ab dem ersten Schritt von `make update` zeigt **jede OTA-Seite** oben ein

@@ -155,8 +155,11 @@ stehen ([Kapitel 11](docs/wiki/11-betrieb.md#das-banner-während-des-updates-)).
    mit, trägt `make update` sie mit sinnvollen Vorgaben nach. **Vorhandene Werte bleiben
    unangetastet** — auch die Geheimnisse. Passierte das erst nach dem Bauen, startete ein Dienst
    gegen eine Variable, die es noch nicht gibt.
-2. **Bauen und starten.** Die Datenbank wandert dabei von selbst mit: Alembic beim Start der API,
-   und fehlende Spalten zieht OTA aus dem Modell nach. Es gibt keinen Migrationsschritt von Hand.
+2. **Bauen und starten — mit Sicherheitsupdates.** Die fremden Dienste (Postgres, Keycloak,
+   Traefik …) kommen innerhalb ihrer Versionsreihe frisch aus dem Netz, die eigenen Images auf
+   frischer Basis und mit den Paket-Updates der Woche. Ohne Netz geht es mit dem Vorhandenen
+   weiter. Die Datenbank wandert dabei von selbst mit: Alembic beim Start der API, und fehlende
+   Spalten zieht OTA aus dem Modell nach. Es gibt keinen Migrationsschritt von Hand.
 3. **Sagen, was *nicht* von selbst passiert.** Siehe unten.
 
 ### Was ein Update nicht anfasst
@@ -423,6 +426,9 @@ mit stehenden Paketen.
   Konfiguration. Umschaltbar im laufenden Betrieb, ohne Neuaufsetzen; ohne Proxy ist nichts zu tun
 - **Stückliste je Image** (`make sbom`) in SPDX und CycloneDX — gebraucht, sobald ein Image das
   Haus verlässt
+- **Sicherheitsupdates mit jedem `make update`** (frische Basis- und Dienst-Images, Paket-Updates
+  der Woche) und **`make cve`**: behebbare Lücken je Image, gescannt mit grype
+  ([Kapitel 11](docs/wiki/11-betrieb.md#sicherheitslücken-cves-))
 - Eigene Registry im Stack; fehlt ein Image lokal, wird es beim Start von dort geholt
 - Sicherung und Wiederherstellung von Profil, Container und Datenbank, manuell und nach Plan
 - HTTPS ab Werk, eigene kleine CA, austauschbar oder hinter einem Reverse Proxy

@@ -154,8 +154,11 @@ disappeared." It disappears as soon as the new API is healthy; if the update fai
    `make update` adds them with sensible defaults. **Existing values stay untouched** — including
    the secrets. If this happened only after building, a service would start against a variable
    that does not exist yet.
-2. **Build and start.** The database migrates by itself: Alembic when the API starts, and OTA adds
-   missing columns from the model. There is no manual migration step.
+2. **Build and start — with security updates.** The third-party services (Postgres, Keycloak,
+   Traefik …) are pulled fresh within their version line, the own images on a fresh base and with
+   the week's package updates. Without network it continues with what is there. The database
+   migrates by itself: Alembic when the API starts, and OTA adds missing columns from the model.
+   There is no manual migration step.
 3. **Say what does *not* happen by itself.** See below.
 
 ### What an update does not touch
@@ -419,6 +422,9 @@ with packets standing still.
   to do
 - **Bill of materials per image** (`make sbom`) in SPDX and CycloneDX — needed as soon as an image
   leaves the building
+- **Security updates with every `make update`** (fresh base and service images, the week's
+  package updates) and **`make cve`**: fixable vulnerabilities per image, scanned with grype
+  ([chapter 11](docs/wiki/en/11-betrieb.md#security-vulnerabilities-cves-))
 - Own registry in the stack; if an image is missing locally, it is fetched from there on start
 - Backup and restore of profile, container and database, manually and on a schedule
 - HTTPS out of the box, own small CA, replaceable or behind a reverse proxy
