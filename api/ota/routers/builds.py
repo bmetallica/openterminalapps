@@ -299,6 +299,8 @@ def delete_build(
     # Beide Namen: den lokalen und den mit Registry-Vorsatz. Wer nur einen
     # loescht, laesst den anderen als Waise stehen.
     for ref in {r for r in (build.image_ref, (build.image_ref or "").split("/", 1)[-1]) if r}:
+        if _anderswo_genutzt(db, ref, tpl.id):
+            continue
         try:
             agent_client.remove_image(ref)
         except HTTPException:
@@ -310,6 +312,23 @@ def delete_build(
                  version=version, image=build.image_ref)
     db.commit()
     return {"status": f"Fassung v{version} entfernt."}
+
+
+def _anderswo_genutzt(db: DbSession, ref: str, tpl_id: uuid.UUID) -> bool:
+    """Zeigt eine **andere** Vorlage auf dieses Image?
+
+    Seit sich Vorlagen duplizieren lassen, teilen sich Original und Kopie ein
+    Image, bis eine von beiden eine eigene Fassung bekommt. Raeumte das
+    Original seine alten Fassungen weg, verloere die Kopie ihr Image — und
+    ihr naechster Start scheiterte mit einer Meldung, die niemand mit dem
+    Aufraeumen in Verbindung braechte. Der Datenbankeintrag der Fassung geht
+    trotzdem; nur das Image bleibt liegen.
+    """
+    kurz = ref.split("/", 1)[-1]
+    return any(
+        t.image_ref in (ref, kurz) or t.image_ref.split("/", 1)[-1] == kurz
+        for t in db.scalars(select(Template).where(Template.id != tpl_id))
+    )
 
 
 def _prune_versions(db: DbSession, tpl: Template) -> list[str]:
@@ -341,6 +360,8 @@ def _prune_versions(db: DbSession, tpl: Template) -> list[str]:
             continue
         if build.image_ref:
             for ref in {build.image_ref, build.image_ref.split("/", 1)[-1]}:
+                if _anderswo_genutzt(db, ref, tpl.id):
+                    continue
                 try:
                     agent_client.remove_image(ref)
                 except HTTPException:
@@ -592,7 +613,7 @@ def delete_build(
         )
 
     version = build.version
-    if build.image_ref:
+    if build.image_ref and not _anderswo_genutzt(db, build.image_ref, template_id):
         with contextlib.suppress(HTTPException):
             agent_client.remove_image(build.image_ref)
     db.delete(build)

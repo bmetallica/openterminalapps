@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session as DbSession
+from sqlalchemy.orm import Session as DbSession, object_session
 
 from .. import agent_client, audit, git, ide_ai, paketquellen, ressourcen, settings_store
 from .firewall import schieben as firewall_schieben
@@ -21,7 +21,7 @@ from ..config import settings
 from ..db import get_db
 from ..deps import current_user
 from ..models import (
-    AppStream, NetLease, NetProfile, OnceScriptRun, Session as SessionModel,
+    AppStream, EigenerName, NetLease, NetProfile, OnceScriptRun, Session as SessionModel,
     Template, TemplateApp, User,
 )
 from ..schemas import SessionOut, SessionStartIn, StreamOut
@@ -150,8 +150,16 @@ def _stream_out(s: SessionModel, st: AppStream) -> StreamOut:
     return data
 
 
+def _eigener_name(s: SessionModel) -> str | None:
+    """Wie der Besitzer der Sitzung diesen Arbeitsplatz für sich nennt."""
+    db = object_session(s)
+    eintrag = db.get(EigenerName, (s.user_id, s.template_id)) if db else None
+    return eintrag.name if eintrag else None
+
+
 def _out(s: SessionModel) -> SessionOut:
     return SessionOut(
+        eigener_name=_eigener_name(s),
         id=s.id,
         template_id=s.template_id,
         template_name=s.template.friendly_name,

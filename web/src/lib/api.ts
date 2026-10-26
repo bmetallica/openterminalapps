@@ -101,6 +101,8 @@ export type Template = {
   effective_memory_bytes: number | null
   /** Nur in der Antwort auf das Speichern: was mit vorhandenen Containern geschah. */
   ressourcen_hinweis?: string | null
+  /** Wie der angemeldete Mensch diesen Arbeitsplatz für sich nennt. `null`: wie die Vorlage. */
+  eigener_name?: string | null
 }
 
 export type Stream = {
@@ -139,6 +141,8 @@ export type Session = {
   /** Welches Netzprofil gilt — steht im Dashboard, damit die Wirkung kein Rätsel ist. */
   netzprofil: string
   netzstufe: NetzStufe
+  /** Wie der Besitzer der Sitzung den Arbeitsplatz für sich nennt. */
+  eigener_name?: string | null
 }
 
 export type MyStorage = {
@@ -649,6 +653,7 @@ export type Arbeitsplatz = {
   username: string
   display_name: string
   template_name: string
+  eigener_name: string | null
   template_icon: string
   template_slug: string
   klasse: 'standard' | 'root'
@@ -867,6 +872,15 @@ export const api = {
     call<Template>(`/templates/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   deleteTemplate: (id: string) =>
     call<{ status: string }>(`/templates/${id}`, { method: 'DELETE' }),
+  duplicateTemplate: (id: string, friendly_name = '') =>
+    call<Template>(`/templates/${id}/duplizieren`, {
+      method: 'POST', body: JSON.stringify({ friendly_name }),
+    }),
+  /** Den Arbeitsplatz für sich selbst umbenennen; leer setzt zurück. */
+  setMeinName: (id: string, name: string) =>
+    call<{ eigener_name: string | null }>(`/templates/${id}/mein-name`, {
+      method: 'PUT', body: JSON.stringify({ name }),
+    }),
   allocations: (id: string) => call<Allocation[]>(`/templates/${id}/allocations`),
   setOverride: (id: string, body: unknown) =>
     call<{ status: string }>(`/templates/${id}/overrides`, {

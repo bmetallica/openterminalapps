@@ -66,7 +66,7 @@ export function InstallButton({ session, stream, template }: {
   if (!template) return null
   const label = stream
     ? template.apps.find((a) => a.slug === stream.app_slug)?.name ?? stream.app_slug
-    : session.template_name
+    : session.eigener_name || session.template_name
 
   return (
     <div className="viewer__row" style={{ marginTop: 8 }}>

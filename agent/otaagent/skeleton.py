@@ -192,6 +192,24 @@ def remove(slug: str, rel: str, app: str | None = None) -> dict[str, str]:
     return {"status": f"{ziel.name} gelöscht"}
 
 
+def kopieren(von: str, nach: str) -> dict[str, Any]:
+    """Das ganze Skeleton einer Vorlage für ihre Kopie — samt den Teilbäumen
+    der Anwendungen. Nur in ein leeres Ziel: Was dort schon liegt, gehört
+    jemand anderem und wird nicht überschrieben."""
+    quelle, ziel = root(von), root(nach)
+    if quelle == ziel:
+        raise SkeletonError("Quelle und Ziel sind dasselbe Skeleton.")
+    if any(ziel.iterdir()):
+        raise SkeletonError("Das Ziel-Skeleton ist nicht leer.")
+    # `symlinks=True`: Ein Link bleibt ein Link und zeigt nicht plötzlich
+    # auf eine Kopie dessen, worauf er zeigte — auch nicht nach draussen.
+    shutil.copytree(quelle, ziel, symlinks=True, dirs_exist_ok=True)
+    for pfad in [ziel, *ziel.rglob("*")]:
+        if not pfad.is_symlink():
+            _own(pfad)
+    return {"dateien": sum(1 for p in ziel.rglob("*") if p.is_file())}
+
+
 def _own(path: Path) -> None:
     """Alles im Skeleton gehoert 1000:1000 — so landet es auch im Container."""
     try:

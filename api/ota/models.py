@@ -505,6 +505,25 @@ class TemplateOverride(Base):
     template: Mapped[Template] = relationship(back_populates="overrides")
 
 
+class EigenerName(Base):
+    """Wie ein Mensch einen Arbeitsplatz für sich nennt (Handbuch Kapitel 3).
+
+    Gilt nur für ihn: Andere sehen weiter den Namen der Vorlage, und die
+    Verwaltung zeigt beide nebeneinander. Ein leerer Name ist kein Eintrag —
+    Zurücksetzen löscht die Zeile.
+    """
+
+    __tablename__ = "eigene_namen"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    template_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("templates.id", ondelete="CASCADE"), primary_key=True
+    )
+    name: Mapped[str] = mapped_column(String(80))
+
+
 class Session(Base):
     __tablename__ = "sessions"
 

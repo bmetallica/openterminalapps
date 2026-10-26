@@ -115,6 +115,31 @@ users see the workspace after saving.").
 > counted as "nobody any more", and a call that only wanted to change one setting made the
 > workspace silently vanish from all dashboards.
 
+## Duplicating ✅
+
+The editor has a **Duplicate** button at the top. It is the way to use a fully set-up workspace —
+say a root workspace with apps, network profile and start script — as the starting point for a
+second one. The only question is the name (default: "… (copy)").
+
+| Copied | Not copied |
+|---|---|
+| all settings: image, class, streaming, resources, network profile, permissions, environment, start script, shelves, Git | the **version list** under Images — the copy points at the same image until it gets its own built or frozen version |
+| the app catalogue with icons, resolutions and visibility per group | what people have **inside** their workspaces: homes, software installed in the root container |
+| run-once scripts — they run once more for everyone in the copy | users' own names |
+| allocations per group and user, the groups | unsaved changes in the open editor |
+| the skeleton, including the applications' subtrees | |
+
+The copy is **disabled**. Otherwise every assigned person would immediately see a second tile that
+looks the same. Adjust it, then enable it under General.
+
+Because original and copy can share an image, OTA **never removes an image that another template
+still points at** when deleting or pruning old versions — only the list entry goes.
+
+> To take **what is installed inside** along as well, first freeze your own session
+> ([chapter 7](07-golden-images.md#freezing-a-session-)), then duplicate the template and point
+> the copy at the frozen version. For a root workspace the Docker data (images and containers
+> inside it) does **not** come along — it lives in a separate volume.
+
 ## Changes to running sessions
 
 Resource changes take effect **immediately, also on running, paused and stopped containers**. Only

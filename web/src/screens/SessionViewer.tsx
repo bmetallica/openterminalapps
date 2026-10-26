@@ -69,7 +69,7 @@ export function SessionViewer({
   const src = mitStand(stream?.url ?? session.url, session.started_at, stream?.started_at)
   const label = stream
     ? template?.apps.find((a) => a.slug === stream.app_slug)?.name ?? stream.app_slug
-    : session.template_name
+    : session.eigener_name || session.template_name
   const [barOpen, setBarOpen] = useState(false)
   // In Firefox fehlt der Lesezugriff auf die Zwischenablage. Fehlt auch die
   // Erweiterung, wird hier gesagt, was zu tun ist — statt dass es einfach

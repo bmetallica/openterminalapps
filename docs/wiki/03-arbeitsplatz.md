@@ -11,6 +11,13 @@ Nach der Anmeldung siehst du zwei Bereiche:
 
 **Deine Apps** — was du starten kannst.
 
+**Eigener Name ✅** — Jede Kachel lässt sich **für dich** umbenennen: Mit der Maus darüber fahren,
+oben rechts erscheint ein Stift (✎). Aus „Arbeitsplatz" wird so „Mein Python-Labor". Der Name gilt
+nur für dich — Kachel, Session-Karte, Tab-Titel und Desktop-Verknüpfungen zeigen ihn, darunter
+steht klein der Name der Vorlage. Andere sehen weiter den alten Namen; die Verwaltung sieht deinen
+unter Betrieb → Arbeitsplätze in Anführungszeichen daneben. Ein leerer Name setzt zurück. Höchstens
+80 Zeichen.
+
 Eine Session-Karte zeigt Laufzeit, letzte Aktivität, CPU und Arbeitsspeicher. Die farbige Kante links
 und die Leuchtpunkte sagen den Zustand:
 

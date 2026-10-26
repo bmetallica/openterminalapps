@@ -292,6 +292,12 @@ export function Monitor({ onToast, darfTerminal = false }: {
                         <td style={{ color: 'var(--label)' }}>
                           <span aria-hidden="true" style={{ marginRight: 8 }}>{s.template_icon}</span>
                           {s.template_name}
+                          {s.eigener_name && (
+                            <span className="silk" style={{ marginLeft: 8 }}
+                              title={tr('So nennt {user} diesen Arbeitsplatz', { user: s.username })}>
+                              „{s.eigener_name}“
+                            </span>
+                          )}
                           {root && (
                             <span className="silk" style={{ marginLeft: 8, color: 'var(--halt)' }}>root</span>
                           )}

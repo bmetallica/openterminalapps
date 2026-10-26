@@ -252,6 +252,7 @@ test:
 	@./scripts/test-ressourcen.sh
 	@./scripts/test-software.sh
 	@./scripts/test-git.sh
+	@./scripts/test-duplizieren.sh
 	@# IDE-AI gegen den KI-Server in OTA_TEST_KI_URL (Kapitel 28).
 	@./scripts/test-ide-ai.sh
 	@echo

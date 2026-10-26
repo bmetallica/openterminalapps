@@ -11,6 +11,10 @@ import { ago, duration, gb } from '../lib/format'
 import { t as tr, useLang } from '../lib/i18n'
 import { installPath, openInTab } from '../lib/routes'
 
+/** Wie der Mensch den Arbeitsplatz nennt — sein eigener Name oder der der Vorlage. */
+const nameVon = (t: Template) => t.eigener_name || t.friendly_name
+const sitzungsName = (s: Session) => s.eigener_name || s.template_name
+
 function greeting(): string {
   const h = new Date().getHours()
   if (h < 5) return tr('Noch wach')
@@ -53,7 +57,7 @@ function Bay({ session, template, onOpen, onAct, onApp, onResume, onReset, busy,
 
       <div className="bay__meta">
         <div className="bay__title-row">
-          <h3 className="h-card">{session.template_name}</h3>
+          <h3 className="h-card">{sitzungsName(session)}</h3>
           <Led status={session.status} />
         </div>
 
@@ -145,8 +149,8 @@ function Bay({ session, template, onOpen, onAct, onApp, onResume, onReset, busy,
           )}
           {!angehalten && (
             <button className="btn btn--halt btn--icon" disabled={busy}
-              aria-label={root ? tr('{name} anhalten', { name: session.template_name })
-                : tr('{name} beenden', { name: session.template_name })}
+              aria-label={root ? tr('{name} anhalten', { name: sitzungsName(session) })
+                : tr('{name} beenden', { name: sitzungsName(session) })}
               title={root ? tr('Anhalten — alles darin bleibt erhalten') : undefined}
               onClick={() => onAct(session, 'stop')}>■</button>
           )}
@@ -233,13 +237,13 @@ function ShortcutSection({ templates }: { templates: Template[] }) {
         name: a.name,
         icon: a.icon || '▢',
         icon_url: a.icon_url,
-        von: t.friendly_name,
+        von: nameVon(t),
         pfad: installPath(t.slug, a.slug),
       }))
     }
     return [{
       key: t.slug,
-      name: t.friendly_name,
+      name: nameVon(t),
       icon: t.icon || '▣',
       icon_url: '',
       von: tr('Ganzer Arbeitsplatz'),
@@ -344,15 +348,33 @@ export function Dashboard({ me, onOpen, onToast, onSoftware }: {
       // Vorher sprang stattdessen ein Tab mit dem leeren Desktop auf.
       if (t.mode === 'single_app' && s.status === 'running') {
         onOpen(s)
-        onToast(tr('{name} läuft', { name: t.friendly_name }))
+        onToast(tr('{name} läuft', { name: nameVon(t) }))
       } else {
         onToast(tr('{name} ist bereit. Wähle oben eine Anwendung.',
-          { name: t.friendly_name }))
+          { name: nameVon(t) }))
       }
     } catch (err) {
       onToast(err instanceof ApiError ? err.message : tr('Start fehlgeschlagen'), 'bad')
     } finally {
       setBusy(null)
+    }
+  }
+
+  /** Den Arbeitsplatz nur für sich umbenennen. Leer setzt zurück. */
+  async function umbenennen(t: Template) {
+    const name = window.prompt(
+      tr('Wie soll „{name}“ für dich heißen? Andere sehen weiter den bisherigen Namen. Leer lassen setzt auf „{orig}“ zurück.',
+        { name: nameVon(t), orig: t.friendly_name }),
+      nameVon(t))
+    if (name === null) return
+    try {
+      await api.setMeinName(t.id, name.trim())
+      onToast(name.trim() && name.trim() !== t.friendly_name
+        ? tr('Umbenannt in „{name}“', { name: name.trim() })
+        : tr('Name zurückgesetzt'))
+      await load()
+    } catch (err) {
+      onToast(err instanceof ApiError ? err.message : tr('Umbenennen fehlgeschlagen'), 'bad')
     }
   }
 
@@ -394,7 +416,7 @@ export function Dashboard({ me, onOpen, onToast, onSoftware }: {
     try {
       await api.startSession(s.template_id)
       onToast(tr('{name} läuft wieder — alles ist, wie du es verlassen hast.',
-        { name: s.template_name }))
+        { name: sitzungsName(s) }))
       await load()
     } catch (err) {
       onToast(err instanceof ApiError ? err.message : tr('Start fehlgeschlagen'), 'bad')
@@ -565,14 +587,20 @@ export function Dashboard({ me, onOpen, onToast, onSoftware }: {
               const cores = t.effective_cores ?? t.cores
               const mem = t.effective_memory_bytes ?? t.memory_bytes
               return (
-                <button key={t.id} className={`tile${isBusy ? ' tile--busy' : ''}`}
+                <div key={t.id} className="tile-wrap">
+                <button className={`tile${isBusy ? ' tile--busy' : ''}`}
                   disabled={busy === t.id}
                   onClick={() => (isBusy
-                    ? onToast(tr('{name} läuft bereits — oben verbinden', { name: t.friendly_name }))
+                    ? onToast(tr('{name} läuft bereits — oben verbinden', { name: nameVon(t) }))
                     : void start(t))}>
                   <span className="tile__top">
                     <span className="tile__icon" aria-hidden="true">{t.icon}</span>
-                    <span className="tile__name">{t.friendly_name}</span>
+                    <span className="tile__name">
+                      {nameVon(t)}
+                      {t.eigener_name && (
+                        <span className="tile__orig">{t.friendly_name}</span>
+                      )}
+                    </span>
                   </span>
                   <span className="tile__desc">{t.description}</span>
                   {t.mode === 'workspace' && t.apps.length > 0 && (
@@ -593,6 +621,13 @@ export function Dashboard({ me, onOpen, onToast, onSoftware }: {
                         : <span className="silk" style={{ color: 'var(--key)' }}>{tr('Starten')}</span>}
                   </span>
                 </button>
+                {/* Neben der Kachel, nicht in ihr: Ein Knopf im Knopf ist
+                    kein gültiges HTML, und ein Fehlklick startete sonst. */}
+                <button className="tile__rename" disabled={busy === t.id}
+                  title={tr('Für dich umbenennen')}
+                  aria-label={tr('{name} umbenennen', { name: nameVon(t) })}
+                  onClick={() => void umbenennen(t)}>✎</button>
+                </div>
               )
             })}
           </div>

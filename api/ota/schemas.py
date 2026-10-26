@@ -243,6 +243,19 @@ class TemplateOut(BaseModel):
     # Nur in der Antwort auf das Speichern: was mit vorhandenen Containern
     # geschah (geaenderte Ressourcen ziehen nach, 2026-10-08).
     ressourcen_hinweis: str | None = None
+    # Wie der anfragende Mensch diesen Arbeitsplatz für sich nennt
+    # (`EigenerName`). Leer heisst: wie die Vorlage.
+    eigener_name: str | None = None
+
+
+class EigenerNameIn(BaseModel):
+    # Leer setzt auf den Namen der Vorlage zurück.
+    name: str = Field(default="", max_length=80)
+
+
+class DuplikatIn(BaseModel):
+    # Leer heisst: „<Name> (Kopie)“.
+    friendly_name: str = Field(default="", max_length=255)
 
 
 class TemplateIn(BaseModel):
@@ -544,6 +557,8 @@ class SessionOut(BaseModel):
     # nicht" ist sonst ein Ticket statt einer Einstellung.
     netzprofil: str = "Vorgabe"
     netzstufe: str = "internet"
+    # Wie der Mensch, dem die Sitzung gehört, den Arbeitsplatz nennt.
+    eigener_name: str | None = None
 
 
 class SessionStartIn(BaseModel):

@@ -63,6 +63,10 @@ def skeleton_mkdir(slug: str, path: str, name: str, app: str = "") -> dict[str, 
                  json={"pfad": path, "name": name, "app_slug": app})
 
 
+def skeleton_copy(von: str, nach: str) -> dict[str, Any]:
+    return _call("POST", f"/skeleton/{von}/kopie", json={"nach": nach})
+
+
 def skeleton_remove(slug: str, path: str, app: str = "") -> dict[str, Any]:
     from urllib.parse import quote
     return _call("DELETE", f"/skeleton/{slug}?pfad={quote(path)}&app_slug={quote(app)}")

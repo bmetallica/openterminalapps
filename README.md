@@ -271,6 +271,9 @@ dabei **nicht** zurückwandert, ist die Datenbank: Neue Spalten bleiben stehen. 
 
 **Verwaltung**
 - Ressourcen **je Nutzer und Workspace**: Nutzer A bekommt 2 Kerne, Nutzer B einen
+- **Workspaces duplizieren** — mit Apps, Einmal-Skripten, Zuteilungen, Gruppen und Skeleton, etwa
+  einen fertig eingerichteten Root-Arbeitsplatz als Vorlage für den nächsten; jeder Mensch kann
+  seine Kacheln **für sich umbenennen** ([Kapitel 5](docs/wiki/05-workspaces-verwalten.md#duplizieren-))
 - **Kontingent je Zuhause** und eine Untergrenze für den freien Plattenplatz — eine verständliche
   Ablehnung statt eines Containers, der mitten in der Arbeit beim Schreiben stehenbleibt.
   **Speicherabbilder** abgestürzter Programme (`core.<pid>`) füllen kein Zuhause mehr: Neue
@@ -501,6 +504,7 @@ make test
 | `test-ressourcen.sh` | Geänderte CPU und RAM erreichen vorhandene Container, laufend und pausiert; RAM unter dem Verbrauch wartet bis zum nächsten Start, die CPU nicht |
 | `test-software.sh` | Softwaremonitoring: Die Erfassung liest einen laufenden Arbeitsplatz (Debian-Pakete wie `apt-mark showmanual`, Starteinträge systemweit und im Zuhause, versteckte nicht); nach dem Befüllen der Whitelist keine Meldung; eine neue Anwendung wird mit Nutzer gemeldet; deinstalliert oder freigegeben verschwindet die Meldung, entzogen kommt sie wieder |
 | `test-git.sh` | OTA-Git: Ein- und Ausschalten (Daten bleiben), Subdomain hinter Traefik mit OTA-CA, OTA unberührt, Eingänge für Arbeitsplätze nicht auf dem Host; Anmeldung über Keycloak nur für berechtigte Gruppen, vorab angelegtes Konto wird verknüpft, Admins sind Admins, gesperrt statt gelöscht; im Arbeitsplatz clone/push ohne Passwort, eigene .gitconfig gewinnt, fremder Server bekommt nichts, SSH über 2222, Token widerrufen bei Ende, Root-Arbeitsplatz mit neuem Token nach dem Fortsetzen; andere Subdomain; nginx als Reverse Proxy; Sicherung mit Repositories |
+| `test-duplizieren.sh` | Duplizieren: Einstellungen, Apps samt Startbefehl, Einmal-Skript, Zuteilung je Nutzer, Gruppen und Skeleton (auch je Anwendung, Besitzer 1000) kommen mit; eigene Kennung, ausgeschaltet, Quelle bleibt unberührt; nur mit Verwaltungsrecht; ein geteiltes Image gilt als anderswo genutzt. Eigener Name: gilt nur für den Nutzer, Vorlage und Admin unberührt, zu lang abgewiesen, nicht für unsichtbare Vorlagen, leer setzt zurück, geht mit der Vorlage |
 | `test-ide-ai.sh` | IDE-AI: Modelle vom KI-Server abrufen, falsche Eingaben abgewiesen, API-Schlüssel bleibt auf dem Server, Testfrage; Pakete in der Paketquelle, nur der Agent bekommt die Datei; in jeder Vorlage mit Editor config.yaml mit Marke, Kontextfenster und Antwortlänge, Telemetrie aus, Continue in VS Code/VSCodium und JetBrains verknüpft, Firewall lässt den KI-Server durch, Frage aus dem Arbeitsplatz bekommt Antwort, eigene config.yaml bleibt; ausgeschaltet ist alles wieder weg |
 | `test-konten.sh` | Konten der zentralen Anmeldung: Anlegen in OTA legt in Keycloak an (samt Pflicht zum Passwortwechsel), lokal kommt es nicht herein; Ändern, Passwort, zweiter Faktor, Sperren und Löschen wirken in Keycloak; Mein Konto führt über Keycloak; ein lokales Bestandskonto zieht mit seinem Passwort um, das Notfallkonto nicht |
 | `test-clipboard-bridge.sh` | Kopieren zwischen zwei Anwendungen im selben Arbeitsplatz: beide Richtungen, Umlaute, ein Bild, ein Megabyte, nach Pause, und abgeschaltet |

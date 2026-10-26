@@ -11,6 +11,12 @@ not "pick an app" but "back into my machine".
 
 **Your apps** — what you can start.
 
+**Your own name ✅** — Every tile can be renamed **for you**: hover over it and a pencil (✎) appears
+at the top right. "Arbeitsplatz" becomes "My Python lab". The name applies to you only — the tile,
+the session card, the tab title and desktop shortcuts show it, with the template's name in small
+print underneath. Others keep seeing the old name; administrators see yours in quotes next to it
+under Operations → Workspaces. An empty name resets it. At most 80 characters.
+
 A session card shows run time, last activity, CPU and memory. The coloured edge on the left and the
 indicator dots tell the state:
 

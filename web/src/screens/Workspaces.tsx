@@ -71,8 +71,9 @@ function toPayload(d: Draft) {
   }
 }
 
-function Editor({ tpl, host, groups, images, netzprofile, onSaved, onClose, onToast }: {
+function Editor({ tpl, host, groups, images, netzprofile, onSaved, onClose, onToast, onCopied }: {
   tpl: Template
+  onCopied: (kopie: Template) => void
   host: Host | null
   groups: Group[]
   images: HostImage[]
@@ -164,6 +165,32 @@ function Editor({ tpl, host, groups, images, netzprofile, onSaved, onClose, onTo
     }
   }
 
+  /** Kopiert die Vorlage mit allem, was zu ihr gehört — ausgeschaltet.
+   *
+   * Ungespeicherte Änderungen gehen nicht mit: Kopiert wird, was gespeichert
+   * ist. Das steht in der Frage, damit niemand eine halbe Kopie erwartet.
+   */
+  async function duplicate() {
+    const name = window.prompt(
+      tr('Name der Kopie von „{name}“:', { name: tpl.friendly_name }) + '\n\n'
+      + tr('Mit: alle Einstellungen, Apps, Einmal-Skripte, Zuteilungen, Gruppen und das Skeleton. Ohne: was Nutzer in ihren Arbeitsplätzen angelegt haben. Die Kopie ist zunächst ausgeschaltet. Ungespeicherte Änderungen gehen nicht mit.'),
+      tr('{name} (Kopie)', { name: tpl.friendly_name }))
+    if (name === null) return
+    setBusy(true)
+    try {
+      const kopie = await api.duplicateTemplate(tpl.id, name.trim())
+      onToast(kopie.ressourcen_hinweis
+        ? tr('{name} angelegt — {hinweis}', { name: kopie.friendly_name, hinweis: kopie.ressourcen_hinweis })
+        : tr('{name} angelegt — noch ausgeschaltet', { name: kopie.friendly_name }),
+        kopie.ressourcen_hinweis ? 'bad' : 'ok')
+      onCopied(kopie)
+    } catch (err) {
+      onToast(err instanceof ApiError ? err.message : tr('Duplizieren fehlgeschlagen'), 'bad')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   /* Von OTA gebaute Images zuerst: Sie sind fast immer gemeint, und
      dazwischen liegen sonst fünfzig fremde Einträge. */
   const imageOptions = [...images]
@@ -189,6 +216,8 @@ function Editor({ tpl, host, groups, images, netzprofile, onSaved, onClose, onTo
               Speichern und gehört nicht in dieselbe Reihe. */}
           <button className="btn btn--halt btn--sm" style={{ marginRight: 10 }}
             disabled={busy} onClick={() => void remove()}>{tr('Löschen')}</button>
+          <button className="btn btn--sm" style={{ marginRight: 10 }}
+            disabled={busy} onClick={() => void duplicate()}>{tr('Duplizieren')}</button>
           <button className="btn btn--ghost" onClick={onClose}>{tr('Verwerfen')}</button>
           <button className="btn btn--primary" disabled={busy} onClick={() => void save()}>
             {busy ? tr('Wird gespeichert…') : tr('Änderungen speichern')}
@@ -753,8 +782,9 @@ export function Workspaces({ onToast }: { onToast: (m: string, tone?: 'ok' | 'ba
   // Ebene tiefer (Workspaces / Arbeitsplatz) und nicht in einem Dialog.
   if (editing) {
     return (
-      <Editor tpl={editing} host={host} groups={groups} images={images}
+      <Editor key={editing.id} tpl={editing} host={host} groups={groups} images={images}
         netzprofile={netzprofile}
+        onCopied={(kopie) => { setEditing(kopie); void load() }}
         onClose={() => setEditing(null)}
         onSaved={() => { setEditing(null); void load() }}
         onToast={onToast} />

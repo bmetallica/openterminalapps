@@ -116,6 +116,31 @@ Nutzer sehen den Workspace nach dem Speichern.").
 > ist hier wichtig: Bis zum 2026-08-28 galt beides als „niemand mehr", und ein Aufruf, der nur eine
 > Einstellung ändern wollte, liess den Workspace wortlos von allen Dashboards verschwinden.
 
+## Duplizieren ✅
+
+Im Editor oben steht **Duplizieren**. Das ist der Weg, einen fertig eingerichteten Workspace — etwa
+einen Root-Arbeitsplatz mit Apps, Netzprofil und Startskript — als Ausgangspunkt für einen zweiten
+zu nehmen. Gefragt wird nur der Name (Vorgabe: „… (Kopie)").
+
+| Kommt mit | Kommt nicht mit |
+|---|---|
+| alle Einstellungen: Image, Klasse, Streaming, Ressourcen, Netzprofil, Rechte, Umgebung, Startskript, Ablagen, Git | die **Fassungsliste** unter Images — die Kopie zeigt auf dasselbe Image, bis sie eine eigene Fassung gebaut oder eingefroren bekommt |
+| der App-Katalog samt Symbolen, Auflösungen und Sichtbarkeit je Gruppe | was Menschen **in** ihren Arbeitsplätzen haben: Zuhause, installierte Software im Root-Container |
+| Einmal-Skripte — sie laufen in der Kopie für jeden noch einmal | eigene Namen der Nutzer |
+| Zuteilungen je Gruppe und Nutzer, die Gruppen | ungespeicherte Änderungen im offenen Editor |
+| das Skeleton, auch die Teilbäume der Anwendungen | |
+
+Die Kopie ist **ausgeschaltet**. Sonst stünde bei allen zugewiesenen Menschen sofort eine zweite,
+gleich aussehende Kachel. Anpassen, dann unter Allgemein einschalten.
+
+Weil sich Original und Kopie ein Image teilen können, räumt OTA beim Löschen und Aufräumen alter
+Fassungen **kein Image weg, auf das eine andere Vorlage noch zeigt** — nur den Eintrag in der Liste.
+
+> Wer auch **das darin Installierte** mitnehmen will, friert zuerst die eigene Session ein
+> ([Kapitel 7](07-golden-images.md#session-einfrieren-)), dupliziert dann die Vorlage und stellt
+> die Kopie auf die eingefrorene Fassung. Bei einem Root-Arbeitsplatz kommen dabei die
+> Docker-Daten (Images und Container darin) **nicht** mit — sie liegen in einem eigenen Volume.
+
 ## Änderungen an laufenden Sessions
 
 Ressourcenänderungen wirken **sofort, auch auf laufende, pausierte und angehaltene Container**. Nur

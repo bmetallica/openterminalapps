@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import copy
 import hashlib
 import re
 import uuid
@@ -14,12 +15,12 @@ from .. import agent_client, audit, icons, ressourcen
 from ..db import get_db
 from ..deps import current_user, require_permission
 from ..models import (
-    Group, OnceScript, Session as SessionModel, Template, TemplateApp,
-    TemplateOverride, User,
+    EigenerName, Group, OnceScript, Session as SessionModel, Template,
+    TemplateApp, TemplateOverride, User,
 )
 from ..schemas import (
-    AllocationOut, AppIn, OnceRunOut, OnceScriptIn, OnceScriptOut, OverrideIn,
-    OverrideOut, TemplateIn, TemplateOut,
+    AllocationOut, AppIn, DuplikatIn, EigenerNameIn, OnceRunOut, OnceScriptIn,
+    OnceScriptOut, OverrideIn, OverrideOut, TemplateIn, TemplateOut,
 )
 from ..security import effective_resources, user_can_see_app, user_can_see_template
 
@@ -32,9 +33,12 @@ def _slugify(value: str) -> str:
     return s or "workspace"
 
 
-def _out(tpl: Template, user: User | None = None) -> TemplateOut:
+def _out(tpl: Template, user: User | None = None,
+         namen: dict[uuid.UUID, str] | None = None) -> TemplateOut:
     data = TemplateOut.model_validate(tpl)
     data.group_ids = [g.id for g in tpl.groups]
+    if namen is not None:
+        data.eigener_name = namen.get(tpl.id)
     if user is not None:
         # Was der Nutzer nicht sehen darf, taucht hier gar nicht erst auf.
         # Der Start prueft es noch einmal — diese Liste ist Anzeige, nicht
@@ -59,7 +63,44 @@ def list_templates(
     Die Einschraenkung passiert hier in der Abfrage, nicht im Frontend.
     """
     templates = db.scalars(select(Template).order_by(Template.friendly_name)).all()
-    return [_out(t, user) for t in templates if user_can_see_template(t, user)]
+    namen = eigene_namen(db, user.id)
+    return [_out(t, user, namen) for t in templates if user_can_see_template(t, user)]
+
+
+def eigene_namen(db: DbSession, user_id: uuid.UUID) -> dict[uuid.UUID, str]:
+    """Wie dieser Mensch seine Arbeitsplätze nennt, je Vorlage."""
+    return {n.template_id: n.name for n in db.scalars(
+        select(EigenerName).where(EigenerName.user_id == user_id))}
+
+
+@router.put("/{template_id}/mein-name")
+def mein_name(
+    template_id: uuid.UUID,
+    body: EigenerNameIn,
+    user: User = Depends(current_user),
+    db: DbSession = Depends(get_db),
+) -> dict[str, str | None]:
+    """Den Arbeitsplatz für sich selbst umbenennen — oder zurücksetzen.
+
+    Jeder darf das für jeden Arbeitsplatz, den er sieht, und nur für sich: Es
+    ändert weder die Vorlage noch, was andere sehen. Kein Eintrag im
+    Prüfprotokoll — es ist eine Anzeige-Einstellung wie Sprache und Farbe.
+    """
+    tpl = db.get(Template, template_id)
+    if not tpl or not user_can_see_template(tpl, user):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Workspace nicht gefunden")
+    name = " ".join(body.name.split())
+    eintrag = db.get(EigenerName, (user.id, tpl.id))
+    if not name or name == tpl.friendly_name:
+        if eintrag:
+            db.delete(eintrag)
+        name = ""
+    elif eintrag:
+        eintrag.name = name
+    else:
+        db.add(EigenerName(user_id=user.id, template_id=tpl.id, name=name))
+    db.commit()
+    return {"eigener_name": name or None}
 
 
 def _maschine(body: TemplateIn, vorher: str = "selkies") -> str:
@@ -147,6 +188,79 @@ def create_template(
     return _out(tpl)
 
 
+@router.post("/{template_id}/duplizieren", dependencies=[Depends(manage)],
+             status_code=status.HTTP_201_CREATED)
+def duplicate_template(
+    template_id: uuid.UUID,
+    body: DuplikatIn,
+    request: Request,
+    actor: User = Depends(current_user),
+    db: DbSession = Depends(get_db),
+) -> TemplateOut:
+    """Eine Vorlage mit allem kopieren, was zu ihr gehört.
+
+    Mit: alle Einstellungen, der App-Katalog samt Symbolen und Sichtbarkeit,
+    die Einmal-Skripte, die Zuteilungen je Gruppe und Nutzer, die Gruppen und
+    das Skeleton. Dasselbe Image — die Kopie zeigt auf dieselbe Fassung, bis
+    jemand für sie eine eigene baut oder einfriert.
+
+    Nicht mit: die Fassungsliste (sie gehört zur Vorlage, die sie gebaut hat)
+    und alles, was Menschen in ihren Arbeitsplätzen angelegt haben — Zuhause
+    und Root-Container. Die Kopie startet für jeden frisch.
+
+    **Ausgeschaltet.** Sonst stünde bei allen zugewiesenen Menschen sofort
+    eine zweite, gleich aussehende Kachel im Dashboard. Wer die Kopie fertig
+    angepasst hat, schaltet sie ein.
+    """
+    alt = db.get(Template, template_id)
+    if not alt:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Workspace nicht gefunden")
+
+    name = " ".join(body.friendly_name.split()) or f"{alt.friendly_name} (Kopie)"
+    slug = _slugify(name)
+    if db.scalar(select(Template).where(Template.slug == slug)):
+        slug = f"{slug}-{uuid.uuid4().hex[:6]}"
+
+    spalten = {c.key for c in Template.__table__.columns} - {
+        "id", "slug", "friendly_name", "is_enabled", "source_registry_id",
+        "created_at", "updated_at",
+    }
+    neu = Template(slug=slug, friendly_name=name, is_enabled=False,
+                   **{k: copy.deepcopy(getattr(alt, k)) for k in spalten})
+    neu.groups = list(alt.groups)
+    neu.apps = [TemplateApp(**{
+        c.key: copy.deepcopy(getattr(a, c.key))
+        for c in TemplateApp.__table__.columns if c.key not in ("id", "template_id")
+    }) for a in alt.apps]
+    # Neue Kennungen, also laufen die Einmal-Skripte in der Kopie für jeden
+    # noch einmal — sie ist ein neuer Arbeitsplatz mit neuem Zuhause.
+    neu.once_scripts = [OnceScript(
+        name=o.name, body=o.body, is_enabled=o.is_enabled, sort_order=o.sort_order,
+    ) for o in alt.once_scripts]
+    neu.overrides = [TemplateOverride(
+        scope=o.scope, target_id=o.target_id, cores=o.cores,
+        memory_bytes=o.memory_bytes,
+    ) for o in alt.overrides]
+    db.add(neu)
+    db.flush()
+
+    # Das Skeleton liegt beim Agent, unter der Kennung. Scheitert das
+    # Kopieren, ist die Vorlage trotzdem brauchbar — der Hinweis sagt, was
+    # fehlt, statt die ganze Kopie zu verwerfen.
+    hinweis = None
+    try:
+        agent_client.skeleton_copy(alt.slug, slug)
+    except HTTPException as exc:
+        hinweis = f"Skeleton nicht kopiert: {exc.detail}"
+
+    audit.record(db, "template.duplicated", actor=actor, object_type="template",
+                 object_id=slug, request=request, von=alt.slug, name=name)
+    db.commit()
+    out = _out(neu)
+    out.ressourcen_hinweis = hinweis
+    return out
+
+
 @router.get("/{template_id}")
 def get_template(
     template_id: uuid.UUID,
@@ -156,7 +270,7 @@ def get_template(
     tpl = db.get(Template, template_id)
     if not tpl or not user_can_see_template(tpl, user):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Workspace nicht gefunden")
-    return _out(tpl, user)
+    return _out(tpl, user, eigene_namen(db, user.id))
 
 
 @router.put("/{template_id}", dependencies=[Depends(manage)])

@@ -2680,6 +2680,18 @@ def skeleton_mkdir(slug: str, req: SkeletonDirRequest) -> dict[str, Any]:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
 
+class SkeletonKopieRequest(BaseModel):
+    nach: str
+
+
+@app.post("/skeleton/{slug}/kopie", dependencies=[Depends(require_token)])
+def skeleton_kopie(slug: str, req: SkeletonKopieRequest) -> dict[str, Any]:
+    try:
+        return skeleton_ops.kopieren(slug, req.nach)
+    except skeleton_ops.SkeletonError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+
 @app.delete("/skeleton/{slug}", dependencies=[Depends(require_token)])
 def skeleton_remove(slug: str, pfad: str, app_slug: str = "") -> dict[str, str]:
     try:

@@ -37,7 +37,7 @@ from .. import agent_client, audit
 from ..config import settings
 from ..db import SessionLocal, get_db
 from ..deps import current_user, require_permission
-from ..models import Session as SessionModel, TerminalEintrag, User
+from ..models import EigenerName, Session as SessionModel, TerminalEintrag, User
 from ..security import darf_terminal, read_token
 from .sessions import (
     ANGEHALTEN, LIVE, platz_anhalten, platz_fortsetzen,
@@ -62,11 +62,15 @@ def liste(db: DbSession = Depends(get_db)) -> list[dict]:
     rows = db.scalars(select(SessionModel).where(
         SessionModel.status.in_(LIVE + (ANGEHALTEN,))
     ).order_by(SessionModel.last_seen_at.desc())).all()
+    namen = {(n.user_id, n.template_id): n.name
+             for n in db.scalars(select(EigenerName))}
     return [{
         "id": str(s.id),
         "username": s.user.username,
         "display_name": s.user.display_name or "",
         "template_name": s.template.friendly_name,
+        # Wie der Nutzer ihn für sich nennt — steht in der Liste daneben.
+        "eigener_name": namen.get((s.user_id, s.template_id)),
         "template_icon": s.template.icon,
         "template_slug": s.template.slug,
         "klasse": s.template.klasse,

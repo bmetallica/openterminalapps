@@ -503,6 +503,20 @@ input[type="color"] {
 .tile__desc { color: var(--label); font-size: 12.5px; line-height: 1.45; flex: 1; }
 .tile__foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-top: 3px; }
 .tile__spec { display: flex; gap: 9px; font-size: 11px; color: var(--mute); }
+.tile-wrap { position: relative; display: flex; }
+.tile-wrap > .tile { flex: 1; min-width: 0; }
+.tile__name { padding-right: 22px; }
+.tile__orig { display: block; font-size: 11px; font-weight: 400; color: var(--mute); }
+.tile__rename {
+  position: absolute; top: 9px; right: 9px;
+  width: 26px; height: 26px; border-radius: 6px;
+  background: transparent; border: 1px solid transparent; color: var(--mute);
+  cursor: pointer; font-size: 13px; opacity: 0;
+  transition: opacity .15s var(--ease), border-color .15s var(--ease);
+}
+.tile-wrap:hover .tile__rename, .tile__rename:focus-visible { opacity: 1; }
+.tile__rename:hover { border-color: var(--edge-lit); color: var(--text); }
+@media (hover: none) { .tile__rename { opacity: .7; } }
 
 /* ============================================================
    Buttons
