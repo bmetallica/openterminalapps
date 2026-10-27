@@ -181,6 +181,11 @@ def platz(cid: str) -> dict[str, Any]:
     return _call("GET", f"/containers/{cid}/platz", timeout=60.0)
 
 
+def auslastung() -> dict[str, Any]:
+    """Live-Werte aller laufenden Arbeitsplaetze und des Wirts."""
+    return _call("GET", "/auslastung", timeout=20.0)
+
+
 def terminal_url(cid: str) -> tuple[str, dict[str, str]]:
     """Adresse und Kopfzeilen fuer das Webterminal im Agent."""
     basis = settings().agent_url.rstrip("/")

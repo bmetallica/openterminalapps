@@ -87,6 +87,28 @@ def liste(db: DbSession = Depends(get_db)) -> list[dict]:
     } for s in rows]
 
 
+@router.get("/auslastung", dependencies=[Depends(sehen)])
+def auslastung(db: DbSession = Depends(get_db)) -> dict:
+    """Was jeder laufende Arbeitsplatz gerade braucht — für die Balken in
+    Betrieb → Arbeitsplätze. Die Seite fragt alle paar Sekunden; die Werte
+    stehen deshalb nirgends, sie werden nur durchgereicht und den Sitzungen
+    zugeordnet."""
+    daten = agent_client.auslastung()
+    zu_session = {
+        s.container_id: str(s.id)
+        for s in db.scalars(select(SessionModel).where(
+            SessionModel.status.in_(LIVE + (ANGEHALTEN,)),
+            SessionModel.container_id.is_not(None)))
+    }
+    werte = {}
+    for c in daten.get("container") or []:
+        sid = next((v for k, v in zu_session.items()
+                    if k and c["container_id"].startswith(k)), None)
+        if sid:
+            werte[sid] = {k: v for k, v in c.items() if k not in ("container_id", "session_id")}
+    return {"wirt": daten.get("wirt") or {}, "arbeitsplaetze": werte}
+
+
 @router.get("/{session_id}/platz", dependencies=[Depends(sehen)])
 def platz(session_id: uuid.UUID, db: DbSession = Depends(get_db)) -> dict:
     """Was ein Root-Arbeitsplatz belegt. Eigener Aufruf, weil die Messung

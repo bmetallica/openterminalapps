@@ -396,7 +396,10 @@ input[type="color"] {
    ============================================================ */
 
 .main { flex: 1; overflow-y: auto; position: relative; }
-.wrap { max-width: 1180px; margin: 0 auto; padding: 30px 32px 64px; }
+/* Volle Breite. Bis 2026-10-27 stand hier `max-width: 1180px`, und die Tabelle
+   unter Betrieb rollte seitwärts, während links und rechts Fläche frei blieb.
+   Lesetexte begrenzen sich selbst (`.md`, `.field`, `.empty__body`). */
+.wrap { padding: 30px 32px 64px; }
 
 .topbar {
   display: flex; align-items: flex-end; justify-content: space-between;
@@ -877,6 +880,25 @@ input[type="color"] {
 .tbl tbody tr { cursor: pointer; transition: background .12s var(--ease); }
 .tbl tbody tr:hover { background: var(--bay-2); }
 .tbl tbody tr:last-child td { border-bottom: 0; }
+
+/* Knöpfe einer Zeile: brechen um, statt die Tabelle zu verbreitern. */
+.tbl__aktionen { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; align-items: center; }
+
+/* ============================================================
+   Live-Balken (Betrieb → Arbeitsplätze)
+   ============================================================ */
+
+.last { display: grid; gap: 7px; min-width: 170px; }
+.last__zeile { display: grid; grid-template-columns: 34px 1fr auto; gap: 8px; align-items: center; }
+.last__name { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--mute); }
+.last__notiz { font-size: 11px; color: var(--mute); }
+.last__wert { font-size: 11.5px; color: var(--label); white-space: nowrap; text-align: right; }
+.balken { position: relative; height: 7px; border-radius: 4px; background: var(--well); overflow: hidden; }
+.balken__fuell { position: absolute; inset: 0 auto 0 0; border-radius: 4px; transition: width .8s var(--ease), background-color .3s; }
+.balken__marke { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--label); opacity: .75; }
+.balken--gross { height: 10px; border-radius: 5px; }
+.wirt { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 18px; padding: 16px 20px; margin-bottom: 14px; }
+.wirt__kopf { display: flex; justify-content: space-between; margin-bottom: 7px; font-size: 12px; color: var(--label); }
 
 /* ============================================================
    Host-Meter

@@ -675,6 +675,27 @@ export type Arbeitsplatz = {
 
 export type Platz = { schicht?: number; docker?: number; gesamt: number | null }
 
+/* Live-Auslastung (Betrieb → Arbeitsplätze). `null` heisst: noch keine zweite
+   Messung, aus der sich eine Rate bilden liesse. */
+export type Auslastung = {
+  kerne: number | null
+  kerne_deckel: number | null
+  kerne_gewicht: number | null
+  gedrosselt: number | null
+  speicher: number
+  speicher_grenze: number | null
+  prozesse: number
+  rx: number | null
+  tx: number | null
+}
+export type WirtAuslastung = {
+  kerne: number
+  kerne_belegt: number | null
+  last: number | null
+  speicher: number
+  speicher_frei: number
+}
+
 export type AuditEntry = {
   ts: string
   actor: string | null
@@ -1173,6 +1194,8 @@ export const api = {
       { method: 'POST' }),
   arbeitsplaetze: () => call<Arbeitsplatz[]>('/admin/arbeitsplaetze'),
   arbeitsplatzPlatz: (id: string) => call<Platz>(`/admin/arbeitsplaetze/${id}/platz`),
+  auslastung: () => call<{ wirt: WirtAuslastung; arbeitsplaetze: Record<string, Auslastung> }>(
+    '/admin/arbeitsplaetze/auslastung'),
   arbeitsplatzStarten: (id: string) =>
     call<{ status: string }>(`/admin/arbeitsplaetze/${id}/starten`, { method: 'POST' }),
   arbeitsplatzAnhalten: (id: string) =>

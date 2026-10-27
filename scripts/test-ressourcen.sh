@@ -99,13 +99,34 @@ if [ "$WIRT" -ge 2 ] && [ "$SPIEL" != "1" ]; then
   abweichung 1.0 null >/dev/null
   last() { docker exec "$C" sh -c 'for i in 1 2 3; do timeout 3 sh -c "while :; do :; done" & done; wait'; }
   zeit() { docker exec "$C" sh -c 'awk "/usage_usec/{print \$2}" /sys/fs/cgroup/cpu.stat'; }
-  A=$(zeit); last; B=$(zeit)
+  A=$(zeit); last & LAST=$!
+  # Dieselbe Last, gesehen von der Live-Anzeige unter Betrieb.
+  sleep 1; api "$BASE/api/admin/arbeitsplaetze/auslastung" >/dev/null
+  sleep 1.5; api "$BASE/api/admin/arbeitsplaetze/auslastung" > "$TMP/live.json"
+  wait $LAST; B=$(zeit)
   K=$(python3 -c "print(round(($B - $A) / 3e6, 1))")
   python3 -c "import sys; sys.exit(0 if $K > 1.4 else 1)" \
     && ok "Ein Kern Gewicht, freier Wirt: $K Kerne genutzt" \
     || bad "Ein Kern Gewicht: nur $K Kerne genutzt"
+  L=$(jqp "d['arbeitsplaetze']['$SID']['kerne']" < "$TMP/live.json")
+  python3 -c "import sys; sys.exit(0 if ${L:-0} > 1.4 else 1)" 2>/dev/null \
+    && ok "Live-Anzeige sieht die Last: $L Kerne" || bad "Live-Anzeige: '$L' Kerne"
+  expect "1.0" "$(jqp "d['arbeitsplaetze']['$SID']['kerne_gewicht']" < "$TMP/live.json")" \
+    "Live-Anzeige: Gewicht ist der zugeteilte Kern"
   abweichung null null >/dev/null
 fi
+
+echo
+echo "Live-Auslastung"
+api "$BASE/api/admin/arbeitsplaetze/auslastung" > "$TMP/live.json"
+expect "$WIRT" "$(jqp "d['wirt']['kerne']" < "$TMP/live.json")" "Kerne des Hosts"
+jqp "d['wirt']['speicher'] > d['wirt']['speicher_frei'] > 0" < "$TMP/live.json" | grep -q True \
+  && ok "Arbeitsspeicher des Hosts" || bad "Arbeitsspeicher des Hosts fehlt"
+jqp "0 < d['arbeitsplaetze']['$SID']['speicher'] <= d['arbeitsplaetze']['$SID']['speicher_grenze']" \
+  < "$TMP/live.json" | grep -q True \
+  && ok "Speicher des Arbeitsplatzes unter seiner Grenze" || bad "Speicher des Arbeitsplatzes: $(cat "$TMP/live.json")"
+CODE=$(curl -sk -o /dev/null -w '%{http_code}' "$BASE/api/admin/arbeitsplaetze/auslastung")
+expect "401" "$CODE" "Ohne Anmeldung keine Live-Werte"
 
 echo
 echo "Pausiert"

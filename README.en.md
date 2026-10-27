@@ -271,6 +271,8 @@ that did not exist before is simply there.
 
 **Administration**
 - Resources **per user and workspace**: user A gets 2 cores, user B one
+- **Live utilisation under Operations** — bars for CPU, RAM and network per workspace and for the
+  host, with a warning as soon as the CPU limit throttles a container ([chapter 11](docs/wiki/en/11-betrieb.md#live-utilisation-operations--workspaces-))
 - **Cores as a weight, not a cap** — on an idle host a workspace may use up to four times as much,
   on a busy one the kernel shares proportionally; no more stutter while the host is half idle
   ([chapter 5](docs/wiki/en/05-workspaces-verwalten.md#resources))
@@ -509,7 +511,7 @@ make test
 | Suite | Checks |
 |---|---|
 | `test-authz.sh` | A normal user can provably do nothing administrative and cannot sit at anyone else's screen; plus container hardening, metrics, quotas and second factor |
-| `test-ressourcen.sh` | Changed CPU and RAM reach existing containers, running and paused; RAM below current usage waits until the next start, CPU does not; cores are a weight, a one-core container uses more on an idle host |
+| `test-ressourcen.sh` | Changed CPU and RAM reach existing containers, running and paused; RAM below current usage waits until the next start, CPU does not; cores are a weight, a one-core container uses more on an idle host; live utilisation sees that load |
 | `test-software.sh` | Software monitoring: the inventory reads a running workspace (Debian packages like `apt-mark showmanual`, start entries system-wide and in the home, hidden ones not); after filling the whitelist no alert; a new application is reported with its user; uninstalled or approved, the alert disappears, revoked it comes back |
 | `test-git.sh` | OTA Git: switching on and off (data stays), subdomain behind Traefik with the OTA CA, OTA untouched, workspace entrances not on the host; sign-in through Keycloak only for entitled groups, a pre-created account is linked, admins are admins, locked instead of deleted; in the workspace clone/push without password, your own .gitconfig wins, a foreign server gets nothing, SSH via 2222, token revoked at the end, root workspace with a new token after resuming; a different subdomain; nginx as reverse proxy; backup including repositories |
 | `test-root-arbeitsplatz.sh` (addition) | A run-once script assigned to a paused root workspace runs on resume as 1000 and shows up with exit code and output under "Show runs" |

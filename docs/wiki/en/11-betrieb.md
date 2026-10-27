@@ -393,6 +393,22 @@ costs a moment at start and nothing else — and saves `libfuse2` in the image.
 
 ## Monitoring ✅
 
+### Live utilisation: Operations → Workspaces ✅
+
+At the top there are two bars for the **host**: cores in use with load, and memory in use. In the
+table, the **Live** column shows for each running workspace:
+
+| | |
+|---|---|
+| **CPU** | cores in use. The bar reaches up to the upper limit; the line in it marks the allocated cores, i.e. the weight ([chapter 5](05-workspaces-verwalten.md#resources)) |
+| **RAM** | memory in use without page cache, against the container's limit |
+| **Throttled X % of the time** | shown in red when the CPU limit stops the container. Users see that as stutter even when the host is idle. Remedy: allocate more cores |
+| **↓ ↑** and **processes** | network in bytes per second and the number of processes |
+
+The values refresh every 3 seconds while the tab is open and the browser window is visible.
+Nothing is stored. Below 1050 pixels the table scrolls sideways, the page itself does not. The
+values come from `GET /api/admin/arbeitsplaetze/auslastung` (permission `sessions.view_all`).
+
 ### `GET /healthz`
 
 Answers **one** question: can the application work right now? Without sign-in, so a load balancer

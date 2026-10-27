@@ -274,6 +274,8 @@ dabei **nicht** zurückwandert, ist die Datenbank: Neue Spalten bleiben stehen. 
 
 **Verwaltung**
 - Ressourcen **je Nutzer und Workspace**: Nutzer A bekommt 2 Kerne, Nutzer B einen
+- **Live-Auslastung unter Betrieb** — Balken für CPU, RAM und Netz je Arbeitsplatz und für den
+  Host, mit Warnung, sobald die CPU-Grenze einen Container bremst ([Kapitel 11](docs/wiki/11-betrieb.md#live-auslastung-betrieb--arbeitsplätze-))
 - **Kerne als Gewicht, nicht als Deckel** — bei freiem Host darf ein Arbeitsplatz bis zum Vierfachen
   nutzen, bei vollem teilt der Kernel im Verhältnis auf; kein Ruckeln mehr, während der Host halb
   leer steht ([Kapitel 5](docs/wiki/05-workspaces-verwalten.md#ressourcen))
@@ -513,7 +515,7 @@ make test
 | Suite | Prüft |
 |---|---|
 | `test-authz.sh` | Ein normaler Nutzer kann beweisbar nichts Administratives tun und an keinem fremden Bildschirm sitzen; dazu Container-Härtung, Kennzahlen, Kontingente und zweiter Faktor |
-| `test-ressourcen.sh` | Geänderte CPU und RAM erreichen vorhandene Container, laufend und pausiert; RAM unter dem Verbrauch wartet bis zum nächsten Start, die CPU nicht; Kerne sind Gewicht, ein Container mit einem Kern nutzt bei freiem Host mehr |
+| `test-ressourcen.sh` | Geänderte CPU und RAM erreichen vorhandene Container, laufend und pausiert; RAM unter dem Verbrauch wartet bis zum nächsten Start, die CPU nicht; Kerne sind Gewicht, ein Container mit einem Kern nutzt bei freiem Host mehr; die Live-Auslastung sieht diese Last |
 | `test-software.sh` | Softwaremonitoring: Die Erfassung liest einen laufenden Arbeitsplatz (Debian-Pakete wie `apt-mark showmanual`, Starteinträge systemweit und im Zuhause, versteckte nicht); nach dem Befüllen der Whitelist keine Meldung; eine neue Anwendung wird mit Nutzer gemeldet; deinstalliert oder freigegeben verschwindet die Meldung, entzogen kommt sie wieder |
 | `test-git.sh` | OTA-Git: Ein- und Ausschalten (Daten bleiben), Subdomain hinter Traefik mit OTA-CA, OTA unberührt, Eingänge für Arbeitsplätze nicht auf dem Host; Anmeldung über Keycloak nur für berechtigte Gruppen, vorab angelegtes Konto wird verknüpft, Admins sind Admins, gesperrt statt gelöscht; im Arbeitsplatz clone/push ohne Passwort, eigene .gitconfig gewinnt, fremder Server bekommt nichts, SSH über 2222, Token widerrufen bei Ende, Root-Arbeitsplatz mit neuem Token nach dem Fortsetzen; andere Subdomain; nginx als Reverse Proxy; Sicherung mit Repositories |
 | `test-root-arbeitsplatz.sh` (Ergänzung) | Ein Einmal-Skript, das einem angehaltenen Root-Arbeitsplatz zugewiesen wird, läuft beim Fortsetzen als 1000 und steht mit Rückgabewert und Ausgabe unter „Läufe ansehen" |

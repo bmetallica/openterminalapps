@@ -169,7 +169,8 @@ Werkzeug für Entwickler, kein Verwaltungsrecht.
 
 Die Liste zeigt **alle** Arbeitsplätze — laufende beider Klassen und angehaltene
 Root-Arbeitsplätze — mit Nutzer, Klasse, Zustand, zuletzt aktiv und dem belegten Platz
-(Container + Docker-Daten, gegen die Grenze der Vorlage). Je Zeile:
+(Container + Docker-Daten, gegen die Grenze der Vorlage). Dazu kommt die Live-Auslastung von CPU,
+RAM und Netz mit Balken ([Kapitel 11](11-betrieb.md#live-auslastung-betrieb--arbeitsplätze-)). Je Zeile:
 
 | Knopf | Wirkung | Recht |
 |---|---|---|

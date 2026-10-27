@@ -167,7 +167,8 @@ developers, not an administrative right.
 
 The list shows **all** workspaces — running ones of both classes and stopped root workspaces — with
 user, class, state, last active and the storage used (container + Docker data, against the
-template's limit). Per row:
+template's limit), plus live CPU, RAM and network usage as bars
+([chapter 11](11-betrieb.md#live-utilisation-operations--workspaces-)). Per row:
 
 | Button | Effect | Permission |
 |---|---|---|

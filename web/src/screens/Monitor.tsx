@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Led } from '../components/controls'
 import { WebTerminal } from '../components/WebTerminal'
-import { ApiError, api, type Arbeitsplatz, type AuditEntry, type Platz } from '../lib/api'
+import {
+  ApiError, api, type Arbeitsplatz, type AuditEntry, type Auslastung, type Platz, type WirtAuslastung,
+} from '../lib/api'
 import { Backups } from './Backups'
-import { ago, duration, gb } from '../lib/format'
+import { ago, duration, gb, size } from '../lib/format'
 import { getLang, t as tr, useLang } from '../lib/i18n'
 
 type Tab = 'Arbeitsplätze' | 'Protokoll' | 'Sicherung'
@@ -149,6 +151,91 @@ function GrenzeLabel({ platz, grenzeGb }: { platz: Platz | undefined; grenzeGb: 
   )
 }
 
+/* Wie oft die Balken neu gemessen werden. Der Agent bildet die CPU aus der
+   Differenz zur letzten Abfrage — kürzer misst ungenauer, länger wirkt träge. */
+const LIVE_MS = 3000
+
+const zahl = (n: number) => (Math.round(n * 10) / 10).toString().replace('.', getLang() === 'de' ? ',' : '.')
+
+function Balken({ wert, max, marke, gross, title }: {
+  wert: number; max: number; marke?: number; gross?: boolean; title?: string
+}) {
+  const anteil = max > 0 ? Math.min(1, Math.max(0, wert / max)) : 0
+  const farbe = anteil > .9 ? 'var(--halt)' : anteil > .7 ? 'var(--caution)' : 'var(--live)'
+  return (
+    <div className={`balken${gross ? ' balken--gross' : ''}`} title={title}
+      role="meter" aria-valuemin={0} aria-valuemax={max} aria-valuenow={wert}>
+      <div className="balken__fuell" style={{ width: `${anteil * 100}%`, background: farbe }} />
+      {marke !== undefined && max > 0 && marke < max && (
+        <div className="balken__marke" style={{ left: `calc(${(marke / max) * 100}% - 1px)` }} />
+      )}
+    </div>
+  )
+}
+
+/* Was ein Arbeitsplatz gerade braucht. Der CPU-Balken reicht bis zur
+   Obergrenze; der Strich darin sind die zugeteilten Kerne — das Gewicht,
+   das gilt, wenn der Host voll ist (Kapitel 5, Ressourcen). */
+function LiveLast({ a, s }: { a: Auslastung | undefined; s: Arbeitsplatz }) {
+  if (!a) return <span className="silk">…</span>
+  const deckel = a.kerne_deckel ?? s.cores
+  const gebremst = (a.gedrosselt ?? 0) >= 0.05
+  return (
+    <div className="last">
+      <div className="last__zeile">
+        <span className="last__name">CPU</span>
+        <Balken wert={a.kerne ?? 0} max={deckel} marke={a.kerne_gewicht ?? undefined}
+          title={tr('Strich: zugeteilte Kerne. Balkenende: Obergrenze.')} />
+        <span className="last__wert data" style={gebremst ? { color: 'var(--halt)' } : undefined}>
+          {a.kerne === null ? '…' : tr('{a} / {b} Kerne', { a: zahl(a.kerne), b: zahl(deckel) })}
+        </span>
+      </div>
+      <div className="last__zeile">
+        <span className="last__name">RAM</span>
+        <Balken wert={a.speicher} max={a.speicher_grenze ?? s.memory_bytes} />
+        <span className="last__wert data">
+          {gb(a.speicher)} / {gb(a.speicher_grenze ?? s.memory_bytes)} GB
+        </span>
+      </div>
+      {gebremst && (
+        <span className="last__notiz" style={{ color: 'var(--halt)' }}
+          title={tr('Die CPU-Grenze hält den Container an — er ruckelt. Mehr Kerne zuteilen.')}>
+          {tr('Gebremst in {p} % der Zeit', { p: Math.round((a.gedrosselt ?? 0) * 100) })}
+        </span>
+      )}
+      <span className="last__notiz data">
+        {a.rx === null ? '' : `↓ ${size(a.rx)}/s  ↑ ${size(a.tx ?? 0)}/s · `}
+        {tr('{n} Prozesse', { n: a.prozesse })}
+      </span>
+    </div>
+  )
+}
+
+function WirtLast({ w }: { w: WirtAuslastung }) {
+  const belegt = w.speicher - w.speicher_frei
+  return (
+    <div className="panel wirt">
+      <div>
+        <div className="wirt__kopf">
+          <span>{tr('Host-CPU')}</span>
+          <span className="data">
+            {w.kerne_belegt === null ? '…' : tr('{a} von {b} Kernen', { a: zahl(w.kerne_belegt), b: w.kerne })}
+            {w.last !== null && <>{' · '}{tr('Last {l}', { l: zahl(w.last) })}</>}
+          </span>
+        </div>
+        <Balken gross wert={w.kerne_belegt ?? 0} max={w.kerne} />
+      </div>
+      <div>
+        <div className="wirt__kopf">
+          <span>{tr('Host-Arbeitsspeicher')}</span>
+          <span className="data">{gb(belegt)} / {gb(w.speicher)} GB</span>
+        </div>
+        <Balken gross wert={belegt} max={w.speicher} />
+      </div>
+    </div>
+  )
+}
+
 export function Monitor({ onToast, darfTerminal = false }: {
   onToast: (m: string, tone?: 'ok' | 'bad') => void
   darfTerminal?: boolean
@@ -162,6 +249,7 @@ export function Monitor({ onToast, darfTerminal = false }: {
   const [terminal, setTerminal] = useState<Arbeitsplatz | null>(null)
   const [loeschFrage, setLoeschFrage] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
+  const [live, setLive] = useState<{ wirt: WirtAuslastung; arbeitsplaetze: Record<string, Auslastung> } | null>(null)
 
   async function load() {
     try {
@@ -206,6 +294,20 @@ export function Monitor({ onToast, darfTerminal = false }: {
     const timer = setInterval(() => { void load() }, 15_000)
     return () => clearInterval(timer)
   }, [])
+
+  // Live-Werte nur, solange die Liste zu sehen ist: Jede Abfrage fragt den
+  // Docker-Daemon nach jedem laufenden Container.
+  useEffect(() => {
+    if (tab !== 'Arbeitsplätze') return
+    let aus = false
+    const messen = () => {
+      if (document.hidden) return
+      api.auslastung().then((x) => { if (!aus) setLive(x) }).catch(() => undefined)
+    }
+    messen()
+    const timer = setInterval(messen, LIVE_MS)
+    return () => { aus = true; clearInterval(timer) }
+  }, [tab])
 
 
   if (failed) {
@@ -263,6 +365,7 @@ export function Monitor({ onToast, darfTerminal = false }: {
                 <>{' '}{tr('{n} Root-Arbeitsplätze sind angehalten.', { n: sessions.length - laufend.length })}</>
               )}
             </p>
+            {live && <WirtLast w={live.wirt} />}
             <div className="panel" style={{ padding: '14px 0 0', overflowX: 'auto' }}>
               <table className="tbl">
                 <thead>
@@ -273,6 +376,7 @@ export function Monitor({ onToast, darfTerminal = false }: {
                     <th>{tr('Zuletzt aktiv')}</th>
                     <th>{tr('Platz')}</th>
                     <th>{tr('Zugeteilt')}</th>
+                    <th>{tr('Live')}</th>
                     <th />
                   </tr>
                 </thead>
@@ -320,7 +424,11 @@ export function Monitor({ onToast, darfTerminal = false }: {
                         <td className="data" style={{ color: 'var(--label)' }}>
                           {laeuft ? `${s.cores} × ${gb(s.memory_bytes)} GB` : '—'}
                         </td>
-                        <td style={{ textAlign: 'right', paddingRight: 20, whiteSpace: 'nowrap' }}>
+                        <td style={{ minWidth: 190 }}>
+                          {laeuft ? <LiveLast a={live?.arbeitsplaetze[s.id]} s={s} /> : <span className="silk">—</span>}
+                        </td>
+                        <td style={{ textAlign: 'right', paddingRight: 20 }}>
+                          <div className="tbl__aktionen">
                           {loeschFrage === s.id ? (
                             <>
                               <span className="silk" style={{ marginRight: 8 }}>
@@ -361,6 +469,7 @@ export function Monitor({ onToast, darfTerminal = false }: {
                               </button>
                             </>
                           )}
+                          </div>
                         </td>
                       </tr>
                     )

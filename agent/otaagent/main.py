@@ -22,6 +22,7 @@ import shlex
 import subprocess
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 from urllib.parse import urlparse
 
@@ -2355,6 +2356,127 @@ def platz(cid: str) -> dict[str, int]:
     sid = (c.labels or {}).get("ota.session_id", "")
     docker_bytes = _volume_groessen(client).get(docker_volume_name(sid), 0)
     return {"schicht": schicht, "docker": docker_bytes, "gesamt": schicht + docker_bytes}
+
+
+# --------------------------------------------------------------------------
+# Live-Auslastung fuer Betrieb → Arbeitsplaetze
+# --------------------------------------------------------------------------
+#
+# Was jeder laufende Arbeitsplatz **gerade** braucht, und ob ihn seine
+# CPU-Grenze bremst. Anlass war der 2026-10-27: Fuenf Leute, die Bilder
+# ruckelten, und weder Proxmox noch htop zeigten etwas — die Drosselung sah
+# man nur in `cpu.stat` des einzelnen Containers.
+#
+# `one_shot` statt des ueblichen `docker stats`: Ohne das wartet Docker je
+# Container eine Sekunde auf eine zweite Messung. Die Differenz bildet der
+# Agent selbst, gegen die letzte Abfrage; die Seite fragt alle paar Sekunden.
+# Die erste Abfrage nach dem Start hat deshalb noch keine CPU-Werte.
+
+_auslastung_vorher: dict[str, dict[str, float]] = {}
+_wirt_vorher: dict[str, float] = {}
+_auslastung_sperre = threading.Lock()
+
+
+def _wirt_cpu() -> float | None:
+    """Auslastung des Wirts in Kernen seit der letzten Abfrage (`/proc/stat`
+    ist nicht namensraumgebunden: Der Agent sieht den Wirt)."""
+    try:
+        with open("/proc/stat", encoding="ascii") as fh:
+            werte = [int(x) for x in fh.readline().split()[1:]]
+    except (OSError, ValueError):
+        return None
+    leer = werte[3] + (werte[4] if len(werte) > 4 else 0)
+    gesamt = sum(werte[:8])
+    vorher = dict(_wirt_vorher)
+    _wirt_vorher.update(leer=leer, gesamt=gesamt)
+    if not vorher or gesamt <= vorher["gesamt"]:
+        return None
+    belegt = 1 - (leer - vorher["leer"]) / (gesamt - vorher["gesamt"])
+    return round(belegt * (os.cpu_count() or 1), 2)
+
+
+def _eine_auslastung(client, eintrag: dict[str, Any], jetzt: float) -> dict[str, Any] | None:
+    cid = eintrag["Id"]
+    try:
+        st = client.api.stats(cid, stream=False, one_shot=True)
+        hc = client.api.inspect_container(cid).get("HostConfig") or {}
+    except (APIError, NotFound):
+        return None
+    cpu = (st.get("cpu_stats") or {})
+    drossel = cpu.get("throttling_data") or {}
+    mem = st.get("memory_stats") or {}
+    # Wie `docker stats`: ohne den Seitencache, den der Kernel jederzeit
+    # zurueckholen kann. Sonst stuende jeder Container nach etwas Plattenarbeit
+    # scheinbar an seiner Grenze.
+    belegt = int(mem.get("usage") or 0) - int((mem.get("stats") or {}).get("inactive_file") or 0)
+    netz = st.get("networks") or {}
+    rx = sum(int(n.get("rx_bytes") or 0) for n in netz.values())
+    tx = sum(int(n.get("tx_bytes") or 0) for n in netz.values())
+    nun = {
+        "zeit": jetzt,
+        "cpu": float((cpu.get("cpu_usage") or {}).get("total_usage") or 0),
+        "perioden": float(drossel.get("periods") or 0),
+        "gedrosselt": float(drossel.get("throttled_periods") or 0),
+        "rx": float(rx), "tx": float(tx),
+    }
+    vorher = _auslastung_vorher.get(cid)
+    _auslastung_vorher[cid] = nun
+    kerne = drossel_anteil = rx_rate = tx_rate = None
+    if vorher and nun["zeit"] > vorher["zeit"] and nun["cpu"] >= vorher["cpu"]:
+        dauer = nun["zeit"] - vorher["zeit"]
+        kerne = round((nun["cpu"] - vorher["cpu"]) / 1e9 / dauer, 2)
+        perioden = nun["perioden"] - vorher["perioden"]
+        drossel_anteil = round((nun["gedrosselt"] - vorher["gedrosselt"]) / perioden, 3) if perioden > 0 else 0.0
+        rx_rate = max(0, int((nun["rx"] - vorher["rx"]) / dauer))
+        tx_rate = max(0, int((nun["tx"] - vorher["tx"]) / dauer))
+    return {
+        "container_id": cid,
+        "session_id": (eintrag.get("Labels") or {}).get("ota.session_id", ""),
+        "kerne": kerne,
+        "kerne_deckel": round(int(hc.get("NanoCpus") or 0) / 1e9, 2) or None,
+        "kerne_gewicht": round(int(hc.get("CpuShares") or 0) / 1024, 2) or None,
+        "gedrosselt": drossel_anteil,
+        "speicher": max(0, belegt),
+        "speicher_grenze": int(hc.get("Memory") or 0) or None,
+        "prozesse": int((st.get("pids_stats") or {}).get("current") or 0),
+        "rx": rx_rate, "tx": tx_rate,
+    }
+
+
+@app.get("/auslastung", dependencies=[Depends(require_token)])
+def auslastung() -> dict[str, Any]:
+    """Live-Werte aller laufenden Arbeitsplaetze und des Wirts."""
+    client = dc()
+    eintraege = client.api.containers(filters={"label": "ota.session_id", "status": "running"})
+    jetzt = time.monotonic()
+    with _auslastung_sperre:
+        # Parallel: Jede Abfrage ist ein Weg zum Docker-Daemon, und mit
+        # zwanzig Arbeitsplaetzen summierte sich das sonst.
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            werte = [w for w in pool.map(lambda e: _eine_auslastung(client, e, jetzt), eintraege) if w]
+        lebend = {e["Id"] for e in eintraege}
+        for alt in [k for k in _auslastung_vorher if k not in lebend]:
+            del _auslastung_vorher[alt]
+        wirt_kerne = _wirt_cpu()
+    gesamt = verfuegbar = 0
+    try:
+        with open("/proc/meminfo", encoding="ascii") as fh:
+            for zeile in fh:
+                if zeile.startswith("MemTotal:"):
+                    gesamt = int(zeile.split()[1]) * 1024
+                elif zeile.startswith("MemAvailable:"):
+                    verfuegbar = int(zeile.split()[1]) * 1024
+    except OSError:
+        pass
+    try:
+        last = float(open("/proc/loadavg", encoding="ascii").read().split()[0])
+    except (OSError, ValueError, IndexError):
+        last = None
+    return {
+        "wirt": {"kerne": os.cpu_count() or 1, "kerne_belegt": wirt_kerne, "last": last,
+                 "speicher": gesamt, "speicher_frei": verfuegbar},
+        "container": werte,
+    }
 
 
 # --------------------------------------------------------------------------

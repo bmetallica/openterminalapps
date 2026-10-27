@@ -398,6 +398,22 @@ Kostet einen Moment beim Start und sonst nichts — und spart `libfuse2` im Imag
 
 ## Überwachung ✅
 
+### Live-Auslastung: Betrieb → Arbeitsplätze ✅
+
+Oben stehen zwei Balken für den **Host**: belegte Kerne mit Last und belegter Arbeitsspeicher. In
+der Tabelle zeigt die Spalte **Live** je laufendem Arbeitsplatz:
+
+| | |
+|---|---|
+| **CPU** | genutzte Kerne. Der Balken reicht bis zur Obergrenze, der Strich darin sind die zugeteilten Kerne, also das Gewicht ([Kapitel 5](05-workspaces-verwalten.md#ressourcen)) |
+| **RAM** | belegter Speicher ohne Seitencache, gegen die Grenze des Containers |
+| **Gebremst in X % der Zeit** | erscheint rot, wenn die CPU-Grenze den Container anhält. Das sieht man als Ruckeln, auch wenn der Host frei ist. Abhilfe: mehr Kerne zuteilen |
+| **↓ ↑** und **Prozesse** | Netz in Byte pro Sekunde und Zahl der Prozesse |
+
+Die Werte kommen alle 3 Sekunden, solange der Reiter offen und das Browserfenster sichtbar ist.
+Gespeichert wird nichts. Unter 1050 Pixel Breite rollt die Tabelle seitwärts, die Seite selbst
+nicht. Die Werte liefert `GET /api/admin/arbeitsplaetze/auslastung` (Recht `sessions.view_all`).
+
 ### `GET /healthz`
 
 Beantwortet **eine** Frage: Kann die Anwendung gerade arbeiten? Ohne Anmeldung, damit ein

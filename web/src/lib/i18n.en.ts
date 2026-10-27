@@ -1943,4 +1943,15 @@ export const EN: Record<string, string> = {
   '{name} angelegt — noch ausgeschaltet': '{name} created — still disabled',
   'Duplizieren fehlgeschlagen': 'Duplicating failed',
   'Duplizieren': 'Duplicate',
+  // Betrieb → Arbeitsplätze: Live-Auslastung
+  'Live': 'Live',
+  'Strich: zugeteilte Kerne. Balkenende: Obergrenze.': 'Line: allocated cores. End of bar: upper limit.',
+  '{a} / {b} Kerne': '{a} / {b} cores',
+  'Die CPU-Grenze hält den Container an — er ruckelt. Mehr Kerne zuteilen.': 'The CPU limit is stopping the container — it stutters. Allocate more cores.',
+  'Gebremst in {p} % der Zeit': 'Throttled {p} % of the time',
+  '{n} Prozesse': '{n} processes',
+  'Host-CPU': 'Host CPU',
+  '{a} von {b} Kernen': '{a} of {b} cores',
+  'Last {l}': 'Load {l}',
+  'Host-Arbeitsspeicher': 'Host memory',
 }
