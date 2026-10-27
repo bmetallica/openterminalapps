@@ -156,6 +156,34 @@ chapter), the **directory** ([chapter 8](08-nutzer-und-gruppen.md)) and the **br
 colour and logo of the installation, [chapter 22](22-marke.md). All of it needs the permission
 `settings.manage`.
 
+## News ✅
+
+Announcements to all users: maintenance windows, new workspaces, changes. The **News** entry is in
+the sidebar for everyone, right below Start.
+
+Whoever has `settings.manage` may **write**. On the News page:
+
+1. **New post**, enter title and text in **Markdown**. **Preview** shows what it looks like. The same
+   notation as in the handbook applies: `**bold**`, `*italic*`, `` `code` ``, `## heading`, lists
+   with `-` and links `[text](https://…)`.
+2. **Pin to top** keeps a post above all others, for example an ongoing maintenance.
+3. **Draft** saves without users seeing anything.
+4. **Publish.**
+
+**The badge in the sidebar** shows everyone how many posts were published since their last visit to
+the News page. Opening the page marks everything as read. Whoever has never opened it sees the posts
+of the last 30 days as new. The state is kept in the database, not in the browser, and therefore
+applies on every computer. The sidebar checks every five minutes.
+
+**Corrections do not count again:** the publication date is set by the first publishing. Fixing a
+typo does not send anyone the badge again. The change is shown under the date ("changed on …").
+
+**Safe:** the text is rendered in the browser, and any HTML in it is escaped. A post therefore
+cannot execute anything. Creating, changing and deleting are logged (Operations → Log).
+
+API: `GET /api/news`, `GET /api/news/ungelesen`, `POST /api/news/gelesen` for everyone;
+`POST /api/news`, `PUT` and `DELETE /api/news/{id}` with `settings.manage`.
+
 ## Language ✅
 
 **Administration → Settings → Language → Default language.**

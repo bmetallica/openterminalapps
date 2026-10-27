@@ -122,7 +122,7 @@ Start eines Arbeitsplatzes.
 
 ### Rechte
 Zwischenablage, Dateien, Geräte, Sonstiges — gruppiert, mit Erklärung je Schalter.
-Siehe [Kapitel 4](04-zwischenablage.md).
+Siehe [Kapitel 37](37-zwischenablage-verwaltung.md).
 
 ### Umgebung
 Umgebungsvariablen für den Container.

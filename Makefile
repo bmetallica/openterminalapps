@@ -267,6 +267,8 @@ test:
 	@./scripts/test-software.sh
 	@./scripts/test-git.sh
 	@./scripts/test-duplizieren.sh
+	@# News: Rechte, Entwürfe, Zähler für die Seitenleiste.
+	@./scripts/test-news.sh
 	@# Zwei Root-Arbeitsplaetze gleichzeitig, Datenordner geteilt.
 	@./scripts/test-gemeinsame-daten.sh
 	@# IDE-AI gegen den KI-Server in OTA_TEST_KI_URL (Kapitel 28).

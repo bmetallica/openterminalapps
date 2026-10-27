@@ -271,6 +271,10 @@ that did not exist before is simply there.
 
 **Administration**
 - Resources **per user and workspace**: user A gets 2 cores, user B one
+- **News** — announcements from the administrators to everyone, written in Markdown right on the
+  page, with drafts, pinning and a sidebar badge for unread posts ([chapter 11](docs/wiki/en/11-betrieb.md#news-))
+- **User handbook** — chapters of their own for users: getting started, account, files, root
+  workspace, Git and AI, using a session, help with problems, terms ([chapters 29 to 36](docs/wiki/en/29-los-gehts.md))
 - **Live utilisation under Operations** — bars for CPU, RAM and network per workspace and for the
   host, with a warning as soon as the CPU limit throttles a container ([chapter 11](docs/wiki/en/11-betrieb.md#live-utilisation-operations--workspaces-))
 - **Cores as a weight, not a cap** — on an idle host a workspace may use up to four times as much,
@@ -517,6 +521,7 @@ make test
 | `test-root-arbeitsplatz.sh` (addition) | A run-once script assigned to a paused root workspace runs on resume as 1000 and shows up with exit code and output under "Show runs" |
 | `test-gemeinsame-daten.sh` | Shared data: two root workspaces of the same account run at once, each with its own home; data folders (nested too) are the same in both and in the shared home on the host, owner 1000; settings kept apart; folders with `..`, hidden ones and an unknown persistence are refused; packages reach the root container despite a refused `put_archive`; a vanished container is paused instead of staying "running" and restarts with the same data |
 | `test-duplizieren.sh` | Duplicating: settings, apps with their start command, run-once script, per-user allocation, groups and skeleton (also per application, owner 1000) are copied; own slug, disabled, source untouched; only with management rights; a shared image counts as used elsewhere. Own name: applies to that user only, template and admin untouched, too long refused, not for invisible templates, empty resets, goes with the template |
+| `test-news.sh` | News: everyone reads, writing only with `settings.manage`; draft invisible and not new; publishing counts for the sidebar, opening resets, a correction does not count again; pinned on top; text stored unchanged; create, change, delete in the log |
 | `test-ide-ai.sh` | IDE-AI: fetch models from the AI server, wrong input refused, API key stays on the server, test question; packages in the package source, only the agent gets the file; in every template with an editor config.yaml with mark, context window and response length, telemetry off, Continue linked in VS Code/VSCodium and JetBrains, firewall lets the AI server through, a question from the workspace gets an answer, own config.yaml stays; turned off, everything is gone again |
 | `test-konten.sh` | Central sign-in accounts: creating in OTA creates in Keycloak (including the required password change), locally it does not get in; changes, password, second factor, locking and deleting take effect in Keycloak; My account goes through Keycloak; a local legacy account moves over with its password, the emergency account does not |
 | `test-clipboard-bridge.sh` | Copying between two applications in the same workspace: both directions, umlauts, an image, a megabyte, after a pause, and switched off |

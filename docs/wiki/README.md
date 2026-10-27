@@ -9,8 +9,8 @@ Jedes Kapitel gibt es auch auf Englisch, in [`en/`](en/README.md) unter demselbe
 Programm zeigt die Fassung in der Sprache der Oberfläche; wer ein Kapitel ändert, ändert beide —
 `scripts/i18n-pruefen.py` vergleicht den Aufbau.
 
-Welche Kapitel jemand dort sieht, hängt an den Rechten: Anwender bekommen Überblick, Arbeitsplatz,
-Zwischenablage und Lizenzen; Verwaltung und Betrieb bleiben Administratoren vorbehalten. Diese
+Welche Kapitel jemand dort sieht, hängt an den Rechten: Anwender bekommen den Überblick,
+die Anwenderkapitel (3, 4 und 29 bis 36) und die Lizenzen; Verwaltung und Betrieb bleiben Administratoren vorbehalten. Diese
 Aufteilung steht in `api/ota/routers/help.py` — wer ein Kapitel hinzufügt, trägt es dort ein.
 
 ## Kennzeichnung
@@ -34,6 +34,14 @@ heute schon funktioniert.
 **Für Anwender**
 3. [Der Arbeitsplatz](03-arbeitsplatz.md)
 4. [Zwischenablage, Dateien und Ton](04-zwischenablage.md)
+29. [Los geht's — die ersten Minuten](29-los-gehts.md)
+30. [Mein Konto](30-mein-konto.md)
+31. [Dateien — was wo liegt und was bleibt](31-dateien.md)
+32. [Mit einem Root-Arbeitsplatz arbeiten](32-root-arbeitsplatz-nutzen.md)
+33. [Entwickeln: Git und KI im Editor](33-entwickeln.md)
+34. [Bedienung: Bildschirm, Tastatur, Ton](34-bedienung.md)
+35. [Wenn etwas nicht geht](35-wenn-etwas-nicht-geht.md)
+36. [Begriffe](36-glossar.md)
 
 **Für Administratoren**
 5. [Workspaces verwalten](05-workspaces-verwalten.md)
@@ -50,6 +58,7 @@ heute schon funktioniert.
 22. [Die eigene Marke — Name, Farbe, Zeichen](22-marke.md)
 23. [Das Netz der Arbeitsplätze](23-netz.md)
 25. [Root-Arbeitsplatz — root und Docker im Container](25-root-arbeitsplatz.md)
+37. [Zwischenablage für Administratoren](37-zwischenablage-verwaltung.md)
 
 **Betrieb**
 10. [Zertifikate und HTTPS](10-zertifikate-und-https.md)

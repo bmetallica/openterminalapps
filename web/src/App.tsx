@@ -6,6 +6,7 @@ import { People } from './screens/People'
 import { WebApps } from './screens/WebApps'
 import { Workspaces } from './screens/Workspaces'
 import { Help } from './screens/Help'
+import { News } from './screens/News'
 import { Netz } from './screens/Netz'
 import { Settings } from './screens/Settings'
 import { Images } from './screens/Images'
@@ -23,12 +24,15 @@ import { setKontoLang, setLang, t, useLang, type Lang } from './lib/i18n'
 import { setTheme, useTheme, type Theme } from './lib/theme'
 import './styles/app.css'
 
-type View = 'dashboard' | 'workspaces' | 'webapps' | 'images' | 'registries' | 'paketquellen' | 'storage'
+type View = 'dashboard' | 'news' | 'workspaces' | 'webapps' | 'images' | 'registries' | 'paketquellen' | 'storage'
   | 'files' | 'people' | 'monitor' | 'software' | 'netz' | 'settings' | 'account' | 'help'
 type Toast = { id: number; msg: string; tone: 'ok' | 'bad' }
 
 const NAV: { id: View; glyph: string; cap: string; adminOnly: boolean }[] = [
   { id: 'dashboard', glyph: '▣', cap: 'Start', adminOnly: false },
+  // Meldungen der Verwaltung an alle. Gleich unter Start, weil man dort
+  // nachschaut, ob es etwas Neues gibt — ein Punkt zeigt es an.
+  { id: 'news', glyph: '✦', cap: 'News', adminOnly: false },
   { id: 'workspaces', glyph: '⬡', cap: 'Workspaces', adminOnly: true },
   // Fremde Web-Anwendungen. Eigener Punkt und nicht ein Reiter bei den
   // Workspaces: Das eine läuft hier, das andere woanders — und wer es
@@ -81,6 +85,7 @@ export default function App() {
   const [templates, setTemplates] = useState<Template[]>([])
   const [host, setHost] = useState<Host | null>(null)
   const [toasts, setToasts] = useState<Toast[]>([])
+  const [newsNeu, setNewsNeu] = useState(0)
 
   const toast = useCallback((msg: string, tone: 'ok' | 'bad' = 'ok') => {
     const id = Date.now() + Math.random()
@@ -104,6 +109,16 @@ export default function App() {
     const load = () => { api.host().then(setHost).catch(() => {}) }
     load()
     const timer = setInterval(load, 20_000)
+    return () => clearInterval(timer)
+  }, [me])
+
+  // Der Punkt an „News". Alle fünf Minuten reicht: Eine Meldung, die eine
+  // Minute später auftaucht, verpasst niemand.
+  useEffect(() => {
+    if (!me) return
+    const load = () => { api.newsUngelesen().then((x) => setNewsNeu(x.anzahl)).catch(() => {}) }
+    load()
+    const timer = setInterval(load, 300_000)
     return () => clearInterval(timer)
   }, [me])
 
@@ -246,6 +261,11 @@ export default function App() {
             onClick={() => setView(n.id)} aria-current={current === n.id ? 'page' : undefined}>
             <span className="rail__glyph" aria-hidden="true">{n.glyph}</span>
             <span className="rail__cap">{t(n.cap)}</span>
+            {n.id === 'news' && newsNeu > 0 && current !== 'news' && (
+              <span className="rail__badge" title={t('{n} neue Beiträge', { n: newsNeu })}>
+                {newsNeu > 9 ? '9+' : newsNeu}
+              </span>
+            )}
           </button>
         ))}
 
@@ -299,6 +319,7 @@ export default function App() {
           <Dashboard me={me} onOpen={openSession} onToast={toast}
             onSoftware={() => setView('software')} />
         )}
+        {current === 'news' && <News onToast={toast} onGelesen={() => setNewsNeu(0)} />}
         {current === 'workspaces' && <Workspaces onToast={toast} />}
         {current === 'webapps' && <WebApps onToast={toast}
           zuEinstellungen={visible.some((n) => n.id === 'settings') ? zuDenZielen : undefined} />}

@@ -675,6 +675,19 @@ export type Arbeitsplatz = {
 
 export type Platz = { schicht?: number; docker?: number; gesamt: number | null }
 
+export type NewsBeitrag = {
+  id: string
+  titel: string
+  text: string
+  angeheftet: boolean
+  entwurf: boolean
+  autor: string
+  erstellt_am: string
+  geaendert_am: string
+  veroeffentlicht_am: string | null
+}
+export type NewsIn = Pick<NewsBeitrag, 'titel' | 'text' | 'angeheftet' | 'entwurf'>
+
 /* Live-Auslastung (Betrieb → Arbeitsplätze). `null` heisst: noch keine zweite
    Messung, aus der sich eine Rate bilden liesse. */
 export type Auslastung = {
@@ -1194,6 +1207,13 @@ export const api = {
       { method: 'POST' }),
   arbeitsplaetze: () => call<Arbeitsplatz[]>('/admin/arbeitsplaetze'),
   arbeitsplatzPlatz: (id: string) => call<Platz>(`/admin/arbeitsplaetze/${id}/platz`),
+  news: () => call<{ beitraege: NewsBeitrag[]; gelesen_bis: string; darf_schreiben: boolean }>('/news'),
+  newsUngelesen: () => call<{ anzahl: number }>('/news/ungelesen'),
+  newsGelesen: () => call<{ anzahl: number }>('/news/gelesen', { method: 'POST' }),
+  newsAnlegen: (b: NewsIn) => call<NewsBeitrag>('/news', { method: 'POST', body: JSON.stringify(b) }),
+  newsAendern: (id: string, b: NewsIn) =>
+    call<NewsBeitrag>(`/news/${id}`, { method: 'PUT', body: JSON.stringify(b) }),
+  newsLoeschen: (id: string) => call<{ status: string }>(`/news/${id}`, { method: 'DELETE' }),
   auslastung: () => call<{ wirt: WirtAuslastung; arbeitsplaetze: Record<string, Auslastung> }>(
     '/admin/arbeitsplaetze/auslastung'),
   arbeitsplatzStarten: (id: string) =>

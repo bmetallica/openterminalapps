@@ -144,13 +144,14 @@ it.
 
 ## Automatic ending
 
-Without activity the session is paused, stopped or deleted after a set time. What applies is shown
-on the card. Ten minutes before, a notice appears with the option to extend, if the policy allows
-it.
+Without activity the session is paused, stopped or deleted after a set time. How long, and what
+happens then, is set by the administrators per workspace. There is no notice beforehand. Root
+workspaces are only ever stopped ([chapter 32](32-root-arbeitsplatz-nutzen.md)).
 
 **In all three cases your profile is kept.** "Deleted" refers to the container, not your files.
 
 ## Resetting the profile
 
-Under *Settings* there is **Reset profile**. It restores the golden image's delivery state. A backup
-is made automatically beforehand — but it is an intervention, not a tidy-up button.
+There is no button for it. If your home is so broken that nothing works any more, the
+administrators reset it, from a backup or from scratch. You can **rebuild** a root workspace
+yourself; your home is kept ([chapter 32](32-root-arbeitsplatz-nutzen.md)).

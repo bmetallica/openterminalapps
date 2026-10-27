@@ -552,9 +552,9 @@ def start_session(
                 status.HTTP_409_CONFLICT,
                 f"„{clash.template.friendly_name}“ läuft schon und benutzt "
                 "dasselbe Zuhause. Zwei Arbeitsplätze auf einem Profil geraten "
-                "sich in die Quere. Beende den anderen — oder stelle diesen "
-                "Workspace unter Persistenz auf „Eigene Einstellungen, "
-                "gemeinsame Daten“.",
+                "sich in die Quere. Beende den anderen. Sollen beide "
+                "nebeneinander laufen, stellt die Verwaltung diesen Workspace "
+                "unter Persistenz auf „Gemeinsame Daten“.",
             )
 
     # **Root-Arbeitsplatz: derselbe Platz, nicht ein neuer.** Gibt es einen

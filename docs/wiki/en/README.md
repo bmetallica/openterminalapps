@@ -10,8 +10,8 @@ program shows the version in the interface language; whoever changes a chapter c
 `scripts/i18n-pruefen.py` compares the structure. File names and some anchors stay German, because
 renaming them would break every link that already exists.
 
-Which chapters someone sees there depends on their permissions: users get the overview, workspace,
-clipboard and licences; administration and operations are reserved for administrators. This split
+Which chapters someone sees there depends on their permissions: users get the overview, the
+user chapters (3, 4 and 29 to 36) and the licences; administration and operations are reserved for administrators. This split
 is defined in `api/ota/routers/help.py` — whoever adds a chapter registers it there.
 
 ## Markers
@@ -34,6 +34,14 @@ configuration decisions can be made with foresight — but it always says what a
 **For users**
 3. [The workspace](03-arbeitsplatz.md)
 4. [Clipboard, files and sound](04-zwischenablage.md)
+29. [Getting started — the first minutes](29-los-gehts.md)
+30. [My account](30-mein-konto.md)
+31. [Files — what lives where and what is kept](31-dateien.md)
+32. [Working with a root workspace](32-root-arbeitsplatz-nutzen.md)
+33. [Developing: Git and AI in the editor](33-entwickeln.md)
+34. [Using a session: screen, keyboard, sound](34-bedienung.md)
+35. [When something goes wrong](35-wenn-etwas-nicht-geht.md)
+36. [Terms](36-glossar.md)
 
 **For administrators**
 5. [Managing workspaces](05-workspaces-verwalten.md)
@@ -50,6 +58,7 @@ configuration decisions can be made with foresight — but it always says what a
 22. [Your own brand — name, colour, logo](22-marke.md)
 23. [The workspaces' network](23-netz.md)
 25. [Root workspace — root and Docker in the container](25-root-arbeitsplatz.md)
+37. [Clipboard for administrators](37-zwischenablage-verwaltung.md)
 
 **Operations**
 10. [Certificates and HTTPS](10-zertifikate-und-https.md)

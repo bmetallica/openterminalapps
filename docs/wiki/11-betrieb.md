@@ -159,6 +159,35 @@ nicht selbst umschalten, die **Anmeldefrist** und der **Platz** (beide unten in 
 das **Verzeichnis** ([Kapitel 8](08-nutzer-und-gruppen.md)) und die **Marke** — Name, Farbe und
 Zeichen der Anlage, [Kapitel 22](22-marke.md). Alles davon braucht das Recht `settings.manage`.
 
+## News ✅
+
+Meldungen an alle Nutzer: Wartungsfenster, neue Workspaces, Änderungen. Der Eintrag **News** steht
+für alle in der Seitenleiste, gleich unter Start.
+
+**Schreiben** darf, wer `settings.manage` hat. Auf der News-Seite:
+
+1. **Neuer Beitrag**, Titel und Text in **Markdown** eingeben. **Vorschau** zeigt, wie es aussieht.
+   Es gilt dieselbe Schreibweise wie im Handbuch: `**fett**`, `*kursiv*`, `` `Code` ``,
+   `## Überschrift`, Listen mit `-` und Links `[Text](https://…)`.
+2. **Oben anheften** hält einen Beitrag über allen anderen, etwa eine laufende Wartung.
+3. **Entwurf** speichert, ohne dass Nutzer etwas sehen.
+4. **Veröffentlichen.**
+
+**Der Punkt in der Seitenleiste** zeigt jedem, wie viele Beiträge seit seinem letzten Besuch der
+News-Seite veröffentlicht wurden. Wer die Seite öffnet, hat alles gelesen. Wer sie nie geöffnet
+hat, sieht die Beiträge der letzten 30 Tage als neu. Der Stand liegt in der Datenbank, nicht im
+Browser, und gilt deshalb an jedem Rechner. Die Seitenleiste fragt alle fünf Minuten nach.
+
+**Korrigieren zählt nicht erneut:** Das Veröffentlichungsdatum setzt das erste Veröffentlichen. Wer
+einen Tippfehler behebt, schickt niemandem den Punkt noch einmal. Die Änderung steht unter dem Datum
+(„geändert am …").
+
+**Sicher:** Der Text wird im Browser gerendert, jedes HTML darin wird maskiert. Ein Beitrag kann
+also nichts ausführen. Anlegen, Ändern und Löschen stehen im Protokoll (Betrieb → Protokoll).
+
+API: `GET /api/news`, `GET /api/news/ungelesen`, `POST /api/news/gelesen` für alle;
+`POST /api/news`, `PUT` und `DELETE /api/news/{id}` mit `settings.manage`.
+
 ## Sprache ✅
 
 **Verwaltung → Einstellungen → Sprache → Standardsprache.**

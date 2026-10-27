@@ -124,6 +124,9 @@ const ACTION_TEXT: Record<string, string> = {
   'backup.restored': 'Profil wiederhergestellt',
   'backup.restored_container': 'Container wiederhergestellt',
   'protokoll.aufgeraeumt': 'Protokoll aufgeräumt (Aufbewahrungsfrist)',
+  'news.created': 'News-Beitrag angelegt',
+  'news.updated': 'News-Beitrag geändert',
+  'news.deleted': 'News-Beitrag gelöscht',
 
   // Root-Arbeitsplätze und Webterminal (Kapitel 25)
   'platz.angehalten': 'Root-Arbeitsplatz angehalten',

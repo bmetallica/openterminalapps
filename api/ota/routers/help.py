@@ -62,7 +62,27 @@ SECTIONS: dict[str, tuple[str, bool]] = {
     "25": ("Für Administratoren", True),
     "26": ("Betrieb", True),
     "27": ("Für Administratoren", True),
+    "28": ("Für Administratoren", True),
+    # Das Anwenderhandbuch, seit dem 2026-10-27. Bis dahin sahen Nutzer vier
+    # Kapitel; was sie betraf, stand verstreut in Kapiteln für die Verwaltung.
+    "29": ("Für Anwender", False),
+    "30": ("Für Anwender", False),
+    "31": ("Für Anwender", False),
+    "32": ("Für Anwender", False),
+    "33": ("Für Anwender", False),
+    "34": ("Für Anwender", False),
+    "35": ("Für Anwender", False),
+    "36": ("Für Anwender", False),
+    # Der Verwaltungsteil von Kapitel 4, dort herausgelöst.
+    "37": ("Für Administratoren", True),
 }
+
+# In dieser Reihenfolge stehen die Rubriken im Handbuch, innerhalb einer Rubrik
+# nach Nummer. Ohne das stuende ein spaeteres Anwenderkapitel hinter allen
+# Verwaltungskapiteln, in einer zweiten Gruppe „Für Anwender".
+RUBRIKEN = ["Grundlagen", "Für Anwender", "Für Administratoren", "Betrieb", "Weiteres"]
+# „Los geht's" ist der Einstieg und steht vor den älteren Kapiteln 3 und 4.
+ZUERST = ("29",)
 
 SLUG_OK = re.compile(r"^[0-9a-z-]+$")
 
@@ -96,7 +116,13 @@ def _chapters(user: User, lang: str = "") -> list[HelpChapter]:
     if not WIKI_DIR.is_dir():
         return []
     out: list[HelpChapter] = []
-    for path in sorted(WIKI_DIR.glob("*.md")):
+
+    def reihenfolge(path: Path) -> tuple[int, bool, str]:
+        rubrik = SECTIONS.get(path.name[:2], ("Weiteres", True))[0]
+        rang = RUBRIKEN.index(rubrik) if rubrik in RUBRIKEN else len(RUBRIKEN)
+        return rang, path.name[:2] not in ZUERST, path.name
+
+    for path in sorted(WIKI_DIR.glob("*.md"), key=reihenfolge):
         if path.name == "README.md":
             continue
         section, admin_only = SECTIONS.get(path.name[:2], ("Weiteres", True))

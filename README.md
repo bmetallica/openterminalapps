@@ -274,6 +274,10 @@ dabei **nicht** zurückwandert, ist die Datenbank: Neue Spalten bleiben stehen. 
 
 **Verwaltung**
 - Ressourcen **je Nutzer und Workspace**: Nutzer A bekommt 2 Kerne, Nutzer B einen
+- **News** — Meldungen der Verwaltung an alle, in Markdown direkt auf der Seite geschrieben, mit
+  Entwürfen, Anheften und einem Punkt in der Seitenleiste für Ungelesenes ([Kapitel 11](docs/wiki/11-betrieb.md#news-))
+- **Anwenderhandbuch** — eigene Kapitel für Nutzer: erste Schritte, Konto, Dateien,
+  Root-Arbeitsplatz, Git und KI, Bedienung, Hilfe bei Problemen, Begriffe ([Kapitel 29 bis 36](docs/wiki/29-los-gehts.md))
 - **Live-Auslastung unter Betrieb** — Balken für CPU, RAM und Netz je Arbeitsplatz und für den
   Host, mit Warnung, sobald die CPU-Grenze einen Container bremst ([Kapitel 11](docs/wiki/11-betrieb.md#live-auslastung-betrieb--arbeitsplätze-))
 - **Kerne als Gewicht, nicht als Deckel** — bei freiem Host darf ein Arbeitsplatz bis zum Vierfachen
@@ -521,6 +525,7 @@ make test
 | `test-root-arbeitsplatz.sh` (Ergänzung) | Ein Einmal-Skript, das einem angehaltenen Root-Arbeitsplatz zugewiesen wird, läuft beim Fortsetzen als 1000 und steht mit Rückgabewert und Ausgabe unter „Läufe ansehen" |
 | `test-gemeinsame-daten.sh` | Gemeinsame Daten: zwei Root-Arbeitsplätze desselben Kontos laufen gleichzeitig, jeder mit eigenem Zuhause; Datenordner (auch verschachtelt) in beiden dieselben und im gemeinsamen Zuhause auf dem Wirt, Besitzer 1000; Einstellungen getrennt; Ordner mit `..`, versteckte und unbekannte Persistenz abgelehnt; Pakete kommen trotz abgelehntem `put_archive` in den Root-Container; ein verschwundener Container wird angehalten statt als „läuft“ stehen zu bleiben und startet mit denselben Daten neu |
 | `test-duplizieren.sh` | Duplizieren: Einstellungen, Apps samt Startbefehl, Einmal-Skript, Zuteilung je Nutzer, Gruppen und Skeleton (auch je Anwendung, Besitzer 1000) kommen mit; eigene Kennung, ausgeschaltet, Quelle bleibt unberührt; nur mit Verwaltungsrecht; ein geteiltes Image gilt als anderswo genutzt. Eigener Name: gilt nur für den Nutzer, Vorlage und Admin unberührt, zu lang abgewiesen, nicht für unsichtbare Vorlagen, leer setzt zurück, geht mit der Vorlage |
+| `test-news.sh` | News: lesen alle, schreiben nur mit `settings.manage`; Entwurf unsichtbar und nicht neu; Veröffentlichen zählt für die Seitenleiste, Öffnen setzt zurück, Korrektur zählt nicht erneut; Angeheftetes oben; Text unverändert gespeichert; Anlegen, Ändern, Löschen im Protokoll |
 | `test-ide-ai.sh` | IDE-AI: Modelle vom KI-Server abrufen, falsche Eingaben abgewiesen, API-Schlüssel bleibt auf dem Server, Testfrage; Pakete in der Paketquelle, nur der Agent bekommt die Datei; in jeder Vorlage mit Editor config.yaml mit Marke, Kontextfenster und Antwortlänge, Telemetrie aus, Continue in VS Code/VSCodium und JetBrains verknüpft, Firewall lässt den KI-Server durch, Frage aus dem Arbeitsplatz bekommt Antwort, eigene config.yaml bleibt; ausgeschaltet ist alles wieder weg |
 | `test-konten.sh` | Konten der zentralen Anmeldung: Anlegen in OTA legt in Keycloak an (samt Pflicht zum Passwortwechsel), lokal kommt es nicht herein; Ändern, Passwort, zweiter Faktor, Sperren und Löschen wirken in Keycloak; Mein Konto führt über Keycloak; ein lokales Bestandskonto zieht mit seinem Passwort um, das Notfallkonto nicht |
 | `test-clipboard-bridge.sh` | Kopieren zwischen zwei Anwendungen im selben Arbeitsplatz: beide Richtungen, Umlaute, ein Bild, ein Megabyte, nach Pause, und abgeschaltet |

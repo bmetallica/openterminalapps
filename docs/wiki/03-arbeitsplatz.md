@@ -147,15 +147,15 @@ Davon unberührt läuft dein Container weiter — dafür gilt die eigene Frist i
 
 ## Automatisches Beenden
 
-Ohne Aktivität wird die Session nach einer eingestellten Zeit pausiert, gestoppt oder gelöscht. Was
-gilt, steht auf der Karte. Zehn Minuten vorher erscheint ein Hinweis mit der Möglichkeit zu
-verlängern, sofern die Richtlinie das zulässt.
+Ohne Aktivität wird die Session nach einer eingestellten Zeit pausiert, gestoppt oder gelöscht. Wie
+lange und was dann passiert, legt die Verwaltung je Workspace fest. Einen Hinweis vorher gibt es
+nicht. Root-Arbeitsplätze werden immer nur angehalten ([Kapitel 32](32-root-arbeitsplatz-nutzen.md)).
 
 **In allen drei Fällen bleibt dein Profil erhalten.** „Gelöscht" bezieht sich auf den Container,
 nicht auf deine Dateien.
 
 ## Profil zurücksetzen
 
-Unter *Einstellungen* gibt es **Profil zurücksetzen**. Das stellt den Auslieferungszustand des
-Golden Image wieder her. Vorher wird automatisch gesichert — aber es ist ein Eingriff, kein
-Aufräumknopf.
+Einen Knopf dafür gibt es nicht. Ist dein Zuhause so verbastelt, dass nichts mehr geht, setzt die
+Verwaltung es zurück, aus einer Sicherung oder neu. Einen Root-Arbeitsplatz kannst du selbst
+**neu aufsetzen**, dein Zuhause bleibt dabei erhalten ([Kapitel 32](32-root-arbeitsplatz-nutzen.md)).

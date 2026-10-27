@@ -376,6 +376,13 @@ input[type="color"] {
 .rail__btn.is-on { background: var(--bay-2); color: var(--text); }
 .rail__btn.is-on .rail__glyph { color: var(--accent); }
 .rail__glyph { font-size: 17px; line-height: 1; }
+.rail__btn { position: relative; }
+/* Ungelesene News. Oben rechts am Knopf, wie man es von Symbolleisten kennt. */
+.rail__badge {
+  position: absolute; top: 4px; right: 22px; min-width: 17px; height: 17px; padding: 0 5px;
+  border-radius: 9px; background: var(--accent); color: var(--on-key);
+  font-size: 10px; font-weight: 700; line-height: 17px; text-align: center;
+}
 .rail__cap {
   font-size: 9px; letter-spacing: .06em; text-transform: uppercase; font-weight: 600;
   /* Eine Zeile, mittig, ohne Abschneiden — "Einstellungen" passt jetzt. */
@@ -1871,3 +1878,26 @@ input[type="color"] {
 .ide-ai__modelle tbody tr { cursor: default; }
 .ide-ai__modelle tbody tr:hover { background: none; }
 .ide-ai__modelle td { vertical-align: top; padding: 10px 10px; }
+
+/* ============================================================
+   News
+   ============================================================ */
+
+.news .panel + .panel, .news .empty + .panel { margin-top: 14px; }
+.news__beitrag { padding: 20px 24px; }
+.news__beitrag.is-pinned { border-color: var(--accent-dim); }
+.news__kopf { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; margin-bottom: 12px; }
+.news__titel { font-size: 19px; font-weight: 600; margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.news__meta { font-size: 12px; color: var(--mute); margin: 4px 0 0; }
+.news__marke {
+  font-size: 10px; letter-spacing: .1em; text-transform: uppercase; font-weight: 600;
+  padding: 2px 7px; border-radius: 4px; background: var(--bay-2); color: var(--label);
+}
+.news__marke--neu { background: var(--accent); color: var(--on-key); }
+.news__marke--entwurf { background: var(--caution-bg); color: var(--caution); }
+.news__editor { padding: 18px 20px; margin-bottom: 14px; }
+.news__titel-eingabe { width: 100%; font-size: 16px; }
+.news__text { width: 100%; min-height: 260px; resize: vertical; font-family: 'IBM Plex Mono', monospace; font-size: 13px; line-height: 1.55; }
+.news__vorschau { min-height: 260px; padding: 12px 14px; border: 1px dashed var(--edge); border-radius: var(--r-ctl); max-width: none; }
+.news__schalter { display: flex; flex-wrap: wrap; gap: 10px 28px; margin: 14px 0; }
+.news__knoepfe { display: flex; justify-content: flex-end; gap: 9px; }

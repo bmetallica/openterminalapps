@@ -998,3 +998,39 @@ class GitToken(Base):
     forgejo_name: Mapped[str] = mapped_column(String(128))
     token_id: Mapped[int] = mapped_column(Integer)
     am: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+# --------------------------------------------------------------------------
+# News (news.py, Handbuch Kapitel 11)
+# --------------------------------------------------------------------------
+
+class NewsBeitrag(Base):
+    """Eine Meldung der Verwaltung an alle — Markdown, wie das Handbuch.
+
+    Ein Entwurf ist nur für die Verwaltung sichtbar. `veroeffentlicht_am`
+    setzt das erste Veröffentlichen und bleibt danach stehen: Eine
+    Korrektur soll niemandem den Beitrag wieder als neu anzeigen.
+    """
+
+    __tablename__ = "news"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    titel: Mapped[str] = mapped_column(String(200))
+    text: Mapped[str] = mapped_column(Text, default="")
+    angeheftet: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sa_false())
+    entwurf: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sa_false())
+    autor: Mapped[str] = mapped_column(String(128), default="")
+    erstellt_am: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    geaendert_am: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    veroeffentlicht_am: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class NewsGelesen(Base):
+    """Bis wann ein Mensch die News gelesen hat — für den Punkt in der
+    Seitenleiste. In der Datenbank und nicht im Browser, damit er auch auf
+    dem zweiten Rechner verschwindet."""
+
+    __tablename__ = "news_gelesen"
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    am: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

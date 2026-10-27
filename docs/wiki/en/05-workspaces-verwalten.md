@@ -120,7 +120,7 @@ workspace.
 
 ### Permissions
 Clipboard, files, devices, other — grouped, with an explanation per switch.
-See [chapter 4](04-zwischenablage.md).
+See [chapter 37](37-zwischenablage-verwaltung.md).
 
 ### Environment
 Environment variables for the container.

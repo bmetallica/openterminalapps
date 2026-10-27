@@ -22,6 +22,7 @@ from .routers import (
     registries as registries_router,
     sessions, shared as shared_router, skeleton as skeleton_router,
     software as software_router, git as git_router, ide_ai as ide_ai_router, templates,
+    news as news_router,
 )
 
 log = logging.getLogger("ota")
@@ -464,6 +465,7 @@ app.include_router(monitoring.router)
 app.include_router(software_router.router)
 app.include_router(git_router.router)
 app.include_router(ide_ai_router.router)
+app.include_router(news_router.router)
 
 
 @app.exception_handler(Exception)
