@@ -275,6 +275,10 @@ that did not exist before is simply there.
   page, with drafts, pinning and a sidebar badge for unread posts ([chapter 11](docs/wiki/en/11-betrieb.md#news-))
 - **User handbook** — chapters of their own for users: getting started, account, files, root
   workspace, Git and AI, using a session, help with problems, terms ([chapters 29 to 36](docs/wiki/en/29-los-gehts.md))
+- **Start progress bar and start log** — the tile shows what is happening during a start; the
+  agent's log has one line per start with the duration of each step. Root workspaces resume without
+  waiting for the space measurement over all volumes or for the inner containers
+  ([chapter 25](docs/wiki/en/25-root-arbeitsplatz.md#start-time))
 - **Live utilisation under Operations** — bars for CPU, RAM and network per workspace and for the
   host, with a warning as soon as the CPU limit throttles a container ([chapter 11](docs/wiki/en/11-betrieb.md#live-utilisation-operations--workspaces-))
 - **Cores as a weight, not a cap** — on an idle host a workspace may use up to four times as much,
@@ -532,7 +536,7 @@ make test
 | `test-ldap.sh` | Directory connection **through Keycloak** against a real OpenLDAP in a container — above all that a directory entry does not take over a local account and an outage does not take the emergency access down with it |
 | `test-streaming.sh` | The media path with its own template on the current base image: a browser in a foreign network counts the **decoded frames** — on the desktop and on an application's display (Selkies 2.0, WebSockets through Traefik); umlauts, Shift and AltGr of a German keyboard arrive correctly. If TURN is set up (only for golden images with Selkies 1.6.2), it is checked too, including the block list and NAT |
 | `test-firewall.sh` | The network protection, **measured from inside**: neighbour, host, company network, TURN, name service, internet per level, rule by name, port forward — and everything again after a restart of the router |
-| `test-root-arbeitsplatz.sh` | The root workspace: root unprivileged on the host (Sysbox), Docker and Compose in the container, network rules for the **inner** containers too, stop and resume with preserved state, rebuild, web terminal with log and export, no terminal into the stack's services, golden images with `USER 1000`. Skipped without Sysbox |
+| `test-root-arbeitsplatz.sh` | The root workspace: root unprivileged on the host (Sysbox), Docker and Compose in the container, network rules for the **inner** containers too, stop and resume with preserved state, rebuild, web terminal with log and export, no terminal into the stack's services, golden images with `USER 1000`, progress bar and start log on start and resume. Skipped without Sysbox |
 | `test-repo.sh` | The own package repository: signature, upload (duplicate 409, broken 422), snapshots including protection against deletion, a Debian 13 workspace installs its own package **from here**, "mirror only" no longer calls `deb.debian.org`, the image builder adds and removes the source, an Ubuntu image stays untouched, a root workspace picks up the current setting when resuming. The mirror parts only with a mirror |
 | `test-selkies-paket.sh` | The package `ota-selkies`: it is in the package repository, upgrades a workspace on an old golden image with Selkies 1.6.2, the image builder upgrades a golden image, a root workspace upgrades itself when resuming and keeps what was installed in it |
 | `test-backup.sh` | Backup and restore of profile, container and database. Ends sessions for it — **only its own**, and checks that explicitly |

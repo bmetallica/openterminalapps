@@ -55,9 +55,12 @@ In beiden Fällen bleibt dein **Zuhause** (`/home/…`) erhalten, auch wenn der 
 ## Der erste Start ✅
 
 1. Auf **Starten** klicken.
-2. Ein neuer Browsertab öffnet sich. Beim ersten Mal dauert es etwas länger, weil dein Zuhause
+2. Auf der Kachel zeigt ein **Balken**, was gerade passiert („Container starten", „Desktop startet"
+   …) und wie lange es schon dauert. Beim ersten Mal dauert es etwas länger, weil dein Zuhause
    angelegt wird. Danach geht es schneller.
-3. Einmal in das Bild klicken, damit die Tastatur dort ankommt.
+3. Eine **Einzelanwendung** öffnet sich danach in einem neuen Tab. Bei einem **Arbeitsplatz** wählst
+   du oben auf der Startseite die Anwendung, die du öffnen willst.
+4. Einmal in das Bild klicken, damit die Tastatur dort ankommt.
 
 Die Startseite bleibt im ersten Tab stehen. Du wechselst zwischen deinen Anwendungen wie zwischen
 Fenstern.

@@ -51,14 +51,21 @@ if [ "${OTA_DOCKER:-0}" = "1" ]; then
   fi
   dockerd "${DNS_ARG[@]}" >> /var/log/dockerd.log 2>&1 &
   DOCKERD_PID=$!
-  for _ in $(seq 1 60); do
-    [ -S /var/run/docker.sock ] && break
-    sleep 0.5
-  done
-  if [ ! -S /var/run/docker.sock ]; then
-    echo "dockerd kam nicht hoch — Arbeitsplatz startet ohne Docker" >&2
+  # **Nicht auf `dockerd` warten.** Bis zum 2026-10-27 startete der Desktop
+  # erst, wenn der Socket stand — und den legt `dockerd` erst an, nachdem er
+  # die inneren Container wiederhergestellt hat. Wer im Arbeitsplatz einen
+  # Compose-Stack mit `restart: always` hatte, wartete bei jedem Fortsetzen
+  # darauf, bis zu 30 Sekunden. Der Desktop braucht Docker nicht; ein Terminal,
+  # das in der ersten Sekunde `docker ps` ruft, wartet eben kurz.
+  (
+    for _ in $(seq 1 120); do
+      [ -S /var/run/docker.sock ] && exit 0
+      kill -0 "$DOCKERD_PID" 2>/dev/null || break
+      sleep 0.5
+    done
+    echo "dockerd kam nicht hoch — Arbeitsplatz laeuft ohne Docker" >&2
     tail -20 /var/log/dockerd.log >&2
-  fi
+  ) &
 fi
 
 # Der Desktop als 1000, mit der Umgebung von oben. `--init-groups` bringt die

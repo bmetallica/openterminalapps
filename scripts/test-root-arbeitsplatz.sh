@@ -93,12 +93,33 @@ print(darf_root(ohne), darf_root(mit), darf_terminal(mit))" 2>&1)
 api -X PUT -H 'Content-Type: application/json' "$BASE_URL/api/templates/$TID/apps" \
   -d '[{"slug":"terminal","name":"Terminal","exec_cmd":"xfce4-terminal"}]' >/dev/null
 
+# Der Balken auf der Startseite: Waehrend des Starts fragt die Seite nach dem
+# laufenden Schritt. Nur lesend am Keks-Glas, der Start schreibt hinein.
+beobachten() {
+  : > "$1"
+  for _ in $(seq 1 400); do
+    curl -sk -b "$TMP/jar" "$BASE_URL/api/sessions/fortschritt?template_id=$TID" \
+      | jqp "d['schritt'] if d.get('aktiv') else '-'" >> "$1"
+    sleep 0.3
+  done
+}
+beobachten "$TMP/schritte1" & BEOBACHTER=$!
+
 START=$(api -H 'Content-Type: application/json' -X POST "$BASE_URL/api/sessions" \
   -d "{\"template_id\":\"$TID\"}")
+kill "$BEOBACHTER" 2>/dev/null; wait "$BEOBACHTER" 2>/dev/null
 SID=$(jqp "d['id']" <<<"$START")
 [ "$(jqp "d['status']" <<<"$START")" = "running" ] && ok "Gestartet" \
   || { bad "Start scheiterte: $(jqp "d.get('detail')" <<<"$START")"; exit 1; }
 CN="ota-s-${SID:0:12}"
+GESEHEN=$(grep -v '^-$' "$TMP/schritte1" | uniq | tr '\n' ' ')
+grep -qx desktop "$TMP/schritte1" && grep -qx pruefen "$TMP/schritte1" \
+  && ok "Fortschritt während des Starts: $GESEHEN" || bad "Fortschritt fehlt oder unvollständig: ${GESEHEN:-nichts}"
+[ "$(api "$BASE_URL/api/sessions/fortschritt?template_id=$TID" | jqp "d['aktiv']")" = "False" ] \
+  && ok "…und danach kein laufender Start mehr" || bad "Fortschritt bleibt nach dem Start stehen"
+docker logs ota-agent 2>&1 | grep -q "Start $CN in [0-9.]* s: .*desktop" \
+  && ok "Startprotokoll im Agent: $(docker logs ota-agent 2>&1 | grep -o "Start $CN in .*" | tail -1)" \
+  || bad "Keine Startzeile im Protokoll des Agents"
 
 [ "$(docker inspect "$CN" -f '{{.HostConfig.Runtime}}')" = "sysbox-runc" ] \
   && ok "Läuft unter Sysbox" || bad "Läuft nicht unter Sysbox"
@@ -154,7 +175,15 @@ EXIT=$(docker inspect "$CN" -f '{{.State.Status}} {{.State.ExitCode}}' 2>/dev/nu
 EINMAL=$(api -H 'Content-Type: application/json' -X POST "$BASE_URL/api/templates/$TID/once" \
   -d '{"name":"Prüfung Fortsetzen","body":"id -u > \"$HOME/.ota-einmal-pruef\"; echo fertig"}' | jqp "d['id']")
 
+beobachten "$TMP/schritte2" & BEOBACHTER=$!
 START2=$(api -H 'Content-Type: application/json' -X POST "$BASE_URL/api/sessions" -d "{\"template_id\":\"$TID\"}")
+kill "$BEOBACHTER" 2>/dev/null; wait "$BEOBACHTER" 2>/dev/null
+grep -qxE "desktop|ausstattung|einrichten" "$TMP/schritte2" \
+  && ok "Fortschritt beim Fortsetzen: $(grep -v '^-$' "$TMP/schritte2" | uniq | tr '\n' ' ')" \
+  || bad "Fortschritt beim Fortsetzen fehlt"
+docker logs ota-agent 2>&1 | grep -q "Fortsetzen $CN in" \
+  && ok "Startprotokoll beim Fortsetzen: $(docker logs ota-agent 2>&1 | grep -o "Fortsetzen $CN in .*" | tail -1)" \
+  || bad "Keine Zeile zum Fortsetzen im Protokoll des Agents"
 [ "$(jqp "d['id']" <<<"$START2")" = "$SID" ] && ok "Wieder gestartet — dieselbe Kennung, dieselbe Adresse" \
   || bad "Neue Kennung nach dem Fortsetzen"
 [ "$(drin 'cat /opt/ota-pruefmarke')" = "bleibt" ] && ok "Was ausserhalb des Zuhauses installiert war, ist noch da" \

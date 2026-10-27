@@ -278,6 +278,10 @@ dabei **nicht** zurückwandert, ist die Datenbank: Neue Spalten bleiben stehen. 
   Entwürfen, Anheften und einem Punkt in der Seitenleiste für Ungelesenes ([Kapitel 11](docs/wiki/11-betrieb.md#news-))
 - **Anwenderhandbuch** — eigene Kapitel für Nutzer: erste Schritte, Konto, Dateien,
   Root-Arbeitsplatz, Git und KI, Bedienung, Hilfe bei Problemen, Begriffe ([Kapitel 29 bis 36](docs/wiki/29-los-gehts.md))
+- **Startbalken und Startprotokoll** — auf der Kachel steht, was beim Start gerade passiert; im
+  Protokoll des Agents je Start eine Zeile mit der Dauer jedes Schritts. Root-Arbeitsplätze setzen
+  fort, ohne auf die Platzmessung über alle Volumes oder auf die inneren Container zu warten
+  ([Kapitel 25](docs/wiki/25-root-arbeitsplatz.md#startzeit))
 - **Live-Auslastung unter Betrieb** — Balken für CPU, RAM und Netz je Arbeitsplatz und für den
   Host, mit Warnung, sobald die CPU-Grenze einen Container bremst ([Kapitel 11](docs/wiki/11-betrieb.md#live-auslastung-betrieb--arbeitsplätze-))
 - **Kerne als Gewicht, nicht als Deckel** — bei freiem Host darf ein Arbeitsplatz bis zum Vierfachen
@@ -536,7 +540,7 @@ make test
 | `test-ldap.sh` | Verzeichnis-Anbindung **über Keycloak** gegen ein echtes OpenLDAP im Container — vor allem, dass ein Verzeichniseintrag kein lokales Konto übernimmt und ein Ausfall den Notzugang nicht mitreisst |
 | `test-streaming.sh` | Der Medienweg mit einer eigenen Vorlage auf dem aktuellen Basisimage: Ein Browser in einem fremden Netz zählt die **dekodierten Bilder** — auf dem Arbeitsplatz und auf dem Bildschirm einer Anwendung (Selkies 2.0, WebSockets durch Traefik); Umlaute, Shift und AltGr einer deutschen Tastatur kommen richtig an. Ist TURN eingerichtet (nur noch für Golden Images mit Selkies 1.6.2), wird er mitgeprüft, samt Sperrliste und NAT |
 | `test-firewall.sh` | Die Netzabsicherung, **von innen gemessen**: Nachbar, Wirt, Firmennetz, TURN, Namensdienst, Internet je Stufe, Freigabe nach Namen, Portfreigabe — und alles noch einmal nach einem Neustart des Routers |
-| `test-root-arbeitsplatz.sh` | Der Root-Arbeitsplatz: root auf dem Host unprivilegiert (Sysbox), Docker und Compose im Container, Netzregeln auch für die **inneren** Container, Anhalten und Fortsetzen mit erhaltenem Stand, Neu aufsetzen, Webterminal samt Protokoll und Export, kein Terminal in Dienste des Stacks, Golden Images mit `USER 1000`. Ohne Sysbox übersprungen |
+| `test-root-arbeitsplatz.sh` | Der Root-Arbeitsplatz: root auf dem Host unprivilegiert (Sysbox), Docker und Compose im Container, Netzregeln auch für die **inneren** Container, Anhalten und Fortsetzen mit erhaltenem Stand, Neu aufsetzen, Webterminal samt Protokoll und Export, kein Terminal in Dienste des Stacks, Golden Images mit `USER 1000`, Startbalken und Startprotokoll bei Start und Fortsetzen. Ohne Sysbox übersprungen |
 | `test-repo.sh` | Die eigene Paketquelle: Signatur, Hochladen (doppelt 409, kaputt 422), Snapshots samt Schutz vor dem Löschen, ein Debian-13-Arbeitsplatz installiert ein eigenes Paket **von hier**, „Nur Spiegel" ruft `deb.debian.org` nicht mehr, der Bildbauer trägt ein und wieder aus, ein Ubuntu-Image bleibt unberührt, ein Root-Arbeitsplatz übernimmt beim Fortsetzen die aktuelle Einstellung. Die Spiegelteile nur mit Spiegel |
 | `test-selkies-paket.sh` | Das Paket `ota-selkies`: liegt in der Paketquelle, hebt einen Arbeitsplatz auf einem alten Golden Image mit Selkies 1.6.2 an, der Bildbauer hebt ein Golden Image an, ein Root-Arbeitsplatz hebt sich beim Fortsetzen an und behält, was darin installiert war |
 | `test-backup.sh` | Sicherung und Wiederherstellung von Profil, Container und Datenbank. Beendet dafür Sitzungen — **nur die eigenen**, und prüft das ausdrücklich nach |

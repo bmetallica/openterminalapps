@@ -231,6 +231,50 @@ die das Startskript liest.
 Arbeitsplatz, was er belegt; die Grenze der Vorlage verhindert, dass einer die Platte füllt.
 Gemessen wird `docker ps --size` plus `docker system df` (eine Minute zwischengespeichert).
 
+**Beim Fortsetzen gilt der letzte Messwert.** `docker system df` rechnet über alle Volumes des Hosts,
+auch über die fremder Dienste, und dauert entsprechend; bis zum 2026-10-27 wartete jedes Fortsetzen
+darauf. Jetzt misst der Agent beim Anhalten im Hintergrund (ein angehaltener Platz wächst nicht) und
+beim Fortsetzen noch einmal hinterher. Gibt es noch keinen Wert, etwa beim ersten Fortsetzen nach
+einem Neustart des Agents, startet der Platz ohne Prüfung, und beim nächsten Mal gilt die Grenze.
+Die Anzeige unter Betrieb misst weiter frisch.
+
+## Startzeit
+
+Jeder Start und jedes Fortsetzen steht mit seinen Schritten im Protokoll des Agents:
+
+```
+Fortsetzen ota-s-1c25cbce-e5e in 2.6 s: netz 0.0 · container 0.3 · einrichten 0.6 · selkies 0.2 · desktop 1.2 · ausstattung 0.1 · skripte 0.2
+```
+
+```bash
+docker logs ota-agent 2>&1 | grep -E "(Start|Fortsetzen) ota-s-" | tail -20
+```
+
+| Schritt | Was darin passiert | Wenn er lange dauert |
+|---|---|---|
+| `image` | Image prüfen, bei Bedarf aus der Registry holen; Einhängepunkte vorbereiten | Das Image lag nicht auf dem Host |
+| `netz` | Sitzungsnetz, Router, Anlagenwerte | — |
+| `container` | Docker erzeugt oder startet den Container | Sysbox, langsame Platte |
+| `einrichten` | Firewall-Abgleich, Proxy, Paketquelle, Git, Grundausstattung | viele Sitzungen auf einmal |
+| `selkies` | nur beim Fortsetzen: Selkies auf den Stand der Paketquelle heben | Eine neue Fassung wurde installiert; danach startet der Container einmal neu |
+| `desktop` | warten, bis Selkies oder KasmVNC antwortet | Der Host ist ausgelastet |
+| `ausstattung` | Tastaturlayout, IDE-AI, Skeleton, Verweise | — |
+| `skripte` | Einmal-Skripte und Startskript der Vorlage | ein langsames Skript |
+
+Dieselben Schritte sieht der Nutzer als Balken auf der Kachel. Die API fragt sie während des Starts
+beim Agent ab (`GET /api/sessions/fortschritt?template_id=…`).
+
+**Der Desktop wartet nicht auf `dockerd`.** Bis zum 2026-10-27 startete der Desktop erst, wenn der
+innere `dockerd` seinen Socket hatte, und den legt er erst an, nachdem er die inneren Container
+wiederhergestellt hat. Gemessen mit 15 Containern mit `restart: always`: Docker antwortete nach
+4,9 s, der Desktop nach 2,2 s, vorher nach Docker. Das gilt für Root-Arbeitsplätze, die aus einem
+neu gebauten Root-Image entstehen (`sudo make root-image`, danach die Golden Images darauf neu
+bauen). Ein bestehender Arbeitsplatz behält sein Startskript, bis er neu aufgesetzt wird.
+
+**Eine Selkies-Fassung, die nicht installierbar war,** wird im Arbeitsplatz vermerkt
+(`/var/lib/ota/selkies-fehlgeschlagen`) und nicht bei jedem Fortsetzen erneut versucht. Eine neuere
+Fassung in der Paketquelle versucht es wieder.
+
 ## Zwei Dinge, die beim Bauen anders kamen
 
 - **DNS in inneren Containern.** Im Arbeitsplatz steht als Nameserver Dockers eingebauter Resolver
@@ -269,7 +313,7 @@ sudo make update                                   # Dienste bauen und starten
 sudo scripts/sysbox-einrichten.sh --pruefen        # Voraussetzungen ansehen
 sudo scripts/sysbox-einrichten.sh --live-restore   # Sysbox einrichten (kein Container wird angefasst)
 sudo make up                                       # baut jetzt ota/base-desktop-root:1
-./scripts/test-root-arbeitsplatz.sh                # optional: der ganze Weg, 37 Prüfungen
+./scripts/test-root-arbeitsplatz.sh                # optional: der ganze Weg, 47 Prüfungen
 ```
 
 Danach: eine Vorlage der Klasse „Root mit Docker" anlegen und das Recht „Root-Arbeitsplatz nutzen"

@@ -27,6 +27,9 @@ from .routers import (
 
 log = logging.getLogger("ota")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+# Jede Anfrage an Agent und Keycloak waere sonst eine Zeile — die Seite
+# „Betrieb" allein fragt alle drei Sekunden.
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 REAP_INTERVAL = 60
 

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import base64
+import contextlib
 import json
 import logging
+import math
 import os
 import time
 import urllib.error
@@ -395,6 +397,106 @@ def _netzprofil(tpl: Template) -> dict:
     return {"stufe": profil.stufe, "freigaben": freigaben, "namen": namen}
 
 
+# --------------------------------------------------------------------------
+# Fortschritt eines Starts (der Balken auf der Startseite)
+# --------------------------------------------------------------------------
+#
+# Ein Start ist ein einziger, langer Aufruf. Waehrenddessen fragt die Seite
+# hier nach, wie weit er ist. Den Schluessel kennt sie vorher schon: Mensch und
+# Vorlage — die Kennung der Session entsteht erst unterwegs. Eine API, ein
+# Prozess (api/Dockerfile): Der Speicher dieses Moduls genuegt.
+#
+# Die Schritte im Agent heissen wie dort (`_Startlauf`); davor prueft die API,
+# danach wartet sie auf die Route.
+
+SCHRITTE_NEU = ["pruefen", "image", "netz", "container", "einrichten",
+                "desktop", "ausstattung", "skripte", "route"]
+SCHRITTE_FORTSETZEN = ["pruefen", "netz", "container", "einrichten", "selkies",
+                       "desktop", "ausstattung", "skripte", "route"]
+# Wie lange ein Schritt ungefaehr dauert, in Sekunden. Nur fuer den Balken:
+# Innerhalb eines Schritts naehert er sich seinem Ende, ohne es zu erreichen.
+_ERWARTET = {"pruefen": 1, "image": 1, "netz": 1, "container": 2,
+             "einrichten": 2, "selkies": 1, "desktop": 6, "ausstattung": 3,
+             "skripte": 2, "route": 2}
+
+_starts: dict[tuple[str, str], dict] = {}
+
+
+@contextlib.contextmanager
+def _startlauf(user_id, template_id, art: str):
+    """Meldet einen Start an und am Ende wieder ab — mit Zeile im Protokoll."""
+    key = (str(user_id), str(template_id))
+    eigen = key not in _starts
+    jetzt = time.monotonic()
+    if eigen:
+        _starts[key] = {"art": art, "phase": "pruefen", "sid": "", "beginn": jetzt,
+                        "seit": jetzt, "dauer": {}}
+    else:
+        _starts[key]["art"] = art
+    try:
+        yield
+    finally:
+        if eigen:
+            eintrag = _starts.pop(key, None) or {}
+            _phase_schliessen(eintrag)
+            if eintrag.get("sid"):
+                log.info("%s %s in %.1f s: %s",
+                         "Fortsetzen" if eintrag["art"] == "fortsetzen" else "Start",
+                         eintrag["sid"][:8], time.monotonic() - eintrag["beginn"],
+                         " · ".join(f"{k} {v:.1f}" for k, v in eintrag["dauer"].items()))
+
+
+def _phase_schliessen(eintrag: dict) -> None:
+    if eintrag.get("phase"):
+        eintrag["dauer"][eintrag["phase"]] = time.monotonic() - eintrag["seit"]
+
+
+def _phase(user_id, template_id, phase: str, sid=None) -> None:
+    eintrag = _starts.get((str(user_id), str(template_id)))
+    if eintrag is None:
+        return
+    _phase_schliessen(eintrag)
+    eintrag["phase"], eintrag["seit"] = phase, time.monotonic()
+    if sid:
+        eintrag["sid"] = str(sid)
+
+
+@router.get("/fortschritt")
+def start_fortschritt(template_id: uuid.UUID,
+                      user: User = Depends(current_user)) -> dict:
+    """Wie weit der laufende Start dieser Vorlage ist. `aktiv: false`, wenn
+    gerade keiner laeuft."""
+    eintrag = _starts.get((str(user.id), str(template_id)))
+    if eintrag is None:
+        return {"aktiv": False}
+    schritte = SCHRITTE_FORTSETZEN if eintrag["art"] == "fortsetzen" else SCHRITTE_NEU
+    schritt, sekunden = eintrag["phase"], time.monotonic() - eintrag["seit"]
+    if schritt == "agent":
+        # Im Agent: dessen Schritt. Antwortet er nicht, bleibt der Balken
+        # beim ersten Schritt des Agents stehen — kein Grund fuer einen Fehler.
+        try:
+            antwort = agent_client.fortschritt(eintrag["sid"])
+            schritt = antwort.get("schritt") or ""
+            sekunden = float(antwort.get("sekunden") or 0)
+        except HTTPException:
+            schritt = ""
+        if schritt in schritte:
+            eintrag["zuletzt"] = schritt
+        else:
+            # Noch nicht angefangen, oder im Agent schon fertig, waehrend die
+            # API ihre Antwort verbucht: Der Balken bleibt, wo er war, statt
+            # zurueckzuspringen.
+            schritt, sekunden = eintrag.get("zuletzt") or schritte[1], 0.0
+    index = schritte.index(schritt) if schritt in schritte else 0
+    gesamt = sum(_ERWARTET[s] for s in schritte)
+    erwartet = _ERWARTET[schritte[index]]
+    fertig = sum(_ERWARTET[s] for s in schritte[:index]) \
+        + erwartet * (1 - math.exp(-sekunden / erwartet))
+    return {"aktiv": True, "art": eintrag["art"], "schritte": schritte,
+            "schritt": schritte[index], "anteil": round(min(fertig / gesamt, 0.99), 3),
+            "sekunden": round(time.monotonic() - eintrag["beginn"], 1)}
+
+
 @router.get("")
 def list_sessions(
     all_users: bool = False,
@@ -418,6 +520,12 @@ def start_session(
     user: User = Depends(current_user),
     db: DbSession = Depends(get_db),
 ) -> SessionOut:
+    with _startlauf(user.id, body.template_id, "neu"):
+        return _starten(body, request, user, db)
+
+
+def _starten(body: SessionStartIn, request: Request, user: User,
+             db: DbSession) -> SessionOut:
     if needs_totp(user):
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
@@ -620,6 +728,7 @@ def start_session(
     env = {str(k): str(v) for k, v in (tpl.env or {}).items()}
     env.setdefault("VNC_RESOLUTION", f"{tpl.x_res}x{tpl.y_res}")
 
+    _phase(user.id, tpl.id, "agent", sess.id)
     try:
         result = agent_client.start_container({
             "session_id": str(sess.id),
@@ -697,6 +806,7 @@ def start_session(
 
     sess.container_id = result["container_id"]
     # Erst wenn die Route steht, ist die Session fuer den Browser da.
+    _phase(user.id, tpl.id, "route")
     sess.status = "running" if _wait_for_route(sess.id) else "starting"
     audit.record(db, "session.started", actor=user, object_type="session",
                  object_id=str(sess.id), request=request,
@@ -783,7 +893,9 @@ def _platz_pruefen(sess: SessionModel) -> None:
     if not grenze or not sess.container_id:
         return
     try:
-        belegt = int(agent_client.platz(sess.container_id).get("gesamt", 0))
+        # Der letzte Messwert, nicht eine neue Messung: Die rechnet ueber
+        # alle Volumes des Wirts und hielt jedes Fortsetzen auf (Agent, `platz`).
+        belegt = int(agent_client.platz(sess.container_id, schnell=True).get("gesamt", 0))
     except HTTPException:
         return
     if belegt > grenze:
@@ -799,6 +911,12 @@ def platz_fortsetzen(db: DbSession, sess: SessionModel, request: Request | None,
                      actor: User, platzgrenze: bool = True) -> SessionModel:
     """Einen angehaltenen Root-Arbeitsplatz wieder starten — derselbe
     Container, dieselbe Kennung, dieselbe Adresse."""
+    with _startlauf(sess.user_id, sess.template_id, "fortsetzen"):
+        return _fortsetzen(db, sess, request, actor, platzgrenze)
+
+
+def _fortsetzen(db: DbSession, sess: SessionModel, request: Request | None,
+                actor: User, platzgrenze: bool) -> SessionModel:
     if platzgrenze:
         _platz_pruefen(sess)
     # Steht der Container, gehen auch die Grenzen, die ihm im Lauf zu eng
@@ -807,6 +925,7 @@ def platz_fortsetzen(db: DbSession, sess: SessionModel, request: Request | None,
     ressourcen.angleichen(sess)
     sess.status = "starting"
     db.commit()
+    _phase(sess.user_id, sess.template_id, "agent", sess.id)
     try:
         ergebnis = agent_client.fortsetzen(
             sess.container_id, paketquellen.fuer_container(db),
@@ -829,6 +948,7 @@ def platz_fortsetzen(db: DbSession, sess: SessionModel, request: Request | None,
     now = datetime.now(timezone.utc)
     sess.started_at = sess.last_seen_at = now
     sess.ended_at = sess.end_reason = sess.error = None
+    _phase(sess.user_id, sess.template_id, "route")
     sess.status = "running" if _wait_for_route(sess.id) else "starting"
     audit.record(db, "platz.fortgesetzt", actor=actor, object_type="session",
                  object_id=str(sess.id), request=request,

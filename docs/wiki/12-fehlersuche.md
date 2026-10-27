@@ -263,6 +263,23 @@ done
 Wächst `nr_throttled` zwischen zwei Aufrufen deutlich, bremst die Grenze. Ist der Host dagegen
 wirklich voll, hilft nur mehr Hardware oder weniger Last.
 
+## Ein Arbeitsplatz startet langsam
+
+Wo die Zeit bleibt, steht im Protokoll des Agents, je Start eine Zeile mit allen Schritten:
+
+```bash
+docker logs ota-agent 2>&1 | grep -E "(Start|Fortsetzen) ota-s-" | tail -20
+```
+
+Was die Schritte bedeuten und was hilft:
+[Root-Arbeitsplatz → Startzeit](25-root-arbeitsplatz.md#startzeit). Auf einem ruhigen Host braucht
+ein Start etwa 3 s, ein Fortsetzen etwa 2,5 s. Fehlt die Zeit in der Zeile, lag sie vor dem Agent:
+in der Prüfung des Zuhauses (`du` über das Profil, zwischengespeichert) oder beim Warten auf die
+Route in Traefik.
+
+Bis zum 2026-10-27 verlor der Agent jede Info-Zeile, weil sein Protokoll nie eingerichtet war; auch
+die API verlor ihre nach dem Start an Alembic. Ältere Protokolle enthalten deshalb nur Warnungen.
+
 ## Ein Root-Arbeitsplatz steht auf „läuft", aber nichts geht
 
 **Zeichen:** Unter *Betrieb* steht „Läuft", beim Platz nur `…`. Anwendungen melden „Diese Sitzung

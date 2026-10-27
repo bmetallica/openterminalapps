@@ -22,7 +22,7 @@ eigenen Benutzerbereich.
 - Das **Quadrat** auf der Kachel hält den Arbeitsplatz an. Er steht danach als „angehalten" auf der
   Startseite.
 - **Fortsetzen** startet genau diesen Arbeitsplatz wieder, mit allen Paketen, Einstellungen und
-  Docker-Images. Beides dauert nur ein paar Sekunden.
+  Docker-Images. Beides dauert nur ein paar Sekunden; ein Balken zeigt, wie weit er ist.
 - Bei **Leerlauf** wird ein Root-Arbeitsplatz immer nur angehalten, nie gelöscht.
 - Stürzt der Desktop darin ab, steht er danach als angehalten da und lässt sich fortsetzen.
 
@@ -43,6 +43,9 @@ Ein neues Basisimage kommt **nur** auf diesem Weg in deinen Arbeitsplatz.
 `docker`, `docker compose` und `docker buildx` gehen ohne `sudo`. Ein veröffentlichter Port, etwa
 `ports: ["8080:80"]`, ist im Browser **im Arbeitsplatz** unter `http://localhost:8080` erreichbar.
 Von deinem eigenen Rechner aus geht das nur über eine befristete Portfreigabe der Verwaltung.
+
+Nach dem Fortsetzen ist der Desktop da, bevor Docker fertig ist: Docker startet deine Container mit
+`restart: always` erst noch. Ein `docker ps` in den ersten Sekunden wartet deshalb kurz.
 
 ## Platz
 

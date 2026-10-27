@@ -688,6 +688,16 @@ export type NewsBeitrag = {
 }
 export type NewsIn = Pick<NewsBeitrag, 'titel' | 'text' | 'angeheftet' | 'entwurf'>
 
+/** Wie weit ein laufender Start ist (GET /sessions/fortschritt). */
+export type StartStand = {
+  aktiv: true
+  art: 'neu' | 'fortsetzen'
+  schritte: string[]
+  schritt: string
+  anteil: number
+  sekunden: number
+}
+
 /* Live-Auslastung (Betrieb → Arbeitsplätze). `null` heisst: noch keine zweite
    Messung, aus der sich eine Rate bilden liesse. */
 export type Auslastung = {
@@ -929,6 +939,8 @@ export const api = {
     call<Session[]>(`/sessions${allUsers ? '?all_users=true' : ''}`),
   startSession: (template_id: string) =>
     call<Session>('/sessions', { method: 'POST', body: JSON.stringify({ template_id }) }),
+  startFortschritt: (template_id: string) =>
+    call<{ aktiv: false } | StartStand>(`/sessions/fortschritt?template_id=${template_id}`),
   sessionAction: (id: string, action: 'pause' | 'unpause' | 'stop') =>
     call<Session>(`/sessions/${id}/${action}`, { method: 'POST' }),
   deleteSession: (id: string) =>

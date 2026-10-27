@@ -228,6 +228,50 @@ agent writes them into a mounted file before every start, which the start script
 it uses; the template's limit prevents one from filling the disk. It is measured with
 `docker ps --size` plus `docker system df` (cached for a minute).
 
+**Resuming uses the last measured value.** `docker system df` computes over all volumes on the host,
+including those of other services, and takes accordingly long; until 2026-10-27 every resume waited
+for it. Now the agent measures in the background when the workspace is stopped (a stopped workspace
+does not grow) and again after resuming. If there is no value yet, for example on the first resume
+after the agent restarted, the workspace starts without the check, and the limit applies next time.
+The display under Operations still measures fresh.
+
+## Start time
+
+Every start and every resume is in the agent's log with its steps:
+
+```
+Fortsetzen ota-s-1c25cbce-e5e in 2.6 s: netz 0.0 · container 0.3 · einrichten 0.6 · selkies 0.2 · desktop 1.2 · ausstattung 0.1 · skripte 0.2
+```
+
+```bash
+docker logs ota-agent 2>&1 | grep -E "(Start|Fortsetzen) ota-s-" | tail -20
+```
+
+| Step | What happens in it | If it takes long |
+|---|---|---|
+| `image` | check the image, fetch it from the registry if needed; prepare mount points | The image was not on the host |
+| `netz` | session network, router, installation values | — |
+| `container` | Docker creates or starts the container | Sysbox, slow disk |
+| `einrichten` | firewall reconciliation, proxy, package source, Git, basic setup | many sessions at once |
+| `selkies` | resume only: bring Selkies up to the package source's version | A new version was installed; the container then restarts once |
+| `desktop` | wait until Selkies or KasmVNC answers | The host is busy |
+| `ausstattung` | keyboard layout, IDE-AI, skeleton, links | — |
+| `skripte` | run-once scripts and the template's start script | a slow script |
+
+Users see the same steps as a progress bar on the tile. The API asks the agent for them during the
+start (`GET /api/sessions/fortschritt?template_id=…`).
+
+**The desktop does not wait for `dockerd`.** Until 2026-10-27 the desktop only started once the
+inner `dockerd` had its socket, and it only creates that after restoring the inner containers.
+Measured with 15 containers with `restart: always`: Docker answered after 4.9 s, the desktop after
+2.2 s; before, it came after Docker. This applies to root workspaces created from a rebuilt root
+image (`sudo make root-image`, then rebuild the golden images on top of it). An existing workspace
+keeps its start script until it is rebuilt.
+
+**A Selkies version that could not be installed** is noted in the workspace
+(`/var/lib/ota/selkies-fehlgeschlagen`) and not retried on every resume. A newer version in the
+package source tries again.
+
 ## Two things that turned out differently while building
 
 - **DNS in inner containers.** In the workspace the name server is Docker's built-in resolver

@@ -53,9 +53,12 @@ In both cases your **home** (`/home/…`) is kept, even when the container ends.
 ## The first start ✅
 
 1. Click **Start**.
-2. A new browser tab opens. The first time takes a little longer because your home is being
-   created. After that it is quicker.
-3. Click into the picture once so the keyboard arrives there.
+2. A **progress bar** on the tile shows what is happening ("Starting container", "Desktop
+   starting" …) and how long it has taken so far. The first time takes a little longer because
+   your home is being created. After that it is quicker.
+3. A **single application** then opens in a new tab. For a **workspace**, you choose the
+   application you want to open at the top of the start page.
+4. Click into the picture once so the keyboard arrives there.
 
 The start page stays in the first tab. You switch between your applications as between windows.
 

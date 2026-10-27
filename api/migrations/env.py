@@ -1,3 +1,4 @@
+import logging
 from logging.config import fileConfig
 
 from alembic import context
@@ -10,7 +11,11 @@ import ota.models  # noqa: F401  — registriert alle Tabellen
 config = context.config
 config.set_main_option("sqlalchemy.url", settings().database_url)
 
-if config.config_file_name is not None:
+# Nur, wenn noch niemand das Protokoll eingerichtet hat (Aufruf von Hand).
+# Beim Start der API schaltete die Datei sonst jeden vorhandenen Logger ab und
+# setzte die Wurzel auf WARN — danach stand von `ota.*` keine einzige
+# Info-Zeile mehr im Protokoll (bemerkt am 2026-10-27).
+if config.config_file_name is not None and not logging.getLogger().handlers:
     fileConfig(config.config_file_name)
 
 target_metadata = Base.metadata

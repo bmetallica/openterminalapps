@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { AppIcon } from '../components/AppIcon'
 import { Led, stateClass } from '../components/controls'
+import { StartFortschritt } from '../components/StartFortschritt'
 import {
   ApiError, api,
   type Me, type MyStorage, type RepoKurz, type Session, type SoftwareMeldung, type Stream,
@@ -115,6 +116,9 @@ function Bay({ session, template, onOpen, onAct, onApp, onResume, onReset, busy,
                 : tr('Internet, kein Firmennetz')}
             </b></span>
         </div>
+        {busy && angehalten && (
+          <div className="bay__fortschritt"><StartFortschritt templateId={session.template_id} /></div>
+        )}
       </div>
 
       {neuFragen ? (
@@ -588,7 +592,7 @@ export function Dashboard({ me, onOpen, onToast, onSoftware }: {
               const mem = t.effective_memory_bytes ?? t.memory_bytes
               return (
                 <div key={t.id} className="tile-wrap">
-                <button className={`tile${isBusy ? ' tile--busy' : ''}`}
+                <button className={`tile${isBusy ? ' tile--busy' : ''}${busy === t.id ? ' tile--startet' : ''}`}
                   disabled={busy === t.id}
                   onClick={() => (isBusy
                     ? onToast(tr('{name} läuft bereits — oben verbinden', { name: nameVon(t) }))
@@ -615,11 +619,12 @@ export function Dashboard({ me, onOpen, onToast, onSoftware }: {
                       <span>{gb(mem)} GB</span>
                     </span>
                     {busy === t.id
-                      ? <span className="silk">{tr('startet…')}</span>
+                      ? null
                       : isBusy
                         ? <Led status="live" />
                         : <span className="silk" style={{ color: 'var(--key)' }}>{tr('Starten')}</span>}
                   </span>
+                  {busy === t.id && <StartFortschritt templateId={t.id} />}
                 </button>
                 {/* Neben der Kachel, nicht in ihr: Ein Knopf im Knopf ist
                     kein gültiges HTML, und ein Fehlklick startete sonst. */}

@@ -286,6 +286,10 @@ def _umleitungen() -> list[dict]:
              "ports": os.environ.get("OTA_TURN_PORT", "3478"), "protokoll": "beide"}]
 
 log = logging.getLogger("ota.agent")
+# Ohne das kamen nur Warnungen an (Pythons Notbehelf), und jede Info-Zeile des
+# Agents — Sitzungsnetz, Tastaturlayout, Startprotokoll — ging verloren.
+logging.basicConfig(level=logging.INFO,
+                    format="%(asctime)s %(levelname)s %(name)s %(message)s")
 
 @contextlib.asynccontextmanager
 async def _lifespan(_: FastAPI):
@@ -1043,9 +1047,67 @@ def firewall_abgleich() -> dict:
     return _firewall_abgleich()
 
 
+# --------------------------------------------------------------------------
+# Startprotokoll und Fortschritt
+# --------------------------------------------------------------------------
+#
+# Anlass war der 2026-10-27: Root-Arbeitsplaetze starteten in der Produktion
+# „recht lange", auf dem Testwirt aber in drei Sekunden. Wo die Zeit blieb,
+# stand nirgends. Jetzt steht je Start eine Zeile im Protokoll:
+#
+#   Start ota-s-1c25cbce-e5e in 41.3 s: netz 0.3 · container 0.4 · … · desktop 3.1
+#
+# Und die API fragt waehrenddessen den laufenden Schritt ab, fuer den Balken
+# auf der Startseite.
+
+_fortschritt: dict[str, dict[str, Any]] = {}
+
+
+class _Startlauf:
+    """Die Schritte eines Starts oder Fortsetzens, mit ihrer Dauer."""
+
+    def __init__(self, sid: str, art: str, name: str) -> None:
+        jetzt = time.monotonic()
+        # Liegengebliebene Eintraege (ein Start, der mit einer Ausnahme
+        # endete) nach einer Viertelstunde weg.
+        for alt in [k for k, v in _fortschritt.items() if jetzt - v["beginn"] > 900]:
+            _fortschritt.pop(alt, None)
+        self.sid, self.art, self.name = sid, art, name
+        self.beginn = self.seit = jetzt
+        self.schritte: list[tuple[str, float]] = []
+        self.aktuell = ""
+
+    def schritt(self, name: str) -> None:
+        jetzt = time.monotonic()
+        if self.aktuell:
+            self.schritte.append((self.aktuell, jetzt - self.seit))
+        self.aktuell, self.seit = name, jetzt
+        if self.sid:
+            _fortschritt[self.sid] = {"schritt": name, "seit": jetzt, "beginn": self.beginn}
+
+    def ende(self) -> None:
+        self.schritt("")
+        _fortschritt.pop(self.sid, None)
+        log.info("%s %s in %.1f s: %s", self.art, self.name,
+                 time.monotonic() - self.beginn,
+                 " · ".join(f"{n} {d:.1f}" for n, d in self.schritte))
+
+
+@app.get("/fortschritt/{sid}", dependencies=[Depends(require_token)])
+def fortschritt(sid: str) -> dict[str, Any]:
+    """Der laufende Schritt eines Starts. Leer, wenn keiner laeuft."""
+    eintrag = _fortschritt.get(sid)
+    if not eintrag:
+        return {"schritt": ""}
+    return {"schritt": eintrag["schritt"],
+            "sekunden": round(time.monotonic() - eintrag["seit"], 1)}
+
+
 @app.post("/containers", dependencies=[Depends(require_token)])
 def start_container(req: StartRequest) -> dict[str, Any]:
     client = dc()
+    lauf = _Startlauf(req.session_id, "Start", f"ota-s-{req.session_id[:12]}")
+    lauf.schritt("image")
 
     try:
         client.images.get(req.image)
@@ -1294,6 +1356,7 @@ def start_container(req: StartRequest) -> dict[str, Any]:
     # **Erst das Netz, dann der Router, dann der Arbeitsplatz.** Die
     # Reihenfolge ist nicht beliebig: Das Netz ist `internal`, ohne Router
     # gibt es darin keinen Weg — und ohne Regelwerk soll es auch keinen geben.
+    lauf.schritt("netz")
     sitzungsnetz, subnetz = netz_ops.netz_anlegen(
         client, req.session_id, req.netzprofil, req.subnetz)
     router = netz_ops.router_verbinden(client, sitzungsnetz, subnetz)
@@ -1321,6 +1384,7 @@ def start_container(req: StartRequest) -> dict[str, Any]:
     beschriftung["traefik.docker.network"] = sitzungsnetz
     beschriftung["ota.klasse"] = req.klasse
 
+    lauf.schritt("container")
     try:
         container = client.containers.run(
             req.image,
@@ -1393,6 +1457,7 @@ def start_container(req: StartRequest) -> dict[str, Any]:
     # Traefik muss hinein, damit ein Bild ankommt — aber **nur** Traefik, und
     # nur in dieses eine Netz. Frueher hingen alle Sitzungen gemeinsam in
     # `ota_public`; genau das war Befund H2.
+    lauf.schritt("einrichten")
     netz_ops.traefik_verbinden(client, sitzungsnetz, subnetz)
     # Jetzt erst: Regelwerk **und** Standardroute. Vorher hatte der
     # Arbeitsplatz keinen Weg — genau so soll es sein.
@@ -1407,7 +1472,9 @@ def start_container(req: StartRequest) -> dict[str, Any]:
     git_dienst.im_container(container, req.git, netz_ops.traefik_adresse(subnetz), _run_as_root)
 
     # Selkies hoert auf 8080, KasmVNC auf 6901.
+    lauf.schritt("desktop")
     _wait_for_vnc(container, port=8080 if req.engine == "selkies" else 6901)
+    lauf.schritt("ausstattung")
     if req.engine == "selkies":
         _tastatur_setzen(container)
 
@@ -1434,11 +1501,13 @@ def start_container(req: StartRequest) -> dict[str, Any]:
     _link_shared(container)
     # Einmal-Skripte zuerst: Sie richten ein, worauf das Startskript sich
     # danach verlassen darf.
+    lauf.schritt("skripte")
     once = _run_once_scripts(container, req.once_scripts)
     if req.start_script.strip():
         _run_start_script(container, req.start_script)
 
     container.reload()
+    lauf.ende()
     return {"container_id": container.id, "status": container.status, "once": once}
 
 
@@ -1936,11 +2005,18 @@ IST=$(dpkg-query -W -f='${Version}' ota-selkies 2>/dev/null || true)
 if [ -n "$IST" ] && dpkg --compare-versions "$IST" gt "$SOLL"; then
   echo "selkies-neuer $IST"; exit 0
 fi
+# Schon einmal an genau dieser Fassung gescheitert: nicht bei jedem Fortsetzen
+# wieder `apt-get update` und einen Fehlversuch abwarten. Eine neue Fassung
+# in der Paketquelle versucht es wieder.
+MERK=/var/lib/ota/selkies-fehlgeschlagen
+[ "$(cat "$MERK" 2>/dev/null)" = "$SOLL" ] && { echo "selkies-fehlversuch $SOLL"; exit 0; }
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -q > /tmp/ota-selkies-heben.log 2>&1 || true
 if apt-get install -y -q --no-install-recommends "ota-selkies=$SOLL" >> /tmp/ota-selkies-heben.log 2>&1; then
+  rm -f "$MERK"
   echo "selkies-gehoben ${IST:-1.6.2} -> $SOLL"
 else
+  mkdir -p /var/lib/ota && echo "$SOLL" > "$MERK"
   echo "selkies-fehlgeschlagen"; tail -5 /tmp/ota-selkies-heben.log
 fi
 """
@@ -1969,6 +2045,9 @@ def _selkies_heben(container, repo: dict[str, Any]) -> bool:
     if zeile.startswith("selkies-gehoben"):
         log.info("%s: %s", container.name, zeile)
         return True
+    if zeile.startswith("selkies-fehlversuch"):
+        log.info("Selkies in %s nicht erneut versucht: %s scheiterte schon einmal "
+                 "(/var/lib/ota/selkies-fehlgeschlagen)", container.name, soll)
     if zeile.startswith("selkies-fehlgeschlagen"):
         log.warning("Selkies in %s nicht gehoben: %s", container.name, out.strip()[-400:])
     return False
@@ -2183,6 +2262,9 @@ def container_action(cid: str, action: str) -> dict[str, str]:
             # Vorgabe) reichen dafuer nicht — danach kaeme SIGKILL, und die
             # inneren Container staenden mitten im Schreiben still.
             c.stop(timeout=45)
+            # Jetzt ist der Platz endgueltig: Gemessen im Hintergrund, steht
+            # der Wert beim Fortsetzen schon bereit (siehe `platz`).
+            threading.Thread(target=platz, args=(cid, True), daemon=True).start()
         else:
             getattr(c, action)()
     except NotFound:
@@ -2261,6 +2343,8 @@ def fortsetzen(cid: str, body: "FortsetzenRequest | None" = None) -> dict[str, A
     _sysbox_pruefen(client)
     c = _root_container(client, cid)
     sid = (c.labels or {}).get("ota.session_id", "")
+    lauf = _Startlauf(sid, "Fortsetzen", c.name)
+    lauf.schritt("netz")
     _umgebung_schreiben(sid)
     try:
         client.networks.get(netz_ops.netzname(sid))
@@ -2271,6 +2355,7 @@ def fortsetzen(cid: str, body: "FortsetzenRequest | None" = None) -> dict[str, A
             "baut ihn mit neuem Netz auf; das Zuhause bleibt.",
         )
     netz_ops.anbindung_sichern(client)
+    lauf.schritt("container")
     try:
         if c.status == "paused":
             c.unpause()
@@ -2280,6 +2365,7 @@ def fortsetzen(cid: str, body: "FortsetzenRequest | None" = None) -> dict[str, A
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Docker meldet: {exc}") from exc
     # Erst der Container, dann die Regeln und die Standardroute: Den
     # Namensraum, in den die Route gehoert, gibt es erst jetzt.
+    lauf.schritt("einrichten")
     _firewall_abgleich(client)
     _proxy_einrichten(c)
     # Auch beim Fortsetzen: Der Modus der Paketquellen kann sich geaendert
@@ -2302,20 +2388,25 @@ def fortsetzen(cid: str, body: "FortsetzenRequest | None" = None) -> dict[str, A
     # etwas geaendert, einmal neu starten: Das laufende Selkies ist noch das
     # alte, und das Startskript liest die neuen Dateien nur beim Start. Der
     # Namensraum entsteht dabei neu — Regeln und Route also noch einmal.
+    lauf.schritt("selkies")
     if _selkies_heben(c, repo):
         try:
             c.restart(timeout=30)
         except APIError as exc:
             raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Docker meldet: {exc}") from exc
         _firewall_abgleich(client)
+    lauf.schritt("desktop")
     _wait_for_vnc(c, port=8080)
+    lauf.schritt("ausstattung")
     _tastatur_setzen(c)
     # **Auch beim Fortsetzen.** Bis zum 2026-10-27 liefen Einmal-Skripte nur,
     # wenn ein Container neu entstand. Ein Root-Arbeitsplatz wird aber fast
     # immer fortgesetzt — ein Skript, das die Verwaltung ihm zuwies, kam dort
     # nie an, und in der Oberflaeche stand „0× gelaufen" ohne Grund.
+    lauf.schritt("skripte")
     once = _run_once_scripts(c, body.once_scripts if body else [])
     c.reload()
+    lauf.ende()
     return {"container_id": c.id, "status": c.status, "once": once}
 
 
@@ -2341,11 +2432,44 @@ def _volume_groessen(client) -> dict[str, int]:
     return _df_zwischen["volumes"]
 
 
+# Der letzte gemessene Platz je Container, fuer `schnell`.
+_platz_zwischen: dict[str, dict[str, int]] = {}
+_platz_misst: set[str] = set()
+
+
 @app.get("/containers/{cid}/platz", dependencies=[Depends(require_token)])
-def platz(cid: str) -> dict[str, int]:
-    """Was ein Root-Arbeitsplatz belegt: Schicht des Containers + Docker-Daten."""
+def platz(cid: str, schnell: bool = False) -> dict[str, int]:
+    """Was ein Root-Arbeitsplatz belegt: Schicht des Containers + Docker-Daten.
+
+    **`schnell` fuer den Start.** Die Messung rechnet ueber `docker system df`
+    und damit ueber alle Volumes des Wirts — auf dem Testwirt 3 s, auf einem
+    Wirt mit vielen Root-Arbeitsplaetzen und fremden Diensten ein Vielfaches.
+    Bis zum 2026-10-27 wartete jedes Fortsetzen darauf. Ein angehaltener
+    Platz waechst nicht, also genuegt beim Start der letzte Wert; gemessen
+    wird im Hintergrund neu. Gibt es noch keinen (erster Start nach einem
+    Neustart des Agents), meldet `schnell` 0 — eine Messung darf keinen Start
+    verhindern, und beim naechsten Mal gilt der Wert.
+    """
     client = dc()
     c = _root_container(client, cid)
+    if schnell:
+        if c.id not in _platz_misst:
+            _platz_misst.add(c.id)
+
+            def nachmessen() -> None:
+                try:
+                    _platz_messen(client, c)
+                except Exception as exc:  # noqa: BLE001 — nur ein Messwert
+                    log.warning("Platz von %s nicht gemessen: %s", c.name, exc)
+                finally:
+                    _platz_misst.discard(c.id)
+
+            threading.Thread(target=nachmessen, daemon=True).start()
+        return _platz_zwischen.get(c.id) or {"schicht": 0, "docker": 0, "gesamt": 0}
+    return _platz_messen(client, c)
+
+
+def _platz_messen(client, c) -> dict[str, int]:
     # Die Groesse der Schicht liefert nur die Liste (`docker ps --size`); das
     # SDK reicht `size` an `inspect_container` nicht durch.
     try:
@@ -2355,7 +2479,9 @@ def platz(cid: str) -> dict[str, int]:
         schicht = 0
     sid = (c.labels or {}).get("ota.session_id", "")
     docker_bytes = _volume_groessen(client).get(docker_volume_name(sid), 0)
-    return {"schicht": schicht, "docker": docker_bytes, "gesamt": schicht + docker_bytes}
+    wert = {"schicht": schicht, "docker": docker_bytes, "gesamt": schicht + docker_bytes}
+    _platz_zwischen[c.id] = wert
+    return wert
 
 
 # --------------------------------------------------------------------------

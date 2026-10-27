@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { SessionViewer } from './SessionViewer'
 import { InstallCard } from '../components/InstallButton'
+import { StartFortschritt } from '../components/StartFortschritt'
 import { ApiError, api, type Session, type Stream, type Template } from '../lib/api'
 import { t, useLang } from '../lib/i18n'
 import { viewPath, type Route } from '../lib/routes'
 
 type State =
   | { phase: 'ablegen'; name: string; icon: string }
-  | { phase: 'busy'; note: string }
+  | { phase: 'busy'; note: string; vorlage?: string }
   | { phase: 'ready'; session: Session; stream?: Stream }
   | { phase: 'failed'; note: string }
 
@@ -97,7 +98,8 @@ export function StandaloneViewer({ route, onToast }: {
         const sessions = await api.sessions()
         let session = sessions.find((s) => s.template_id === tpl.id)
         if (!session) {
-          setState({ phase: 'busy', note: t('{name} wird gestartet…', { name: tpl.friendly_name }) })
+          setState({ phase: 'busy', note: t('{name} wird gestartet…', { name: tpl.friendly_name }),
+            vorlage: tpl.id })
           session = await api.startSession(tpl.id)
         }
 
@@ -134,6 +136,9 @@ export function StandaloneViewer({ route, onToast }: {
     return (
       <div className="boot">
         <span className="silk">{state.note}</span>
+        {state.vorlage && (
+          <div className="boot__fortschritt"><StartFortschritt templateId={state.vorlage} /></div>
+        )}
       </div>
     )
   }

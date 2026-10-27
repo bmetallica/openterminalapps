@@ -1901,3 +1901,14 @@ input[type="color"] {
 .news__vorschau { min-height: 260px; padding: 12px 14px; border: 1px dashed var(--edge); border-radius: var(--r-ctl); max-width: none; }
 .news__schalter { display: flex; flex-wrap: wrap; gap: 10px 28px; margin: 14px 0; }
 .news__knoepfe { display: flex; justify-content: flex-end; gap: 9px; }
+
+/* Fortschritt eines Starts (Kachel, Fortsetzen, Einzelfenster) */
+.startlauf { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 0; width: 100%; }
+.startlauf__kopf { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; white-space: nowrap; }
+.startlauf__text { overflow: hidden; text-overflow: ellipsis; color: var(--key); font-size: 12.5px; font-weight: 600; }
+/* Die Kachel ist während des Starts gesperrt, soll aber nicht wie
+   abgeschaltet aussehen — auf ihr passiert ja gerade etwas. */
+.tile.tile--startet:disabled { opacity: 1; cursor: progress; }
+.startlauf__fuell { background: var(--key); transition: width .7s linear; }
+.bay__fortschritt { margin-top: 12px; max-width: 420px; display: flex; }
+.boot__fortschritt { width: min(360px, 80vw); display: flex; }

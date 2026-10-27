@@ -22,7 +22,7 @@ of its own.
 - The **square** on the tile stops the workspace. Afterwards it shows as "stopped" on the start
   page.
 - **Resume** starts exactly this workspace again, with all packages, settings and Docker images.
-  Both take just a few seconds.
+  Both take just a few seconds; a progress bar shows how far it has got.
 - When **idle**, a root workspace is only ever stopped, never deleted.
 - If the desktop in it crashes, it shows as stopped afterwards and can be resumed.
 
@@ -44,6 +44,9 @@ base image gets into your workspace **only** this way.
 `ports: ["8080:80"]`, is reachable in the browser **inside the workspace** at
 `http://localhost:8080`. From your own computer that only works through a time-limited port
 forwarding set up by the administrators.
+
+After resuming, the desktop is there before Docker is ready: Docker is still starting your
+containers with `restart: always`. A `docker ps` in the first few seconds therefore waits briefly.
 
 ## Space
 

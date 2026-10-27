@@ -254,6 +254,22 @@ done
 If `nr_throttled` grows noticeably between two runs, the limit is the brake. If the host really is
 full, only more hardware or less load helps.
 
+## A workspace starts slowly
+
+Where the time goes is in the agent's log, one line per start with all its steps:
+
+```bash
+docker logs ota-agent 2>&1 | grep -E "(Start|Fortsetzen) ota-s-" | tail -20
+```
+
+What the steps mean and what helps:
+[Root workspace → Start time](25-root-arbeitsplatz.md#start-time). On a quiet host a start takes
+about 3 s, a resume about 2.5 s. If the time is missing from the line, it was spent before the
+agent: in the home check (`du` over the profile, cached) or while waiting for the route in Traefik.
+
+Until 2026-10-27 the agent lost every info line because its logging was never set up; the API also
+lost its own after handing over to Alembic at startup. Older logs therefore contain only warnings.
+
 ## A root workspace says "running", but nothing works
 
 **Signs:** Under *Operations* it says "Running", the space column only shows `…`. Applications

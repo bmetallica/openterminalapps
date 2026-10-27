@@ -176,9 +176,16 @@ def git_einrichten(oauth: dict[str, str]) -> dict[str, Any]:
     return _call("POST", "/git/einrichten", json={"oauth": oauth}, timeout=120.0)
 
 
-def platz(cid: str) -> dict[str, Any]:
-    """Was ein Root-Arbeitsplatz belegt (Schicht + Docker-Daten), in Bytes."""
-    return _call("GET", f"/containers/{cid}/platz", timeout=60.0)
+def platz(cid: str, schnell: bool = False) -> dict[str, Any]:
+    """Was ein Root-Arbeitsplatz belegt (Schicht + Docker-Daten), in Bytes.
+    `schnell`: der letzte Messwert, neu gemessen wird im Hintergrund."""
+    return _call("GET", f"/containers/{cid}/platz",
+                 params={"schnell": "true"} if schnell else None, timeout=60.0)
+
+
+def fortschritt(sid: str) -> dict[str, Any]:
+    """Der laufende Schritt eines Starts im Agent."""
+    return _call("GET", f"/fortschritt/{sid}", timeout=5.0)
 
 
 def auslastung() -> dict[str, Any]:
