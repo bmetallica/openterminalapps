@@ -281,6 +281,21 @@ docker logs ota-api 2>&1 | grep -iE "<erste 12 Zeichen der Container-ID>|ohne g�
 docker events --since 24h --filter event=destroy --filter type=container | grep ota-s-
 ```
 
+## Softwareerfassung: „Nicht lesbar: … openat" bei Root-Arbeitsplätzen
+
+```
+Nicht lesbar: kieferjo: 500 Server Error … /archive?path=%2Fvar%2Flib%2Fdpkg%2Fstatus … ("openat
+```
+
+**Ursache:** Docker liest Dateien aus einem laufenden Root-Arbeitsplatz (Sysbox) nicht per Archiv,
+solange der Container seit dem Anlegen nie angehalten war. Es fehlt der Einhaengepunkt von
+`/etc/ota/umgebung.sh`. `docker cp` scheitert genauso.
+
+**Behoben am 2026-10-27:** In diesem Fall packt der Agent die Dateien mit `tar` im Container. Das
+betraf auch die **Sicherung der Container-Schicht**: Gemessen wurden 7 Änderungen gemeldet und
+0 Einträge gesichert, und die Sicherung meldete trotzdem Erfolg. Wer Root-Arbeitsplätze sichert,
+sollte nach dem Update einmal neu sichern (Betrieb → Sicherung).
+
 ## „Die Daten konnten nicht geladen werden" nach einem Update
 
 **Ursache (behoben am 2026-08-27):** `Base.metadata.create_all()` legt fehlende **Tabellen** an,

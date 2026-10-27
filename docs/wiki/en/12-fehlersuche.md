@@ -272,6 +272,21 @@ docker logs ota-api 2>&1 | grep -iE "<first 12 characters of the container id>|o
 docker events --since 24h --filter event=destroy --filter type=container | grep ota-s-
 ```
 
+## Software inventory: "Not readable: … openat" for root workspaces
+
+```
+Nicht lesbar: kieferjo: 500 Server Error … /archive?path=%2Fvar%2Flib%2Fdpkg%2Fstatus … ("openat
+```
+
+**Cause:** Docker does not read files from a running root workspace (Sysbox) via an archive as
+long as the container has never been stopped since it was created. The mount point of
+`/etc/ota/umgebung.sh` is missing. `docker cp` fails the same way.
+
+**Fixed on 2026-10-27:** In that case the agent packs the files with `tar` inside the container.
+This also affected the **backup of the container layer**: measured, 7 changes were reported and
+0 entries were backed up, and the backup still reported success. If you back up root workspaces,
+run a new backup once after the update (Operations → Backup).
+
 ## "The data could not be loaded" after an update
 
 **Cause (fixed on 2026-08-27):** `Base.metadata.create_all()` creates missing **tables**, but not

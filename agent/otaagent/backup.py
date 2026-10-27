@@ -264,6 +264,33 @@ def restore_profile(username: str, archive: str, scope: str = "user") -> dict[st
     }
 
 
+def _aus_container(container, path: str) -> bytes | None:
+    """Ein Pfad aus dem Container als Tar — wie `docker cp`.
+
+    **Laufende Root-Arbeitsplaetze** lehnt Docker dabei ab („openat … 500"),
+    solange der Container seit dem Anlegen nie angehalten war: Unter Sysbox
+    fehlt dann der Einhaengepunkt von `/etc/ota/umgebung.sh` in der Schicht,
+    die Docker fuer das Archiv aufbaut. Bis zum 2026-10-27 fiel das hier
+    still unter „einzelne Pfade duerfen fehlen" — gemessen: 7 Aenderungen
+    gemeldet, 0 Eintraege gesichert, und die Sicherung meldete Erfolg. Fuer
+    diesen Fall packt jetzt `tar` im Container.
+    """
+    try:
+        stream, _ = container.get_archive(path)
+        return b"".join(stream)
+    except Exception:  # noqa: BLE001 — einzelne Pfade duerfen fehlen
+        if (container.labels or {}).get("ota.klasse") != "root":
+            return None
+    ordner, name = posixpath.split(path.rstrip("/"))
+    try:
+        rc, (aus, _fehler) = container.exec_run(
+            ["tar", "-cf", "-", "-C", ordner or "/", name], user="0", demux=True)
+    except Exception:  # noqa: BLE001
+        return None
+    # 1 heisst bei GNU tar: eine Datei aenderte sich beim Lesen — der Rest ist da.
+    return aus if rc in (0, 1) and aus else None
+
+
 def backup_container(container, username: str, template_slug: str) -> dict[str, Any]:
     """Sichert nur die Aenderungen im Container ausserhalb des Home.
 
@@ -325,9 +352,8 @@ def backup_container(container, username: str, template_slug: str) -> dict[str, 
         assert proc.stdin is not None
         with tarfile.open(fileobj=proc.stdin, mode="w|") as tar:
             for path in wanted:
-                try:
-                    stream, _ = container.get_archive(path)
-                except Exception:  # noqa: BLE001 — einzelne Pfade duerfen fehlen
+                roh = _aus_container(container, path)
+                if roh is None:
                     continue
 
                 # get_archive liefert die Eintraege relativ zum ELTERN-
@@ -335,7 +361,7 @@ def backup_container(container, username: str, template_slug: str) -> dict[str, 
                 # als "etc/...". Der Praefix ist deshalb der Elternpfad, nicht
                 # der Pfad selbst — sonst entsteht "etc/etc/...".
                 prefix = posixpath.dirname(path).lstrip("/")
-                buf = io.BytesIO(b"".join(stream))
+                buf = io.BytesIO(roh)
                 try:
                     with tarfile.open(fileobj=buf, mode="r|") as inner:
                         for member in inner:

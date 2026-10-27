@@ -55,6 +55,8 @@ def _archiv(container, pfad: str) -> tarfile.TarFile | None:
     except APIError as exc:
         if getattr(exc, "status_code", None) == 404:
             return None
+        if (container.labels or {}).get("ota.klasse") == "root":
+            return _archiv_ueber_exec(container, pfad)
         raise
     if (info or {}).get("size", 0) > MAX_DATEI:
         return None
@@ -65,6 +67,32 @@ def _archiv(container, pfad: str) -> tarfile.TarFile | None:
             return None
     puffer.seek(0)
     return tarfile.open(fileobj=puffer)
+
+
+def _archiv_ueber_exec(container, pfad: str) -> tarfile.TarFile | None:
+    """Derselbe Tar, gepackt von `tar` im Container.
+
+    Nur fuer Root-Arbeitsplaetze: Unter Sysbox lehnt Docker das Lesen per
+    Archiv ab („openat … 500"), solange der Container seit dem Anlegen nie
+    angehalten war — es fehlt der Einhaengepunkt von `/etc/ota/umgebung.sh`.
+    Dieselbe Ursache wie beim Hineinkopieren der IDE-AI-Pakete (ide_ai.py)
+    und bei der Sicherung (backup.py). Aufgefallen am 2026-10-27: Laufende
+    Root-Arbeitsplaetze standen in der Softwareerfassung als „Nicht lesbar".
+
+    Das heisst, einem Programm im Container zu glauben, was oben vermieden
+    wird. In einem Root-Arbeitsplatz koennte der Nutzer die Statusdateien
+    ohnehin selbst faelschen — hier verliert die Erfassung nichts.
+    """
+    ordner, name = os.path.split(pfad.rstrip("/"))
+    try:
+        rc, (aus, _fehler) = container.exec_run(
+            ["tar", "-cf", "-", "-C", ordner or "/", name], user="0", demux=True)
+    except APIError as exc:
+        log.warning("%s: %s nicht lesbar: %s", container.name, pfad, exc)
+        return None
+    if rc != 0 or not aus or len(aus) > MAX_DATEI * 2:
+        return None
+    return tarfile.open(fileobj=io.BytesIO(aus))
 
 
 def _datei(container, pfad: str) -> str | None:
