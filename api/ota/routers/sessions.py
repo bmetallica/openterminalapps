@@ -861,7 +861,12 @@ def platz_ohne_lauf(sess: SessionModel, grund: str) -> None:
     sess.status = ANGEHALTEN
     sess.ended_at = datetime.now(timezone.utc)
     sess.end_reason = grund
-    git.widerrufen(db, sess.id)
+    # Die Sitzung, an der die Zeile haengt — ein `db` gibt es hier nicht.
+    # Bis zum 2026-10-27 stand hier `git.widerrufen(db, …)`: ein NameError,
+    # der den Aufraeumer bei **jedem** verschwundenen Root-Container abbrechen
+    # liess. Die Zeile blieb dann fuer immer auf „laeuft", und ein neuer Start
+    # desselben Arbeitsplatzes scheiterte mit „Unerwarteter Fehler".
+    git.widerrufen(object_session(sess), sess.id)
 
 
 def platz_anhalten(db: DbSession, sess: SessionModel, request: Request | None,

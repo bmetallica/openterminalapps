@@ -226,6 +226,24 @@ That is not a fault but intentional. All workspaces with persistence **per user*
 workspace** under *Resources → Persistent profile*. Then it gets its own home and both run side by
 side. The price: separate settings and projects.
 
+## A root workspace says "running", but nothing works
+
+**Signs:** Under *Operations* it says "Running", the space column only shows `…`. Applications
+report "This session is no longer running", the admin terminal does not connect. `docker ps -a`
+does not know the container.
+
+**Cause until 2026-10-27:** If a root container was missing (removed by hand or by a foreign
+clean-up), the OTA reaper aborted with an error. The row stayed "running", and a new start of the
+same workspace failed with "Unexpected error". Since then the reaper sets it to **paused** within a
+minute. The next start rebuilds the container with the same id and the same home. Whatever was
+installed outside the home is gone, as are the Docker data if the volume was removed too.
+
+**Who removed it?**
+```bash
+docker logs ota-api 2>&1 | grep -iE "<first 12 characters of the container id>|ohne gültige Session"
+docker events --since 24h --filter event=destroy --filter type=container | grep ota-s-
+```
+
 ## "The data could not be loaded" after an update
 
 **Cause (fixed on 2026-08-27):** `Base.metadata.create_all()` creates missing **tables**, but not

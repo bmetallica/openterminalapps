@@ -26,11 +26,14 @@ import io
 import logging
 import os
 import re
+import socket
 import tarfile
 import threading
 import urllib.error
 import urllib.request
 from typing import Any, Callable
+
+from docker.errors import APIError
 
 
 log = logging.getLogger("otaagent.ide_ai")
@@ -165,13 +168,57 @@ def _datei(name: str, fassung: str) -> str:
 
 
 def _hinein(container, pfad: str) -> str:
-    """Die Datei nach /tmp im Container."""
-    puffer = io.BytesIO()
+    """Die Datei nach /tmp im Container.
+
+    **Erst `put_archive`, sonst ueber `docker exec`.** Bei Root-Arbeitsplaetzen
+    (Sysbox) lehnt Docker das Archiv ab: Es haengt dafuer alle Mounts des
+    Containers in dessen Dateisystem, und die Datei `/etc/ota/umgebung.sh`
+    gibt es dort als Ziel nicht („openat etc/ota/umgebung.sh: no such file
+    or directory" bzw. „directory not empty", gemessen am 2026-10-27). Ein
+    `exec` geht an dieser Stelle vorbei.
+    """
     ziel = os.path.basename(pfad)
+    puffer = io.BytesIO()
     with tarfile.open(fileobj=puffer, mode="w") as tar:
         tar.add(pfad, arcname=ziel)
-    container.put_archive("/tmp", puffer.getvalue())
+    try:
+        container.put_archive("/tmp", puffer.getvalue())
+        return f"/tmp/{ziel}"
+    except APIError as exc:
+        log.info("IDE-AI in %s: Archiv abgelehnt (%s) — kopiere über exec",
+                 container.name, exc.explanation or exc)
+    _ueber_exec(container, pfad, f"/tmp/{ziel}")
     return f"/tmp/{ziel}"
+
+
+def _ueber_exec(container, quelle: str, ziel: str) -> None:
+    """Eine Datei ueber die Standardeingabe eines `exec` schreiben.
+
+    Nicht als Argument: Eines darf hoechstens 128 KiB lang sein, und ein
+    Paket in Stuecken dieser Groesse waeren bei JetBrains tausend Aufrufe.
+    Geprueft wird am Ende die Groesse; erst dann bekommt die Datei ihren Namen.
+    """
+    api = container.client.api
+    kennung = api.exec_create(container.id, ["sh", "-c", f"cat > {ziel}.teil"],
+                              stdin=True, user="0")["Id"]
+    sock = api.exec_start(kennung, socket=True)
+    roh = getattr(sock, "_sock", sock)
+    try:
+        with open(quelle, "rb") as fh:
+            while stueck := fh.read(1 << 20):
+                roh.sendall(stueck)
+        roh.shutdown(socket.SHUT_WR)
+        # Bis der Prozess die Eingabe zu Ende gelesen hat und schliesst.
+        while roh.recv(65536):
+            pass
+    finally:
+        roh.close()
+    groesse = os.path.getsize(quelle)
+    code, out = container.exec_run(
+        ["sh", "-c", f'[ "$(stat -c %s {ziel}.teil)" = "{groesse}" ] && mv {ziel}.teil {ziel}'],
+        user="0")
+    if code != 0:
+        raise OSError(f"{ziel}: Groesse stimmt nicht ({out!r})")
 
 
 def _pakete(container, fassungen: dict[str, str], run_as_root: Callable) -> bool:

@@ -141,6 +141,42 @@ drin "$C1" 'echo a > $HOME/.ota-pruef-einstellung' >/dev/null
 [ ! -e "$GEMEINSAM/.ota-pruef-einstellung" ] \
   && ok "…und nicht im gemeinsamen Zuhause" || bad "Einstellung im gemeinsamen Zuhause"
 
+# Gemessen am 2026-10-27: In einen Root-Container lehnt Docker `put_archive`
+# ab (Mount /etc/ota/umgebung.sh). IDE-AI kam so nie hinein.
+GROSS=$(docker exec ota-agent python -c "
+import os, hashlib, docker
+from otaagent import ide_ai
+os.makedirs('/srv/ota/runtime/ota-pruef-hinein', exist_ok=True)
+p='/srv/ota/runtime/ota-pruef-hinein/probe_1.deb'
+open(p,'wb').write(os.urandom(3_000_000))
+try:
+    z=ide_ai._hinein(docker.from_env().containers.get('$C1'), p)
+    print(z, hashlib.sha256(open(p,'rb').read()).hexdigest())
+finally:
+    os.remove(p); os.rmdir('/srv/ota/runtime/ota-pruef-hinein')
+" 2>&1 | tail -1)
+DRIN=$(docker exec "$C1" sh -c 'sha256sum /tmp/probe_1.deb | cut -d" " -f1; rm -f /tmp/probe_1.deb')
+[ "${GROSS#* }" = "$DRIN" ] && [ -n "$DRIN" ] \
+  && ok "Pakete kommen in den Root-Container (3 MB, Prüfsumme gleich)" || bad "Kopieren scheitert: $GROSS"
+
+# ------------------------------------------------------------------ Weg
+echo
+echo "Container verschwindet"
+# Gemessen am 2026-10-27: Fehlte ein Root-Container, brach der Aufraeumer
+# mit einem NameError ab; die Zeile blieb auf „laeuft", jeder Neustart
+# scheiterte mit „Unerwarteter Fehler".
+docker rm -f "$C2" >/dev/null
+for _ in $(seq 1 15); do
+  Z=$(api "$B/api/sessions" | jqp "next((s['status'] for s in d if s['id']=='$S2'), '')")
+  [ "$Z" = "angehalten" ] && break; sleep 10
+done
+[ "$Z" = "angehalten" ] && ok "Der Aufräumer hält ihn an (statt „läuft“ stehen zu lassen)" \
+  || bad "Status nach Verschwinden: $Z"
+[ "$(starte "$T2")" = "$S2" ] && ok "Neu gestartet — dieselbe Kennung, neuer Container" \
+  || bad "Neustart scheitert: $(jqp "d.get('detail')" <"$TMP/s.json")"
+[ "$(drin "$C2" "cat \$HOME/$PRUEF/tief/notiz.txt")" = "von-a" ] \
+  && ok "…mit den gemeinsamen Daten" || bad "Gemeinsame Daten fehlen nach dem Neustart"
+
 echo
 echo "─────────────────────────────────────"
 printf '  bestanden: %s   fehlgeschlagen: %s\n' "$pass" "$fail"

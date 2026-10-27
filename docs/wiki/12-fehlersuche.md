@@ -231,6 +231,26 @@ Schaden angerichtet:
 **Was tun:** Entweder den anderen Arbeitsplatz beenden — oder dem zweiten Workspace unter
 *Ressourcen → Persistentes Profil* die Einstellung **Pro Workspace** geben. Dann bekommt er sein
 eigenes Zuhause und beide laufen nebeneinander. Der Preis: getrennte Einstellungen und Projekte.
+Besser meist **Gemeinsame Daten**: eigene Einstellungen, aber `Desktop`, `Documents` & Co. geteilt
+([Kapitel 5](05-workspaces-verwalten.md#ressourcen)).
+
+## Ein Root-Arbeitsplatz steht auf „läuft", aber nichts geht
+
+**Zeichen:** Unter *Betrieb* steht „Läuft", beim Platz nur `…`. Anwendungen melden „Diese Sitzung
+läuft nicht mehr", das Admin-Terminal verbindet nicht. `docker ps -a` kennt den Container nicht.
+
+**Ursache bis 2026-10-27:** Fehlte ein Root-Container (von Hand oder von einem fremden Aufräumer
+entfernt), brach der OTA-Aufräumer mit einem Fehler ab. Die Zeile blieb auf „läuft", und ein
+neuer Start desselben Arbeitsplatzes scheiterte mit „Unerwarteter Fehler". Seitdem setzt ihn der
+Aufräumer binnen einer Minute auf **angehalten**. Der nächste Start baut den Container neu, mit
+derselben Kennung und demselben Zuhause. Was außerhalb des Zuhauses installiert war, ist dann
+weg, ebenso die Docker-Daten, falls das Volume mit entfernt wurde.
+
+**Wer hat ihn entfernt?**
+```bash
+docker logs ota-api 2>&1 | grep -iE "<erste 12 Zeichen der Container-ID>|ohne gültige Session"
+docker events --since 24h --filter event=destroy --filter type=container | grep ota-s-
+```
 
 ## „Die Daten konnten nicht geladen werden" nach einem Update
 
