@@ -808,9 +808,12 @@ def platz_fortsetzen(db: DbSession, sess: SessionModel, request: Request | None,
     sess.status = "starting"
     db.commit()
     try:
-        agent_client.fortsetzen(sess.container_id, paketquellen.fuer_container(db),
-                                git.fuer_sitzung(db, sess, sess.user, sess.template),
-                                ide_ai.fuer_sitzung(db, sess.user))
+        ergebnis = agent_client.fortsetzen(
+            sess.container_id, paketquellen.fuer_container(db),
+            git.fuer_sitzung(db, sess, sess.user, sess.template),
+            ide_ai.fuer_sitzung(db, sess.user),
+            # Wie beim Start: was dieser Mensch noch nicht hatte.
+            _offene_einmal_skripte(db, sess.template, sess.user))
     except HTTPException as exc:
         if exc.status_code == status.HTTP_404_NOT_FOUND:
             # Der Container ist weg (von Hand geloescht, Docker zurueckgesetzt).
@@ -820,6 +823,7 @@ def platz_fortsetzen(db: DbSession, sess: SessionModel, request: Request | None,
         sess.status = ANGEHALTEN
         db.commit()
         raise
+    _buche_einmal_skripte(db, sess.user, ergebnis.get("once") or [])
     for st in sess.streams:
         st.status = "stopped"
     now = datetime.now(timezone.utc)

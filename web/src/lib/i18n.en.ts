@@ -231,6 +231,8 @@ export const EN: Record<string, string> = {
   'Pro Nutzer': 'Per user',
   'Pro Workspace': 'Per workspace',
   'Flüchtig': 'Ephemeral',
+  'Läufe ansehen': 'Show runs',
+  'Rückgabewert {rc}': 'exit code {rc}',
   'Gemeinsame Daten': 'Shared data',
   'Eigene Einstellungen für diesen Workspace, die Datenordner kommen aus dem gemeinsamen Home. Läuft gleichzeitig mit anderen Workspaces dieses Nutzers.':
     'Own settings for this workspace; the data folders come from the shared home. Runs alongside the user’s other workspaces.',

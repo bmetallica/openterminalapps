@@ -148,11 +148,13 @@ def ressourcen(cid: str, cores: float, memory_bytes: int) -> dict[str, Any]:
 
 def fortsetzen(cid: str, repo: dict[str, Any] | None = None,
                git: dict[str, Any] | None = None,
-               ide_ai: dict[str, Any] | None = None) -> dict[str, Any]:
+               ide_ai: dict[str, Any] | None = None,
+               once_scripts: list[dict[str, str]] | None = None) -> dict[str, Any]:
     """Einen angehaltenen Root-Arbeitsplatz wieder starten."""
     return _call("POST", f"/containers/{cid}/fortsetzen",
-                 json={"repo": repo or {}, "git": git or {}, "ide_ai": ide_ai or {}},
-                 timeout=180.0)
+                 json={"repo": repo or {}, "git": git or {}, "ide_ai": ide_ai or {},
+                       "once_scripts": once_scripts or []},
+                 timeout=600.0)
 
 
 # --- OTA-Git (git.py) -----------------------------------------------------

@@ -486,6 +486,8 @@ export type OnceScript = {
   created_at: string
   ran_count: number
   failed: { username: string; ran_at: string; exit_code: number; output: string }[]
+  /** Alle Läufe, neueste zuerst (höchstens 100). */
+  laeufe?: { username: string; ran_at: string; exit_code: number; output: string }[]
 }
 
 export type OnceScriptIn = {

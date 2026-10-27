@@ -289,7 +289,14 @@ change in the home — a moved settings file, a new path.
 * The **start script** helps, but then runs again on every start — although the matter is settled
   after the first time.
 
-A one-time script runs **exactly once per user**, on the next start of this workspace.
+A one-time script runs **exactly once per user**, on the next start of this workspace. For a root
+workspace, **resuming** counts as a start too (since 2026-10-27; before that it only ran after
+*Rebuild*). It runs as user 1000 once the display is up.
+
+**Did it run?** In the editor under *One-time*, each script shows "ran n×". **Show runs** lists
+every run with user, time, exit code and the last 4000 characters of the output. In the container,
+the script and the full log are at `/tmp/ota-einmal-<id>.sh` and `.log`. An `echo` at the end of
+the script makes the run easy to spot in the list.
 
 ```bash
 #!/usr/bin/env bash

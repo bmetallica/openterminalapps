@@ -1843,6 +1843,8 @@ class FortsetzenRequest(BaseModel):
     repo: dict[str, Any] = {}
     git: dict[str, Any] = {}
     ide_ai: dict[str, Any] = {}
+    # Einmal-Skripte, die dieser Nutzer noch nicht hatte — wie beim Start.
+    once_scripts: list[dict[str, str]] = []
 
 
 def _repo_einrichten(container, repo: dict[str, Any]) -> None:
@@ -2287,8 +2289,13 @@ def fortsetzen(cid: str, body: "FortsetzenRequest | None" = None) -> dict[str, A
         _firewall_abgleich(client)
     _wait_for_vnc(c, port=8080)
     _tastatur_setzen(c)
+    # **Auch beim Fortsetzen.** Bis zum 2026-10-27 liefen Einmal-Skripte nur,
+    # wenn ein Container neu entstand. Ein Root-Arbeitsplatz wird aber fast
+    # immer fortgesetzt — ein Skript, das die Verwaltung ihm zuwies, kam dort
+    # nie an, und in der Oberflaeche stand „0× gelaufen" ohne Grund.
+    once = _run_once_scripts(c, body.once_scripts if body else [])
     c.reload()
-    return {"container_id": c.id, "status": c.status}
+    return {"container_id": c.id, "status": c.status, "once": once}
 
 
 _df_zwischen: dict[str, Any] = {"zeit": 0.0, "volumes": {}}

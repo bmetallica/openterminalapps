@@ -149,11 +149,22 @@ ZUSTAND=$(api "$BASE_URL/api/sessions" | jqp "next((s['status'] for s in d if s[
 EXIT=$(docker inspect "$CN" -f '{{.State.Status}} {{.State.ExitCode}}' 2>/dev/null)
 [ "$EXIT" = "exited 0" ] && ok "Container sauber heruntergefahren (Exit 0)" || bad "Container nach Anhalten: ${EXIT:-weg}"
 
+# Gemeldet am 2026-10-27: Ein Einmal-Skript, das einem angehaltenen
+# Root-Arbeitsplatz zugewiesen wurde, lief beim Fortsetzen nie.
+EINMAL=$(api -H 'Content-Type: application/json' -X POST "$BASE_URL/api/templates/$TID/once" \
+  -d '{"name":"Prüfung Fortsetzen","body":"id -u > \"$HOME/.ota-einmal-pruef\"; echo fertig"}' | jqp "d['id']")
+
 START2=$(api -H 'Content-Type: application/json' -X POST "$BASE_URL/api/sessions" -d "{\"template_id\":\"$TID\"}")
 [ "$(jqp "d['id']" <<<"$START2")" = "$SID" ] && ok "Wieder gestartet — dieselbe Kennung, dieselbe Adresse" \
   || bad "Neue Kennung nach dem Fortsetzen"
 [ "$(drin 'cat /opt/ota-pruefmarke')" = "bleibt" ] && ok "Was ausserhalb des Zuhauses installiert war, ist noch da" \
   || bad "Installiertes ist weg"
+[ "$(drin 'cat "$HOME/.ota-einmal-pruef"')" = "1000" ] \
+  && ok "Ein Einmal-Skript, zugewiesen während er angehalten war, läuft beim Fortsetzen (als 1000)" \
+  || bad "Einmal-Skript lief beim Fortsetzen nicht"
+LAUF=$(api "$BASE_URL/api/templates/$TID/once" | jqp "[(s['ran_count'], s['laeufe'][0]['exit_code'], s['laeufe'][0]['output'].strip()) for s in d if s['id']=='$EINMAL'][0]")
+[ "$LAUF" = "(1, 0, 'fertig')" ] && ok "…gebucht, mit Rückgabewert und Ausgabe in der Verwaltung" \
+  || bad "Buchung des Laufs: $LAUF"
 for _ in $(seq 1 30); do drin 'docker info >/dev/null' >/dev/null && break; sleep 1; done
 drin 'docker images --format "{{.Repository}}"' | grep -q '^nginx$' \
   && ok "Docker-Images überleben das Anhalten" || bad "Docker-Images sind weg"

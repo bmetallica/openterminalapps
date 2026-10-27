@@ -483,6 +483,9 @@ class OnceScriptOut(BaseModel):
     # „bei wie vielen ist es gelaufen und bei wem ging es schief".
     ran_count: int = 0
     failed: list[OnceRunOut] = []
+    # Alle Laeufe, neueste zuerst — damit sich auch „bei wem lief es, und was
+    # kam heraus" beantworten laesst, nicht nur das Scheitern.
+    laeufe: list[OnceRunOut] = []
 
 
 class OnceScriptIn(BaseModel):

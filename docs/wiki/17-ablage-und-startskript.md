@@ -295,7 +295,14 @@ mit, und die braucht eine Änderung im Zuhause — eine umgezogene Einstellungsd
 * Das **Startskript** hilft, läuft dann aber bei jedem Start wieder — obwohl die Sache nach dem
   ersten Mal erledigt ist.
 
-Ein Einmal-Skript läuft **je Nutzer genau einmal**, beim nächsten Start dieses Workspace.
+Ein Einmal-Skript läuft **je Nutzer genau einmal**, beim nächsten Start dieses Workspace. Bei
+einem Root-Arbeitsplatz zählt auch das **Fortsetzen** als Start (seit 2026-10-27; vorher lief es
+dort erst nach *Neu aufsetzen*). Es läuft als Nutzer 1000, nachdem der Bildschirm steht.
+
+**Ist es gelaufen?** Im Editor unter *Einmal* steht je Skript „n× gelaufen". Unter **Läufe
+ansehen** steht jeder Lauf mit Nutzer, Zeit, Rückgabewert und den letzten 4000 Zeichen der Ausgabe.
+Im Container liegen Skript und vollständiges Protokoll unter `/tmp/ota-einmal-<kennung>.sh` und
+`.log`. Ein `echo` am Ende des Skripts macht den Lauf in der Liste gut erkennbar.
 
 ```bash
 #!/usr/bin/env bash

@@ -710,6 +710,11 @@ def _once_out(script: OnceScript) -> OnceScriptOut:
                    exit_code=r.exit_code, output=r.output)
         for r in script.runs if r.exit_code != 0
     ]
+    daten.laeufe = [
+        OnceRunOut(username=r.user.username, ran_at=r.ran_at,
+                   exit_code=r.exit_code, output=r.output)
+        for r in sorted(script.runs, key=lambda r: r.ran_at, reverse=True)[:100]
+    ]
     return daten
 
 

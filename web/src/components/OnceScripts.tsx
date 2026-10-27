@@ -101,6 +101,24 @@ export function OnceScripts({ templateId, onToast }: {
             </div>
           )}
 
+          {(s.laeufe?.length ?? 0) > 0 && (
+            <details style={{ marginTop: 10 }}>
+              <summary className="field__hint">{tr('Läufe ansehen')}</summary>
+              {s.laeufe!.map((r, i) => (
+                <details key={i} style={{ marginTop: 6 }}>
+                  <summary className="data">
+                    {r.exit_code === 0 ? '✓' : '✗'} {r.username} ·{' '}
+                    {new Date(r.ran_at).toLocaleString()} ·{' '}
+                    {tr('Rückgabewert {rc}', { rc: r.exit_code })}
+                  </summary>
+                  <pre className="build__log" style={{ maxHeight: 140, margin: '6px 0 0' }}>
+                    {r.output || tr('(keine Ausgabe)')}
+                  </pre>
+                </details>
+              ))}
+            </details>
+          )}
+
           <div className="viewer__row" style={{ marginTop: 12 }}>
             <button className="btn btn--sm" onClick={() => bearbeiten(s)}>{tr('Bearbeiten')}</button>
             <button className="btn btn--sm" disabled={s.ran_count === 0} onClick={() => {
