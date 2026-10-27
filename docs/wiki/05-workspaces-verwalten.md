@@ -72,6 +72,14 @@ hinausgeht, sieht sofort die Folge — statt sie später im OOM-Kill zu erfahren
 
 Beim Arbeitsplatz gelten die Werte für den **Container als Ganzes**, nicht je App.
 
+**Kerne sind ein Gewicht, keine harte Grenze** (seit 2026-10-27). Hat der Host Luft, darf ein
+Container bis zum Vierfachen seiner Kerne nutzen, höchstens alle Kerne des Hosts. Wird es eng, teilt
+der Kernel die Rechenzeit im Verhältnis der eingestellten Kerne auf: Ein Workspace mit 4 Kernen
+bekommt dann doppelt so viel wie einer mit 2. Den Faktor setzt `OTA_CPU_BURST` in `deploy/.env`
+(Vorgabe `4`; `1` heißt harte Grenze wie früher), gültig für neu angelegte Container und bei jeder
+Ressourcenänderung. Der Grund steht in [Fehlersuche](12-fehlersuche.md#alles-ruckelt-obwohl-der-host-nicht-ausgelastet-ist).
+Arbeitsspeicher bleibt eine harte Grenze.
+
 *Was nach Inaktivität passiert:*
 
 | | |

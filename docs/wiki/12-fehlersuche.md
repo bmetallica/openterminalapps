@@ -234,6 +234,35 @@ eigenes Zuhause und beide laufen nebeneinander. Der Preis: getrennte Einstellung
 Besser meist **Gemeinsame Daten**: eigene Einstellungen, aber `Desktop`, `Documents` & Co. geteilt
 ([Kapitel 5](05-workspaces-verwalten.md#ressourcen)).
 
+## Alles ruckelt, obwohl der Host nicht ausgelastet ist
+
+Gesehen am 2026-10-27: fünf Leute gleichzeitig, 24 Kerne und 100 GB RAM, die Bilder ruckelten, aber
+weder Proxmox noch `htop` zeigten eine Überlastung.
+
+**Ursache:** Bis dahin waren die Kerne eines Workspaces eine **harte Grenze** (CFS-Kontingent).
+Ohne GPU kodiert Selkies H.264 in Software mit 30 Bildern pro Sekunde, Xvfb zeichnet ebenfalls in
+Software, und dazu kam ein `vitest`, der allein einen Kern belegte. Damit war das Kontingent von zwei
+Kernen in jedem 100-ms-Fenster aufgebraucht, und der Kernel hielt den ganzen Container bis zum
+nächsten Fenster an. Der Host stand dabei halb leer.
+
+**Seitdem:** Die Kerne sind ein Gewicht, und ein Container darf bis zum Vierfachen nutzen
+([Ressourcen](05-workspaces-verwalten.md#ressourcen)). Container, die vor dem Update angelegt
+wurden, behalten die alte Grenze, bis sie neu entstehen oder ihre Ressourcen geändert werden.
+
+**Prüfen**, während es ruckelt:
+
+```bash
+docker stats --no-stream $(docker ps --filter name=ota-s- -q)
+for c in $(docker ps --filter name=ota-s- -q); do
+  id=$(docker inspect -f '{{.Id}}' $c)
+  echo "$(docker inspect -f '{{.Name}} nano={{.HostConfig.NanoCpus}} gewicht={{.HostConfig.CpuShares}}' $c)" \
+       "$(grep -E 'nr_throttled|throttled_usec' /sys/fs/cgroup/system.slice/docker-$id.scope/cpu.stat | tr '\n' ' ')"
+done
+```
+
+Wächst `nr_throttled` zwischen zwei Aufrufen deutlich, bremst die Grenze. Ist der Host dagegen
+wirklich voll, hilft nur mehr Hardware oder weniger Last.
+
 ## Ein Root-Arbeitsplatz steht auf „läuft", aber nichts geht
 
 **Zeichen:** Unter *Betrieb* steht „Läuft", beim Platz nur `…`. Anwendungen melden „Diese Sitzung

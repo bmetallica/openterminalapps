@@ -1334,7 +1334,8 @@ def start_container(req: StartRequest) -> dict[str, Any]:
             ports=ports or None,
             labels=beschriftung,
             dns=dns,
-            nano_cpus=int(req.cores * 1_000_000_000),
+            nano_cpus=_cpu_grenzen(req.cores)["NanoCpus"],
+            cpu_shares=_cpu_grenzen(req.cores)["CpuShares"],
             mem_limit=req.memory_bytes,
             # Grosszuegig, weil Browser und Electron-Anwendungen sonst
             # unvermittelt abstuerzen.
@@ -1599,6 +1600,25 @@ def _fetch_from_registry(client: docker.DockerClient, ref: str) -> bool:
 # Container kurz hintereinander —, braucht ein Arbeitsplatz mit grossem Zuhause
 # laenger. Das Ergebnis war eine Session, die als „nicht bereit" galt, obwohl
 # sie Sekunden spaeter stand. Laenger zu warten kostet nur im Fehlerfall.
+# **CPU: Gewicht statt Deckel.** Bis zum 2026-10-27 war `cores` eine harte
+# Grenze (`NanoCpus`). Mit fuenf Leuten ruckelte die Anlage, waehrend der Wirt
+# halb leer stand: Software-H.264 mit 30 Bildern, Xvfb und ein `vitest`
+# brauchten in einem Container mehr als zwei Kerne, und der Kernel hielt ihn
+# in jedem 100-ms-Fenster an, sobald das Kontingent weg war.
+#
+# Jetzt ist `cores` das Gewicht (`CpuShares`, 1024 je Kern): Ist die Maschine
+# voll, teilt der Kernel im Verhaeltnis der Kerne auf. Ist sie es nicht, darf
+# ein Container bis `cores * OTA_CPU_BURST` hinauf, nie ueber die Kerne des
+# Wirts. `OTA_CPU_BURST=1` stellt das alte Verhalten wieder her.
+CPU_SPIELRAUM = max(1.0, float(os.environ.get("OTA_CPU_BURST", "4") or 4))
+
+
+def _cpu_grenzen(kerne: float) -> dict[str, int]:
+    deckel = min(float(os.cpu_count() or 1), kerne * CPU_SPIELRAUM)
+    return {"NanoCpus": int(deckel * 1_000_000_000),
+            "CpuShares": max(2, int(kerne * 1024))}
+
+
 VNC_BEREIT_SEKUNDEN = int(os.environ.get("OTA_VNC_READY_SECONDS", "90"))
 
 
@@ -2124,7 +2144,7 @@ def ressourcen_setzen(cid: str, req: RessourcenIn) -> dict[str, Any]:
     except NotFound:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Container nicht gefunden")
     hc = c.attrs.get("HostConfig") or {}
-    werte: dict[str, int] = {"NanoCpus": int(req.cores * 1_000_000_000)}
+    werte: dict[str, int] = _cpu_grenzen(req.cores)
     zu_eng = False
     if c.status in ("running", "paused") and req.memory_bytes < int(hc.get("Memory") or 0):
         try:

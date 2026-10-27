@@ -1835,7 +1835,7 @@ export const EN: Record<string, string> = {
   '{a} ist für diesen Workspace abgeschaltet.': '{a} is disabled for this workspace.',
   '{a} ist für dich nicht freigegeben.': '{a} is not enabled for you.',
   'Dein Zuhause belegt {a} GB und damit die gesamten {b} GB, die dir zustehen. Räume auf — Downloads, Caches, alte Container-Abbilder — oder bitte deinen Administrator um mehr Platz.': 'Your home uses {a} GB, the full {b} GB you are allowed. Clean up — downloads, caches, old container images — or ask your administrator for more space.',
-  '„{a}“ läuft schon und benutzt dasselbe Zuhause. Zwei Arbeitsplätze auf einem Profil geraten sich in die Quere. Beende den anderen — oder gib diesem Workspace unter Persistenz ein eigenes Profil.': '“{a}” is already running and uses the same home. Two workspaces on one profile get in each other\'s way. End the other one — or give this workspace its own profile under persistence.',
+  '„{a}“ läuft schon und benutzt dasselbe Zuhause. Zwei Arbeitsplätze auf einem Profil geraten sich in die Quere. Beende den anderen — oder stelle diesen Workspace unter Persistenz auf „Eigene Einstellungen, gemeinsame Daten“.': '“{a}” is already running and uses the same home. Two workspaces on one profile get in each other\'s way. End the other one — or set this workspace\'s persistence to “Own settings, shared data”.',
   'Es sind höchstens {a} Anwendungen gleichzeitig offen. Schliesse eine, dann geht die nächste auf.': 'At most {a} applications can be open at once. Close one, then the next one opens.',
   '„{a}“ ist keine Anwendung dieses Workspace.': '“{a}” is not an application of this workspace.',
   'Steht nicht auf der Whitelist.': 'Not on the whitelist.',

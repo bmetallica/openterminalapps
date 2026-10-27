@@ -71,6 +71,14 @@ beyond sees the consequence immediately — instead of learning it later in an O
 
 For a desktop the values apply to the **container as a whole**, not per app.
 
+**Cores are a weight, not a hard limit** (since 2026-10-27). While the host has headroom, a
+container may use up to four times its cores, at most all cores of the host. When it gets tight, the
+kernel shares CPU time in proportion to the configured cores: a workspace with 4 cores then gets
+twice as much as one with 2. The factor is `OTA_CPU_BURST` in `deploy/.env` (default `4`; `1` means
+a hard limit as before), applied to newly created containers and on every resource change. The
+reason is in [Troubleshooting](12-fehlersuche.md#everything-stutters-although-the-host-is-not-busy).
+Memory stays a hard limit.
+
 *What happens after inactivity:*
 
 | | |

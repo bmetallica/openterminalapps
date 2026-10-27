@@ -370,6 +370,10 @@ services:
       # ohne diese beiden Zeilen schriebe jeder Arbeitsplatz ohne Grenze.
       OTA_LOG_MAX_SIZE: "${OTA_LOG_MAX_SIZE:-10m}"
       OTA_LOG_MAX_FILE: "${OTA_LOG_MAX_FILE:-3}"
+      # Wie weit ein Arbeitsplatz ueber seine Kerne hinaus darf, solange der
+      # Wirt Luft hat. Die Kerne des Workspaces sind sein Gewicht, wenn es eng
+      # wird (Kapitel 5, Ressourcen). 1 = harte Grenze wie bis 2026-10-27.
+      OTA_CPU_BURST: "${OTA_CPU_BURST:-4}"
       # Der Zeitserver, falls einer gesetzt ist. Er steht in der Grundregel des
       # Routers: Eine falsche Uhr bricht TLS, und der Fehler sieht nach allem
       # aus ausser nach der Uhr. Leer heisst: keine Zeile dafuer.

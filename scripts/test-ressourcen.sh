@@ -58,11 +58,15 @@ for n in 1 2 3; do
 done
 [ -n "$SID" ] || { bad "Session ließ sich nicht starten"; exit 1; }
 C=$(docker ps -a --format '{{.Names}}' | grep "^ota-s-${SID:0:12}" | head -1)
-grenzen() { docker inspect "$C" --format '{{.HostConfig.NanoCpus}} {{.HostConfig.Memory}}'; }
-mit() {  # mit <Kerne> <Bytes> -> „<NanoCpus> <Bytes>"
-  python3 -c "print(int($1 * 1e9), $2)"
+grenzen() { docker inspect "$C" --format '{{.HostConfig.NanoCpus}} {{.HostConfig.CpuShares}} {{.HostConfig.Memory}}'; }
+# Die Kerne sind das Gewicht; der Deckel liegt bei Kerne mal OTA_CPU_BURST,
+# hoechstens bei den Kernen des Wirts — gerechnet wie im Agent.
+WIRT=$(docker exec ota-agent python3 -c 'import os; print(os.cpu_count())')
+SPIEL=$(docker exec ota-agent printenv OTA_CPU_BURST 2>/dev/null || echo 4)
+mit() {  # mit <Kerne> <Bytes> -> „<NanoCpus> <CpuShares> <Bytes>"
+  python3 -c "print(int(min($WIRT, $1 * max(1.0, $SPIEL)) * 1e9), max(2, int($1 * 1024)), $2)"
 }
-echo "  (Session ${SID:0:8} in $C)"
+echo "  (Session ${SID:0:8} in $C, Wirt $WIRT Kerne, Spielraum $SPIEL)"
 
 aendern() {  # aendern <Kerne> <Bytes> -> Hinweis aus der Antwort
   jqp "json.dumps(dict(d, cores=$1, memory_bytes=$2))" < "$TMP/vorher.json" > "$TMP/neu.json"
@@ -86,6 +90,22 @@ expect "$(mit 0.5 $((GIB + GIB / 2)))" "$(grenzen)" "RAM unter dem Verbrauch: CP
 grep -q "ab dem nächsten Start" <<<"$H" && ok "… und die Antwort sagt, wann er gilt" || bad "Hinweis: '$H'"
 H=$(abweichung null null)
 expect "$(mit 3.0 $((3 * GIB)))" "$(grenzen)" "Abweichung entfernt: wieder die Werte des Workspaces"
+
+echo
+echo "Spielraum"
+# Ein Kern Gewicht, drei Kerne Last: Mit freiem Wirt darf der Container mehr
+# als den einen Kern nehmen. Gemessen ueber die CPU-Zeit im Container.
+if [ "$WIRT" -ge 2 ] && [ "$SPIEL" != "1" ]; then
+  abweichung 1.0 null >/dev/null
+  last() { docker exec "$C" sh -c 'for i in 1 2 3; do timeout 3 sh -c "while :; do :; done" & done; wait'; }
+  zeit() { docker exec "$C" sh -c 'awk "/usage_usec/{print \$2}" /sys/fs/cgroup/cpu.stat'; }
+  A=$(zeit); last; B=$(zeit)
+  K=$(python3 -c "print(round(($B - $A) / 3e6, 1))")
+  python3 -c "import sys; sys.exit(0 if $K > 1.4 else 1)" \
+    && ok "Ein Kern Gewicht, freier Wirt: $K Kerne genutzt" \
+    || bad "Ein Kern Gewicht: nur $K Kerne genutzt"
+  abweichung null null >/dev/null
+fi
 
 echo
 echo "Pausiert"

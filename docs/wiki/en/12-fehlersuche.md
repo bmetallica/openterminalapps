@@ -226,6 +226,34 @@ That is not a fault but intentional. All workspaces with persistence **per user*
 workspace** under *Resources → Persistent profile*. Then it gets its own home and both run side by
 side. The price: separate settings and projects.
 
+## Everything stutters although the host is not busy
+
+Seen on 2026-10-27: five people at once, 24 cores and 100 GB RAM, the streams stuttered, but neither
+Proxmox nor `htop` showed any overload.
+
+**Cause:** Until then a workspace's cores were a **hard limit** (CFS quota). Without a GPU, Selkies
+encodes H.264 in software at 30 frames per second, Xvfb draws in software as well, and on top a
+`vitest` took a whole core by itself. That used up the two-core quota in every 100 ms window, and
+the kernel stopped the whole container until the next window. Meanwhile the host was half idle.
+
+**Since then:** Cores are a weight, and a container may use up to four times as much
+([Resources](05-workspaces-verwalten.md#resources)). Containers created before the update keep
+the old limit until they are recreated or their resources are changed.
+
+**Check** while it stutters:
+
+```bash
+docker stats --no-stream $(docker ps --filter name=ota-s- -q)
+for c in $(docker ps --filter name=ota-s- -q); do
+  id=$(docker inspect -f '{{.Id}}' $c)
+  echo "$(docker inspect -f '{{.Name}} nano={{.HostConfig.NanoCpus}} weight={{.HostConfig.CpuShares}}' $c)" \
+       "$(grep -E 'nr_throttled|throttled_usec' /sys/fs/cgroup/system.slice/docker-$id.scope/cpu.stat | tr '\n' ' ')"
+done
+```
+
+If `nr_throttled` grows noticeably between two runs, the limit is the brake. If the host really is
+full, only more hardware or less load helps.
+
 ## A root workspace says "running", but nothing works
 
 **Signs:** Under *Operations* it says "Running", the space column only shows `…`. Applications
