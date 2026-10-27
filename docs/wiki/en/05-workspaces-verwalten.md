@@ -84,8 +84,26 @@ For a desktop the values apply to the **container as a whole**, not per app.
 | | |
 |---|---|
 | **Per user** | One shared home for all workspaces. The normal case |
+| **Shared data** | Own settings per type, data folders from the shared home. Runs **alongside** the user's other workspaces |
 | **Per workspace** | A separate home per type. When configurations interfere |
 | **Ephemeral** | Nothing is stored. Every start begins at the golden image |
+
+**Two workspaces on one home do not start at the same time.** The second is refused with a
+message. That is deliberate: programs such as VS Code or Chrome put locks and sockets in the home
+and would otherwise reach into the other container. Anyone who needs several at once, such as two
+root workspaces, sets them to **Shared data**:
+
+- Each workspace has its own home under `/srv/ota/profiles/<id>/<slug>`, with its own settings and
+  its own browser and IDE profile.
+- The folders under **Shared folders** come from the shared home (`…/<id>/user`). Whatever one
+  workspace puts there, the other sees at once. Default: `Desktop`, `Documents`, `Downloads`,
+  `Music`, `Pictures`, `Videos`, `Templates`, `Public`. Your own folders work too, such as
+  `Projekte` or `Projekte/customer-a`. They must be relative, without `..` and not hidden.
+- Shelf, group drives and `~/Gemeinsam` are there as always.
+- After switching, the workspace starts with fresh settings from the skeleton. The old dotfiles
+  stay in the shared home. A **paused root workspace** needs one *Rebuild*
+  ([chapter 25](25-root-arbeitsplatz.md)), because the folders are mounted when the container is
+  created. Freeze whatever is installed in it first ([chapter 7](07-golden-images.md)).
 
 **OTA Git** (under Resources): if [OTA Git](27-git.md) is on, workspaces from this template get Git
 preconfigured for the Git subdomain: address, token, name and email. On by default. Turning it off

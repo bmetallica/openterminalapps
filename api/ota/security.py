@@ -280,9 +280,39 @@ def profile_path(user: User, tpl: Template) -> str:
     if tpl.persistence_scope == "none":
         return ""
     kennung = str(user.id)
-    if tpl.persistence_scope == "template":
+    # „daten" wohnt wie „template" in einem eigenen Zuhause — die Datenordner
+    # kommen erst beim Start aus dem gemeinsamen dazu (`daten_pfad`).
+    if tpl.persistence_scope in ("template", "daten"):
         return f"{root}/{kennung}/{tpl.slug}"
     return f"{root}/{kennung}/user"
+
+
+# Die Ordner, die xdg-user-dirs im Basisimage anlegt (englische Namen, auch
+# unter LANG=de_DE — so steht es in `~/.config/user-dirs.dirs`).
+DATEN_ORDNER_VORGABE = [
+    "Desktop", "Documents", "Downloads", "Music", "Pictures", "Videos",
+    "Templates", "Public",
+]
+
+
+def daten_freigabe(user: User, tpl: Template) -> dict:
+    """Was ein Arbeitsplatz mit Persistenz „daten" aus dem gemeinsamen
+    Zuhause des Nutzers bekommt — oder nichts.
+
+    **Warum es das gibt:** Zwei Container auf *einem* Zuhause geraten sich in
+    die Quere (siehe die Sperre in `sessions.start_session`): VS Code reicht
+    seine Aufrufe ueber einen Socket im Profil an den anderen Container,
+    Browser sperren ihr Profil gegen den „anderen Rechner". Getrennt werden
+    deshalb die Einstellungen, geteilt nur die Ordner mit den Daten — und
+    damit laufen mehrere Root-Arbeitsplaetze desselben Menschen gleichzeitig.
+    """
+    if tpl.persistence_scope != "daten":
+        return {}
+    root = settings().profiles_root.rstrip("/")
+    return {
+        "pfad": f"{root}/{user.id}/user",
+        "ordner": list(tpl.daten_ordner or DATEN_ORDNER_VORGABE),
+    }
 
 
 def as_uuid(value: str) -> uuid.UUID | None:

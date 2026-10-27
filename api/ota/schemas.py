@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime
 from typing import Annotated, Any
 
-from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, model_validator
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, field_validator, model_validator
 
 
 def _adresse(wert: object) -> str:
@@ -225,6 +225,7 @@ class TemplateOut(BaseModel):
     env: dict
     start_script: str = ""
     skeleton_enforce: list[str] = []
+    daten_ordner: list[str] = []
     user_shelf: bool = True
     group_shelf: bool = True
     # OTA-Git im Arbeitsplatz vorkonfigurieren (Kapitel 27).
@@ -271,11 +272,31 @@ class TemplateIn(BaseModel):
     y_res: int = 720
     idle_minutes: int = 60
     idle_action: str = "stop"
-    persistence_scope: str = "user"
+    # user: ein Zuhause je Nutzer · template: je Arbeitsplatz · daten: eigene
+    # Einstellungen je Arbeitsplatz, Datenordner aus dem Zuhause des Nutzers
+    # (laesst sich gleichzeitig mit anderen starten) · none: fluechtig
+    persistence_scope: str = Field("user", pattern="^(user|template|daten|none)$")
     rights: dict = {}
     env: dict = {}
     start_script: str = ""
     skeleton_enforce: list[str] = []
+    # Relativ zum Zuhause, ohne „..": Desktop, Documents, Projekte/kunde-a …
+    daten_ordner: list[str] = Field([], max_length=40)
+
+    @field_validator("daten_ordner")
+    @classmethod
+    def _daten_ordner_pruefen(cls, werte: list[str]) -> list[str]:
+        sauber: list[str] = []
+        for wert in werte:
+            pfad = wert.strip().strip("/")
+            teile = pfad.split("/")
+            if (not pfad or len(pfad) > 200 or ".." in teile or "." in teile
+                    or "" in teile or teile[0].startswith(".")):
+                raise ValueError(f"„{wert}“ ist kein Ordner im Zuhause "
+                                 "(relativ, ohne .., nicht versteckt).")
+            if pfad not in sauber:
+                sauber.append(pfad)
+        return sauber
     user_shelf: bool = True
     group_shelf: bool = True
     # OTA-Git im Arbeitsplatz vorkonfigurieren (Kapitel 27).

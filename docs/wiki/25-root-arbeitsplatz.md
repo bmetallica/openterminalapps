@@ -13,7 +13,9 @@ Ein **Root-Arbeitsplatz** ist eine eigene Klasse von Arbeitsplatz, gedacht für 
 | Adresse im Browser | je Sitzung neu | **fest** — Verknüpfungen und Lesezeichen bleiben gültig |
 | Laufzeit | `runc`, gehärtet (`cap_drop: ALL`) | **Sysbox** (`sysbox-runc`) |
 
-Das Zuhause, die Ablagen und die Gruppenlaufwerke sind in beiden Klassen dieselben.
+Das Zuhause, die Ablagen und die Gruppenlaufwerke sind in beiden Klassen dieselben. **Mehrere
+Root-Arbeitsplätze gleichzeitig:** Persistenz *Gemeinsame Daten* gibt jedem ein eigenes Zuhause
+mit den Datenordnern aus dem gemeinsamen ([Kapitel 5](05-workspaces-verwalten.md#ressourcen)).
 
 ## Warum Sysbox — und was das sicherheitlich heisst
 

@@ -246,6 +246,13 @@ class Template(Base):
     git_vorkonfig: Mapped[bool] = mapped_column(Boolean, default=True,
                                                 server_default="true")
 
+    # Nur bei Persistenz „daten" (eigene Einstellungen, gemeinsame Daten):
+    # welche Ordner aus dem gemeinsamen Zuhause des Nutzers in das eigene
+    # Zuhause dieses Arbeitsplatzes gehaengt werden. Leer heisst: die Vorgabe
+    # (`security.DATEN_ORDNER_VORGABE`).
+    daten_ordner: Mapped[list] = mapped_column(JSONB, default=list,
+                                               server_default="[]")
+
     # Welche Streaming-Maschine den Bildschirm überträgt.
     #
     # `kasmvnc` ist die Vorgabe und bleibt es: Sie trägt heute jeden

@@ -26,7 +26,7 @@ from ..models import (
 )
 from ..schemas import SessionOut, SessionStartIn, StreamOut
 from ..security import (
-    darf_root, effective_resources, needs_totp, owns_session, profile_path,
+    daten_freigabe, darf_root, effective_resources, needs_totp, owns_session, profile_path,
     user_can_see_app, user_can_see_template, vnc_secret,
 )
 
@@ -541,7 +541,9 @@ def start_session(
     # Beides liesse sich einzeln abfangen. Die gemeinsame Ursache nicht: Ein
     # Zuhause ist fuer einen Rechner gedacht, nicht fuer zwei. Wer beides
     # gleichzeitig braucht, gibt der zweiten Vorlage ein eigenes Profil
-    # (Persistenz "Pro Workspace").
+    # (Persistenz "Pro Workspace") — oder "Eigene Einstellungen, gemeinsame
+    # Daten": eigenes Zuhause, die Datenordner aus dem gemeinsamen
+    # (`security.daten_freigabe`). Dann gibt es hier keinen Zusammenstoss.
     if profile:
         clash = next((s for s in running
                       if profile_path(user, s.template) == profile), None)
@@ -550,8 +552,9 @@ def start_session(
                 status.HTTP_409_CONFLICT,
                 f"„{clash.template.friendly_name}“ läuft schon und benutzt "
                 "dasselbe Zuhause. Zwei Arbeitsplätze auf einem Profil geraten "
-                "sich in die Quere. Beende den anderen — oder gib diesem "
-                "Workspace unter Persistenz ein eigenes Profil.",
+                "sich in die Quere. Beende den anderen — oder stelle diesen "
+                "Workspace unter Persistenz auf „Eigene Einstellungen, "
+                "gemeinsame Daten“.",
             )
 
     # **Root-Arbeitsplatz: derselbe Platz, nicht ein neuer.** Gibt es einen
@@ -625,6 +628,8 @@ def start_session(
             "memory_bytes": memory,
             "env": env,
             "profile_path": profile,
+            # Persistenz "daten": Datenordner aus dem gemeinsamen Zuhause.
+            "daten": daten_freigabe(user, tpl),
             "vnc_user": sess.vnc_user,
             "vnc_secret": sess.vnc_secret,
             "mode": tpl.mode,

@@ -420,6 +420,9 @@ class StartRequest(BaseModel):
     memory_bytes: int = Field(gt=0)
     env: dict[str, str] = {}
     profile_path: str = ""
+    # Persistenz „daten": {"pfad": gemeinsames Zuhause, "ordner": [...]}.
+    # Die Ordner werden daraus in das eigene Zuhause gehaengt. Leer: nichts.
+    daten: dict[str, Any] = {}
     # Kennung des Workspace — bestimmt, welches Skeleton gilt.
     template_slug: str = ""
     # Pfade im Skeleton, die bei **jedem** Start ueberschreiben.
@@ -786,6 +789,62 @@ def list_images() -> list[dict[str, Any]]:
     return sorted(out, key=lambda i: i["ref"])
 
 
+def _daten_mounts(daten: dict[str, Any], profil: str, heimat: str) -> list:
+    """Persistenz „daten": die Datenordner aus dem gemeinsamen Zuhause.
+
+    Der Arbeitsplatz hat sein eigenes Zuhause (Einstellungen, Browser- und
+    IDE-Profil, Sockets) und sieht darin `Desktop`, `Documents` … aus dem
+    Zuhause, das alle seine Arbeitsplaetze teilen. So laufen mehrere
+    gleichzeitig, ohne sich ueber Sperrdateien in die Quere zu kommen.
+
+    **Beide Seiten werden vorher angelegt und gehoeren 1000.** Fehlt das Ziel
+    im eigenen Zuhause, legt Docker es an — als root, und der Nutzer koennte
+    in seinem eigenen Desktop nichts ablegen. Fehlt die Quelle, verweigert
+    Docker den Start.
+
+    Der Pfad kommt von der API, wird hier aber trotzdem geprueft: Er muss im
+    Profilbaum liegen, und kein Ordner darf hinausfuehren — auch nicht ueber
+    einen Verweis, den jemand im Zuhause angelegt hat.
+    """
+    if not daten or not profil:
+        return []
+    wurzel = os.path.realpath(os.environ.get("OTA_PROFILES_ROOT", "/srv/ota/profiles"))
+    gemeinsam = os.path.realpath(str(daten.get("pfad") or ""))
+    if not gemeinsam.startswith(wurzel + os.sep):
+        log.warning("Datenordner: %s liegt nicht unter %s — nichts eingehaengt",
+                    gemeinsam, wurzel)
+        return []
+    _ensure_profile(gemeinsam)
+    profil = os.path.realpath(profil)
+    mounts = []
+    for name in daten.get("ordner") or []:
+        rel = str(name).strip().strip("/")
+        teile = rel.split("/")
+        if not rel or ".." in teile or "." in teile or "" in teile:
+            continue
+        quelle = os.path.join(gemeinsam, rel)
+        ziel = os.path.join(profil, rel)
+        # Kein Verweis auf dem Weg: Er koennte aus dem Profilbaum fuehren.
+        if os.path.realpath(quelle) != quelle or os.path.realpath(ziel) != ziel:
+            log.warning("Datenordner %s: Verweis im Weg — uebersprungen", rel)
+            continue
+        try:
+            for pfad, basis in ((quelle, gemeinsam), (ziel, profil)):
+                os.makedirs(pfad, exist_ok=True)
+                # Jede Stufe unterhalb der Basis, nicht nur die letzte.
+                stufe = pfad
+                while stufe != basis and stufe.startswith(basis):
+                    os.chown(stufe, 1000, 1000)
+                    stufe = os.path.dirname(stufe)
+        except OSError as exc:
+            log.warning("Datenordner %s nicht anlegbar: %s", rel, exc)
+            continue
+        mounts.append(docker.types.Mount(
+            target=f"{heimat}/{rel}", source=quelle, type="bind",
+        ))
+    return mounts
+
+
 def _ensure_profile(path: str) -> None:
     """Legt das Profilverzeichnis an, setzt UID/GID 1000 und haelt es eng.
 
@@ -1071,6 +1130,9 @@ def start_container(req: StartRequest) -> dict[str, Any]:
         mounts.append(docker.types.Mount(
             target=heimat, source=req.profile_path, type="bind",
         ))
+        # Nach dem Zuhause: Docker haengt in der Reihenfolge der Liste ein,
+        # und ein Ordner darin muss auf dem schon eingehaengten Zuhause liegen.
+        mounts.extend(_daten_mounts(req.daten, req.profile_path, heimat))
 
     # Die gemeinsame Ablage, nur lesbar. Sie haengt **nicht** im Home: Ein
     # Verzeichnis, das der Nutzer nicht beschreiben kann, mitten in seinem

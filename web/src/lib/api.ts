@@ -83,7 +83,9 @@ export type Template = {
   y_res: number
   idle_minutes: number
   idle_action: 'pause' | 'stop' | 'delete'
-  persistence_scope: 'user' | 'template' | 'none'
+  persistence_scope: 'user' | 'template' | 'daten' | 'none'
+  /** Nur bei „daten": Ordner aus dem gemeinsamen Zuhause. Leer = Vorgabe. */
+  daten_ordner?: string[]
   rights: Record<string, boolean>
   /** Läuft bei jedem Sessionstart als Nutzer im Container. */
   start_script: string

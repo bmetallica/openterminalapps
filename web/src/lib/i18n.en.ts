@@ -231,6 +231,12 @@ export const EN: Record<string, string> = {
   'Pro Nutzer': 'Per user',
   'Pro Workspace': 'Per workspace',
   'Flüchtig': 'Ephemeral',
+  'Gemeinsame Daten': 'Shared data',
+  'Eigene Einstellungen für diesen Workspace, die Datenordner kommen aus dem gemeinsamen Home. Läuft gleichzeitig mit anderen Workspaces dieses Nutzers.':
+    'Own settings for this workspace; the data folders come from the shared home. Runs alongside the user’s other workspaces.',
+  'Gemeinsame Ordner': 'Shared folders',
+  'Ein Ordner je Zeile, relativ zum Home. Leer: Desktop, Documents, Downloads, Music, Pictures, Videos, Templates, Public. Wirkt bei Root-Arbeitsplätzen erst nach „Neu aufsetzen“.':
+    'One folder per line, relative to the home. Empty: Desktop, Documents, Downloads, Music, Pictures, Videos, Templates, Public. On root workspaces it takes effect only after “Rebuild”.',
   'Gilt für alle Nutzer dieses Workspace. Gruppen können strenger sein, nie großzügiger.':
     'Applies to every user of this workspace. Groups can be stricter, never more permissive.',
   'Die Brücke hält die Zwischenablage über alle Apps im Container gleich. Wird das Kopieren hier abgeschaltet, läuft auch die Brücke nicht.':

@@ -13,7 +13,9 @@ A **root workspace** is a class of workspace of its own, meant for developers:
 | Address in the browser | new per session | **fixed** — shortcuts and bookmarks stay valid |
 | Runtime | `runc`, hardened (`cap_drop: ALL`) | **Sysbox** (`sysbox-runc`) |
 
-The home, the shelves and the group drives are the same in both classes.
+The home, the shelves and the group drives are the same in both classes. **Several root
+workspaces at once:** the *Shared data* persistence gives each its own home with the data folders
+from the shared one ([chapter 5](05-workspaces-verwalten.md#resources)).
 
 ## Why Sysbox — and what it means for security
 

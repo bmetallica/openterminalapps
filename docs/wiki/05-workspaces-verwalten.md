@@ -85,8 +85,27 @@ Beim Arbeitsplatz gelten die Werte für den **Container als Ganzes**, nicht je A
 | | |
 |---|---|
 | **Pro Nutzer** | Ein gemeinsames Home für alle Workspaces. Der Normalfall |
+| **Gemeinsame Daten** | Eigene Einstellungen je Typ, die Datenordner aus dem gemeinsamen Home. Läuft **gleichzeitig** mit den anderen Workspaces des Nutzers |
 | **Pro Workspace** | Getrenntes Home je Typ. Wenn Konfigurationen sich stören |
 | **Flüchtig** | Nichts wird gespeichert. Jeder Start beginnt beim Golden Image |
+
+**Zwei Workspaces auf einem Home starten nicht gleichzeitig.** Der zweite wird mit einer Meldung
+abgewiesen. Das ist Absicht: Programme wie VS Code oder Chrome legen Sperren und Sockets im Home ab
+und greifen sonst in den anderen Container hinüber. Wer mehrere gleichzeitig braucht, zum Beispiel
+zwei Root-Arbeitsplätze, stellt sie auf **Gemeinsame Daten**:
+
+- Jeder Workspace hat sein eigenes Home unter `/srv/ota/profiles/<id>/<kennung>`, mit eigenen
+  Einstellungen sowie eigenem Browser- und IDE-Profil.
+- Die Ordner unter **Gemeinsame Ordner** kommen aus dem gemeinsamen Home (`…/<id>/user`). Was ein
+  Arbeitsplatz dort ablegt, sieht der andere sofort. Vorgabe: `Desktop`, `Documents`, `Downloads`,
+  `Music`, `Pictures`, `Videos`, `Templates`, `Public`. Eigene Ordner gehen auch, etwa
+  `Projekte` oder `Projekte/kunde-a`. Sie müssen relativ sein, ohne `..` und nicht versteckt.
+- Ablage, Gruppenlaufwerke und `~/Gemeinsam` sind wie immer dabei.
+- Beim Umstellen beginnt der Workspace mit frischen Einstellungen aus dem Skeleton. Die alten
+  Punktdateien bleiben im gemeinsamen Home liegen. Ein **angehaltener Root-Arbeitsplatz** braucht
+  einmal *Neu aufsetzen* ([Kapitel 25](25-root-arbeitsplatz.md)), weil die Ordner beim Anlegen
+  des Containers eingehängt werden. Was darin installiert ist, vorher einfrieren
+  ([Kapitel 7](07-golden-images.md)).
 
 **OTA-Git** (unter Ressourcen): Ist [OTA-Git](27-git.md) an, bekommen Arbeitsplätze aus diesem
 Workspace Git für die Git-Subdomain vorkonfiguriert: Adresse, Token, Name und E-Mail. Vorgabe ist

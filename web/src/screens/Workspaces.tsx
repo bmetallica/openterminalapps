@@ -57,6 +57,7 @@ function toPayload(d: Draft) {
     idle_minutes: d.idle_minutes,
     idle_action: d.idle_action,
     persistence_scope: d.persistence_scope,
+    daten_ordner: d.daten_ordner ?? [],
     rights: d.rights,
     env: Object.fromEntries(d.env_rows.filter((r) => r.k).map((r) => [r.k, r.v])),
     // Fehlte bis zum 2026-08-28: Das Feld liess sich bearbeiten und wurde
@@ -69,6 +70,25 @@ function toPayload(d: Draft) {
     is_enabled: d.is_enabled,
     group_ids: d.group_ids,
   }
+}
+
+/** Eine Zeile je Ordner. Der Text bleibt lokal, sonst verschluckte das
+ *  Aufräumen leerer Zeilen jeden Zeilenumbruch beim Tippen. */
+function OrdnerListe({ werte, onChange }: {
+  werte: string[]
+  onChange: (v: string[]) => void
+}) {
+  const [text, setText] = useState(werte.join('\n'))
+  return (
+    <textarea className="input" rows={4}
+      aria-label={tr('Gemeinsame Ordner')}
+      placeholder={'Desktop\nDocuments\nDownloads\nProjekte'}
+      value={text}
+      onChange={(e) => {
+        setText(e.target.value)
+        onChange(e.target.value.split('\n').map((x) => x.trim()).filter(Boolean))
+      }} />
+  )
 }
 
 function Editor({ tpl, host, groups, images, netzprofile, onSaved, onClose, onToast, onCopied }: {
@@ -493,15 +513,26 @@ function Editor({ tpl, host, groups, images, netzprofile, onSaved, onClose, onTo
               ? tr('Ein gemeinsames Home für alle Workspaces dieses Nutzers.')
               : draft.persistence_scope === 'template'
                 ? tr('Ein eigenes Home nur für diesen Workspace-Typ.')
-                : tr('Nichts wird gespeichert. Jeder Start beginnt beim Golden Image.')}>
+                : draft.persistence_scope === 'daten'
+                  ? tr('Eigene Einstellungen für diesen Workspace, die Datenordner kommen aus dem gemeinsamen Home. Läuft gleichzeitig mit anderen Workspaces dieses Nutzers.')
+                  : tr('Nichts wird gespeichert. Jeder Start beginnt beim Golden Image.')}>
             <Segmented label={tr('Persistenz')} value={draft.persistence_scope}
               options={[
                 { value: 'user' as const, label: tr('Pro Nutzer') },
+                { value: 'daten' as const, label: tr('Gemeinsame Daten') },
                 { value: 'template' as const, label: tr('Pro Workspace') },
                 { value: 'none' as const, label: tr('Flüchtig') },
               ]}
               onChange={(v) => set('persistence_scope', v)} />
           </Field>
+
+          {draft.persistence_scope === 'daten' && (
+            <Field label={tr('Gemeinsame Ordner')}
+              hint={tr('Ein Ordner je Zeile, relativ zum Home. Leer: Desktop, Documents, Downloads, Music, Pictures, Videos, Templates, Public. Wirkt bei Root-Arbeitsplätzen erst nach „Neu aufsetzen“.')}>
+              <OrdnerListe werte={draft.daten_ordner ?? []}
+                onChange={(v) => set('daten_ordner', v)} />
+            </Field>
+          )}
         </>
       )}
 
