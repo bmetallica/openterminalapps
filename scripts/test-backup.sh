@@ -111,6 +111,9 @@ else
         bad "srv/ota/$teil fehlt in der Sicherung"
       fi
     done
+    # Die Probe ist kein Backup: liegen gelassen, sammelten sich hier 42
+    # Archive zu je 134 MB.
+    rm -f "$PROBE"
   fi
 fi
 
