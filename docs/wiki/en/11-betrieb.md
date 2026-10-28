@@ -164,8 +164,13 @@ the sidebar for everyone, right below Start.
 Whoever has `settings.manage` may **write**. On the News page:
 
 1. **New post**, enter title and text in **Markdown**. **Preview** shows what it looks like. The same
-   notation as in the handbook applies: `**bold**`, `*italic*`, `` `code` ``, `## heading`, lists
-   with `-` and links `[text](https://…)`.
+   notation as in the handbook applies: `**bold**`, `*italic*`, code in backticks, `## heading`,
+   lists with `-` and links `[text](https://…)`. Plus two things the handbook does not have:
+   - **Line breaks** stay, as in an e-mail. A blank line starts a new paragraph.
+   - **HTML** works: `<center>`, `<font color="red">`, `<span style="color:#c00">`, `<u>`,
+     `<br>`, tables, `<details>` and the like. Markdown inside keeps working when the tags are on
+     lines of their own. Images only from OTA itself or as a `data:` address; the browser blocks
+     others.
 2. **Pin to top** keeps a post above all others, for example an ongoing maintenance.
 3. **Draft** saves without users seeing anything.
 4. **Publish.**
@@ -178,8 +183,9 @@ applies on every computer. The sidebar checks every five minutes.
 **Corrections do not count again:** the publication date is set by the first publishing. Fixing a
 typo does not send anyone the badge again. The change is shown under the date ("changed on …").
 
-**Safe:** the text is rendered in the browser, and any HTML in it is escaped. A post therefore
-cannot execute anything. Creating, changing and deleting are logged (Operations → Log).
+**Safe:** the text is rendered in the browser, and the HTML in it goes through an allowlist. It may
+style, not execute: scripts, `on…` attributes, `javascript:` links, forms, frames and `position` in
+`style` are dropped. Creating, changing and deleting are logged (Operations → Log).
 
 API: `GET /api/news`, `GET /api/news/ungelesen`, `POST /api/news/gelesen` for everyone;
 `POST /api/news`, `PUT` and `DELETE /api/news/{id}` with `settings.manage`.

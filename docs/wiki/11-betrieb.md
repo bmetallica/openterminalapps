@@ -167,8 +167,14 @@ für alle in der Seitenleiste, gleich unter Start.
 **Schreiben** darf, wer `settings.manage` hat. Auf der News-Seite:
 
 1. **Neuer Beitrag**, Titel und Text in **Markdown** eingeben. **Vorschau** zeigt, wie es aussieht.
-   Es gilt dieselbe Schreibweise wie im Handbuch: `**fett**`, `*kursiv*`, `` `Code` ``,
-   `## Überschrift`, Listen mit `-` und Links `[Text](https://…)`.
+   Es gilt dieselbe Schreibweise wie im Handbuch: `**fett**`, `*kursiv*`, Code in Backticks,
+   `## Überschrift`, Listen mit `-` und Links `[Text](https://…)`. Dazu zweierlei, was das Handbuch
+   nicht kennt:
+   - **Zeilenumbrüche** bleiben, wie in einer Mail. Eine Leerzeile beginnt einen neuen Absatz.
+   - **HTML** gilt: `<center>`, `<font color="red">`, `<span style="color:#c00">`, `<u>`,
+     `<br>`, Tabellen, `<details>` und Ähnliches. Markdown darin geht weiter, wenn die Tags auf
+     eigenen Zeilen stehen. Bilder nur von OTA selbst oder als `data:`-Adresse, fremde blockiert
+     der Browser.
 2. **Oben anheften** hält einen Beitrag über allen anderen, etwa eine laufende Wartung.
 3. **Entwurf** speichert, ohne dass Nutzer etwas sehen.
 4. **Veröffentlichen.**
@@ -182,8 +188,9 @@ Browser, und gilt deshalb an jedem Rechner. Die Seitenleiste fragt alle fünf Mi
 einen Tippfehler behebt, schickt niemandem den Punkt noch einmal. Die Änderung steht unter dem Datum
 („geändert am …").
 
-**Sicher:** Der Text wird im Browser gerendert, jedes HTML darin wird maskiert. Ein Beitrag kann
-also nichts ausführen. Anlegen, Ändern und Löschen stehen im Protokoll (Betrieb → Protokoll).
+**Sicher:** Der Text wird im Browser gerendert, das HTML darin geht durch eine Positivliste.
+Gestalten darf es, ausführen nicht: Skripte, `on…`-Attribute, `javascript:`-Verweise, Formulare,
+Frames und `position` in `style` fallen weg. Anlegen, Ändern und Löschen stehen im Protokoll (Betrieb → Protokoll).
 
 API: `GET /api/news`, `GET /api/news/ungelesen`, `POST /api/news/gelesen` für alle;
 `POST /api/news`, `PUT` und `DELETE /api/news/{id}` mit `settings.manage`.

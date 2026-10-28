@@ -271,7 +271,7 @@ that did not exist before is simply there.
 
 **Administration**
 - Resources **per user and workspace**: user A gets 2 cores, user B one
-- **News** — announcements from the administrators to everyone, written in Markdown right on the
+- **News** — announcements from the administrators to everyone, written in Markdown with line breaks and filtered HTML right on the
   page, with drafts, pinning and a sidebar badge for unread posts ([chapter 11](docs/wiki/en/11-betrieb.md#news-))
 - **User handbook** — chapters of their own for users: getting started, account, files, root
   workspace, Git and AI, using a session, help with problems, terms ([chapters 29 to 36](docs/wiki/en/29-los-gehts.md))

@@ -1974,7 +1974,7 @@ export const EN: Record<string, string> = {
   'Vorschau': 'Preview',
   'Schreiben': 'Write',
   'Text (Markdown)': 'Text (Markdown)',
-  'Text in Markdown: **fett**, *kursiv*, `Code`, ## Überschrift, - Liste, [Link](https://…)': 'Text in Markdown: **bold**, *italic*, `code`, ## heading, - list, [link](https://…)',
+  'Text in Markdown: **fett**, *kursiv*, `Code`, ## Überschrift, - Liste, [Link](https://…), HTML wie <center>. Leerzeile = neuer Absatz': 'Text in Markdown: **bold**, *italic*, `code`, ## heading, - list, [link](https://…), HTML such as <center>. Blank line = new paragraph',
   'Oben anheften': 'Pin to top',
   'Steht über allen anderen, bis du es wieder abschaltest.': 'Stays above all others until you switch it off.',
   'Entwurf': 'Draft',

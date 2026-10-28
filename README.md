@@ -274,7 +274,7 @@ dabei **nicht** zurückwandert, ist die Datenbank: Neue Spalten bleiben stehen. 
 
 **Verwaltung**
 - Ressourcen **je Nutzer und Workspace**: Nutzer A bekommt 2 Kerne, Nutzer B einen
-- **News** — Meldungen der Verwaltung an alle, in Markdown direkt auf der Seite geschrieben, mit
+- **News** — Meldungen der Verwaltung an alle, in Markdown mit Zeilenumbrüchen und gefiltertem HTML direkt auf der Seite geschrieben, mit
   Entwürfen, Anheften und einem Punkt in der Seitenleiste für Ungelesenes ([Kapitel 11](docs/wiki/11-betrieb.md#news-))
 - **Anwenderhandbuch** — eigene Kapitel für Nutzer: erste Schritte, Konto, Dateien,
   Root-Arbeitsplatz, Git und KI, Bedienung, Hilfe bei Problemen, Begriffe ([Kapitel 29 bis 36](docs/wiki/29-los-gehts.md))

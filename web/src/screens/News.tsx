@@ -7,8 +7,8 @@ import { getLang, t as tr, useLang } from '../lib/i18n'
 /* News: Meldungen der Verwaltung an alle (Handbuch Kapitel 11).
 
    Wer `settings.manage` hat, schreibt direkt auf dieser Seite — Markdown mit
-   Vorschau, derselbe Renderer wie das Handbuch. Der maskiert jedes HTML, ein
-   Beitrag kann also nichts ausführen.
+   Vorschau, derselbe Renderer wie das Handbuch, hier mit HTML. Das geht durch
+   eine Positivliste (`lib/htmlFilter.ts`): gestalten ja, ausführen nein.
 
    Beim Öffnen gilt alles als gelesen; der Punkt in der Seitenleiste
    verschwindet. Was seit dem letzten Besuch neu ist, trägt hier ein „Neu". */
@@ -29,7 +29,7 @@ function Editor({ start, onSave, onCancel, busy }: {
 }) {
   const [b, setB] = useState<NewsIn>(start)
   const [vorschau, setVorschau] = useState(false)
-  const html = useMemo(() => (vorschau ? renderMarkdown(b.text) : ''), [vorschau, b.text])
+  const html = useMemo(() => (vorschau ? renderMarkdown(b.text, { umbrueche: true, html: true }) : ''), [vorschau, b.text])
   return (
     <div className="panel news__editor">
       <input className="input news__titel-eingabe" value={b.titel} maxLength={200} autoFocus
@@ -48,7 +48,7 @@ function Editor({ start, onSave, onCancel, busy }: {
       ) : (
         <textarea className="input news__text" spellCheck rows={14} value={b.text}
           aria-label={tr('Text (Markdown)')}
-          placeholder={tr('Text in Markdown: **fett**, *kursiv*, `Code`, ## Überschrift, - Liste, [Link](https://…)')}
+          placeholder={tr('Text in Markdown: **fett**, *kursiv*, `Code`, ## Überschrift, - Liste, [Link](https://…), HTML wie <center>. Leerzeile = neuer Absatz')}
           onChange={(e) => setB({ ...b, text: e.target.value })} />
       )}
       <div className="news__schalter">
@@ -212,7 +212,7 @@ export function News({ onToast, onGelesen }: {
                 </div>
               )}
             </header>
-            <div className="md" dangerouslySetInnerHTML={{ __html: renderMarkdown(b.text) }} />
+            <div className="md" dangerouslySetInnerHTML={{ __html: renderMarkdown(b.text, { umbrueche: true, html: true }) }} />
           </article>
         )
       })}
