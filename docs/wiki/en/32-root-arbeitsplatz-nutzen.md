@@ -29,6 +29,8 @@ of its own.
 ## Rebuilding ✅
 
 For a broken state, or when you want the newest image. **Your home always stays.**
+You find it in the **⋯** menu at the top right of the workspace's tile, then you pick one of the
+two variants:
 
 | Variant | What stays |
 |---|---|

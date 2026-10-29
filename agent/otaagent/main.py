@@ -2330,6 +2330,32 @@ def _root_container(client, cid: str):
     return c
 
 
+class IdeAiNeuIn(BaseModel):
+    ide_ai: dict[str, Any] = {}
+
+
+@app.post("/containers/{cid}/ide-ai/neu", dependencies=[Depends(require_token)])
+def ide_ai_neu(cid: str, body: IdeAiNeuIn) -> dict[str, Any]:
+    """IDE-AI in einem laufenden Arbeitsplatz neu einrichten (Dashboard).
+
+    Für jede Klasse: Auch im Standard-Arbeitsplatz kann eine Continue-Kopie
+    aus dem Marketplace im Zuhause unsere verdrängen."""
+    try:
+        c = dc().containers.get(cid)
+    except NotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Container nicht gefunden")
+    if not (c.labels or {}).get("ota.session_id"):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Container nicht gefunden")
+    if c.status != "running":
+        raise HTTPException(status.HTTP_409_CONFLICT, "Der Arbeitsplatz läuft nicht.")
+    try:
+        return ide_ai.neu_einrichten(c, body.ide_ai, _heimat_container(c), _run_as_root)
+    except ide_ai.Beschaeftigt:
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            "IDE-AI wird in diesem Arbeitsplatz gerade eingerichtet. "
+                            "Versuch es in einer Minute noch einmal.")
+
+
 @app.post("/containers/{cid}/fortsetzen", dependencies=[Depends(require_token)])
 def fortsetzen(cid: str, body: "FortsetzenRequest | None" = None) -> dict[str, Any]:
     """Einen angehaltenen Root-Arbeitsplatz wieder starten.

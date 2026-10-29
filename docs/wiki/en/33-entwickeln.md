@@ -55,6 +55,27 @@ afterwards.
 you want to maintain it yourself, delete the first line (`# Verwaltet von OTA …`). After that OTA
 no longer touches it. If you delete the whole file, OTA's version comes back at the next start.
 
+### Continue is gone or behaves differently ✅
+
+First check whether only the icon is missing: in JetBrains IDEs **View → Tool Windows → Continue**,
+in VS Code **Ctrl+Alt+B**. New plugins like to push an icon into the **⋯** at the edge.
+
+If Continue really is missing, something has usually displaced our version: an update from the
+Marketplace, a disabled plugin or a configuration of your own. Then, on the dashboard, in the tile of
+the running workspace: **⋯ → Set up AI tools again**. Close PyCharm and VSCodium first. It takes up
+to a minute and
+
+- removes a Continue copy from the Marketplace (JetBrains and VS Code/VSCodium),
+- switches Continue back on if it was disabled,
+- puts your own `~/.continue/config.yaml` aside as `config.yaml.vor-ota-<date>` and writes OTA's,
+- installs OTA's packages once more.
+
+Then start the editor. Other plugins and extensions stay as they are. The entry is only there if
+IDE-AI is switched on for you.
+
+**Please do not accept an update for Continue from the Marketplace** if the editor offers one. OTA's
+version is set up for your AI server and adapted to the IDE.
+
 ## Docker
 
 Docker is only available in **root workspaces** ([chapter 32](32-root-arbeitsplatz-nutzen.md#docker-)).

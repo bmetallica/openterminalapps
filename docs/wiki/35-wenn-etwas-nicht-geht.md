@@ -15,6 +15,7 @@ dir wissen muss, wenn es nicht hilft.
 | **Bild ruckelt** | rechenintensive Programme im Arbeitsplatz prüfen (Tests, Builds, Indexierung). Dauerhaft: melden |
 | **Anwendung im Arbeitsplatz startet nicht** | Session beenden und neu starten. Beim Root-Arbeitsplatz: anhalten und fortsetzen |
 | **Desktop leer, ohne Menü und Leiste** | Session beenden und neu starten |
+| **Continue (KI-Assistent) fehlt im Editor** | Kachel → **⋯ → KI-Werkzeuge neu einrichten** ([Kapitel 33](33-entwickeln.md#continue-ist-weg-oder-verhält-sich-anders-)) |
 | **Seite zeigt „Die Daten konnten nicht geladen werden"** | Seite neu laden (F5). Direkt nach einem Update der Anlage ist das normal |
 
 ## Meldungen beim Start

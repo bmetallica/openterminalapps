@@ -1045,6 +1045,35 @@ def neu_aufsetzen(
     return _out(sess)
 
 
+@router.post("/{session_id}/ide-ai-neu")
+def ide_ai_neu(
+    session_id: uuid.UUID,
+    request: Request,
+    user: User = Depends(current_user),
+    db: DbSession = Depends(get_db),
+) -> dict:
+    """IDE-AI im eigenen, laufenden Arbeitsplatz neu einrichten (Kapitel 33).
+
+    Für den Fall, dass ein Plugin-Update aus dem Marketplace, eine
+    abgeschaltete Erweiterung oder eine eigene config.yaml unsere Fassung
+    verdrängt hat. Gewartet wird auf die Pakete; das kann eine Minute dauern."""
+    sess = _load(session_id, user, db)
+    if sess.status != "running" or not sess.container_id:
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            "Der Arbeitsplatz muss dafür laufen.")
+    angaben = ide_ai.fuer_sitzung(db, sess.user)
+    if not angaben:
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            "IDE-AI ist für dich nicht eingerichtet.")
+    erg = agent_client.ide_ai_neu(sess.container_id, angaben)
+    audit.record(db, "ide_ai.neu_eingerichtet", actor=user, object_type="session",
+                 object_id=str(sess.id), request=request,
+                 template=sess.template.slug, nutzer=sess.user.username,
+                 ok=bool(erg.get("ok")), weggeraeumt=len(erg.get("meldungen") or []))
+    db.commit()
+    return {"ok": bool(erg.get("ok")), "meldungen": erg.get("meldungen") or []}
+
+
 @router.post("/{session_id}/{action}")
 def act(
     session_id: uuid.UUID,

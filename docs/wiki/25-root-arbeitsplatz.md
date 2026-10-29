@@ -137,8 +137,8 @@ Werkzeug für Entwickler, kein Verwaltungsrecht.
   als „angehalten" im Dashboard. **Fortsetzen** startet genau diesen Container wieder — mit allen
   installierten Paketen, Einstellungen und Docker-Images, unter derselben Adresse. Gemessen: rund
   3 Sekunden zum Anhalten (sauber, Exit 0), 3 Sekunden zum Fortsetzen.
-- **Neu aufsetzen** baut den Arbeitsplatz aus dem aktuellen Image neu — für ein neues Basisimage
-  oder einen verbastelten Stand. Das Zuhause bleibt immer. Zwei Varianten:
+- **Neu aufsetzen** (Menü **⋯** der Kachel) baut den Arbeitsplatz aus dem aktuellen Image neu —
+  für ein neues Basisimage oder einen verbastelten Stand. Das Zuhause bleibt immer. Zwei Varianten:
   - *Docker-Images behalten* — die Images und Volumes im Arbeitsplatz bleiben.
   - *auch Docker-Daten löschen* — alles ausser dem Zuhause ist weg.
 

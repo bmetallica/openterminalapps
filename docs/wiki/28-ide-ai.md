@@ -200,6 +200,7 @@ Die Einstellungsseite zeigt, welche Fassungen in der Paketquelle liegen.
 | Continue rechts nicht zu sehen | `Strg+Alt+B` öffnet die rechte Leiste. Von selbst öffnet OTA sie nur einmal je Ordner |
 | PyCharm zeigt bei Continue nur „Nothing to show“ | Paket `ota-ide-ai-jetbrains` älter als `1.0.67-ota5`: `make update`, dann Arbeitsplatz neu starten. Im Protokoll (`~/.cache/JetBrains/*/log/idea.log`) steht dann `NoClassDefFoundError: com/intellij/ui/jcef/JBCefApp` oder `continue-binary: Die Operation ist nicht erlaubt` |
 | PyCharm zeigt Continue nicht | Gibt es `~/.local/share/JetBrains/<IDE><Fassung>/ota-continue`? Der Name kommt aus `product-info.json` der IDE |
+| Continue verdrängt: Marketplace-Update, abgeschaltet, eigene `config.yaml` | Der Mensch selbst: Dashboard → Kachel → **⋯ → KI-Werkzeuge neu einrichten** ([Kapitel 33](33-entwickeln.md#continue-ist-weg-oder-verhält-sich-anders-)). Räumt die Kopien weg, schaltet Continue ein, legt die eigene `config.yaml` beiseite und installiert die Pakete noch einmal. Im Protokoll: `ide_ai.neu_eingerichtet`, im Agent `IDE-AI in … neu eingerichtet: …` |
 
 Prüfreihe: `scripts/test-ide-ai.sh`. Sie startet jede Vorlage mit einem passenden Editor und fragt
 den KI-Server aus dem Arbeitsplatz. Vorgabe ist der llama.cpp-Server der Testanlage; ein anderer

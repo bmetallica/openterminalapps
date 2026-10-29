@@ -292,6 +292,73 @@ const STATUS_CLASS: Record<string, string> = {
 }
 
 /** Zustandsklasse fuer die farbige Kante einer Karte. */
+/* ============================================================
+   Menü hinter „⋯"
+   Fest positioniert statt im Fluss: Die Karten schneiden mit
+   overflow: hidden ab, was über ihren Rand ragt.
+   ============================================================ */
+
+export type MenueEintrag = { text: string; hinweis?: string; onClick: () => void; heikel?: boolean }
+
+export function Menue({ label, eintraege }: { label: string; eintraege: MenueEintrag[] }) {
+  const [ort, setOrt] = useState<{ top: number; right: number } | null>(null)
+  const knopf = useRef<HTMLButtonElement>(null)
+  const liste = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!ort) return
+    const zu = () => setOrt(null)
+    const weg = (e: MouseEvent) => {
+      if (!liste.current?.contains(e.target as Node) && !knopf.current?.contains(e.target as Node)) zu()
+    }
+    const taste = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { zu(); knopf.current?.focus(); return }
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return
+      e.preventDefault()
+      const punkte = Array.from(liste.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? [])
+      const i = punkte.indexOf(document.activeElement as HTMLButtonElement)
+      punkte[(i + (e.key === 'ArrowDown' ? 1 : -1) + punkte.length) % punkte.length]?.focus()
+    }
+    document.addEventListener('mousedown', weg)
+    document.addEventListener('keydown', taste)
+    window.addEventListener('resize', zu)
+    window.addEventListener('scroll', zu, true)
+    liste.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus()
+    return () => {
+      document.removeEventListener('mousedown', weg)
+      document.removeEventListener('keydown', taste)
+      window.removeEventListener('resize', zu)
+      window.removeEventListener('scroll', zu, true)
+    }
+  }, [ort])
+
+  if (eintraege.length === 0) return null
+  return (
+    <>
+      <button ref={knopf} type="button" className="btn btn--sm btn--icon menue__knopf"
+        aria-label={label} title={label} aria-haspopup="menu" aria-expanded={!!ort}
+        onClick={() => {
+          if (ort) { setOrt(null); return }
+          const r = knopf.current!.getBoundingClientRect()
+          setOrt({ top: r.bottom + 5, right: window.innerWidth - r.right })
+        }}>⋯</button>
+      {ort && (
+        <div ref={liste} className="pop menue" role="menu" aria-label={label}
+          style={{ position: 'fixed', top: ort.top, right: ort.right, left: 'auto' }}>
+          {eintraege.map((e) => (
+            <button key={e.text} type="button" role="menuitem"
+              className={`menue__punkt${e.heikel ? ' menue__punkt--heikel' : ''}`}
+              onClick={() => { setOrt(null); e.onClick() }}>
+              <span>{e.text}</span>
+              {e.hinweis && <span className="menue__hinweis">{e.hinweis}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </>
+  )
+}
+
 export function stateClass(status: string): string {
   return {
     running: 'live', starting: 'paused', paused: 'paused',

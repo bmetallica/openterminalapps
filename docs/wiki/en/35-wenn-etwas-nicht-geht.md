@@ -15,6 +15,7 @@ administrators need to know from you if it does not help.
 | **Picture stutters** | check compute-heavy programs in the workspace (tests, builds, indexing). If permanent: report it |
 | **An application in the workspace does not start** | End the session and start it again. Root workspace: stop and resume |
 | **Desktop empty, without menu and panel** | End the session and start it again |
+| **Continue (AI assistant) missing in the editor** | Tile → **⋯ → Set up AI tools again** ([chapter 33](33-entwickeln.md#continue-is-gone-or-behaves-differently-)) |
 | **Page shows "The data could not be loaded"** | Reload the page (F5). Right after an update of the system this is normal |
 
 ## Messages when starting

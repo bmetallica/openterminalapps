@@ -21,6 +21,8 @@ export type Me = {
   must_setup_totp: boolean
   /** Gesetzt, wenn das Konto in keiner Gruppe ist: der Text fürs Dashboard. */
   ohne_gruppe_hinweis?: string | null
+  /** Kommt IDE-AI in die eigenen Arbeitsplätze? */
+  ide_ai?: boolean
 }
 
 export type App = {
@@ -1214,6 +1216,9 @@ export const api = {
   },
   clearLogo: () => call<Marke>('/branding/logo', { method: 'DELETE' }),
   adminSessions: () => call<AdminSession[]>('/admin/sessions'),
+  /** IDE-AI im laufenden Arbeitsplatz neu einrichten — wartet auf die Pakete. */
+  ideAiNeu: (id: string) =>
+    call<{ ok: boolean; meldungen: string[] }>(`/sessions/${id}/ide-ai-neu`, { method: 'POST' }),
   neuAufsetzen: (id: string, dockerDaten: boolean) =>
     call<Session>(`/sessions/${id}/neu-aufsetzen${dockerDaten ? '?docker=true' : ''}`,
       { method: 'POST' }),

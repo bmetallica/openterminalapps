@@ -136,8 +136,8 @@ developers, not an administrative right.
   "stopped" on the dashboard. **Resume** starts exactly this container again — with all installed
   packages, settings and Docker images, under the same address. Measured: about 3 seconds to stop
   (clean, exit 0), 3 seconds to resume.
-- **Rebuild** builds the workspace anew from the current image — for a new base image or a
-  tinkered-up state. The home always stays. Two variants:
+- **Rebuild** (the tile's **⋯** menu) builds the workspace anew from the current image — for a new
+  base image or a tinkered-up state. The home always stays. Two variants:
   - *Keep Docker images* — the images and volumes in the workspace stay.
   - *Also delete Docker data* — everything except the home is gone.
 

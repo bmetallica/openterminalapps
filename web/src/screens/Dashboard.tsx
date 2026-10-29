@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { AppIcon } from '../components/AppIcon'
-import { Led, stateClass } from '../components/controls'
+import { Led, Menue, stateClass, type MenueEintrag } from '../components/controls'
 import { StartFortschritt } from '../components/StartFortschritt'
 import {
   ApiError, api,
@@ -24,7 +24,7 @@ function greeting(): string {
   return tr('Guten Abend')
 }
 
-function Bay({ session, template, onOpen, onAct, onApp, onResume, onReset, busy, busyApp }: {
+function Bay({ session, template, onOpen, onAct, onApp, onResume, onReset, onKiNeu, ideAi, busy, busyApp }: {
   session: Session
   template: Template | undefined
   onOpen: (s: Session, stream?: Stream) => void
@@ -32,6 +32,9 @@ function Bay({ session, template, onOpen, onAct, onApp, onResume, onReset, busy,
   onApp: (s: Session, slug: string) => void
   onResume: (s: Session) => void
   onReset: (s: Session, dockerDaten: boolean) => void
+  onKiNeu: (s: Session) => void
+  /** Kommt IDE-AI in die Arbeitsplätze dieses Menschen? (`Me.ide_ai`) */
+  ideAi: boolean
   busy: boolean
   busyApp: string | null
 }) {
@@ -41,6 +44,7 @@ function Bay({ session, template, onOpen, onAct, onApp, onResume, onReset, busy,
   const root = session.klasse === 'root'
   const angehalten = session.status === 'angehalten'
   const [neuFragen, setNeuFragen] = useState(false)
+  const [kiFragen, setKiFragen] = useState(false)
   const started = new Date(session.started_at).getTime()
   const isWorkspace = session.template_mode === 'workspace'
   const apps = (template?.apps ?? []).filter((a) => a.is_enabled && !a.blocked_reason)
@@ -48,8 +52,26 @@ function Bay({ session, template, onOpen, onAct, onApp, onResume, onReset, busy,
   // fälschlich als offen gilt, ergibt eine schwarze Seite statt eines Starts.
   const openSlugs = new Set(session.streams.filter((s) => s.status === 'running').map((s) => s.app_slug))
 
+  // Was man selten braucht und nicht aus Versehen drücken soll, steht hinter „⋯".
+  const menue: MenueEintrag[] = busy ? [] : [
+    ...(running && ideAi ? [{
+      text: tr('KI-Werkzeuge neu einrichten'),
+      hinweis: tr('Stellt Continue in PyCharm und VSCodium wieder her, falls es fehlt oder verdrängt wurde.'),
+      onClick: () => { setNeuFragen(false); setKiFragen(true) },
+    }] : []),
+    ...(root ? [{
+      text: tr('Neu aufsetzen…'),
+      hinweis: tr('Baut den Arbeitsplatz aus dem aktuellen Image neu. Das Zuhause bleibt.'),
+      heikel: true,
+      onClick: () => { setKiFragen(false); setNeuFragen(true) },
+    }] : []),
+  ]
+
   return (
     <article className={`panel panel--state panel--${stateClass(session.status)} bay`}>
+      <div className="bay__menue">
+        <Menue label={tr('Weitere Aktionen für {name}', { name: sitzungsName(session) })} eintraege={menue} />
+      </div>
       <div className={`bay__screen${running ? ' bay__screen--on' : ''}`}>
         <span className="bay__screen-tag data">
           {running ? tr('bereit') : angehalten ? tr('angehalten') : tr('eingefroren')}
@@ -121,7 +143,18 @@ function Bay({ session, template, onOpen, onAct, onApp, onResume, onReset, busy,
         )}
       </div>
 
-      {neuFragen ? (
+      {kiFragen ? (
+        <div className="bay__actions" style={{ flexWrap: 'wrap', gap: 8 }}>
+          <p className="field__hint" style={{ width: '100%', margin: 0 }}>
+            {tr('Richtet Continue neu ein: Eine Kopie aus dem Marketplace wird entfernt, eine eigene config.yaml beiseitegelegt. Schließe PyCharm und VSCodium vorher; das dauert bis zu einer Minute.')}
+          </p>
+          <button className="btn btn--primary" disabled={busy}
+            onClick={() => { setKiFragen(false); onKiNeu(session) }}>
+            {tr('Neu einrichten')}
+          </button>
+          <button className="btn btn--ghost" onClick={() => setKiFragen(false)}>{tr('Abbrechen')}</button>
+        </div>
+      ) : neuFragen ? (
         <div className="bay__actions" style={{ flexWrap: 'wrap', gap: 8 }}>
           <p className="field__hint" style={{ width: '100%', margin: 0 }}>
             {tr('Neu aufsetzen baut den Arbeitsplatz aus dem aktuellen Image neu. Was ausserhalb des Zuhauses installiert wurde, ist danach weg — das Zuhause bleibt.')}
@@ -145,11 +178,6 @@ function Bay({ session, template, onOpen, onAct, onApp, onResume, onReset, busy,
           </button>
           {running && !root && (
             <button className="btn" disabled={busy} onClick={() => onAct(session, 'pause')}>{tr('Pause')}</button>
-          )}
-          {root && (
-            <button className="btn" disabled={busy} onClick={() => setNeuFragen(true)}>
-              {tr('Neu aufsetzen')}
-            </button>
           )}
           {!angehalten && (
             <button className="btn btn--halt btn--icon" disabled={busy}
@@ -429,6 +457,25 @@ export function Dashboard({ me, onOpen, onToast, onSoftware }: {
     }
   }
 
+  async function kiNeu(s: Session) {
+    setBusy(s.id)
+    onToast(tr('KI-Werkzeuge werden neu eingerichtet…'))
+    try {
+      const r = await api.ideAiNeu(s.id)
+      if (!r.ok) {
+        onToast(tr('Continue ließ sich nicht vollständig einrichten. Melde dich bei der Verwaltung.'), 'bad')
+      } else {
+        onToast(r.meldungen.length
+          ? tr('Neu eingerichtet, {n} verdrängende Einträge entfernt. Starte PyCharm bzw. VSCodium neu.', { n: r.meldungen.length })
+          : tr('Neu eingerichtet. Starte PyCharm bzw. VSCodium neu, falls sie offen sind.'))
+      }
+    } catch (err) {
+      onToast(err instanceof ApiError ? err.message : tr('Aktion fehlgeschlagen'), 'bad')
+    } finally {
+      setBusy(null)
+    }
+  }
+
   async function reset(s: Session, dockerDaten: boolean) {
     setBusy(s.id)
     try {
@@ -553,6 +600,7 @@ export function Dashboard({ me, onOpen, onToast, onSoftware }: {
                 template={templates.find((t) => t.id === s.template_id)}
                 onOpen={onOpen} onAct={act} onApp={openApp}
                 onResume={(x) => void resume(x)} onReset={(x, dd) => void reset(x, dd)}
+                onKiNeu={(x) => void kiNeu(x)} ideAi={!!me.ide_ai}
                 busy={busy === s.id} busyApp={busyApp} />
             ))}
           </div>

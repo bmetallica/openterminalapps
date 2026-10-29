@@ -29,6 +29,7 @@ import re
 import socket
 import tarfile
 import threading
+import time
 import urllib.error
 import urllib.request
 from typing import Any, Callable
@@ -145,6 +146,87 @@ exit 0
 """
 
 
+# „Neu einrichten" (Dashboard, Menü der Kachel): räumt weg, was unsere Fassung
+# verdrängen kann, bevor _KONFIG sie wieder einhängt. $1 Zuhause.
+#
+# - JetBrains: eine Continue-Kopie aus dem Marketplace neben ota-continue
+#   (dieselbe Plugin-Kennung — welche die IDE lädt, ist dann Zufall) und
+#   Continue in disabled_plugins.txt.
+# - VS Code/VSCodium: Continue aus dem Marketplace im Zuhause. Eine Erweiterung
+#   dort schlägt die mitgelieferte unter resources/app/extensions. Dazu die
+#   Liste abgeschalteter Erweiterungen im Zustand des Editors.
+# - Eine eigene config.yaml wird nicht gelöscht, sondern beiseitegelegt.
+_REPARIEREN = r"""
+H="$1"; M='# Verwaltet von OTA (IDE-AI).'
+[ -d "$H" ] || exit 0
+JBID=com.github.continuedev.continueintellijextension
+for f in /opt/*/product-info.json /opt/*/*/product-info.json /usr/share/*/product-info.json; do
+  [ -f "$f" ] || continue
+  n=$(sed -n 's/.*"dataDirectoryName": *"\([A-Za-z0-9._-]*\)".*/\1/p' "$f" | head -1)
+  [ -n "$n" ] || continue
+  P="$H/.local/share/JetBrains/$n"
+  for d in "$P"/*/; do
+    d="${d%/}"
+    [ -d "$d" ] && [ ! -L "$d" ] || continue
+    ls "$d"/lib/continue-intellij-extension-*.jar >/dev/null 2>&1 || continue
+    rm -rf "$d" && echo "fremd-jetbrains: $d"
+  done
+  [ -L "$P/ota-continue" ] && rm -f "$P/ota-continue"
+  A="$H/.config/JetBrains/$n/disabled_plugins.txt"
+  if [ -f "$A" ] && grep -qx "$JBID" "$A"; then
+    sed -i "/^$JBID\$/d" "$A" && echo "eingeschaltet: $A"
+  fi
+done
+for E in "$H/.vscode-oss/extensions" "$H/.vscode/extensions"; do
+  for d in "$E"/continue.continue-*; do
+    [ -d "$d" ] || continue
+    rm -rf "$d" && echo "fremd-vscode: $d"
+  done
+done
+if command -v python3 >/dev/null 2>&1; then
+  python3 - "$H" <<'PY'
+import json, os, sqlite3, sys
+h = sys.argv[1]
+WEG = {"continue.continue", "ota.ota-ide-ai"}
+for e in (".vscode-oss/extensions", ".vscode/extensions"):
+    p = os.path.join(h, e, "extensions.json")
+    try:
+        liste = json.load(open(p))
+    except (OSError, ValueError):
+        continue
+    neu = [x for x in liste if str((x.get("identifier") or {}).get("id", "")).lower() not in WEG]
+    if len(neu) != len(liste):
+        json.dump(neu, open(p, "w"))
+        print("liste:", p)
+for ed in ("VSCodium", "Code"):
+    p = os.path.join(h, ".config", ed, "User/globalStorage/state.vscdb")
+    if not os.path.exists(p):
+        continue
+    try:
+        db = sqlite3.connect(p)
+        zeile = db.execute("SELECT value FROM ItemTable WHERE key='extensionsIdentifiers/disabled'").fetchone()
+        if zeile:
+            aus = json.loads(zeile[0])
+            neu = [x for x in aus if str(x.get("id", "")).lower() not in WEG]
+            if len(neu) != len(aus):
+                db.execute("UPDATE ItemTable SET value=? WHERE key='extensionsIdentifiers/disabled'",
+                           (json.dumps(neu),))
+                db.commit()
+                print("eingeschaltet:", p)
+        db.close()
+    except (sqlite3.Error, ValueError) as exc:
+        print("zustand-unlesbar:", p, exc)
+PY
+fi
+F="$H/.continue/config.yaml"
+if [ -f "$F" ] && ! head -1 "$F" | grep -qF "$M"; then
+  Z="$F.vor-ota-$(date +%Y%m%d-%H%M%S)"
+  mv "$F" "$Z" && echo "konfig-gesichert: $Z"
+fi
+exit 0
+"""
+
+
 def _datei(name: str, fassung: str) -> str:
     """Die .deb-Datei aus der Paketquelle, zwischengespeichert je Fassung."""
     ordner = os.path.join(RUNTIME_ROOT, "ide-ai")
@@ -221,8 +303,12 @@ def _ueber_exec(container, quelle: str, ziel: str) -> None:
         raise OSError(f"{ziel}: Groesse stimmt nicht ({out!r})")
 
 
-def _pakete(container, fassungen: dict[str, str], run_as_root: Callable) -> bool:
-    """True, wenn ein Paket neu installiert oder angehoben wurde."""
+def _pakete(container, fassungen: dict[str, str], run_as_root: Callable,
+            erzwingen: bool = False) -> bool:
+    """True, wenn ein Paket neu installiert oder angehoben wurde.
+
+    `erzwingen`: auch dieselbe Fassung noch einmal — stellt Dateien unter
+    /usr/share wieder her, die jemand mit root-Rechten verändert hat."""
     code, out = run_as_root(container, ["sh", "-c", _ERKUNDEN])
     if "kein-dpkg" in out:
         log.info("IDE-AI in %s: kein dpkg — nichts installiert", container.name)
@@ -234,10 +320,10 @@ def _pakete(container, fassungen: dict[str, str], run_as_root: Callable) -> bool
             continue
         art, editor, ist = teile[0], teile[1] == "1", (teile[2] if len(teile) > 2 else "")
         soll = str(fassungen.get(art) or "")
-        if not editor or not soll or not FASSUNG_OK.fullmatch(soll) or ist == soll:
+        if not editor or not soll or not FASSUNG_OK.fullmatch(soll) or (ist == soll and not erzwingen):
             continue
         name = f"ota-ide-ai-{art}"
-        if ist:
+        if ist and not erzwingen:
             c, _ = run_as_root(container, ["dpkg", "--compare-versions", ist, "gt", soll])
             if c == 0:
                 continue
@@ -294,3 +380,46 @@ def im_container(container, angaben: dict[str, Any], heim: str, run_as_root: Cal
             return
         _laufend.add(container.id)
     threading.Thread(target=hintergrund, name=f"ide-ai-{container.name}", daemon=True).start()
+
+
+class Beschaeftigt(Exception):
+    """Die Einrichtung im Hintergrund läuft für diesen Container noch."""
+
+
+def neu_einrichten(container, angaben: dict[str, Any], heim: str,
+                   run_as_root: Callable) -> dict[str, Any]:
+    """Unsere Fassung wiederherstellen, auf Wunsch des Menschen (Dashboard).
+
+    Anders als beim Start wartet das hier auf die Pakete — wer den Knopf
+    drückt, will hinterher wissen, ob es geklappt hat. Was verdrängt hätte
+    (Marketplace-Kopien, abgeschaltete Erweiterung, eigene config.yaml),
+    räumt `_REPARIEREN` vorher weg; die config.yaml nur beiseite."""
+    konfig = str(angaben.get("config") or "")
+    if not konfig:
+        return {"ok": False, "meldungen": []}
+    # Direkt nach dem Start läuft die Einrichtung im Hintergrund noch — wer
+    # dann schon klickt, wartet darauf, statt abgewiesen zu werden.
+    frist = time.monotonic() + 180
+    while True:
+        with _sperre:
+            if container.id not in _laufend:
+                _laufend.add(container.id)
+                break
+        if time.monotonic() > frist:
+            raise Beschaeftigt()
+        time.sleep(1)
+    try:
+        code, out = run_as_root(container, ["sh", "-c", _REPARIEREN, "sh", heim])
+        meldungen = [z.strip() for z in out.splitlines() if ":" in z]
+        if code != 0:
+            log.warning("IDE-AI in %s: Aufräumen: %s", container.name, out.strip()[-300:])
+        neu = _pakete(container, angaben.get("fassungen") or {}, run_as_root, erzwingen=True)
+        k64 = base64.b64encode(konfig.encode()).decode()
+        code, out = run_as_root(container, ["sh", "-c", _KONFIG, "sh", heim, k64])
+        log.info("IDE-AI in %s neu eingerichtet: %s; Pakete %s", container.name,
+                 "; ".join(meldungen) or "nichts verdrängt", "neu" if neu else "unverändert")
+        return {"ok": code == 0 and "konfig-gesetzt" in out, "pakete": neu,
+                "meldungen": meldungen}
+    finally:
+        with _sperre:
+            _laufend.discard(container.id)

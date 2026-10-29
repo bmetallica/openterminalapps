@@ -57,6 +57,28 @@ neu. Willst du sie selbst pflegen, löschst du die erste Zeile (`# Verwaltet von
 fasst OTA sie nicht mehr an. Löschst du die ganze Datei, kommt beim nächsten Start wieder die
 Fassung von OTA.
 
+### Continue ist weg oder verhält sich anders ✅
+
+Erst nachsehen, ob nur das Symbol fehlt: In JetBrains-IDEs **View → Tool Windows → Continue**, in
+VS Code **Strg+Alt+B**. Neue Plugins schieben ein Symbol gern ins **⋯** am Rand.
+
+Fehlt Continue wirklich, hat meist etwas unsere Fassung verdrängt: ein Update aus dem Marketplace,
+ein abgeschaltetes Plugin oder eine eigene Konfiguration. Dann im Dashboard in der Kachel des
+laufenden Arbeitsplatzes **⋯ → KI-Werkzeuge neu einrichten**. Schliesse PyCharm und VSCodium vorher.
+Das dauert bis zu einer Minute und
+
+- entfernt eine Continue-Kopie aus dem Marketplace (JetBrains und VS Code/VSCodium),
+- schaltet Continue wieder ein, wenn es abgeschaltet war,
+- legt eine eigene `~/.continue/config.yaml` als `config.yaml.vor-ota-<Datum>` beiseite und schreibt
+  die von OTA,
+- installiert die Pakete von OTA noch einmal.
+
+Danach den Editor starten. Andere Plugins und Erweiterungen bleiben, wie sie sind. Den Eintrag gibt
+es nur, wenn IDE-AI für dich eingeschaltet ist.
+
+**Bitte kein Update für Continue aus dem Marketplace annehmen**, wenn der Editor eins anbietet. Die
+Fassung von OTA ist auf euren KI-Server eingestellt und an die IDE angepasst.
+
 ## Docker
 
 Docker gibt es nur in **Root-Arbeitsplätzen** ([Kapitel 32](32-root-arbeitsplatz-nutzen.md#docker-)).

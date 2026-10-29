@@ -184,6 +184,43 @@ for j in glob.glob("'"$J"'/lib/continue-intellij-extension-*.jar"):
   # Das Zuhause bleibt: nächster Start, gleiche Datei.
   SID=$(starten "$T"); C=$(container_von "$SID")
   expect "name: meins" "$(docker exec "$C" head -1 "$H/.continue/config.yaml" 2>/dev/null)" "Eine eigene config.yaml bleibt unangetastet"
+
+  # „KI-Werkzeuge neu einrichten" (Menü der Kachel): Was unsere Fassung
+  # verdrängt hat, ist danach weg — eine Kopie aus dem Marketplace, Continue
+  # unter den abgeschalteten Plugins, die eigene config.yaml (nur beiseite).
+  JB1=$(docker exec "$C" sh -c 'for f in /opt/*/product-info.json; do [ -f "$f" ] && sed -n "s/.*\"dataDirectoryName\": *\"\([^\"]*\)\".*/\1/p" "$f" | head -1; done' | head -1)
+  if [ -n "$JB1" ]; then
+    P="$H/.local/share/JetBrains/$JB1"
+    docker exec -u 1000 "$C" sh -c "rm -f '$P/ota-continue'; mkdir -p '$P/continue-intellij-extension/lib' '$H/.config/JetBrains/$JB1' \
+      && : > '$P/continue-intellij-extension/lib/continue-intellij-extension-9.9.9.jar' \
+      && printf 'com.github.continuedev.continueintellijextension\nanderes.plugin\n' > '$H/.config/JetBrains/$JB1/disabled_plugins.txt'"
+  fi
+  docker exec -u 1000 "$C" sh -c "mkdir -p '$H/.vscode-oss/extensions/continue.continue-9.9.9' && printf '%s' \
+    '[{\"identifier\":{\"id\":\"continue.continue\"},\"version\":\"9.9.9\"},{\"identifier\":{\"id\":\"ms-python.python\"}}]' \
+    > '$H/.vscode-oss/extensions/extensions.json'"
+  R=$(api -X POST "$B/api/sessions/$SID/ide-ai-neu")
+  expect "True" "$(jqp "d['ok']" <<<"$R")" "Neu einrichten meldet Erfolg"
+  expect "# Verwaltet von OTA (IDE-AI). Änderungen hier überschreibt OTA beim nächsten Start." \
+    "$(docker exec "$C" head -1 "$H/.continue/config.yaml" 2>/dev/null)" "… OTAs config.yaml ist wieder da"
+  expect "name: meins" "$(docker exec "$C" sh -c "head -1 '$H'/.continue/config.yaml.vor-ota-*" 2>/dev/null)" \
+    "… die eigene liegt daneben"
+  expect "1000" "$(docker exec "$C" stat -c %u "$H/.continue/config.yaml")" "… und gehört dem Menschen"
+  if [ -n "$JB1" ]; then
+    expect "nein" "$(docker exec "$C" sh -c "test -e '$P/continue-intellij-extension' && echo ja || echo nein")" \
+      "… die Marketplace-Kopie in $JB1 ist weg"
+    expect "/usr/share/ota-ide-ai/jetbrains/continue-intellij-extension" "$(docker exec "$C" readlink "$P/ota-continue")" \
+      "… unsere ist wieder verknüpft"
+    expect "anderes.plugin" "$(docker exec "$C" cat "$H/.config/JetBrains/$JB1/disabled_plugins.txt")" \
+      "… Continue nicht mehr abgeschaltet, das andere schon"
+  fi
+  expect "nein" "$(docker exec "$C" sh -c "test -e '$H/.vscode-oss/extensions/continue.continue-9.9.9' && echo ja || echo nein")" \
+    "… die Kopie in VSCodium ist weg"
+  expect "ms-python.python" "$(docker exec "$C" cat "$H/.vscode-oss/extensions/extensions.json" | jqp "','.join(x['identifier']['id'] for x in d)")" \
+    "… und aus der Liste, die anderen Erweiterungen bleiben"
+  expect "1" "$(docker exec ota-db psql -U ota -d ota -At -c "select count(*) from audit_log where action = 'ide_ai.neu_eingerichtet' and object_id = '$SID'")" \
+    "… im Protokoll"
+  docker exec "$C" sh -c "rm -rf '$H'/.continue/config.yaml.vor-ota-* '$H/.vscode-oss/extensions/extensions.json'; \
+    [ -n '$JB1' ] && rm -f '$H/.config/JetBrains/$JB1/disabled_plugins.txt'; true"
   # Continues eigene Leerdatei (Continue lief, bevor IDE-AI an war): OTA ersetzt sie.
   docker exec -u 1000 "$C" sh -c "printf 'name: Main Config\nversion: 1.0.0\nschema: v1\nmodels: []\n' > '$H/.continue/config.yaml'"
   beenden "$SID"; SID=""

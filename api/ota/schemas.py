@@ -154,6 +154,9 @@ class MeOut(BaseModel):
     must_setup_totp: bool = False
     # Gesetzt, wenn das Konto in keiner Gruppe ist: der Text fuers Dashboard.
     ohne_gruppe_hinweis: str | None = None
+    # Kommt IDE-AI in die eigenen Arbeitsplaetze? Dann bietet das Menue der
+    # Kachel „KI-Werkzeuge neu einrichten" an.
+    ide_ai: bool = False
 
 
 class AppOut(BaseModel):

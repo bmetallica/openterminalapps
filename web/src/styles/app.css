@@ -754,6 +754,19 @@ input[type="color"] {
 .pop__opt.is-on::after { content: "✓"; margin-left: auto; color: var(--live); font-size: 12px; }
 .pop__empty { padding: 14px 10px; color: var(--mute); font-size: 12.5px; text-align: center; }
 
+/* Menü hinter „⋯" (controls.tsx, Menue) */
+.menue { width: 280px; max-width: calc(100vw - 32px); }
+.menue__punkt {
+  width: 100%; padding: 8px 10px; border: 0; border-radius: 5px;
+  background: none; color: var(--text); text-align: left; cursor: pointer;
+  display: flex; flex-direction: column; gap: 2px; font-size: 13.5px;
+}
+.menue__punkt:hover, .menue__punkt:focus-visible { background: var(--bay); outline: none; }
+.menue__punkt--heikel { color: var(--halt-text); }
+.menue__hinweis { color: var(--mute); font-size: 12px; line-height: 1.35; }
+.menue__knopf { font-size: 17px; line-height: 1; }
+.bay__menue { position: absolute; top: 10px; right: 12px; }
+
 /* ============================================================
    Chips (Mehrfachauswahl)
    ============================================================ */

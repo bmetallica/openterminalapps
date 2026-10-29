@@ -29,6 +29,8 @@ eigenen Benutzerbereich.
 ## Neu aufsetzen ✅
 
 Für einen verbastelten Stand oder wenn du das neueste Image willst. **Dein Zuhause bleibt immer.**
+Du findest es im Menü **⋯** oben rechts in der Kachel des Arbeitsplatzes, dann wählst du eine der
+beiden Varianten:
 
 | Variante | Was bleibt |
 |---|---|

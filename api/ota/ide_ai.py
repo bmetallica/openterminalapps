@@ -307,10 +307,16 @@ def fassungen(db: DbSession) -> dict[str, str]:
     return dict((paketquellen.fuer_container(db) or {}).get("ide_ai") or {})
 
 
+def aktiv_fuer(db: DbSession, user: User, e: dict[str, Any] | None = None) -> bool:
+    """Kommt IDE-AI in die Arbeitsplätze dieses Menschen?"""
+    e = e or einstellungen(db)
+    return berechtigt(db, user, e) and bool(e["url"]) and bool(e["modelle"])
+
+
 def fuer_sitzung(db: DbSession, user: User) -> dict[str, Any]:
     """Was der Agent im Arbeitsplatz einrichtet — oder {} (dann räumt er weg)."""
     e = einstellungen(db)
-    if not berechtigt(db, user, e) or not e["url"] or not e["modelle"]:
+    if not aktiv_fuer(db, user, e):
         return {}
     return {"fassungen": fassungen(db), "config": konfiguration(e)}
 

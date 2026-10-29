@@ -132,6 +132,7 @@ const ACTION_TEXT: Record<string, string> = {
   'platz.angehalten': 'Root-Arbeitsplatz angehalten',
   'platz.fortgesetzt': 'Root-Arbeitsplatz fortgesetzt',
   'platz.neu_aufgesetzt': 'Root-Arbeitsplatz neu aufgesetzt',
+  'ide_ai.neu_eingerichtet': 'IDE-AI im Arbeitsplatz neu eingerichtet',
   'platz.geloescht': 'Root-Arbeitsplatz gelöscht',
   'terminal.geoeffnet': 'Webterminal geöffnet',
   'terminal.geschlossen': 'Webterminal geschlossen',

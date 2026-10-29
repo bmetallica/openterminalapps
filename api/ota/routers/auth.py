@@ -411,15 +411,17 @@ def konto(user: User = Depends(current_user),
 
 
 def _me(user: User) -> MeOut:
-    hinweis = None
-    if not user.groups and not user.is_admin:
-        from sqlalchemy.orm import object_session
+    from sqlalchemy.orm import object_session
 
-        db = object_session(user)
-        if db is not None:
-            hinweis = settings_store.get(db, settings_store.OHNE_GRUPPE_HINWEIS)
+    from .. import ide_ai
+
+    hinweis = None
+    db = object_session(user)
+    if db is not None and not user.groups and not user.is_admin:
+        hinweis = settings_store.get(db, settings_store.OHNE_GRUPPE_HINWEIS)
     return MeOut(
         ohne_gruppe_hinweis=hinweis,
+        ide_ai=db is not None and ide_ai.aktiv_fuer(db, user),
         id=user.id,
         username=user.username,
         display_name=user.display_name,

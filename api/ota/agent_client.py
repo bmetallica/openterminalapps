@@ -157,6 +157,12 @@ def fortsetzen(cid: str, repo: dict[str, Any] | None = None,
                  timeout=600.0)
 
 
+def ide_ai_neu(cid: str, ide_ai: dict[str, Any]) -> dict[str, Any]:
+    """IDE-AI im laufenden Arbeitsplatz neu einrichten — wartet auf die Pakete."""
+    return _call("POST", f"/containers/{cid}/ide-ai/neu", json={"ide_ai": ide_ai},
+                 timeout=600.0)
+
+
 # --- OTA-Git (git.py) -----------------------------------------------------
 
 def git_status() -> dict[str, Any]:
