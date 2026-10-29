@@ -302,8 +302,9 @@ an Ubuntu image stays untouched, and a root workspace picks up the current setti
 - **Control service** `repo/otarepo/main.py` (FastAPI, port 8200, only in the internal network).
   Talks to the API with the same service token as the agent. No Docker socket.
 - **aptly 1.6.1** from Debian 13: mirror → snapshot → `publish switch`. One job at a time.
-- **nginx** (`ota-repo-web`) serves `aptly/public` under `/repo/`; `Release` and `Packages` without
-  caching.
+- **nginx** (`ota-repo-web`, image `ota/repo-web`) serves `aptly/public` under `/repo/`; `Release`
+  and `Packages` without caching. The image is `nginx:1.30-alpine` plus `apk upgrade`, fresh on
+  every `make update`: the official image lags behind Alpine's security updates.
 - **Agent** `agent/otaagent/paketquelle.py` generates the add and remove script; the same version for
   workspaces and image builder.
 - **Settings** in the database (`REPO_MODUS`, `REPO_BAU_SNAPSHOT`, `REPO_ALTER_GELB`,

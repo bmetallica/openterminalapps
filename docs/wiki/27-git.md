@@ -25,8 +25,10 @@ macht weiter, wo es aufgehört hat.
    arbeitest.
 3. **Wer darf**: die Gruppen wählen. Ohne Gruppe kommen nur Administratoren hinein.
 4. Den Schalter umlegen. Beim ersten Mal lädt OTA das Image von Forgejo
-   (`codeberg.org/forgejo/forgejo:15.0.10`, festgelegt in `OTA_GIT_IMAGE`). Danach dauert es
-   etwa 15 Sekunden.
+   (`codeberg.org/forgejo/forgejo:15.0.11`, festgelegt in `OTA_GIT_IMAGE`). Danach dauert es
+   etwa 15 Sekunden. Bringt ein Update eine neue Fassung mit (etwa eine Sicherheitskorrektur),
+   ersetzt OTA den Container danach von selbst, spätestens nach einer Minute. Die Daten im Volume
+   bleiben.
 
 Was dabei geschieht:
 
@@ -166,7 +168,7 @@ Wiederherstellen geht von Hand:
 D=/srv/ota/backups/git/<zeit>
 zstd -dc $D/forgejo.sql.zst | docker exec -i ota-db psql -q -U ota -d forgejo
 zstd -dc $D/daten.tar.zst | docker run --rm -i -v ota_git_daten:/data \
-  --entrypoint tar codeberg.org/forgejo/forgejo:15.0.10 x -C /
+  --entrypoint tar codeberg.org/forgejo/forgejo:15.0.11 x -C /
 # 2. Einstellungen → Git → an
 ```
 

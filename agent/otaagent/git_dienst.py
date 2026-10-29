@@ -34,7 +34,7 @@ log = logging.getLogger("otaagent.git")
 
 NAME = "ota-git"
 VOLUME = "ota_git_daten"
-BILD = os.environ.get("OTA_GIT_IMAGE", "codeberg.org/forgejo/forgejo:15.0.10")
+BILD = os.environ.get("OTA_GIT_IMAGE", "codeberg.org/forgejo/forgejo:15.0.11")
 RUNTIME_ROOT = os.environ.get("OTA_RUNTIME_ROOT", "/srv/ota/runtime")
 TRAEFIK_DYNAMIC = "/ota/traefik-dynamic"
 OEFFENTLICH = os.environ.get("OTA_PUBLIC_NETWORK", "ota_public")
@@ -267,8 +267,13 @@ def status(client) -> dict[str, Any]:
     except NotFound:
         return {"container": "fehlt", "bild": BILD}
     gesund = ((c.attrs.get("State") or {}).get("Health") or {}).get("Status")
+    # Gegen den Namen, mit dem der Container angelegt wurde: Nach einem
+    # Update mit neuer Forgejo-Fassung (Sicherheitskorrektur) läuft er
+    # sonst auf der alten weiter, bis jemand Git aus- und einschaltet.
+    angelegt = (c.attrs.get("Config") or {}).get("Image") or ""
     return {"container": c.status, "gesund": gesund, "bild": c.image.tags[0] if c.image.tags else BILD,
-            "domain": (c.labels or {}).get("ota.git.domain", "")}
+            "domain": (c.labels or {}).get("ota.git.domain", ""),
+            "veraltet": bool(angelegt) and angelegt != BILD}
 
 
 def an(client, domain: str, umgebung: dict[str, str], ota_url: str = "") -> dict[str, Any]:

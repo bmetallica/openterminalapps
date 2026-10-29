@@ -381,7 +381,7 @@ services:
       # OTA-Git (Kapitel 27). Den Container legt der Agent an, wenn Git im
       # Menü eingeschaltet wird — nicht Compose, sonst ließe er sich nicht aus
       # der Oberfläche schalten. Die Fassung steht hier fest.
-      OTA_GIT_IMAGE: "${OTA_GIT_IMAGE:-codeberg.org/forgejo/forgejo:15.0.10}"
+      OTA_GIT_IMAGE: "${OTA_GIT_IMAGE:-codeberg.org/forgejo/forgejo:15.0.11}"
       OTA_GIT_DB_PW: "${OTA_GIT_DB_PW:-}"
       OTA_GIT_ADMIN_PW: "${OTA_GIT_ADMIN_PW:-}"
       POSTGRES_DB: "${POSTGRES_DB:-ota}"
@@ -734,8 +734,25 @@ services:
 
   repo-web:
     # Die stabile Linie von nginx, wie die anderen Dienste auf eine Fassung
-    # festgelegt und nicht auf `latest`.
-    image: nginx:1.30-alpine
+    # festgelegt und nicht auf `latest`. Gebaut statt nur gezogen, mit
+    # `apk upgrade` wie ota/web: das Alpine im nginx-Image hinkt seinen
+    # Paketen hinterher (so noch Brotli 1.2.0 mit CVE-2026-111497, als
+    # Alpine 1.2.1 längst hatte).
+    build:
+      context: ./nginx
+      dockerfile_inline: |
+        FROM nginx:1.30-alpine
+        ARG OTA_PAKETSTAND=
+        RUN apk upgrade --no-cache
+      args:
+        http_proxy: "${OTA_HTTP_PROXY:-}"
+        https_proxy: "${OTA_HTTPS_PROXY:-}"
+        no_proxy: "${OTA_NO_PROXY:-}"
+        HTTP_PROXY: "${OTA_HTTP_PROXY:-}"
+        HTTPS_PROXY: "${OTA_HTTPS_PROXY:-}"
+        NO_PROXY: "${OTA_NO_PROXY:-}"
+        OTA_PAKETSTAND: "${OTA_PAKETSTAND:-}"
+    image: ota/repo-web:${OTA_VERSION:-dev}
     container_name: ota-repo-web
     logging: *protokoll
     restart: unless-stopped

@@ -268,9 +268,20 @@ def _git_takt() -> None:
         if not git.an(db):
             return
         try:
-            agent_client.git_status()  # zieht im Agent den Weg zu Keycloak nach
+            stand = agent_client.git_status()  # zieht im Agent den Weg zu Keycloak nach
         except HTTPException as exc:
             log.warning("OTA-Git: Agent nicht erreichbar: %s", exc.detail)
+            stand = {}
+        if stand.get("veraltet"):
+            # Neue Forgejo-Fassung nach einem Update: Container ersetzen,
+            # die Daten bleiben im Volume.
+            log.info("OTA-Git: Container läuft auf %s, neu angelegt mit der aktuellen Fassung",
+                     stand.get("bild"))
+            try:
+                git.einschalten(db)
+            except (git.GitFehler, HTTPException) as exc:
+                log.warning("OTA-Git: Erneuern fehlgeschlagen: %s", getattr(exc, "detail", exc))
+                db.rollback()
         git.tokens_aufraeumen(db)
         git.konten_abgleichen(db)
 

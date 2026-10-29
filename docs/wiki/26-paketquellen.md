@@ -306,8 +306,10 @@ bleibt unberührt, und ein Root-Arbeitsplatz übernimmt beim Fortsetzen die aktu
 - **Steuerdienst** `repo/otarepo/main.py` (FastAPI, Port 8200, nur im internen Netz). Spricht mit
   der API über denselben Dienst-Token wie der Agent. Kein Docker-Socket.
 - **aptly 1.6.1** aus Debian 13: Spiegel → Snapshot → `publish switch`. Ein Auftrag zur Zeit.
-- **nginx** (`ota-repo-web`) liefert `aptly/public` unter `/repo/` aus; `Release` und `Packages`
-  ohne Zwischenspeicher.
+- **nginx** (`ota-repo-web`, Image `ota/repo-web`) liefert `aptly/public` unter `/repo/` aus;
+  `Release` und `Packages` ohne Zwischenspeicher. Das Image ist `nginx:1.30-alpine` plus
+  `apk upgrade`, bei jedem `make update` frisch: Das offizielle Image hinkt den Sicherheitsupdates
+  von Alpine hinterher.
 - **Agent** `agent/otaagent/paketquelle.py` erzeugt das Ein- und Austragsskript; dieselbe Fassung
   für Arbeitsplätze und Bildbauer.
 - **Einstellungen** in der Datenbank (`REPO_MODUS`, `REPO_BAU_SNAPSHOT`, `REPO_ALTER_GELB`,

@@ -446,7 +446,8 @@ mit stehenden Paketen.
 - **Stückliste je Image** (`make sbom`) in SPDX und CycloneDX — gebraucht, sobald ein Image das
   Haus verlässt
 - **Sicherheitsupdates mit jedem `make update`** (frische Basis- und Dienst-Images, Paket-Updates
-  der Woche) und **`make cve`**: behebbare Lücken je Image, gescannt mit grype
+  der Woche, auch für das nginx der Paketquelle; eine neue Forgejo-Fassung übernimmt OTA-Git danach
+  von selbst) und **`make cve`**: behebbare Lücken je Image, gescannt mit grype
   ([Kapitel 11](docs/wiki/11-betrieb.md#sicherheitslücken-cves-))
 - Eigene Registry im Stack; fehlt ein Image lokal, wird es beim Start von dort geholt
 - Sicherung und Wiederherstellung von Profil, Container und Datenbank, manuell und nach Plan

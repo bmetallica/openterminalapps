@@ -442,7 +442,8 @@ with packets standing still.
 - **Bill of materials per image** (`make sbom`) in SPDX and CycloneDX — needed as soon as an image
   leaves the building
 - **Security updates with every `make update`** (fresh base and service images, the week's
-  package updates) and **`make cve`**: fixable vulnerabilities per image, scanned with grype
+  package updates, also for the package repository's nginx; OTA Git picks up a new Forgejo version
+  by itself afterwards) and **`make cve`**: fixable vulnerabilities per image, scanned with grype
   ([chapter 11](docs/wiki/en/11-betrieb.md#security-vulnerabilities-cves-))
 - Own registry in the stack; if an image is missing locally, it is fetched from there on start
 - Backup and restore of profile, container and database, manually and on a schedule
