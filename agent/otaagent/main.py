@@ -297,7 +297,16 @@ logging.basicConfig(level=logging.INFO,
 async def _lifespan(_: FastAPI):
     # Statt `@app.on_event("startup")`: Starlette 1.0 kennt das nicht mehr,
     # FastAPI nur noch als veralteten Umweg.
-    _firewall_start()
+    #
+    # **Der Abgleich läuft im Hintergrund**, der Agent nimmt sofort Anfragen
+    # an. Bis zum 2026-11-02 wartete der Start auf ihn — und nachdem Traefik
+    # und Router neu angelegt waren, hängt er beide wieder in **jedes**
+    # Sitzungsnetz, auch das jedes angehaltenen Root-Arbeitsplatzes. Auf
+    # einem Wirt mit langsamem Docker dauerte das länger als der Healthcheck
+    # Geduld hat; der Agent galt als krank, und die API startete gar nicht
+    # (Betrieb, `make update`).
+    _verwaltung_laden()
+    threading.Thread(target=_firewall_start, name="firewall-start", daemon=True).start()
     yield
 
 
@@ -951,10 +960,11 @@ def _weiterleitungen_aufloesen(client) -> list[dict]:
 
 
 def _firewall_start() -> None:
-    """Was die API gesetzt hat, wieder aufnehmen — und einmal abgleichen."""
-    _verwaltung_laden()
+    """Einmal abgleichen, was die API gesetzt hat (`_verwaltung_laden` lief
+    schon beim Start). Im Hintergrund, siehe `_lifespan`."""
+    beginn = time.monotonic()
     try:
-        log.info("Firewall beim Start: %s", _firewall_abgleich())
+        log.info("Firewall beim Start: %s (%.0f s)", _firewall_abgleich(), time.monotonic() - beginn)
     except Exception as exc:  # noqa: BLE001
         log.error("Firewall-Abgleich beim Start fehlgeschlagen: %s", exc)
 
