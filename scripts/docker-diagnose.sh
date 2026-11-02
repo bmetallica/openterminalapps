@@ -23,7 +23,6 @@ messen() {
   local beginn ende
   beginn=$(date +%s%N)
   timeout 120 bash -c "$2" >/dev/null 2>&1
-  local code=$?
   ende=$(date +%s%N)
   local ms=$(( (ende - beginn) / 1000000 ))
   printf '  %-34s %7d ms%s\n' "$1" "$ms" "$([ $code -eq 124 ] && echo '   (nach 120 s abgebrochen!)')" >&2
@@ -39,9 +38,10 @@ messen "docker ps -a" "docker ps -aq" >/dev/null
 T_NET=$(messen "docker network ls" "docker network ls -q")
 T_INFO=$(messen "docker info" "docker info")
 messen "docker inspect (bis 50 laufende)" 'docker ps -q | head -50 | xargs -r docker inspect' >/dev/null
-messen "docker system df" "docker system df" >/dev/null
+T_DF=$(messen "docker system df" "docker system df")
 [ "${T_PS:-0}" -gt 2000 ] && hinweis "docker ps braucht ${T_PS} ms — der Daemon selbst ist langsam (siehe Last, Platte, dockerd)."
 [ "${T_INFO:-0}" -gt 5000 ] && hinweis "docker info braucht ${T_INFO} ms."
+[ "${T_DF:-0}" -gt 10000 ] && hinweis "docker system df braucht $((T_DF / 1000)) s — Docker rechnet dafür die Größe jeder Schicht aus; das ist langsam bei langsamer Platte oder viel Build-Cache. OTA fragt die Größe von Arbeitsplätzen auf dieselbe Weise ab."
 [ "${T_NET:-0}" -gt 2000 ] && hinweis "docker network ls braucht ${T_NET} ms — viele Netze oder ein überlasteter Daemon."
 
 # ------------------------------------------------------------------ System
@@ -53,13 +53,22 @@ LAST=$(cut -d' ' -f1 /proc/loadavg)
 awk -v l="$LAST" -v c="$CPUS" 'BEGIN { exit !(l > c * 1.5) }' && hinweis "Last $LAST bei $CPUS CPUs — der Wirt ist überlastet."
 z "free -h"
 SWAP_BELEGT=$(free -m | awk '/^Swap:/ {print $3}')
-[ "${SWAP_BELEGT:-0}" -gt 1024 ] && hinweis "${SWAP_BELEGT} MB Swap belegt — Speicher wird knapp, alles wird langsam."
+# Belegter Swap allein sagt wenig: Der Kernel lagert selten Genutztes auch
+# bei freiem RAM aus. Knapp ist es erst, wenn kaum Speicher verfügbar ist.
+VERF_PROZENT=$(awk '/^MemTotal:/ {t=$2} /^MemAvailable:/ {a=$2} END {print int(a * 100 / t)}' /proc/meminfo)
+if [ "${SWAP_BELEGT:-0}" -gt 1024 ] && [ "${VERF_PROZENT:-100}" -lt 15 ]; then
+  hinweis "${SWAP_BELEGT} MB Swap belegt und nur ${VERF_PROZENT} % RAM verfügbar — Speicher wird knapp, alles wird langsam."
+fi
 kopf "Druck (PSI): wie viel Zeit Prozesse auf CPU, Platte, Speicher warten"
 for r in cpu io memory; do
   [ -r /proc/pressure/$r ] && printf '  %-7s %s\n' "$r" "$(head -1 /proc/pressure/$r)"
 done
 IO_PSI=$(awk '/^some/ {split($3,a,"="); print int(a[2])}' /proc/pressure/io 2>/dev/null || echo 0)
-[ "${IO_PSI:-0}" -ge 20 ] && hinweis "Prozesse warten ${IO_PSI} % der Zeit auf die Platte (io avg60) — die Platte ist der Engpass."
+if [ "${IO_PSI:-0}" -ge 20 ]; then
+  hinweis "Prozesse warten ${IO_PSI} % der Zeit auf die Platte (io avg60) — die Platte ist der Engpass."
+elif [ "${IO_PSI:-0}" -ge 5 ]; then
+  hinweis "Prozesse warten ${IO_PSI} % der Zeit auf die Platte (io avg60) — spürbar; auf einem gesunden Wirt liegt der Wert nahe 0."
+fi
 MEM_PSI=$(awk '/^some/ {split($3,a,"="); print int(a[2])}' /proc/pressure/memory 2>/dev/null || echo 0)
 [ "${MEM_PSI:-0}" -ge 10 ] && hinweis "Speicherdruck ${MEM_PSI} % (memory avg60) — zu wenig RAM."
 kopf "vmstat (5 Sekunden; wa = Warten auf die Platte, si/so = Swap)"
@@ -91,12 +100,47 @@ if command -v iostat >/dev/null; then
 else
   echo "(iostat fehlt — apt install sysstat, dann genauer)"
 fi
-kopf "Schreibtest: 256 MB direkt auf die Platte unter $ROOTDIR (normal: SSD > 200 MB/s, HDD > 80 MB/s)"
-TESTDATEI="$ROOTDIR/.ota-diagnose-$$"
-z "dd if=/dev/zero of='$TESTDATEI' bs=1M count=256 oflag=direct conv=fsync 2>&1 | tail -1" 120
-z "dd if=/dev/zero of='$TESTDATEI' bs=4k count=2000 oflag=direct,dsync 2>&1 | tail -1" 120
-rm -f "$TESTDATEI"
-echo "(zweite Zeile: 2000 kleine, synchrone Schreibvorgänge — so schreibt Docker seine Metadaten; unter 1 MB/s ist sehr langsam)"
+FSTYP=$(df --output=fstype "$ROOTDIR" | tail -1 | tr -d ' ')
+# dd meldet den Durchsatz in der letzten Zeile ("…, 13,7 MB/s"); in MB/s umrechnen.
+mbs() { LC_ALL=C awk '{ gsub(",", ".", $(NF-1)); v = $(NF-1) + 0
+               if ($NF == "kB/s") v /= 1000; else if ($NF == "GB/s") v *= 1000
+               print v }'; }
+schreibtest() {
+  local dir=$1 datei="$1/.ota-diagnose-$$" gross klein
+  kopf "Schreibtest unter $dir (normal: SSD > 200 MB/s, HDD > 80 MB/s)"
+  gross=$(timeout 120 dd if=/dev/zero of="$datei" bs=1M count=256 oflag=direct conv=fsync 2>&1 | tail -1)
+  echo "  256 MB am Stück:          ${gross:-(nach 120 s abgebrochen)}"
+  # 500 kleine, synchrone Schreibvorgänge — so schreiben containerd und
+  # Datenbanken ihre Metadaten. Gesund: Hunderte bis Tausende je Sekunde.
+  local beginn ende
+  beginn=$(date +%s%N)
+  klein=$(timeout 60 dd if=/dev/zero of="$datei" bs=4k count=500 oflag=direct,dsync 2>&1 | tail -1)
+  ende=$(date +%s%N)
+  rm -f "$datei"
+  local ms=$(( (ende - beginn) / 1000000 )) iops=0
+  if echo "$klein" | grep -q 'kopiert\|copied'; then
+    [ "$ms" -gt 0 ] && iops=$(( 500 * 1000 / ms ))
+    echo "  500 × 4 KB synchron:      $klein  (≈ $iops Schreibvorgänge/s)"
+  else
+    echo "  500 × 4 KB synchron:      nach 60 s nicht fertig — unter 9 Schreibvorgänge/s"
+  fi
+  local g; g=$(echo "$gross" | grep -q 'kopiert\|copied' && echo "$gross" | mbs || echo 0)
+  LC_ALL=C awk -v g="$g" 'BEGIN { exit !(g < 80) }' &&
+    hinweis "Nur ${g} MB/s beim Schreiben unter $dir — die Platte ist sehr langsam (in einer VM: Speicher des Hypervisors prüfen, z. B. HDD, Netzspeicher oder Cache-Modus des virtuellen Laufwerks)."
+  [ "$iops" -lt 100 ] &&
+    hinweis "Nur $([ "$iops" -gt 0 ] && echo "$iops" || echo "unter 9") synchrone Schreibvorgänge/s unter $dir (gesund: > 500) — jeder Container-Start, jede Image-Schicht und jede Datenbank wartet darauf. Das ist sehr wahrscheinlich der Hauptgrund."
+}
+schreibtest "$ROOTDIR"
+# Mit dem containerd-Image-Speicher (Speichertreiber overlayfs) liegen Images
+# und Container-Schichten nicht unter DockerRootDir, sondern unter
+# /var/lib/containerd — oft auf einer anderen Platte.
+if [ -d /var/lib/containerd ] && [ "$(stat -c %d /var/lib/containerd)" != "$(stat -c %d "$ROOTDIR")" ]; then
+  echo "(/var/lib/containerd liegt auf $(df --output=source /var/lib/containerd | tail -1) — dort liegen Images und Container-Schichten)"
+  schreibtest /var/lib/containerd
+fi
+if [ "$FSTYP" = btrfs ]; then
+  hinweis "$ROOTDIR liegt auf btrfs. btrfs schreibt jede Änderung an eine neue Stelle (Copy-on-Write) und ist bei vielen fsync — Datenbanken in Volumes — deutlich langsamer als ext4/xfs; in einer VM auf einem qcow2-Abbild kommt ein zweites Copy-on-Write dazu. Für Volumes mit Datenbanken hilft 'chattr +C' auf ein leeres Verzeichnis, besser ext4 oder xfs."
+fi
 
 # ------------------------------------------------------------------ Docker selbst
 kopf "Docker"

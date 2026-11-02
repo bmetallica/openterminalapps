@@ -11,13 +11,19 @@ If `make update`, starting workspaces or even `docker ps` take seconds to minute
 - Response times of Docker.
 - Load, memory and swap, plus PSI (how long processes wait for CPU, disk and memory).
 - Disk: fill level, inodes and a short write test, also with small synchronous writes, the way Docker
-  writes its metadata.
+  writes its metadata. It tests the Docker directory and, if it is on another disk,
+  `/var/lib/containerd`: with the `overlayfs` storage driver (containerd) images and container layers
+  live there, not under `DockerRootDir`.
 - How many containers, networks, images and how much build cache there are; large logs.
 - dockerd and containerd: CPU, memory and the errors in the log of the last hour.
 - Rules in iptables and nft, network namespaces, conntrack.
 - Sysbox, kernel messages about disk errors and hung tasks, steal time in a VM.
 
-At the end there are hints about what stands out. The report is at `/tmp/docker-diagnose-<time>.txt`.
+At the end there are hints about what stands out. The most common finding in VMs: too few
+synchronous writes per second (below 100). Then every container start, every image layer and every
+database in a volume waits for the disk. Only faster storage in the hypervisor helps (SSD instead of
+HDD or network storage, a suitable cache mode for the virtual drive). btrfs under the Docker
+directory makes it worse, because btrfs is much slower than ext4 or xfs with many `fsync` calls. The report is at `/tmp/docker-diagnose-<time>.txt`.
 
 ## "This session is no longer running", although it was just started
 

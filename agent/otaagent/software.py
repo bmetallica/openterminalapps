@@ -48,6 +48,10 @@ NAME_OK = re.compile(r"[A-Za-z0-9][A-Za-z0-9.+_@-]{0,199}")
 
 def _archiv(container, pfad: str) -> tarfile.TarFile | None:
     """Ein Pfad aus dem Container als Tar, oder None, wenn es ihn nicht gibt."""
+    # Unter Sysbox scheitert get_archive immer; gleich ueber exec, sonst steht
+    # jeder Aufruf als Fehler im Protokoll von dockerd.
+    if (container.labels or {}).get("ota.klasse") == "root":
+        return _archiv_ueber_exec(container, pfad)
     try:
         strom, info = container.get_archive(pfad)
     except NotFound:
@@ -55,8 +59,6 @@ def _archiv(container, pfad: str) -> tarfile.TarFile | None:
     except APIError as exc:
         if getattr(exc, "status_code", None) == 404:
             return None
-        if (container.labels or {}).get("ota.klasse") == "root":
-            return _archiv_ueber_exec(container, pfad)
         raise
     if (info or {}).get("size", 0) > MAX_DATEI:
         return None

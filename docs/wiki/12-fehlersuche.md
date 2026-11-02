@@ -11,13 +11,20 @@ Dauern `make update`, das Starten von Arbeitsplätzen oder schon `docker ps` Sek
 - Antwortzeiten von Docker.
 - Last, Speicher und Swap, dazu PSI (wie lange Prozesse auf CPU, Platte und Speicher warten).
 - Platte: Füllstand, Inodes und ein kurzer Schreibtest, auch mit kleinen synchronen Schreibvorgängen,
-  wie Docker sie für seine Metadaten macht.
+  wie Docker sie für seine Metadaten macht. Getestet wird das Docker-Verzeichnis und, wenn es auf
+  einer anderen Platte liegt, `/var/lib/containerd`: Mit dem Speichertreiber `overlayfs` (containerd)
+  liegen Images und Container-Schichten dort, nicht unter `DockerRootDir`.
 - Wie viele Container, Netze, Images und wie viel Build-Cache es gibt; große Protokolle.
 - dockerd und containerd: CPU, Speicher und die Fehler im Protokoll der letzten Stunde.
 - Regeln in iptables und nft, Netz-Namensräume, conntrack.
 - Sysbox, Kernel-Meldungen zu Plattenfehlern und hängenden Aufgaben, Steal-Zeit in einer VM.
 
-Am Ende stehen Hinweise auf das, was auffällt. Der Bericht liegt unter `/tmp/docker-diagnose-<Zeit>.txt`.
+Am Ende stehen Hinweise auf das, was auffällt. Der häufigste Befund in VMs: zu wenige synchrone
+Schreibvorgänge je Sekunde (unter 100). Dann wartet jeder Container-Start, jede Image-Schicht und
+jede Datenbank in einem Volume auf die Platte. Abhilfe schafft nur schnellerer Speicher im Hypervisor
+(SSD statt HDD oder Netzspeicher, passender Cache-Modus des virtuellen Laufwerks). btrfs unter dem
+Docker-Verzeichnis verstärkt das, weil btrfs bei vielen `fsync` deutlich langsamer ist als ext4 oder
+xfs. Der Bericht liegt unter `/tmp/docker-diagnose-<Zeit>.txt`.
 
 ## „Diese Sitzung läuft nicht mehr", obwohl sie gerade gestartet wurde
 
