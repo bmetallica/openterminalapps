@@ -67,6 +67,11 @@ export function Login({ onDone, notfall = false, fehler }: {
       // Ein Konto der zentralen Anmeldung am falschen Eingang: hinüber, mit
       // dem schon getippten Namen.
       if (!notfall && err instanceof ApiError && err.status === 409) { zentral(username); return }
+      if (err instanceof ApiError && (err.status === 0 || err.status >= 500)) {
+        // Kein falsches Passwort, sondern eine API, die gerade neu startet.
+        setError(t('OTA startet gerade neu. Bitte in ein paar Sekunden noch einmal anmelden.'))
+        return
+      }
       const msg = err instanceof ApiError ? err.message : t('Anmeldung fehlgeschlagen')
       // Die API verlangt den zweiten Faktor erst, wenn Name und Passwort stimmen.
       if (msg.includes(t('Code aus deiner App'))) setNeedsTotp(true)

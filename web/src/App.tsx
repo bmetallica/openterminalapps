@@ -94,8 +94,32 @@ export default function App() {
   }, [])
 
   // Beim Laden prüfen, ob noch eine gültige Sitzung besteht.
+  //
+  // **Nur ein 401 heisst „nicht angemeldet“.** Bis zum 2026-11-02 galt jeder
+  // Fehler so — auch ein 503, weil die API gerade neu startet (Update, kurz
+  // roter Healthcheck). Dann flog man hinaus, landete auf der Anmeldung, und
+  // die scheiterte ebenfalls mit 503. Jetzt wartet die Seite und fragt alle
+  // paar Sekunden wieder, bis die API antwortet.
+  const [nichtErreichbar, setNichtErreichbar] = useState(false)
   useEffect(() => {
-    api.me().then(setMe).catch(() => setMe(null)).finally(() => setChecking(false))
+    let weg = false
+    let versuch = 0
+    function fragen() {
+      api.me()
+        .then((m) => { if (!weg) { setMe(m); setNichtErreichbar(false); setChecking(false) } })
+        .catch((err) => {
+          if (weg) return
+          if (err instanceof ApiError && err.status === 401) {
+            setMe(null); setNichtErreichbar(false); setChecking(false)
+            return
+          }
+          setNichtErreichbar(true)
+          versuch++
+          setTimeout(fragen, Math.min(15_000, 2000 * versuch))
+        })
+    }
+    fragen()
+    return () => { weg = true }
   }, [])
   useEffect(() => { alsAngemeldet(!!me) }, [me])
 
@@ -161,7 +185,9 @@ export default function App() {
     return (
       <div className="boot">
         <img className="boot__mark" src={marke.logo_url ?? '/icon.svg'} alt="" aria-hidden="true" />
-        <span className="silk">{t('{name} startet…', { name: marke.name })}</span>
+        <span className="silk">{nichtErreichbar
+          ? t('{name} ist gerade nicht erreichbar, vermutlich ein Neustart. Einen Moment, die Seite versucht es von selbst wieder…', { name: marke.name })
+          : t('{name} startet…', { name: marke.name })}</span>
       </div>
     )
   }

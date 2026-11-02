@@ -2113,4 +2113,6 @@ export const EN: Record<string, string> = {
   '{name}: „{kopf}“ ist kein gültiger Name einer Kopfzeile.': '{name}: “{kopf}” is not a valid header name.',
   '{name}: Der Befehl fehlt, z. B. npx -y @modelcontextprotocol/server-github.': '{name}: the command is missing, e.g. npx -y @modelcontextprotocol/server-github.',
   '{name}: „{variable}“ ist kein gültiger Name einer Umgebungsvariable.': '{name}: “{variable}” is not a valid environment variable name.',
+  '{name} ist gerade nicht erreichbar, vermutlich ein Neustart. Einen Moment, die Seite versucht es von selbst wieder…': '{name} cannot be reached right now, probably a restart. One moment, the page tries again by itself…',
+  'OTA startet gerade neu. Bitte in ein paar Sekunden noch einmal anmelden.': 'OTA is restarting right now. Please sign in again in a few seconds.',
 }
