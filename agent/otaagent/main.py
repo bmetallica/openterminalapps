@@ -1899,6 +1899,92 @@ def _anlagen_umgebung() -> dict[str, str]:
     return werte
 
 
+# Woher `dockerd` **im** Root-Arbeitsplatz die Netze seiner Compose-Projekte
+# nimmt. Ohne Vorgabe greift Docker nach `172.17`–`172.31` zu `192.168.0.0/20`
+# — und das überdeckt im Arbeitsplatz das LAN: Alles an 192.168.1.x landete
+# auf einer leeren inneren Bridge („Keine Route zum Zielrechner"). Gefunden am
+# 2026-10-30, ein Arbeitsplatz mit sechzehn Compose-Projekten, und opencode
+# erreichte den KI-Server im LAN nicht mehr.
+DOCKER_NETZE_VORGABE = "172.16.0.0/12:24"
+_TABU = [ipaddress.ip_network(n) for n in ("127.0.0.0/8", "169.254.0.0/16", "224.0.0.0/4")]
+
+
+def _docker_netze(roh: str | None = None) -> list[dict[str, Any]]:
+    """`OTA_ROOT_DOCKER_NETZE` als `default-address-pools`. Leer = Docker entscheidet.
+
+    Format `Bereich:Grösse`, mehrere mit Komma. Was sich mit den Sitzungsnetzen
+    von OTA überschneidet, fliegt raus: Dann hätte der Arbeitsplatz seinen
+    eigenen Router überdeckt.
+    """
+    roh = os.environ.get("OTA_ROOT_DOCKER_NETZE", DOCKER_NETZE_VORGABE) if roh is None else roh
+    sitzungen = ipaddress.ip_network(netz_ops.POOL, strict=False)
+    netze: list[dict[str, Any]] = []
+    for teil in filter(None, (t.strip() for t in roh.split(","))):
+        try:
+            bereich, _, groesse = teil.partition(":")
+            netz = ipaddress.ip_network(bereich.strip(), strict=False)
+            groesse_n = int(groesse or 24)
+        except ValueError:
+            log.warning("OTA_ROOT_DOCKER_NETZE: %r ist kein Bereich:Grösse — übergangen", teil)
+            continue
+        if netz.version != 4 or not netz.prefixlen <= groesse_n <= 28:
+            log.warning("OTA_ROOT_DOCKER_NETZE: %r passt nicht (IPv4, Grösse zwischen /%d und /28)",
+                        teil, netz.prefixlen)
+            continue
+        if netz.overlaps(sitzungen) or any(netz.overlaps(t) for t in _TABU):
+            log.warning("OTA_ROOT_DOCKER_NETZE: %s überschneidet sich mit %s — übergangen",
+                        netz, sitzungen if netz.overlaps(sitzungen) else "einem reservierten Bereich")
+            continue
+        netze.append({"base": str(netz), "size": groesse_n})
+    return netze
+
+
+# Läuft beim Start des Arbeitsplatzes in `root_startup.sh`, als root und vor
+# `dockerd` — deshalb hier und nicht in einem Paket: Ein Paket käme erst nach
+# dem Start an, wenn `dockerd` seine Bereiche längst gelesen hat. Und so
+# erreicht es auch Arbeitsplätze, deren Image älter ist als diese Zeilen.
+#
+# **Eigenes bleibt.** OTA merkt sich in `/etc/docker/.ota-netze`, was es
+# zuletzt eingetragen hat. Steht in `daemon.json` etwas anderes, hat es der
+# Nutzer gesetzt, und dann fasst OTA den Eintrag nicht an.
+_DOCKER_NETZE_SKRIPT = r"""
+if [ "$(id -u)" = 0 ] && [ "${OTA_DOCKER:-0}" = 1 ] && command -v python3 >/dev/null; then
+  python3 - @NETZE@ <<'OTA_NETZE' || echo "root_startup: Docker-Netze nicht eingetragen" >&2
+import json, os, sys
+soll = json.loads(sys.argv[1])
+datei, merk = "/etc/docker/daemon.json", "/etc/docker/.ota-netze"
+try:
+    conf = json.load(open(datei))
+except FileNotFoundError:
+    conf = {}
+except ValueError:
+    sys.exit("root_startup: /etc/docker/daemon.json ist kein JSON — Docker-Netze unverändert")
+try:
+    zuletzt = json.load(open(merk))
+except (OSError, ValueError):
+    zuletzt = None
+ist = conf.get("default-address-pools")
+if ist is not None and ist != zuletzt:
+    sys.exit(0)
+if ist == (soll or None):
+    sys.exit(0)
+if soll:
+    conf["default-address-pools"] = soll
+else:
+    conf.pop("default-address-pools", None)
+os.makedirs("/etc/docker", exist_ok=True)
+with open(datei + ".ota", "w") as fh:
+    json.dump(conf, fh, indent=2)
+    fh.write("\n")
+os.replace(datei + ".ota", datei)
+if soll:
+    json.dump(soll, open(merk, "w"))
+elif os.path.exists(merk):
+    os.remove(merk)
+OTA_NETZE
+fi"""
+
+
 def _umgebung_datei(session_id: str) -> Path:
     if not re.fullmatch(r"[0-9a-f-]{36}", session_id or ""):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Ungültige Kennung")
@@ -1920,6 +2006,7 @@ def _umgebung_schreiben(session_id: str) -> str:
             zeilen.append(f"export {name}={shlex.quote(wert)}")
         else:
             zeilen.append(f"unset {name}")
+    zeilen.append(_DOCKER_NETZE_SKRIPT.replace("@NETZE@", shlex.quote(json.dumps(_docker_netze()))))
     with open(datei, "w", encoding="utf-8") as fh:
         fh.write("\n".join(zeilen) + "\n")
     # Der Container liest sie als root und als 1000; der Wirt sieht sie nur

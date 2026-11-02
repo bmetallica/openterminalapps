@@ -152,6 +152,15 @@ developers, not an administrative right.
 - **Docker:** `docker`, `docker compose`, `docker buildx` without `sudo`. A published port
   (`ports: ["8080:80"]`) is reachable in the workspace's browser at `http://localhost:8080`. From
   outside the workspace through a time-limited port forward ("+ NAT", [chapter 23](23-netz.md)).
+- **Networks of compose projects** come from `172.16.0.0/12`, one `/24` each (about 4000 networks).
+  OTA writes this into the workspace's `/etc/docker/daemon.json` on every start, before `dockerd`
+  starts. Without it, Docker takes `192.168.0.0/20` after 15 networks — and inside the workspace
+  that covers a LAN in `192.168.x`: destinations there then report "No route to host"
+  (`EHOSTUNREACH`). Applies to **newly created** networks; an existing network keeps its range until
+  it is created again (`docker compose down` and `up` again). Anyone who sets
+  `default-address-pools` in `daemon.json` themselves keeps their entry. The range is set with
+  `OTA_ROOT_DOCKER_NETZE` in `.env` (`range:size`, several separated by commas, empty = Docker
+  decides); `make update` warns if it overlaps a network of the host.
 - **Git:** if [OTA Git](27-git.md) is on, OTA sets it up on every start **and every resume**, as in
   every workspace. The token is revoked when stopping, and there is a new one when resuming. A new Git
   subdomain also arrives with resuming, without "Rebuild". It requires `git` in the workspace: the
@@ -330,6 +339,7 @@ same sessions, plus stopped root workspaces.
 | Start: "… uses X GB, Y GB are allowed" | Storage limit: clean up (`docker system prune` in the workspace), "Rebuild", or raise the template's limit. Administration can still start it under Operations |
 | Start takes long, apps stay greyed out, clicking an app: "Internal Server Error", the container is off shortly after | Golden image with `USER 1000` from before 2026-10-07 (`docker logs ota-s-…` shows `setpriv: initgroups failed`). `git pull`, `make update`, then **rebuild** the workspace |
 | In the workspace `docker: command not found` | The image is not `ota/base-desktop-root:1` or built on it |
+| A destination in the LAN (`192.168.x`) reports "No route to host" / `EHOSTUNREACH` in the workspace, from the host it works | An inner Docker network covers it: `ip route get <destination>` shows `dev br-…` instead of `via 10.99.…`. Network from before 2026-11-02 — run `docker compose down` and `up` once for the project, or `docker network prune` |
 | `docker run …` → "bad address" | Image older than 2026-10-06 (without `--dns`): `make root-image`, then "Rebuild" |
 | Resume: "The network of this workspace no longer exists" | The session network was deleted by hand: "Rebuild" |
 | `apt install sysbox-ce` asks for `docker rm …` | Installed without the script. **Do not run it** — use `scripts/sysbox-einrichten.sh` |

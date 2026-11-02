@@ -263,7 +263,8 @@ dabei **nicht** zurückwandert, ist die Datenbank: Neue Spalten bleiben stehen. 
   Sysbox, also ohne `--privileged` (root im Container ist auf dem Host unprivilegiert). Beenden
   **hält an** statt zu löschen: Was installiert wird, bleibt, unter fester Adresse; „Neu aufsetzen"
   holt ein neues Basisimage. Die inneren Container gehen durch denselben Router und dieselben
-  Netzregeln ([Kapitel 25](docs/wiki/25-root-arbeitsplatz.md))
+  Netzregeln; ihre Netze kommen aus einem festen Bereich (`OTA_ROOT_DOCKER_NETZE`) und überdecken
+  das LAN nicht ([Kapitel 25](docs/wiki/25-root-arbeitsplatz.md))
 - **Eigene Paketquelle** (immer an): **eigene `.deb`-Pakete** per Drag & Drop, **festgehaltene
   Stände** mit Zurückdrehen und reproduzierbaren Images, und das Paket **`ota-selkies`**, das den
   Streaming-Server in Images bringt und Root-Arbeitsplätze beim Fortsetzen anhebt. Ein **Spiegel**

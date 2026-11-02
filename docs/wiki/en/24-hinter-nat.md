@@ -124,6 +124,9 @@ Then `make up`. That regenerates `traefik.yml` and `turnserver.conf` and starts 
 - **`OTA_SESSION_POOL`** (default `10.99.0.0/16`) must not overlap with the outer network. If a whole
   `10.0.0.0/8` lies there, the pool belongs elsewhere — otherwise the session network wins, and the
   real destination is no longer reachable.
+- **`OTA_ROOT_DOCKER_NETZE`** (default `172.16.0.0/12:24`): the same applies to the networks of Docker
+  **inside** root workspaces ([chapter 25](25-root-arbeitsplatz.md)). If the company network lies in
+  `172.16.0.0/12`, enter a different range.
 
 ### The reverse proxy (`192.168.1.23`)
 

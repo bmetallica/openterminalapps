@@ -260,7 +260,8 @@ that did not exist before is simply there.
   under Sysbox, so without `--privileged` (root in the container is unprivileged on the host).
   Ending it **stops** instead of deleting: what gets installed stays, at a fixed address; "Rebuild"
   brings in a new base image. The inner containers go through the same router and the same network
-  rules ([chapter 25](docs/wiki/en/25-root-arbeitsplatz.md))
+  rules; their networks come from a fixed range (`OTA_ROOT_DOCKER_NETZE`) and do not cover the LAN
+  ([chapter 25](docs/wiki/en/25-root-arbeitsplatz.md))
 - **Own package repository** (always on): **your own `.deb` packages** via drag & drop, **pinned
   snapshots** with rollback and reproducible images, and the package **`ota-selkies`**, which
   brings the streaming server into images and upgrades root workspaces when they resume. A

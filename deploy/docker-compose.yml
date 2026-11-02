@@ -348,6 +348,8 @@ services:
       OTA_SESSION_POOL: "${OTA_SESSION_POOL:-10.99.0.0/16}"
       OTA_SESSION_PREFIX: "${OTA_SESSION_PREFIX:-24}"
       OTA_SESSION_MTU: "${OTA_SESSION_MTU:-1500}"
+      # Die Netze von Docker **in** Root-Arbeitsplätzen (Kapitel 25).
+      OTA_ROOT_DOCKER_NETZE: "${OTA_ROOT_DOCKER_NETZE-172.16.0.0/12:24}"
       OTA_TRAEFIK_CONTAINER: ota-traefik
       OTA_FW_SOCKET: "${OTA_RUNTIME_ROOT:-/srv/ota/runtime}/firewall.sock"
       # Damit der Browser im Arbeitsplatz OTA selbst erreicht — die

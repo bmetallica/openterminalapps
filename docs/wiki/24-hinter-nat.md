@@ -124,6 +124,9 @@ geändert hat.
 - **`OTA_SESSION_POOL`** (Vorgabe `10.99.0.0/16`) darf sich nicht mit dem äusseren Netz
   überschneiden. Liegt dort ein ganzes `10.0.0.0/8`, gehört der Pool woandershin — sonst gewinnt
   das Sitzungsnetz, und das echte Ziel ist nicht mehr erreichbar.
+- **`OTA_ROOT_DOCKER_NETZE`** (Vorgabe `172.16.0.0/12:24`) gilt dasselbe für die Netze von Docker
+  **in** Root-Arbeitsplätzen ([Kapitel 25](25-root-arbeitsplatz.md)). Liegt das Firmennetz in
+  `172.16.0.0/12`, einen anderen Bereich eintragen.
 
 ### Der Reverse Proxy (`192.168.1.23`)
 

@@ -147,6 +147,26 @@ sleep 3
   || bad "Compose-Dienst antwortet nicht"
 drin 'cd ~/ota-pruefung && docker compose down >/dev/null 2>&1; rm -rf ~/ota-pruefung'
 
+# Gemeldet am 2026-10-30: Nach 15 Compose-Netzen nahm Docker 192.168.0.0/20
+# und überdeckte im Arbeitsplatz das LAN — opencode erreichte den KI-Server
+# nicht mehr („Keine Route zum Zielrechner").
+SOLL_NETZE="${OTA_ROOT_DOCKER_NETZE-172.16.0.0/12:24}"
+if [ -n "$SOLL_NETZE" ]; then
+  drin 'sudo cat /etc/docker/daemon.json' | grep -q "\"${SOLL_NETZE%%:*}\"" \
+    && ok "daemon.json im Arbeitsplatz: default-address-pools aus OTA_ROOT_DOCKER_NETZE" \
+    || bad "daemon.json ohne die Netze von OTA: $(drin 'sudo cat /etc/docker/daemon.json' | tr -d '\n ')"
+  NETZE=$(drin 'for i in $(seq 1 20); do docker network create ota-pruef-$i >/dev/null; done
+    docker network inspect -f "{{range .IPAM.Config}}{{.Subnet}}{{end}}" $(seq -f "ota-pruef-%g" 1 20)
+    docker network rm $(seq -f "ota-pruef-%g" 1 20) >/dev/null')
+  FALSCH=$(python3 -c "
+import ipaddress, sys
+erlaubt = [ipaddress.ip_network(t.split(':')[0]) for t in sys.argv[1].split(',') if t.strip()]
+netze = [ipaddress.ip_network(z) for z in sys.stdin.read().split()]
+print(len(netze), ' '.join(str(n) for n in netze if not any(n.subnet_of(e) for e in erlaubt)))" "$SOLL_NETZE" <<<"$NETZE")
+  [ "$FALSCH" = "20 " ] && ok "20 innere Netze, alle aus $SOLL_NETZE (keins aus 192.168.x)" \
+    || bad "Innere Netze ausserhalb von $SOLL_NETZE: $FALSCH"
+fi
+
 # Die inneren Container gehen durch denselben Router wie der Arbeitsplatz.
 LAN="${OTA_TURN_BIND:-${OTA_TURN_HOST:-192.168.66.224}}"
 INNEN=$(drin "docker run --rm alpine:3.20 sh -c '
@@ -162,6 +182,10 @@ grep -q "W:NEIN" <<<"$INNEN" && ok "Innerer Container: SSH des Wirts zu" || bad 
 echo
 echo "Anhalten statt Löschen"
 drin 'sudo sh -c "echo bleibt > /opt/ota-pruefmarke"' >/dev/null
+# Eigene Netze in daemon.json: OTA lässt sie beim Fortsetzen stehen.
+drin 'sudo python3 -c "
+import json; d=json.load(open(\"/etc/docker/daemon.json\")); d[\"default-address-pools\"]=[{\"base\":\"10.231.0.0/16\",\"size\":24}]
+json.dump(d, open(\"/etc/docker/daemon.json\",\"w\"))"' >/dev/null
 [ "$(api -X POST "$BASE_URL/api/sessions/$SID/apps/terminal" -o /dev/null -w '%{http_code}')" = "200" ] \
   && ok "Anwendung im Arbeitsplatz gestartet" || bad "Anwendung startet nicht"
 api -X DELETE "$BASE_URL/api/sessions/$SID" >/dev/null
@@ -197,6 +221,9 @@ LAUF=$(api "$BASE_URL/api/templates/$TID/once" | jqp "[(s['ran_count'], s['laeuf
 for _ in $(seq 1 30); do drin 'docker info >/dev/null' >/dev/null && break; sleep 1; done
 drin 'docker images --format "{{.Repository}}"' | grep -q '^nginx$' \
   && ok "Docker-Images überleben das Anhalten" || bad "Docker-Images sind weg"
+drin 'sudo cat /etc/docker/daemon.json' | grep -q '10.231.0.0/16' \
+  && ok "Eigene default-address-pools bleiben beim Fortsetzen stehen" \
+  || bad "Eigene Netze in daemon.json überschrieben"
 
 # Gemeldet am 2026-10-07: Nach dem Fortsetzen stand die vorher offene
 # Anwendung weiter als „läuft" da, ihr Bildschirm existierte aber nicht

@@ -229,4 +229,39 @@ if ! grep -qE "^OTA_TEST_ADMIN_PW=.+" "$ENV"; then
   echo "         trag dort das Passwort deines Admin-Kontos ein."
 fi
 
+# Die Docker-Netze in Root-Arbeitsplätzen dürfen kein Netz des Wirts
+# überdecken — sonst erreicht der Arbeitsplatz dort nichts mehr, sobald ein
+# Compose-Projekt darin ein Netz aus diesem Bereich bekommt. Geprüft wird,
+# was der Wirt kennt (seine Netze und Routen, ohne die von Docker); das
+# Firmennetz hinter der Standardroute sieht er nicht, das bleibt beim Betreiber.
+NETZE=$(sed -n 's/^OTA_ROOT_DOCKER_NETZE=//p' "$ENV" | tail -1)
+if [ -n "$NETZE" ] && command -v ip >/dev/null; then
+  ip -4 route show 2>/dev/null | python3 -c '
+import ipaddress, sys
+netze = []
+for teil in filter(None, (t.strip() for t in sys.argv[1].split(","))):
+    try:
+        netze.append(ipaddress.ip_network(teil.partition(":")[0].strip(), strict=False))
+    except ValueError:
+        pass
+for zeile in sys.stdin:
+    f = zeile.split()
+    if not f or f[0] == "default" or "dev" not in f:
+        continue
+    dev = f[f.index("dev") + 1]
+    if dev == "docker0" or dev.startswith(("br-", "veth")):
+        continue
+    try:
+        ziel = ipaddress.ip_network(f[0], strict=False)
+    except ValueError:
+        continue
+    for n in netze:
+        if n.overlaps(ziel):
+            print()
+            print(f"Hinweis: OTA_ROOT_DOCKER_NETZE ({n}) überschneidet sich mit {ziel} ({dev}) des Wirts.")
+            print("         Docker in Root-Arbeitsplätzen kann dieses Netz dort überdecken —")
+            print("         einen anderen Bereich eintragen (Handbuch Kapitel 25).")
+' "$NETZE"
+fi
+
 chmod 600 "$ENV"

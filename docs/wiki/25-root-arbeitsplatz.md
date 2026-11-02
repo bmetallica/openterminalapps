@@ -153,6 +153,15 @@ Werkzeug für Entwickler, kein Verwaltungsrecht.
 - **Docker:** `docker`, `docker compose`, `docker buildx` ohne `sudo`. Ein veröffentlichter Port
   (`ports: ["8080:80"]`) ist im Browser des Arbeitsplatzes unter `http://localhost:8080` erreichbar.
   Von ausserhalb des Arbeitsplatzes über eine befristete Portfreigabe („+ NAT", [Kapitel 23](23-netz.md)).
+- **Netze der Compose-Projekte** kommen aus `172.16.0.0/12`, je ein `/24` (rund 4000 Netze). OTA
+  trägt das bei jedem Start in `/etc/docker/daemon.json` des Arbeitsplatzes ein, bevor `dockerd`
+  startet. Ohne diese Vorgabe nimmt Docker nach 15 Netzen `192.168.0.0/20` — und das überdeckt im
+  Arbeitsplatz ein LAN in `192.168.x`: Ziele dort melden dann „Keine Route zum Zielrechner“
+  (`EHOSTUNREACH`). Gilt für **neu angelegte** Netze; ein schon bestehendes Netz behält seinen
+  Bereich, bis es neu angelegt wird (`docker compose down` und wieder `up`). Wer in `daemon.json`
+  selbst `default-address-pools` setzt, behält seinen Eintrag. Der Bereich ist einstellbar über
+  `OTA_ROOT_DOCKER_NETZE` in der `.env` (`Bereich:Grösse`, mehrere mit Komma, leer = Docker
+  entscheidet); `make update` warnt, wenn er sich mit einem Netz des Wirts überschneidet.
 - **Git:** Ist [OTA-Git](27-git.md) an, richtet OTA es bei jedem Start **und jedem Fortsetzen**
   ein, wie in jedem Arbeitsplatz. Das Token wird beim Anhalten widerrufen, beim Fortsetzen gibt es
   ein neues. Eine neue Git-Subdomain kommt ebenfalls mit dem Fortsetzen an, ohne „Neu aufsetzen“.
@@ -333,6 +342,7 @@ Klasse Standard und verhalten sich wie bisher. Der Reiter „Sessions" unter Bet
 | Start: „… belegt X GB, erlaubt sind Y GB" | Platzgrenze: aufräumen (`docker system prune` im Arbeitsplatz), „Neu aufsetzen", oder Grenze der Vorlage anheben. Die Verwaltung kann ihn unter Betrieb trotzdem starten |
 | Start dauert lange, Apps bleiben ausgegraut, Klick auf eine App: „Internal Server Error", Container ist kurz danach aus | Golden Image mit `USER 1000` aus der Zeit vor dem 2026-10-07 (`docker logs ota-s-…` zeigt `setpriv: initgroups failed`). `git pull`, `make update`, dann den Arbeitsplatz **neu aufsetzen** |
 | Im Arbeitsplatz `docker: command not found` | Image ist nicht `ota/base-desktop-root:1` oder darauf gebaut |
+| Ein Ziel im LAN (`192.168.x`) meldet im Arbeitsplatz „Keine Route zum Zielrechner“ / `EHOSTUNREACH`, vom Host aus geht es | Ein inneres Docker-Netz überdeckt es: `ip route get <ziel>` zeigt `dev br-…` statt `via 10.99.…`. Netz aus der Zeit vor dem 2026-11-02 — das Projekt einmal `docker compose down` und wieder `up`, oder `docker network prune` |
 | `docker run …` → „bad address" | Image älter als der 2026-10-06 (ohne `--dns`): `make root-image`, dann „Neu aufsetzen" |
 | Fortsetzen: „Das Netz dieses Arbeitsplatzes gibt es nicht mehr" | Das Sitzungsnetz wurde von Hand gelöscht: „Neu aufsetzen" |
 | `apt install sysbox-ce` verlangt `docker rm …` | Ohne das Skript installiert. **Nicht ausführen** — `scripts/sysbox-einrichten.sh` benutzen |
