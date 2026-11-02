@@ -322,14 +322,17 @@ def fuer_sitzung(db: DbSession, user: User) -> dict[str, Any]:
 
 
 def freigabe(db: DbSession) -> dict[str, str] | None:
-    """Die Zeile für die Firewall: der KI-Server, für alle Arbeitsplätze."""
+    """Die Zeile für die Firewall: der KI-Server, für alle Arbeitsplätze —
+    solange IDE-AI oder opencode (Kapitel 38) an ist."""
+    from . import opencode
+
     e = einstellungen(db)
-    if not e["an"] or not e["url"]:
+    if not (e["an"] or opencode.an(db)) or not e["url"]:
         return None
     teile = urlparse(e["url"])
     port = teile.port or (443 if teile.scheme == "https" else 80)
     return {"ziel": teile.hostname or "", "ports": str(port), "protokoll": "tcp",
-            "notiz": "IDE-AI: der KI-Server (Einstellungen → IDE-AI)"}
+            "notiz": "IDE-AI/opencode: der KI-Server (Einstellungen → IDE-AI)"}
 
 
 def stand(db: DbSession) -> dict[str, Any]:

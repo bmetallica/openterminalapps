@@ -166,6 +166,44 @@ def run_git_backup(db: DbSession, trigger: str, actor: str | None) -> Backup:
     return backup
 
 
+def run_erweiterung_backups(db: DbSession, trigger: str, actor: str | None) -> tuple[int, int]:
+    """Jede gekoppelte Erweiterung, die Sicherungen anbietet (Kapitel 39):
+    Die API holt sie dort ab und reicht sie an den Agent weiter. Je
+    Erweiterung eine eigene Reihe (`username` = Kennung) für die Aufbewahrung."""
+    import httpx
+
+    from .. import erweiterungen
+
+    gut = schlecht = 0
+    for e in erweiterungen.alle(db):
+        if not (e.manifest or {}).get("sicherung"):
+            continue
+        backup = Backup(kind="erweiterung", username=e.slug, trigger=trigger, actor=actor, status="running")
+        db.add(backup)
+        db.commit()
+        try:
+            with httpx.Client(timeout=httpx.Timeout(30.0, read=1800.0), trust_env=False) as c:
+                with c.stream("GET", f"{e.adresse}/ota/v1/sicherung",
+                              headers={"Authorization": f"Bearer {e.geheimnis}"}) as r:
+                    if r.status_code != 200:
+                        raise RuntimeError(f"{r.status_code} von der Erweiterung")
+                    result = agent_client.backup_erweiterung(e.slug, r.iter_bytes())
+            backup.path = result["path"]
+            backup.size_bytes = result["size_bytes"]
+            backup.file_count = result["file_count"]
+            backup.log = result["log"]
+            backup.status = "ok"
+            gut += 1
+        except (HTTPException, httpx.HTTPError, RuntimeError) as exc:
+            backup.status = "failed"
+            backup.error = str(getattr(exc, "detail", exc))[:500]
+            schlecht += 1
+        finally:
+            backup.finished_at = datetime.now(timezone.utc)
+            db.commit()
+    return gut, schlecht
+
+
 STALE_AFTER = timedelta(hours=2)
 
 
@@ -295,6 +333,10 @@ def run_scheduled(trigger: str = "schedule", actor: str | None = None) -> dict[s
                     counts["git"] = 1
                 else:
                     counts["failed"] += 1
+            # Die Erweiterungen ebenso (Kapitel 39).
+            gut, schlecht = run_erweiterung_backups(db, trigger, actor)
+            counts["erweiterungen"] = gut
+            counts["failed"] += schlecht
 
         counts["removed"] = apply_retention(db, policy)
 
@@ -302,6 +344,7 @@ def run_scheduled(trigger: str = "schedule", actor: str | None = None) -> dict[s
         policy.last_result = (
             f"{counts['profiles']} Profile, {counts['containers']} Container, "
             f"{counts['database']} Datenbank, {counts.get('git', 0)} Git, "
+            f"{counts.get('erweiterungen', 0)} Erweiterungen, "
             f"{counts['skipped']} ohne Profil, "
             f"{counts['failed']} Fehler, {counts['removed']} aufgeräumt"
         )

@@ -59,6 +59,8 @@ heute schon funktioniert.
 23. [Das Netz der Arbeitsplätze](23-netz.md)
 25. [Root-Arbeitsplatz — root und Docker im Container](25-root-arbeitsplatz.md)
 37. [Zwischenablage für Administratoren](37-zwischenablage-verwaltung.md)
+38. [opencode: der KI-Assistent im Terminal](38-opencode.md)
+39. [Erweiterungen (z. B. Gedächtnis für opencode)](39-erweiterungen.md)
 
 **Betrieb**
 10. [Zertifikate und HTTPS](10-zertifikate-und-https.md)

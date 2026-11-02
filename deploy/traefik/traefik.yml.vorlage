@@ -72,6 +72,11 @@ entryPoints:
   # Git über SSH, nur aus den Arbeitsplätzen.
   git-ssh:
     address: ":2222"
+  # Erweiterungen aus den Arbeitsplätzen (Handbuch Kapitel 39): Der Name
+  # ota-erweiterungen zeigt dort auf Traefik im eigenen Sitzungsnetz.
+  # Ebenfalls nicht auf dem Host veröffentlicht.
+  erweiterungen:
+    address: ":8091"
   # Dashboard. Der Name MUSS "traefik" lauten — an diesen Entrypoint bindet
   # sich api.insecure fest. Im Compose nur an 127.0.0.1 gebunden.
   traefik:

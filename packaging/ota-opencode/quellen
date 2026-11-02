@@ -1,0 +1,13 @@
+# Was in das Paket ota-opencode kommt (Handbuch Kapitel 38). Fassung, Adresse
+# und Prüfsumme gehören zusammen: Der Bau holt die Datei und bricht ab, wenn
+# die Prüfsumme nicht stimmt.
+#
+# Eine neue Fassung von opencode: alle drei Werte ändern, `revision` auf 1
+# zurück, bauen mit scripts/build-opencode-deb.sh --hochladen. Vorher
+# scripts/test-opencode.sh: Das Plugin ota-sitzung hängt an opencodes
+# Plugin-Schnittstelle, und die ändert sich zwischen Fassungen.
+
+# opencode (MIT), das Release für Linux x64 (glibc), von GitHub.
+OPENCODE_FASSUNG=2.2.5
+OPENCODE_URL=https://github.com/anomalyco/opencode/releases/download/v2.2.5/opencode-linux-x64.tar.gz
+OPENCODE_SHA256=09f44302c10fd036912f59c81fd1aef5df45dd06f649197f9dfc9bbe2a79614e

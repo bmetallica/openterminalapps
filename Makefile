@@ -136,6 +136,10 @@ up:
 	@# weiter — nur IDE-AI kommt dann nicht in die Arbeitsplaetze.
 	@./scripts/build-ide-ai-deb.sh --hochladen --wenn-noetig || \
 	  echo "  (IDE-AI nicht in der Paketquelle — von Hand: scripts/build-ide-ai-deb.sh --hochladen)"
+	@# **opencode** (Kapitel 38), ebenso nur, wenn es fehlt (beim ersten Mal
+	@# rund 120 MB aus dem Internet, danach in dist/opencode-quellen).
+	@./scripts/build-opencode-deb.sh --hochladen --wenn-noetig || \
+	  echo "  (opencode nicht in der Paketquelle — von Hand: scripts/build-opencode-deb.sh --hochladen)"
 	@# **Das Root-Image, wenn der Host es tragen kann** (Kapitel 25). Nur mit
 	@# Sysbox: Ohne startet ein Root-Arbeitsplatz ohnehin nicht, und ein Image,
 	@# das niemand benutzen kann, kostet nur Platz. Gebaut wird nur, wenn es

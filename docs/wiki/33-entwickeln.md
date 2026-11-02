@@ -79,6 +79,45 @@ es nur, wenn IDE-AI für dich eingeschaltet ist.
 **Bitte kein Update für Continue aus dem Marketplace annehmen**, wenn der Editor eins anbietet. Die
 Fassung von OTA ist auf euren KI-Server eingestellt und an die IDE angepasst.
 
+## opencode und sein Gedächtnis ✅
+
+Hat die Verwaltung **opencode** eingeschaltet, steht im Terminal der Befehl `opencode` bereit,
+verbunden mit dem KI-Server eurer Firma. Starte ihn im Verzeichnis deines Projekts:
+
+```bash
+cd ~/mein-projekt
+opencode                 # neue Sitzung
+opencode -c              # die letzte Sitzung fortsetzen
+opencode -s <kennung>    # eine bestimmte Sitzung fortsetzen
+```
+
+- **Eigene Einstellungen** gehören nach `~/.config/opencode/opencode.json`: eigene Anbieter, eigene
+  MCP-Server, ein eigenes Standardmodell. OTAs Vorgaben stehen in `/etc/opencode/` und kommen dazu.
+- **Hattest du opencode schon selbst installiert,** startet derselbe Befehl jetzt OTAs Fassung.
+  Deine Installation liegt als `opencode.vor-ota` daneben, deine Sitzungen und Einstellungen
+  bleiben.
+
+**Das Gedächtnis** (wenn es eingeschaltet ist): Jede opencode-Sitzung hat ein eigenes
+Langzeitgedächtnis. Darin merkt sich das Modell Ziel und Stand der Arbeit, Entscheidungen mit Grund,
+deine Vorlieben und die Eigenheiten des Projekts. Das bleibt erhalten, wenn opencode einen langen
+Verlauf zusammenfasst und wenn du die Sitzung Tage später mit `opencode -c` fortsetzt.
+
+- **Jede Sitzung sieht nur ihr eigenes Gedächtnis.** Eine neue Sitzung fängt leer an.
+  Unteragenten und Forks (`--fork`) teilen das Gedächtnis ihrer Sitzung.
+- Ob opencode vor dem Speichern fragt, stellt die Verwaltung ein.
+- **Ansehen und bearbeiten** kannst du alles in OTA:
+  - **Mein Konto → Gedächtnis** zeigt alle Sitzungen.
+  - Das Menü **⋯** der Kachel zeigt unter **Gedächtnis (opencode-Sitzungen)** nur die dieses
+    Arbeitsplatzes.
+  - Dort kannst du Einträge bearbeiten, anheften (sie kommen dann immer mit), löschen, selbst
+    anlegen und in eine andere Sitzung kopieren oder verschieben. Das ist der Weg, Wissen von einer
+    Sitzung in eine andere zu tragen.
+  - Dazu gibt es den Export als JSON oder Markdown.
+- **Zugangsdaten** nimmt das Gedächtnis nicht an.
+- **Niemand außer dir** sieht deine Einträge, auch die Verwaltung nicht.
+- Sitzungen, die lange niemand benutzt hat, werden nach einer Frist gelöscht. Die Frist steht in
+  der Ansicht.
+
 ## Docker
 
 Docker gibt es nur in **Root-Arbeitsplätzen** ([Kapitel 32](32-root-arbeitsplatz-nutzen.md#docker-)).

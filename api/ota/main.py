@@ -21,7 +21,8 @@ from .routers import (
     recipes as recipes_router, webapps,
     registries as registries_router,
     sessions, shared as shared_router, skeleton as skeleton_router,
-    software as software_router, git as git_router, ide_ai as ide_ai_router, templates,
+    software as software_router, git as git_router, ide_ai as ide_ai_router, opencode as opencode_router,
+    erweiterungen as erweiterungen_router, templates,
     news as news_router,
 )
 
@@ -286,6 +287,16 @@ def _git_takt() -> None:
         git.konten_abgleichen(db)
 
 
+def _erweiterungen_takt() -> None:
+    """Jede Minute: Gesundheit der Erweiterungen; alle 15 Minuten Tokens,
+    Aufträge, Sperren und Routen abgleichen (erweiterungen.takt)."""
+    from . import erweiterungen
+
+    with SessionLocal() as db:
+        if erweiterungen.alle(db):
+            erweiterungen.takt(db)
+
+
 async def _scheduler() -> None:
     from .routers.backups import run_scheduled
 
@@ -330,6 +341,7 @@ async def _scheduler() -> None:
 
         try:
             await asyncio.to_thread(_git_takt)
+            await asyncio.to_thread(_erweiterungen_takt)
         except Exception as exc:  # noqa: BLE001 — derselbe Grund wie oben
             log.warning("OTA-Git-Abgleich fehlgeschlagen: %s", exc)
 
@@ -431,6 +443,16 @@ async def lifespan(_: FastAPI):
         except Exception as exc:  # noqa: BLE001
             log.warning("Mitgelieferte Netzprofile nicht angelegt: %s", exc)
 
+    # Die Routen der Erweiterungen: Ein neu angelegter Traefik oder Agent
+    # kennt sie sonst erst nach dem nächsten Abgleich.
+    with SessionLocal() as db:
+        try:
+            from . import erweiterungen
+            if erweiterungen.alle(db):
+                erweiterungen.routen_schieben(db)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Routen der Erweiterungen nicht geschrieben: %s", exc)
+
     tasks = [asyncio.create_task(_reaper()), asyncio.create_task(_scheduler()),
              asyncio.create_task(_keycloak_fristen())]
     try:
@@ -479,6 +501,8 @@ app.include_router(monitoring.router)
 app.include_router(software_router.router)
 app.include_router(git_router.router)
 app.include_router(ide_ai_router.router)
+app.include_router(opencode_router.router)
+app.include_router(erweiterungen_router.router)
 app.include_router(news_router.router)
 
 

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Field, Segmented } from '../components/controls'
-import { ApiError, api, type KontoArt, type Me, type TotpSetup } from '../lib/api'
+import { ApiError, api, type ErweiterungAnsicht as Ansicht, type KontoArt, type Me, type TotpSetup } from '../lib/api'
+import { ErweiterungAnsicht } from '../components/ErweiterungAnsicht'
 import { getLang, setLang, t as tr, useLang, type Lang } from '../lib/i18n'
 
 /**
@@ -20,7 +21,13 @@ export function Account({ me, onMe, onToast }: {
   onToast: (m: string, tone?: 'ok' | 'bad') => void
 }) {
   useLang()
-  const [tab, setTab] = useState<'Passwort' | 'Zwei-Faktor' | 'Sprache'>('Passwort')
+  const [tab, setTab] = useState<string>('Passwort')
+  // Ansichten der Erweiterungen für dieses Konto, z. B. das Gedächtnis
+  // (Kapitel 39) — je eine weitere Lasche.
+  const [ansichten, setAnsichten] = useState<Ansicht[]>([])
+  useEffect(() => {
+    api.erweiterungAnsichten().then((a) => setAnsichten(a.filter((x) => x.ort === 'konto'))).catch(() => setAnsichten([]))
+  }, [])
   // Ein Konto der zentralen Anmeldung ändert Passwort und zweiten Faktor dort
   // (Betreiber, 2026-10-08) — hier gesetzt, wirkte es an der Anmeldung nicht.
   // Lokal bleibt nur das Notfallkonto.
@@ -44,6 +51,12 @@ export function Account({ me, onMe, onToast }: {
             aria-current={x === tab ? 'page' : undefined}
             onClick={() => setTab(x)}>{tr(x)}</button>
         ))}
+        {ansichten.map((a) => (
+          <button key={a.url} type="button"
+            className={`wb__tab${a.url === tab ? ' is-on' : ''}`}
+            aria-current={a.url === tab ? 'page' : undefined}
+            onClick={() => setTab(a.url)}>{a.titel}</button>
+        ))}
       </nav>
 
       <div className="wb__body">
@@ -51,6 +64,9 @@ export function Account({ me, onMe, onToast }: {
         {tab === 'Zwei-Faktor' && (zentral ? <ZentralFaktor konto={konto!} />
           : <TotpPart me={me} onMe={onMe} onToast={onToast} />)}
         {tab === 'Sprache' && <LanguagePart onMe={onMe} onToast={onToast} />}
+        {ansichten.filter((a) => a.url === tab).map((a) => (
+          <ErweiterungAnsicht key={a.url} url={a.url} titel={a.titel} />
+        ))}
       </div>
     </div>
   )

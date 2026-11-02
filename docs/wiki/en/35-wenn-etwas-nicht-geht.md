@@ -7,6 +7,7 @@ administrators need to know from you if it does not help.
 
 | What you see | What you do |
 |---|---|
+| **"No contact with the server"** | The network was briefly gone, for example after sleep. The page tries again by itself as soon as the network is back; otherwise **Try again**. If your sign-in has expired meanwhile, you then land on the sign-in page |
 | **"That session is no longer running"** | The session was ended, for example because it was idle. Back to the start page and start again. Your home is still there |
 | **Black or frozen picture** | Control bar → **Reconnect**. If that does not help, close the tab and open the session again from the start page |
 | **Keyboard does not respond** | Click into the picture once, otherwise control bar → **Focus session** |

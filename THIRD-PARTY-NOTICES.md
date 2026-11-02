@@ -298,6 +298,17 @@ Beide bringen ihrerseits Bibliotheken mit (u. a. `ripgrep`, MIT/Unlicense;
 `sqlite3`; im JetBrains-Plugin `posthog-java` und `sentry`, deren Telemetrie
 OTA abschaltet). Deren Hinweise stehen in den Paketen selbst.
 
+### opencode — MIT, als Paket aus OTAs Paketquelle
+
+Das Release `opencode-linux-x64.tar.gz` von
+[github.com/anomalyco/opencode](https://github.com/anomalyco/opencode) verteilt
+OTA unverändert im Paket `ota-opencode` (`scripts/build-opencode-deb.sh`,
+Handbuch Kapitel 38), mit Prüfsumme in `packaging/ota-opencode/quellen`. Die
+MIT-Lizenz liegt als `/usr/share/doc/ota-opencode/copyright` bei; sie erlaubt
+die Weitergabe, solange der Hinweis mitgeht. Das Plugin `ota-sitzung` im selben
+Paket ist OTAs eigenes (Apache-2.0). opencode bringt als Bun-Bündel seine
+Bibliotheken mit; deren Hinweise stehen im Projekt.
+
 ### Darf das Basisimage weitergegeben werden? — Ja, mit vier Pflichten
 
 Gemeint ist `ota/base-desktop`: Debian 13 + XFCE + Selkies, **ohne KasmVNC und

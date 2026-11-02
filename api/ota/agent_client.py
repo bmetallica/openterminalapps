@@ -149,11 +149,12 @@ def ressourcen(cid: str, cores: float, memory_bytes: int) -> dict[str, Any]:
 def fortsetzen(cid: str, repo: dict[str, Any] | None = None,
                git: dict[str, Any] | None = None,
                ide_ai: dict[str, Any] | None = None,
+               opencode: dict[str, Any] | None = None,
                once_scripts: list[dict[str, str]] | None = None) -> dict[str, Any]:
     """Einen angehaltenen Root-Arbeitsplatz wieder starten."""
     return _call("POST", f"/containers/{cid}/fortsetzen",
                  json={"repo": repo or {}, "git": git or {}, "ide_ai": ide_ai or {},
-                       "once_scripts": once_scripts or []},
+                       "opencode": opencode or {}, "once_scripts": once_scripts or []},
                  timeout=600.0)
 
 
@@ -161,6 +162,16 @@ def ide_ai_neu(cid: str, ide_ai: dict[str, Any]) -> dict[str, Any]:
     """IDE-AI im laufenden Arbeitsplatz neu einrichten — wartet auf die Pakete."""
     return _call("POST", f"/containers/{cid}/ide-ai/neu", json={"ide_ai": ide_ai},
                  timeout=600.0)
+
+
+def backup_erweiterung(slug: str, strom) -> dict[str, Any]:
+    """Eine Sicherung als Strom an den Agent, der sie ablegt."""
+    return _call("PUT", f"/backups/erweiterung/{slug}", content=strom, timeout=1800.0)
+
+
+def erweiterungen_routen(routen: list[dict[str, Any]]) -> dict[str, Any]:
+    """Die Wege zu den Erweiterungen in Traefik (erweiterungen.routen)."""
+    return _call("PUT", "/erweiterungen/routen", json={"routen": routen})
 
 
 # --- OTA-Git (git.py) -----------------------------------------------------

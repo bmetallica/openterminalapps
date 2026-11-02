@@ -75,6 +75,8 @@ SECTIONS: dict[str, tuple[str, bool]] = {
     "36": ("Für Anwender", False),
     # Der Verwaltungsteil von Kapitel 4, dort herausgelöst.
     "37": ("Für Administratoren", True),
+    "38": ("Für Administratoren", True),
+    "39": ("Für Administratoren", True),
 }
 
 # In dieser Reihenfolge stehen die Rubriken im Handbuch, innerhalb einer Rubrik

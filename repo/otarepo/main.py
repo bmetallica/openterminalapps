@@ -354,12 +354,14 @@ def quellen() -> dict[str, Any]:
         raus.append({"prefix": prefix, "dist": dist, "comp": komps.get(basis, "main")})
     return {"quellen": raus, "schluessel": schluessel(), "selkies": _fassung("ota-selkies"),
             # IDE-AI (Kapitel 28): der Agent hebt jeden Arbeitsplatz darauf.
-            "ide_ai": {art: _fassung(f"ota-ide-ai-{art}") for art in ("vscode", "jetbrains")}}
+            "ide_ai": {art: _fassung(f"ota-ide-ai-{art}") for art in ("vscode", "jetbrains")},
+            # opencode (Kapitel 38): ebenso.
+            "opencode": _fassung("ota-opencode")}
 
 
 def _fassung(name: str) -> str:
     """Die neueste Fassung eines Pakets im eigenen Repository, oder "".
-    Der Agent hebt Arbeitsplätze darauf an (ota-selkies, ota-ide-ai-*)."""
+    Der Agent hebt Arbeitsplätze darauf an (ota-selkies, ota-ide-ai-*, ota-opencode)."""
     aus = _lauf(["aptly", "repo", "search", "ota", f"Name (= {name})"], pruefen=False)
     beste = ""
     for zeile in aus.splitlines():

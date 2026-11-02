@@ -59,6 +59,8 @@ configuration decisions can be made with foresight — but it always says what a
 23. [The workspaces' network](23-netz.md)
 25. [Root workspace — root and Docker in the container](25-root-arbeitsplatz.md)
 37. [Clipboard for administrators](37-zwischenablage-verwaltung.md)
+38. [opencode: the AI assistant in the terminal](38-opencode.md)
+39. [Extensions (e.g. memory for opencode)](39-erweiterungen.md)
 
 **Operations**
 10. [Certificates and HTTPS](10-zertifikate-und-https.md)

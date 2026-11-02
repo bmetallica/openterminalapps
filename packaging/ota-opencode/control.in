@@ -1,0 +1,15 @@
+Package: ota-opencode
+Version: @VERSION@
+Architecture: amd64
+Maintainer: OpenTerminalApps <ota@ota.invalid>
+Installed-Size: @GROESSE@
+Section: devel
+Priority: optional
+Homepage: https://opencode.ai
+Description: opencode für OpenTerminalApps
+ opencode (MIT), der KI-Assistent im Terminal, als /usr/bin/opencode, dazu
+ das Plugin ota-sitzung, mit dem Erweiterungen von OTA erfahren, in welcher
+ opencode-Sitzung ein Werkzeug aufgerufen wird.
+ .
+ Die Konfiguration schreibt OTA nach /etc/opencode/ (verwaltet); eigene
+ Einstellungen gehören nach ~/.config/opencode/.

@@ -113,7 +113,9 @@ def fuer_container(db: DbSession) -> dict[str, Any]:
             # Die Fassung, auf die der Agent einen Root-Arbeitsplatz hebt.
             "selkies": daten.get("selkies", ""),
             # Die Fassungen der Pakete von IDE-AI (ide_ai.py, Kapitel 28).
-            "ide_ai": daten.get("ide_ai", {})}
+            "ide_ai": daten.get("ide_ai", {}),
+            # Die Fassung von ota-opencode (opencode.py, Kapitel 38).
+            "opencode": daten.get("opencode", "")}
 
 
 def zwischenspeicher_leeren() -> None:

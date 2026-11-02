@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session as DbSession
 
-from .. import agent_client, audit, git, keycloak, verknuepfen, verzeichnis
+from .. import agent_client, audit, erweiterungen, git, keycloak, verknuepfen, verzeichnis
 import os
 import re
 from ..db import get_db
@@ -218,6 +218,7 @@ def create_user(
                  keycloak="verknüpft" if verknuepft else "angelegt")
     db.commit()
     git.nach_aenderung(db, user)
+    erweiterungen.nutzer_abgleichen(db, user)
     return _user_out(user)
 
 
@@ -319,6 +320,7 @@ def update_user(
                  object_id=user.username, request=request)
     db.commit()
     git.nach_aenderung(db, user)
+    erweiterungen.nutzer_abgleichen(db, user)
     return _user_out(user)
 
 
@@ -467,6 +469,7 @@ def delete_user(
             log.warning("Konto %s in Keycloak nicht gesperrt: %s", name, exc)
             gesperrt = " Achtung: In der zentralen Anmeldung liess es sich nicht sperren."
     git.vor_dem_loeschen(db, user)
+    erweiterungen.vor_dem_loeschen(db, user)
     db.delete(user)
     audit.record(db, "user.deleted", actor=actor, object_type="user",
                  object_id=name, request=request)
@@ -504,6 +507,7 @@ def domaenenkonto_zuordnen(user_id: uuid.UUID, body: dict, request: Request,
                  entfernt=(ergebnis["entfernt"] or {}).get("username"))
     db.commit()
     git.nach_aenderung(db, user)
+    erweiterungen.nutzer_abgleichen(db, user)
     return ergebnis
 
 

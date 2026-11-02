@@ -16,7 +16,7 @@ sondern bei der Weitergabe nach außen.
 | **VSCodium** | MIT | frei. Nur Open VSX |
 | **IntelliJ IDEA Community** | Apache-2.0 | kommerziell kostenfrei |
 | **IntelliJ Ultimate** | proprietär | **Named-User-Lizenz je Entwickler**, Aktivierung durch den Nutzer |
-| **opencode** | MIT | frei |
+| **opencode** | MIT | frei. OTA verteilt es unverändert im Paket `ota-opencode` (Kapitel 38) |
 | **Cursor** | proprietär | **vor Aufnahme prüfen** — siehe unten |
 | **Selkies** | MPL-2.0 | Die Streaming-Engine des Vorgabe-Images. **OTA verändert sie** — siehe unten |
 | **libx264** | GPL-2.0+ | Der Kodierer dahinter. Die eigentliche Pflicht bei Weitergabe — siehe unten |

@@ -14,6 +14,7 @@ const KIND_TEXT: Record<string, string> = {
   container: 'Container',
   database: 'Datenbank',
   git: 'OTA-Git',
+  erweiterung: 'Erweiterung',
 }
 
 const TRIGGER_TEXT: Record<string, string> = {

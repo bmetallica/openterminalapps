@@ -343,6 +343,24 @@ dabei **nicht** zurückwandert, ist die Datenbank: Neue Spalten bleiben stehen. 
     **⋯ → KI-Werkzeuge neu einrichten** auf der Kachel des Arbeitsplatzes OTAs Fassung wieder her.
     Im selben Menü steht bei Root-Arbeitsplätzen **Neu aufsetzen**.
   - Siehe [Kapitel 28](docs/wiki/28-ide-ai.md).
+- **opencode**, unter Einstellungen ein- und ausschaltbar: der KI-Assistent im Terminal, mit dem
+  KI-Server und den Modellen aus IDE-AI:
+  - Paket aus der eigenen Paketquelle in der festgelegten Fassung; selbst installiertes opencode
+    wird übernommen, das Original bleibt als `*.vor-ota`.
+  - OTA schreibt opencodes verwaltete Konfiguration nach `/etc/opencode/`. Eigene Einstellungen in
+    `~/.config/opencode` kommen dazu, ein eigenes Standardmodell bleibt.
+  - Ein Zusatz zum Systemprompt, global und je Gruppe, mit Vorschau und Audit-Log.
+  - Siehe [Kapitel 38](docs/wiki/38-opencode.md).
+- **Erweiterungen:** eigenständige Docker-Anwendungen mit eigenem Compose-Projekt, gekoppelt über
+  einen Vertrag und für Gruppen einschaltbar:
+  - Je Arbeitsplatz ein eigenes Token; MCP-Server und Prompt-Schnipsel für opencode.
+  - Die Ansichten der Erweiterung erscheinen in OTA unter Mein Konto und im ⋯-Menü der Kachel.
+  - Kein Hostport und keine Firewallregel; Kontolöschung, Sperren und Sicherung laufen mit.
+  - Die erste: das **Gedächtnis für opencode**
+    ([plugin_ota-opencode](https://github.com/bmetallica/plugin_ota-opencode)). Jede
+    opencode-Sitzung bekommt ein eigenes Langzeitgedächtnis, mit Embeddings von vLLM oder
+    llama.cpp.
+  - Siehe [Kapitel 39](docs/wiki/39-erweiterungen.md).
 - **Softwaremonitoring:** Stündlich wird erfasst, welche Anwendungen in jedem laufenden
   Arbeitsplatz installiert sind (apt, Startmenü, Flatpak, Snap), ohne Versionen. Dazu gibt es eine
   Whitelist, befüllbar aus dem aktuellen Stand. Was nicht darauf steht, sehen Administratoren auf
@@ -536,6 +554,7 @@ make test
 | `test-duplizieren.sh` | Duplizieren: Einstellungen, Apps samt Startbefehl, Einmal-Skript, Zuteilung je Nutzer, Gruppen und Skeleton (auch je Anwendung, Besitzer 1000) kommen mit; eigene Kennung, ausgeschaltet, Quelle bleibt unberührt; nur mit Verwaltungsrecht; ein geteiltes Image gilt als anderswo genutzt. Eigener Name: gilt nur für den Nutzer, Vorlage und Admin unberührt, zu lang abgewiesen, nicht für unsichtbare Vorlagen, leer setzt zurück, geht mit der Vorlage |
 | `test-news.sh` | News: lesen alle, schreiben nur mit `settings.manage`; Entwurf unsichtbar und nicht neu; Veröffentlichen zählt für die Seitenleiste, Öffnen setzt zurück, Korrektur zählt nicht erneut; Angeheftetes oben; Text unverändert gespeichert; Anlegen, Ändern, Löschen im Protokoll |
 | `test-ide-ai.sh` | IDE-AI: Modelle vom KI-Server abrufen, falsche Eingaben abgewiesen, API-Schlüssel bleibt auf dem Server, Testfrage; Pakete in der Paketquelle, nur der Agent bekommt die Datei; in jeder Vorlage mit Editor config.yaml mit Marke, Kontextfenster und Antwortlänge, Telemetrie aus, Continue in VS Code/VSCodium und JetBrains verknüpft, Firewall lässt den KI-Server durch, Frage aus dem Arbeitsplatz bekommt Antwort, eigene config.yaml bleibt; „neu einrichten“ räumt Marketplace-Kopien in JetBrains und VSCodium weg, schaltet Continue ein und legt die eigene config.yaml beiseite; ausgeschaltet ist alles wieder weg |
+| `test-opencode.sh` | opencode und Erweiterungen: Einstellungen und Vorschau, Unsinn abgewiesen; Gedächtnis koppeln (falscher Schlüssel abgewiesen), konfigurieren, Embeddings testen, Traefik-Wege; im Root-Arbeitsplatz verwaltete Konfiguration, Prompt-Zusatz, Token, Paket; MCP aus dem Arbeitsplatz, der Vertrag nicht; opencode mit Fake-Modell: echte Sitzung statt gefälschter, Unteragent schreibt in die Wurzelsitzung, neue Sitzung sieht nichts, Felder `ota_*` für das Modell unsichtbar; Ansicht nur angemeldet und nur eigene Arbeitsplätze, gefälschte Kopfzeilen wirkungslos; Übernahme einer eigenen Installation, eigenes Standardmodell bleibt; Anhalten widerruft, Fortsetzen gibt neues Token, Gedächtnis ist wieder da |
 | `test-konten.sh` | Konten der zentralen Anmeldung: Anlegen in OTA legt in Keycloak an (samt Pflicht zum Passwortwechsel), lokal kommt es nicht herein; Ändern, Passwort, zweiter Faktor, Sperren und Löschen wirken in Keycloak; Mein Konto führt über Keycloak; ein lokales Bestandskonto zieht mit seinem Passwort um, das Notfallkonto nicht |
 | `test-clipboard-bridge.sh` | Kopieren zwischen zwei Anwendungen im selben Arbeitsplatz: beide Richtungen, Umlaute, ein Bild, ein Megabyte, nach Pause, und abgeschaltet |
 | `test-i18n` (`scripts/i18n-pruefen.py`) | Zweisprachigkeit: Jeder Text der Oberfläche und jede Meldung des Servers hat einen englischen Eintrag, kein deutscher Text geht an der Übersetzung vorbei, und jedes Kapitel des Handbuchs gibt es auf Englisch mit demselben Aufbau |

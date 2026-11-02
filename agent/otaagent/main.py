@@ -29,7 +29,7 @@ from urllib.parse import urlparse
 import docker
 from docker.errors import APIError, ImageNotFound, NotFound
 from fastapi import (
-    Depends, FastAPI, File, Form, Header, HTTPException, Response, UploadFile,
+    Depends, FastAPI, File, Form, Header, HTTPException, Request, Response, UploadFile,
     WebSocket, status,
 )
 from pydantic import BaseModel, Field
@@ -40,7 +40,9 @@ from . import builder
 from . import freeze as freeze_ops
 from . import skeleton as skeleton_ops
 from . import git_dienst
+from . import erweiterungen as erweiterungen_ops
 from . import ide_ai
+from . import opencode as opencode_ops
 from . import software as software_ops
 from . import kerne
 from . import clipboard as clip_scripts
@@ -458,6 +460,9 @@ class StartRequest(BaseModel):
     # IDE-AI (Kapitel 28): Fassungen der Pakete und Continues Konfiguration.
     # Leer heisst: nichts einrichten bzw. Reste entfernen. Siehe ide_ai.py.
     ide_ai: dict[str, Any] = {}
+    # opencode (Kapitel 38) samt Tokens der Erweiterungen (Kapitel 39). Leer
+    # heisst: nichts einrichten bzw. Reste entfernen. Siehe opencode.py.
+    opencode: dict[str, Any] = {}
     # Wem die eigene Ablage gehoert, die eingehaengt werden soll. Leer heisst:
     # keine. Die Vorlage kann das abschalten, und die API entscheidet es —
     # der Agent haengt nur ein, was ihm gesagt wird.
@@ -1483,6 +1488,8 @@ def start_container(req: StartRequest) -> dict[str, Any]:
     # Konfiguration, sobald jemand den Editor oeffnet. Die Pakete kommen im
     # Hintergrund nach.
     ide_ai.im_container(container, req.ide_ai, heimat, _run_as_root)
+    opencode_ops.im_container(container, req.opencode, heimat, netz_ops.traefik_adresse(subnetz),
+                              _run_as_root)
     # Reihenfolge mit Absicht: erst das Skeleton, dann der Verweis auf die
     # Ablage, dann das Startskript. Das Skeleton legt den Grundstand; das
     # Skript darf ihn ueberschreiben, denn es ist das spezifischere Werkzeug.
@@ -2020,6 +2027,7 @@ class FortsetzenRequest(BaseModel):
     repo: dict[str, Any] = {}
     git: dict[str, Any] = {}
     ide_ai: dict[str, Any] = {}
+    opencode: dict[str, Any] = {}
     # Einmal-Skripte, die dieser Nutzer noch nicht hatte — wie beim Start.
     once_scripts: list[dict[str, str]] = []
 
@@ -2497,6 +2505,9 @@ def fortsetzen(cid: str, body: "FortsetzenRequest | None" = None) -> dict[str, A
     _grundausstattung(c, _heimat_container(c))
     # IDE-AI: Konfiguration und, im Hintergrund, die neueste Fassung der Pakete.
     ide_ai.im_container(c, body.ide_ai if body else {}, _heimat_container(c), _run_as_root)
+    # opencode: Konfiguration, frische Tokens der Erweiterungen, Paket.
+    opencode_ops.im_container(c, (body.opencode if body else {}) if traefik_ip else {},
+                              _heimat_container(c), traefik_ip, _run_as_root)
     # Und Selkies auf den Stand der Paketquelle heben (Kapitel 20). Hat sich
     # etwas geaendert, einmal neu starten: Das laufende Selkies ist noch das
     # alte, und das Startskript liest die neuen Dateien nur beim Start. Der
@@ -2810,6 +2821,19 @@ async def terminal(ws: WebSocket, cid: str) -> None:
             await ws.close()
         except Exception:  # noqa: BLE001
             pass
+
+
+# --------------------------------------------------------------------------
+# Erweiterungen (erweiterungen.py, Handbuch Kapitel 39)
+# --------------------------------------------------------------------------
+
+class RoutenIn(BaseModel):
+    routen: list[dict[str, Any]] = []
+
+
+@app.put("/erweiterungen/routen", dependencies=[Depends(require_token)])
+def erweiterungen_routen(body: RoutenIn) -> dict[str, Any]:
+    return erweiterungen_ops.schreiben(body.routen)
 
 
 # --------------------------------------------------------------------------
@@ -3379,6 +3403,20 @@ def backup_git(req: DatabaseBackupRequest) -> dict[str, Any]:
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR,
                             f"Sicherung von OTA-Git fehlgeschlagen: {exc}") from exc
+
+
+@app.put("/backups/erweiterung/{slug}", dependencies=[Depends(require_token)])
+async def backup_erweiterung(slug: str, request: Request) -> dict[str, Any]:
+    if not re.fullmatch(r"[a-z][a-z0-9]{1,30}", slug):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Ungültige Kennung")
+    teile: list[bytes] = []
+    async for stueck in request.stream():
+        teile.append(stueck)
+    try:
+        return await asyncio.to_thread(backup_ops.backup_erweiterung, slug, teile)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR,
+                            f"Sicherung der Erweiterung {slug} fehlgeschlagen: {exc}") from exc
 
 
 @app.post("/backups/database", dependencies=[Depends(require_token)])

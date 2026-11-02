@@ -16,7 +16,7 @@ passing things on to the outside.
 | **VSCodium** | MIT | free. Open VSX only |
 | **IntelliJ IDEA Community** | Apache-2.0 | free for commercial use |
 | **IntelliJ Ultimate** | proprietary | **Named-user licence per developer**, activation by the user |
-| **opencode** | MIT | free |
+| **opencode** | MIT | free. OTA distributes it unchanged in the package `ota-opencode` (chapter 38) |
 | **Cursor** | proprietary | **check before adding** — see below |
 | **Selkies** | MPL-2.0 | The streaming engine of the default image. **OTA modifies it** — see below |
 | **libx264** | GPL-2.0+ | The encoder behind it. The actual obligation when passing on — see below |

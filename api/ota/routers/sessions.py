@@ -17,7 +17,8 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DbSession, object_session
 
-from .. import agent_client, audit, git, ide_ai, paketquellen, ressourcen, settings_store
+from .. import (agent_client, audit, erweiterungen, git, ide_ai, opencode, paketquellen, ressourcen,
+               settings_store)
 from .firewall import schieben as firewall_schieben
 from ..config import settings
 from ..db import get_db
@@ -795,6 +796,9 @@ def _starten(body: SessionStartIn, request: Request, user: User,
             "git": git.fuer_sitzung(db, sess, user, tpl),
             # IDE-AI (Kapitel 28). Leer: nichts, bzw. weg.
             "ide_ai": ide_ai.fuer_sitzung(db, user),
+            # opencode (Kapitel 38) samt den Erweiterungen (Kapitel 39).
+            # Leer: nichts, bzw. weg.
+            "opencode": opencode.fuer_sitzung(db, sess, user, tpl),
         })
     except HTTPException:
         sess.status = "failed"
@@ -931,6 +935,7 @@ def _fortsetzen(db: DbSession, sess: SessionModel, request: Request | None,
             sess.container_id, paketquellen.fuer_container(db),
             git.fuer_sitzung(db, sess, sess.user, sess.template),
             ide_ai.fuer_sitzung(db, sess.user),
+            opencode.fuer_sitzung(db, sess, sess.user, sess.template),
             # Wie beim Start: was dieser Mensch noch nicht hatte.
             _offene_einmal_skripte(db, sess.template, sess.user))
     except HTTPException as exc:
@@ -987,6 +992,7 @@ def platz_ohne_lauf(sess: SessionModel, grund: str) -> None:
     # liess. Die Zeile blieb dann fuer immer auf „laeuft", und ein neuer Start
     # desselben Arbeitsplatzes scheiterte mit „Unerwarteter Fehler".
     git.widerrufen(object_session(sess), sess.id)
+    erweiterungen.widerrufen(object_session(sess), sess.id)
 
 
 def platz_anhalten(db: DbSession, sess: SessionModel, request: Request | None,
@@ -1000,6 +1006,7 @@ def platz_anhalten(db: DbSession, sess: SessionModel, request: Request | None,
     sess.ended_at = datetime.now(timezone.utc)
     sess.end_reason = grund
     git.widerrufen(db, sess.id)
+    erweiterungen.widerrufen(db, sess.id)
     audit.record(db, "platz.angehalten", actor=actor, object_type="session",
                  object_id=str(sess.id), request=request,
                  template=sess.template.slug, nutzer=sess.user.username, grund=grund)
@@ -1139,6 +1146,7 @@ def delete_session(
     sess.ended_at = datetime.now(timezone.utc)
     sess.end_reason = "user"
     git.widerrufen(db, sess.id)
+    erweiterungen.widerrufen(db, sess.id)
     audit.record(db, "session.deleted", actor=user, object_type="session",
                  object_id=str(sess.id), request=request)
     db.commit()

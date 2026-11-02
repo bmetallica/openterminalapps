@@ -59,6 +59,9 @@ services:
       DOCKER_API_VERSION: "${DOCKER_API_VERSION:-1.44}"
     networks:
       - public
+      # Zu den Erweiterungen (Kapitel 39): Traefik leitet die freigegebenen
+      # Wege dorthin, sonst nichts.
+      - erweiterungen
     healthcheck:
       test: ["CMD", "traefik", "healthcheck", "--ping"]
       interval: 30s
@@ -245,6 +248,7 @@ services:
     networks:
       - public      # damit Traefik sie erreicht
       - internal    # damit sie DB und Agent erreicht
+      - erweiterungen  # damit sie die Erweiterungen erreicht (Kapitel 39)
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=ota_public"
@@ -799,4 +803,15 @@ networks:
   # Der Uplink des Routers — der einzige Weg der Arbeitsplätze nach draussen.
   uplink:
     name: ota_uplink
+
+  # Die Erweiterungen (Kapitel 39): eigenständige Compose-Projekte treten
+  # diesem Netz bei (`external: true`). Darin hängen nur Traefik, die API und
+  # die Erweiterungen selbst — nie ein Arbeitsplatz. Ein fester Bereich:
+  # Docker vergäbe sonst irgendwann 192.168.x, und das kann das LAN
+  # überdecken, in dem etwa der Embedding-Server einer Erweiterung steht.
+  erweiterungen:
+    name: ota_erweiterungen
+    ipam:
+      config:
+        - subnet: "${OTA_ERWEITERUNGEN_NETZ:-10.98.0.0/24}"
 

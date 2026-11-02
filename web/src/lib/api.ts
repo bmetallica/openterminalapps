@@ -1,6 +1,7 @@
 /** Typisierter Zugriff auf die OTA-API. */
 
 import type { Marke } from './branding'
+import { anmeldePfad } from './routes'
 import { t, tServer } from './i18n'
 
 export type Me = {
@@ -292,6 +293,59 @@ export type IdeAiStand = {
 
 /** Was der KI-Server anbietet. `kontext` nur, wenn er es verrät. */
 export type IdeAiServerModell = { id: string; titel: string; beschreibung: string; kontext: number | null }
+
+/** Einstellungen → KI-Werkzeuge → opencode (api/ota/opencode.py, Kapitel 38). */
+export type OpencodeStand = {
+  an: boolean
+  gruppen: string[]
+  standard: string
+  klein: string
+  prompt: string
+  /** Gruppenkennung → Text */
+  prompt_gruppen: Record<string, string>
+  zusatz: string
+  /** Fassung von ota-opencode in der Paketquelle; leer, wenn sie fehlt. */
+  fassung: string
+  ki_url: string
+  modelle: { id: string; titel: string }[]
+  ki_standard: string
+  prompt_warnung_tokens: number
+  gruppen_namen: Record<string, string>
+}
+
+export type OpencodeVorschau = { berechtigt: boolean; config: string; anweisungen: string; tokens_geschaetzt: number }
+
+/** Eine gekoppelte Erweiterung (api/ota/erweiterungen.py, Kapitel 39). */
+export type Erweiterung = {
+  slug: string
+  name: string
+  adresse: string
+  an: boolean
+  gruppen: string[]
+  prompt_an: boolean
+  stand: string
+  version: string
+  beschreibung: string
+  /** JSON-Schema des Formulars, das die Erweiterung mitbringt. */
+  konfiguration_schema: { properties?: Record<string, ErweiterungFeld> }
+  ansichten: { ort: string; titel: string; pfad: string }[]
+  liefert: string[]
+  pfade: string[]
+  zuletzt_gesund: string | null
+}
+
+export type ErweiterungFeld = {
+  type: 'string' | 'integer' | 'number' | 'boolean'
+  title?: string
+  description?: string
+  minimum?: number
+  maximum?: number
+  enum?: string[]
+  'x-geheim'?: boolean
+}
+
+/** Eine Ansicht einer Erweiterung, die OTA einbettet (Mein Konto, ⋯-Menü). */
+export type ErweiterungAnsicht = { slug: string; name: string; ort: 'konto' | 'arbeitsplatz'; titel: string; url: string }
 
 /** Einstellungen → Git (api/ota/git.py). */
 export type GitStand = {
@@ -847,6 +901,16 @@ export class ApiError extends Error {
 /* Meldungen des Servers laufen durch dieselbe Übersetzung wie die Oberfläche.
    Das geht auf, weil der deutsche Satz der Schlüssel ist: Was im Wörterbuch
    steht, erscheint übersetzt; alles andere bleibt, wie der Server es sagt. */
+/* Läuft die Anmeldung ab (Frist in Einstellungen → Anmeldung, oder Keycloak
+   beendet die Sitzung), antwortet die API mit 401. Bis zum 2026-11-02 zeigte
+   die Oberfläche das nur als Fehler, bis jemand neu lud. Jetzt geht es sofort
+   zur Anmeldung — aber nur, wenn vorher jemand angemeldet war, und nie für
+   die Anmeldung selbst (/auth/…): Dort heisst 401 „falsches Passwort“ oder
+   „noch nicht angemeldet“. */
+let angemeldet = false
+let weiterleitung = false
+export function alsAngemeldet(ja: boolean): void { angemeldet = ja }
+
 async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
   let res: Response
   try {
@@ -862,6 +926,10 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
     throw new ApiError(0, t('Keine Verbindung zum Server. Läuft OTA noch?'))
   }
 
+  if (res.status === 401 && angemeldet && !path.startsWith('/auth/') && !weiterleitung) {
+    weiterleitung = true
+    window.location.replace(anmeldePfad())
+  }
   if (res.status === 204) return undefined as T
 
   const text = await res.text()
@@ -1296,6 +1364,23 @@ export const api = {
     call<GitStand>('/admin/git', { method: 'PUT', body: JSON.stringify(body) }),
   gitAn: () => call<GitStand>('/admin/git/an', { method: 'POST' }),
   gitAus: () => call<GitStand>('/admin/git/aus', { method: 'POST' }),
+  opencode: () => call<OpencodeStand>('/admin/opencode'),
+  opencodeEinstellen: (body: Partial<OpencodeStand>) =>
+    call<OpencodeStand>('/admin/opencode', { method: 'PUT', body: JSON.stringify(body) }),
+  opencodeVorschau: (user_id: string | null, entwurf: Partial<OpencodeStand>) =>
+    call<OpencodeVorschau>('/admin/opencode/vorschau', { method: 'POST', body: JSON.stringify({ user_id, entwurf }) }),
+  erweiterungen: () => call<Erweiterung[]>('/admin/erweiterungen'),
+  erweiterungKoppeln: (adresse: string, schluessel: string) =>
+    call<Erweiterung>('/admin/erweiterungen', { method: 'POST', body: JSON.stringify({ adresse, schluessel }) }),
+  erweiterungEinstellen: (slug: string, body: Partial<Pick<Erweiterung, 'an' | 'gruppen' | 'prompt_an'>>) =>
+    call<Erweiterung>(`/admin/erweiterungen/${slug}`, { method: 'PUT', body: JSON.stringify(body) }),
+  erweiterungEntfernen: (slug: string) => call<{ status: string }>(`/admin/erweiterungen/${slug}`, { method: 'DELETE' }),
+  erweiterungKonfiguration: (slug: string) => call<Record<string, unknown>>(`/admin/erweiterungen/${slug}/konfiguration`),
+  erweiterungKonfigurieren: (slug: string, werte: Record<string, unknown>) =>
+    call<Record<string, unknown>>(`/admin/erweiterungen/${slug}/konfiguration`, { method: 'PUT', body: JSON.stringify(werte) }),
+  erweiterungTesten: (slug: string) => call<Record<string, unknown>>(`/admin/erweiterungen/${slug}/testen`, { method: 'POST' }),
+  erweiterungStatistik: (slug: string) => call<Record<string, number>>(`/admin/erweiterungen/${slug}/statistik`),
+  erweiterungAnsichten: () => call<ErweiterungAnsicht[]>('/erweiterungen/ansichten'),
   ideAi: () => call<IdeAiStand>('/admin/ide-ai'),
   ideAiEinstellen: (body: Partial<Omit<IdeAiStand, 'api_key_gesetzt' | 'fassungen'>> & { api_key?: string }) =>
     call<IdeAiStand>('/admin/ide-ai', { method: 'PUT', body: JSON.stringify(body) }),

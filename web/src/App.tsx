@@ -18,7 +18,7 @@ import { Paketquellen } from './screens/Paketquellen'
 import { Softwaremonitoring } from './screens/Softwaremonitoring'
 import { StandaloneViewer } from './screens/StandaloneViewer'
 import { anmeldePfad, openInTab, parseRoute, viewPath, type Route } from './lib/routes'
-import { ApiError, api, type Host, type Me, type Session, type Stream, type Template } from './lib/api'
+import { ApiError, alsAngemeldet, api, type Host, type Me, type Session, type Stream, type Template } from './lib/api'
 import { gb } from './lib/format'
 import { setKontoLang, setLang, t, useLang, type Lang } from './lib/i18n'
 import { setTheme, useTheme, type Theme } from './lib/theme'
@@ -97,6 +97,7 @@ export default function App() {
   useEffect(() => {
     api.me().then(setMe).catch(() => setMe(null)).finally(() => setChecking(false))
   }, [])
+  useEffect(() => { alsAngemeldet(!!me) }, [me])
 
   // Die am Konto gemerkte Sprache — gilt, wenn dieser Browser keine eigene Wahl hat.
   useEffect(() => {

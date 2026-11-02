@@ -7,6 +7,7 @@ dir wissen muss, wenn es nicht hilft.
 
 | Was du siehst | Was du tust |
 |---|---|
+| **„Kein Kontakt zum Server"** | Das Netz war kurz weg, etwa nach dem Ruhezustand. Die Seite versucht es von selbst wieder, sobald das Netz zurück ist; sonst **Erneut versuchen**. Ist inzwischen deine Anmeldung abgelaufen, landest du danach auf der Anmeldeseite |
 | **„Diese Sitzung läuft nicht mehr"** | Die Session wurde beendet, etwa wegen Leerlauf. Zurück zur Startseite und neu starten. Dein Zuhause ist noch da |
 | **Schwarzes oder eingefrorenes Bild** | Kontrollleiste → **Neu verbinden**. Hilft das nicht, den Tab schliessen und die Session auf der Startseite neu öffnen |
 | **Tastatur reagiert nicht** | Einmal ins Bild klicken, sonst Kontrollleiste → **Fokus setzen** |

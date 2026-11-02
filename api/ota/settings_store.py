@@ -96,6 +96,8 @@ GIT_OTA_URL = "git.ota_url"
 # IDE-AI (Kapitel 28): alles in einem Eintrag — Server, Schlüssel, Modelle
 # samt Kontextfenster, Gruppen. Vorgaben und Prüfung in ide_ai.py.
 IDE_AI = "ide_ai"
+# opencode (opencode.py, Handbuch Kapitel 38).
+OPENCODE = "opencode"
 
 # Softwaremonitoring (Kapitel 11): was die letzte stündliche Erfassung ergab.
 SOFTWARE_LETZTE = "software.letzte_erfassung"
@@ -128,6 +130,7 @@ DEFAULTS: dict[str, Any] = {
     GIT_GRUPPEN: [],
     GIT_OTA_URL: "",
     IDE_AI: {},
+    OPENCODE: {},
     REPO_MODUS: "zuerst",
     REPO_BAU_SNAPSHOT: "",
     REPO_ALTER_GELB: 7,

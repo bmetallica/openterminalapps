@@ -532,3 +532,28 @@ def delete_file(path: str) -> dict[str, str]:
         return {"status": "entfernt"}
     target.unlink(missing_ok=True)
     return {"status": "entfernt"}
+
+
+def backup_erweiterung(slug: str, stueck_fuer_stueck) -> dict[str, Any]:
+    """Die Sicherung einer Erweiterung (Handbuch Kapitel 39) ablegen. Die API
+    holt sie dort ab (`/ota/v1/sicherung`) und reicht sie als Strom durch;
+    der Agent selbst hängt nicht im Netz der Erweiterungen."""
+    ensure_root()
+    ziel = BACKUP_ROOT / "erweiterungen" / slug / stamp()
+    ziel.mkdir(parents=True, exist_ok=True)
+    try:
+        ziel.chmod(0o700)
+    except OSError:
+        pass
+    datei = ziel / f"{slug}.dump"
+    groesse = 0
+    with open(datei, "wb") as fh:
+        for stueck in stueck_fuer_stueck:
+            fh.write(stueck)
+            groesse += len(stueck)
+    if groesse == 0:
+        datei.unlink(missing_ok=True)
+        ziel.rmdir()
+        raise RuntimeError("Die Erweiterung lieferte eine leere Sicherung")
+    return {"path": str(ziel), "size_bytes": groesse, "file_count": 1,
+            "log": f"{datei.name}: {groesse} Bytes"}

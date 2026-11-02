@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { AppIcon } from '../components/AppIcon'
-import { Led, Menue, stateClass, type MenueEintrag } from '../components/controls'
+import { Drawer, Led, Menue, stateClass, type MenueEintrag } from '../components/controls'
+import { ErweiterungAnsicht } from '../components/ErweiterungAnsicht'
 import { StartFortschritt } from '../components/StartFortschritt'
 import {
   ApiError, api,
-  type Me, type MyStorage, type RepoKurz, type Session, type SoftwareMeldung, type Stream,
+  type ErweiterungAnsicht as AnsichtT, type Me, type MyStorage, type RepoKurz, type Session, type SoftwareMeldung, type Stream,
   type Template,
   type WebApp as WebAppT,
 } from '../lib/api'
@@ -24,7 +25,7 @@ function greeting(): string {
   return tr('Guten Abend')
 }
 
-function Bay({ session, template, onOpen, onAct, onApp, onResume, onReset, onKiNeu, ideAi, busy, busyApp }: {
+function Bay({ session, template, onOpen, onAct, onApp, onResume, onReset, onKiNeu, ideAi, ansichten, busy, busyApp }: {
   session: Session
   template: Template | undefined
   onOpen: (s: Session, stream?: Stream) => void
@@ -35,6 +36,8 @@ function Bay({ session, template, onOpen, onAct, onApp, onResume, onReset, onKiN
   onKiNeu: (s: Session) => void
   /** Kommt IDE-AI in die Arbeitsplätze dieses Menschen? (`Me.ide_ai`) */
   ideAi: boolean
+  /** Ansichten der Erweiterungen je Arbeitsplatz (Kapitel 39), z. B. das Gedächtnis. */
+  ansichten: AnsichtT[]
   busy: boolean
   busyApp: string | null
 }) {
@@ -45,6 +48,7 @@ function Bay({ session, template, onOpen, onAct, onApp, onResume, onReset, onKiN
   const angehalten = session.status === 'angehalten'
   const [neuFragen, setNeuFragen] = useState(false)
   const [kiFragen, setKiFragen] = useState(false)
+  const [ansicht, setAnsicht] = useState<AnsichtT | null>(null)
   const started = new Date(session.started_at).getTime()
   const isWorkspace = session.template_mode === 'workspace'
   const apps = (template?.apps ?? []).filter((a) => a.is_enabled && !a.blocked_reason)
@@ -59,6 +63,11 @@ function Bay({ session, template, onOpen, onAct, onApp, onResume, onReset, onKiN
       hinweis: tr('Stellt Continue in PyCharm und VSCodium wieder her, falls es fehlt oder verdrängt wurde.'),
       onClick: () => { setNeuFragen(false); setKiFragen(true) },
     }] : []),
+    ...ansichten.map((a) => ({
+      text: a.titel,
+      hinweis: tr('Aus der Erweiterung „{n}“, nur für diesen Arbeitsplatz.', { n: a.name }),
+      onClick: () => setAnsicht(a),
+    })),
     ...(root ? [{
       text: tr('Neu aufsetzen…'),
       hinweis: tr('Baut den Arbeitsplatz aus dem aktuellen Image neu. Das Zuhause bleibt.'),
@@ -143,6 +152,11 @@ function Bay({ session, template, onOpen, onAct, onApp, onResume, onReset, onKiN
         )}
       </div>
 
+      {ansicht && (
+        <Drawer title={ansicht.titel} subtitle={sitzungsName(session)} onClose={() => setAnsicht(null)}>
+          <ErweiterungAnsicht url={ansicht.url.replace('{arbeitsplatz_id}', session.id)} titel={ansicht.titel} hoehe="calc(100vh - 140px)" />
+        </Drawer>
+      )}
       {kiFragen ? (
         <div className="bay__actions" style={{ flexWrap: 'wrap', gap: 8 }}>
           <p className="field__hint" style={{ width: '100%', margin: 0 }}>
@@ -328,6 +342,11 @@ export function Dashboard({ me, onOpen, onToast, onSoftware }: {
   const [sessions, setSessions] = useState<Session[] | null>(null)
   const [templates, setTemplates] = useState<Template[] | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
+  // Ansichten der Erweiterungen, die im Menü jeder Kachel stehen (Kapitel 39).
+  const [ansichten, setAnsichten] = useState<AnsichtT[]>([])
+  useEffect(() => {
+    api.erweiterungAnsichten().then((a) => setAnsichten(a.filter((x) => x.ort === 'arbeitsplatz'))).catch(() => {})
+  }, [])
   const [busyApp, setBusyApp] = useState<string | null>(null)
   const [failed, setFailed] = useState<string | null>(null)
   // Nachgeladen, nicht Teil des ersten Aufbaus: Eine Messung über ein
@@ -600,7 +619,7 @@ export function Dashboard({ me, onOpen, onToast, onSoftware }: {
                 template={templates.find((t) => t.id === s.template_id)}
                 onOpen={onOpen} onAct={act} onApp={openApp}
                 onResume={(x) => void resume(x)} onReset={(x, dd) => void reset(x, dd)}
-                onKiNeu={(x) => void kiNeu(x)} ideAi={!!me.ide_ai}
+                onKiNeu={(x) => void kiNeu(x)} ideAi={!!me.ide_ai} ansichten={ansichten}
                 busy={busy === s.id} busyApp={busyApp} />
             ))}
           </div>

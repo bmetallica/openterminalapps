@@ -1001,6 +1001,56 @@ class GitToken(Base):
 
 
 # --------------------------------------------------------------------------
+# Erweiterungen (erweiterungen.py, Handbuch Kapitel 39)
+# --------------------------------------------------------------------------
+
+class Erweiterung(Base):
+    """Eine gekoppelte Erweiterung: eine eigenständige Docker-Anwendung im
+    Netz ota_erweiterungen, die OTA über den Vertrag /ota/v1 anspricht."""
+
+    __tablename__ = "erweiterungen"
+    slug: Mapped[str] = mapped_column(String(32), primary_key=True)
+    name: Mapped[str] = mapped_column(String(255))
+    # Im Netz ota_erweiterungen, z. B. http://ota-gedaechtnis:8080
+    adresse: Mapped[str] = mapped_column(String(255))
+    manifest: Mapped[dict] = mapped_column(JSONB, default=dict)
+    # Damit weist OTA sich aus und signiert die Kopfzeilen der Ansichten.
+    geheimnis: Mapped[str] = mapped_column(String(128))
+    an: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Leer: alle. Sonst nur Mitglieder dieser Gruppen (Kennungen) und Admins.
+    gruppen: Mapped[list] = mapped_column(JSONB, default=list)
+    # Der Prompt-Schnipsel der Erweiterung geht mit (abschaltbar).
+    prompt_an: Mapped[bool] = mapped_column(Boolean, default=True)
+    stand: Mapped[str] = mapped_column(String(255), default="")
+    zuletzt_gesund: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    angelegt: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ErweiterungToken(Base):
+    """Ein Arbeitsplatz hat von einer Erweiterung ein Token bekommen. Das Token
+    selbst kennt OTA nicht — nur, dass es eines gibt, für den Widerruf."""
+
+    __tablename__ = "erweiterung_tokens"
+    session_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    slug: Mapped[str] = mapped_column(String(32), primary_key=True)
+    am: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ErweiterungAuftrag(Base):
+    """Was eine Erweiterung noch erfahren muss, weil sie beim Ereignis nicht
+    erreichbar war — etwa, dass ein Konto gelöscht wurde."""
+
+    __tablename__ = "erweiterung_auftraege"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    slug: Mapped[str] = mapped_column(String(32), index=True)
+    art: Mapped[str] = mapped_column(String(32))
+    nutzer_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    versuche: Mapped[int] = mapped_column(Integer, default=0)
+    fehler: Mapped[str] = mapped_column(Text, default="")
+    am: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+# --------------------------------------------------------------------------
 # News (news.py, Handbuch Kapitel 11)
 # --------------------------------------------------------------------------
 

@@ -76,6 +76,43 @@ IDE-AI is switched on for you.
 **Please do not accept an update for Continue from the Marketplace** if the editor offers one. OTA's
 version is set up for your AI server and adapted to the IDE.
 
+## opencode and its memory ✅
+
+If the administration has turned on **opencode**, the command `opencode` is available in the
+terminal, connected to your company's AI server. Start it in your project's directory:
+
+```bash
+cd ~/my-project
+opencode                 # new session
+opencode -c              # continue the last session
+opencode -s <id>         # continue a particular session
+```
+
+- **Your own settings** belong in `~/.config/opencode/opencode.json`: your own providers, your own
+  MCP servers, your own default model. OTA's defaults are in `/etc/opencode/` and are added.
+- **If you had installed opencode yourself,** the same command now starts OTA's version. Your
+  installation stays next to it as `opencode.vor-ota`; your sessions and settings remain.
+
+**The memory** (if it is turned on): every opencode session has its own long-term memory. The model
+keeps in it the goal and state of the work, decisions with their reasons, your preferences and the
+specifics of the project. It survives opencode summarising a long history and you continuing the
+session days later with `opencode -c`.
+
+- **Every session sees only its own memory.** A new session starts empty. Subagents and forks
+  (`--fork`) share the memory of their session.
+- Whether opencode asks before saving is set by the administration.
+- **You can see and edit everything** in OTA:
+  - **My account → Memory** shows all sessions.
+  - The tile's **⋯** menu shows, under **Memory (opencode sessions)**, only those of this
+    workspace.
+  - There you can edit entries, pin them (they then always come along), delete them, create your
+    own and copy or move them to another session. That is the way to carry knowledge from one
+    session to another.
+  - There is also an export as JSON or Markdown.
+- The memory does not accept **credentials**.
+- **Nobody but you** sees your entries, not even the administration.
+- Sessions nobody has used for a long time are deleted after a period. The view shows the period.
+
 ## Docker
 
 Docker is only available in **root workspaces** ([chapter 32](32-root-arbeitsplatz-nutzen.md#docker-)).
