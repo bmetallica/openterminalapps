@@ -35,10 +35,17 @@ def einstellen(body: dict, request: Request, actor: User = Depends(current_user)
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
     geaendert = {k: {"vorher": vorher[k], "nachher": neu[k]}
                  for k in ("prompt", "prompt_gruppen", "zusatz") if vorher[k] != neu[k]}
+    if vorher["mcp"] != neu["mcp"]:
+        # Ohne die Schlüssel — nur, dass sich einer geändert hat.
+        ohne = lambda liste: [{k: v for k, v in m.items() if k != "schluessel"} for m in liste]  # noqa: E731
+        alt = {m["name"]: m.get("schluessel") for m in vorher["mcp"]}
+        geaendert["mcp"] = {"vorher": ohne(vorher["mcp"]), "nachher": ohne(neu["mcp"]),
+                            "schluessel_geaendert": sorted(m["name"] for m in neu["mcp"]
+                                                           if alt.get(m["name"]) != m.get("schluessel"))}
     audit.record(db, "opencode.eingestellt", actor=actor, request=request,
                  an=neu["an"], gruppen=neu["gruppen"], **geaendert)
     db.commit()
-    if vorher["an"] != neu["an"]:
+    if vorher["an"] != neu["an"] or opencode.freigaben_von(vorher) != opencode.freigaben_von(neu):
         # Die Firewall gibt den KI-Server frei, solange IDE-AI oder opencode an ist.
         schieben(db)
     return opencode.stand(db)

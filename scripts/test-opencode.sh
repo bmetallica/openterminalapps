@@ -103,6 +103,25 @@ R=$(api -X PUT "$B/api/admin/opencode" -d '{"an":true,"prompt":"PRUEF-GLOBAL fü
 expect "True" "$(jqp "str(d['an'])" <<<"$R")" "opencode eingeschaltet"
 FASSUNG=$(jqp "d['fassung']" <<<"$R")
 [ -n "$FASSUNG" ] && ok "ota-opencode in der Paketquelle ($FASSUNG)" || bad "ota-opencode fehlt in der Paketquelle"
+expect "400" "$(code -X PUT "$B/api/admin/opencode" -d '{"mcp":[{"name":"X!","typ":"entfernt","url":"http://a"}]}')" "MCP-Server mit ungültigem Namen abgewiesen"
+expect "400" "$(code -X PUT "$B/api/admin/opencode" -d '{"mcp":[{"name":"ftp","typ":"entfernt","url":"ftp://a"}]}')" "MCP-Server ohne http(s) abgewiesen"
+R=$(api -X PUT "$B/api/admin/opencode" -d '{"mcp":[
+  {"name":"pruefmcp","typ":"entfernt","an":true,"gruppen":[],"url":"http://127.0.0.1:9200/mcp","kopf":"X-Pruef-Key","praefix":"Token ","freigeben":false,"schluessel":"pruef-mcp-schluessel-123"},
+  {"name":"nurgruppe","typ":"lokal","an":true,"gruppen":["00000000-0000-4000-8000-0000000000aa"],"befehl":["echo","x"],"variable":"PRUEF_TOKEN","schluessel":"lokal-geheim"}]}')
+expect "True" "$(jqp "str(d['mcp'][0]['schluessel_gesetzt'] and 'pruef-mcp-schluessel' not in json.dumps(d))" <<<"$R")" \
+  "MCP-Server gespeichert, der Schlüssel kommt nicht zurück"
+R=$(api -X PUT "$B/api/admin/opencode" -d "$(jqp "json.dumps({'mcp': [{k: v for k, v in m.items() if k != 'schluessel_gesetzt'} for m in d['mcp']]})" <<<"$R")")
+expect "True" "$(jqp "str(d['mcp'][0]['schluessel_gesetzt'])" <<<"$R")" "Speichern ohne Schlüssel behält ihn"
+expect "True False" "$(docker exec ota-api python -c "
+from ota.db import SessionLocal
+from ota import opencode
+from ota.models import User, Group
+with SessionLocal() as db:
+    e = opencode.einstellungen(db)
+    ohne = User(username='x'); ohne.groups = []
+    mit = User(username='y'); g = Group(name='g'); g.id = __import__('uuid').UUID('00000000-0000-4000-8000-0000000000aa'); mit.groups = [g]
+    print('nurgruppe' in [m['name'] for m in opencode.mcp_fuer(e, mit)], 'nurgruppe' in [m['name'] for m in opencode.mcp_fuer(e, ohne)])")" \
+  "Gruppensteuerung je MCP-Server (Mitglied ja, Nichtmitglied nein)"
 V=$(api -X POST "$B/api/admin/opencode/vorschau" -d '{}')
 grep -q "PRUEF-GLOBAL für $ADMIN" <<<"$(jqp "d['anweisungen']" <<<"$V")" && ok "Vorschau: Prompt-Zusatz mit Platzhalter" || bad "Vorschau ohne Prompt-Zusatz"
 jqp "d['config']" <<<"$V" | grep -q '"title"' && ok "Vorschau: Zusatzkonfiguration eingemischt" || bad "Zusatzkonfiguration fehlt"
@@ -193,6 +212,28 @@ for _ in $(seq 1 60); do fassung_drin | grep -q "$FASSUNG" && break; sleep 3; do
 expect "$FASSUNG" "$(fassung_drin)" "Paket ota-opencode installiert"
 im '/usr/bin/opencode --version' | grep -q "${FASSUNG%%-ota*}" && ok "opencode $(im '/usr/bin/opencode --version')" || bad "opencode läuft nicht"
 im 'test -f /usr/share/ota-opencode/plugins/ota-sitzung/index.js' && ok "Plugin ota-sitzung mitgeliefert" || bad "Plugin fehlt"
+expect "pruef-mcp-schluessel-123" "$(im 'cat /etc/opencode/ota-mcp/pruefmcp')" "Schlüssel des MCP-Servers als eigene Datei"
+grep -q '"X-Pruef-Key": "Token {file:/etc/opencode/ota-mcp/pruefmcp}"' <<<"$(im 'cat /etc/opencode/opencode.jsonc')" \
+  && ok "MCP-Server in der Konfiguration, Schlüssel nur als Verweis" || bad "MCP-Server fehlt in der Konfiguration"
+im 'grep -q pruef-mcp-schluessel /etc/opencode/opencode.jsonc' && bad "Schlüssel steht im Klartext in der Konfiguration" || ok "… nicht im Klartext"
+docker exec -i "$CN" sh -c 'cat > /tmp/kopf.py' <<'PY'
+from http.server import BaseHTTPRequestHandler, HTTPServer
+class K(BaseHTTPRequestHandler):
+    def log_message(self, *a): pass
+    def _antwort(self):
+        open("/tmp/mcp-kopf.log", "a").write(str(self.headers.get("X-Pruef-Key")) + "\n")
+        self.send_response(404); self.end_headers()
+    do_GET = do_POST = _antwort
+HTTPServer(("127.0.0.1", 9200), K).serve_forever()
+PY
+im 'nohup python3 /tmp/kopf.py >/dev/null 2>&1 &'
+sleep 1
+# --standalone: ein eigener Server nur für diesen Aufruf. Sonst bliebe
+# opencodes Hintergrunddienst mit dieser Umgebung stehen, und die Aufrufe
+# mit dem Fake-Modell weiter unten hängten sich an ihn.
+im 'cd /tmp; timeout 90 opencode run --standalone --model ota/x hallo >/dev/null 2>&1 || true'
+grep -q "Token pruef-mcp-schluessel-123" <<<"$(im 'cat /tmp/mcp-kopf.log 2>/dev/null')" \
+  && ok "opencode schickt den Schlüssel an den MCP-Server" || bad "Schlüssel kam nicht an: $(im 'cat /tmp/mcp-kopf.log 2>/dev/null' | head -2)"
 
 if [ -n "$ERW" ]; then
   grep -q "## Erweiterung: Gedächtnis für opencode" <<<"$(im 'cat /etc/opencode/ota-anweisungen.md')" \

@@ -350,6 +350,7 @@ dabei **nicht** zurückwandert, ist die Datenbank: Neue Spalten bleiben stehen. 
   - OTA schreibt opencodes verwaltete Konfiguration nach `/etc/opencode/`. Eigene Einstellungen in
     `~/.config/opencode` kommen dazu, ein eigenes Standardmodell bleibt.
   - Ein Zusatz zum Systemprompt, global und je Gruppe, mit Vorschau und Audit-Log.
+  - Weitere MCP-Server, entfernt oder lokal, mit API-Schlüssel, je Server für Gruppen freigegeben.
   - Siehe [Kapitel 38](docs/wiki/38-opencode.md).
 - **Erweiterungen:** eigenständige Docker-Anwendungen mit eigenem Compose-Projekt, gekoppelt über
   einen Vertrag und für Gruppen einschaltbar:

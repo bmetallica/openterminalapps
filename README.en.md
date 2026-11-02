@@ -345,6 +345,7 @@ that did not exist before is simply there.
   - OTA writes opencode's managed configuration to `/etc/opencode/`. Own settings in
     `~/.config/opencode` are added, an own default model stays.
   - An addition to the system prompt, globally and per group, with preview and audit log.
+  - Additional MCP servers, remote or local, with an API key, released per server for groups.
   - See [chapter 38](docs/wiki/en/38-opencode.md).
 - **Extensions:** standalone Docker applications with their own Compose project, paired through a
   contract and switchable per group:

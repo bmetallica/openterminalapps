@@ -24,6 +24,7 @@ import logging
 import re
 from datetime import date
 from typing import Any
+from urllib.parse import urlparse
 
 from sqlalchemy.orm import Session as DbSession
 
@@ -40,6 +41,11 @@ PLUGIN_ORDNER = "/usr/share/ota-opencode/plugins"
 ANWEISUNGEN = "/etc/opencode/ota-anweisungen.md"
 SCHLUESSEL = "/etc/opencode/ota-ki-schluessel"
 TOKENS = "/etc/ota/erweiterungen"
+# Die Schlüssel der weiteren MCP-Server, eine Datei je Server.
+MCP_SCHLUESSEL = "/etc/opencode/ota-mcp"
+MCP_NAME_OK = re.compile(r"[a-z][a-z0-9_-]{1,30}")
+KOPF_OK = re.compile(r"[A-Za-z0-9-]{1,64}")
+VARIABLE_OK = re.compile(r"[A-Z_][A-Z0-9_]{0,63}")
 ANBIETER = "ota"
 
 VORGABEN: dict[str, Any] = {
@@ -57,6 +63,9 @@ VORGABEN: dict[str, Any] = {
     # was die Oberfläche nicht kennt (reasoning, chat_template_kwargs, eigene
     # Modelle für Compaction und Titel). Gewinnt gegen das Erzeugte.
     "zusatz": "",
+    # Weitere MCP-Server, die opencode bekommt (Liste, siehe _mcp_pruefen).
+    # Die Schlüssel stehen hier, gehen aber nie zurück an den Browser.
+    "mcp": [],
 }
 PROMPT_LAENGE = 8000
 # Ab hier warnt die Oberfläche: Der Zusatz geht bei jeder Anfrage mit.
@@ -93,6 +102,76 @@ def _zusatz(roh: str) -> dict[str, Any]:
     return wert
 
 
+def _mcp_pruefen(roh: Any, alt: list[dict[str, Any]], belegt: set[str]) -> list[dict[str, Any]]:
+    """Die weiteren MCP-Server aus dem Formular. Ein Schlüssel, der nicht
+    mitkommt (None), bleibt wie er war; leer heisst: kein Schlüssel."""
+    if not isinstance(roh, list):
+        raise OpencodeFehler("mcp: eine Liste von Servern.")
+    vorher = {m["name"]: m for m in alt}
+    raus: list[dict[str, Any]] = []
+    for m in roh:
+        if not isinstance(m, dict):
+            raise OpencodeFehler("mcp: eine Liste von Servern.")
+        name = str(m.get("name") or "").strip().lower()
+        if not MCP_NAME_OK.fullmatch(name):
+            raise OpencodeFehler(f"„{name}“ taugt nicht als Name eines MCP-Servers (a–z, 0–9, - und _).")
+        if name in belegt or any(x["name"] == name for x in raus):
+            raise OpencodeFehler(f"Der Name „{name}“ ist schon vergeben.")
+        typ = "lokal" if m.get("typ") == "lokal" else "entfernt"
+        eintrag: dict[str, Any] = {"name": name, "typ": typ, "an": bool(m.get("an", True)),
+                                   "gruppen": [str(g) for g in m.get("gruppen") or []]}
+        if typ == "entfernt":
+            url = str(m.get("url") or "").strip()
+            teile = urlparse(url)
+            if teile.scheme not in ("http", "https") or not teile.hostname:
+                raise OpencodeFehler(f"{name}: Die Adresse beginnt mit http:// oder https://.")
+            kopf = str(m.get("kopf") or "Authorization").strip()
+            if not KOPF_OK.fullmatch(kopf):
+                raise OpencodeFehler(f"{name}: „{kopf}“ ist kein gültiger Name einer Kopfzeile.")
+            eintrag.update(url=url, kopf=kopf, praefix=str(m.get("praefix", "Bearer ") or "")[:40],
+                           freigeben=bool(m.get("freigeben", True)))
+        else:
+            befehl = m.get("befehl")
+            if isinstance(befehl, str):
+                befehl = befehl.split()
+            if not isinstance(befehl, list) or not befehl or not all(isinstance(b, str) and b for b in befehl):
+                raise OpencodeFehler(f"{name}: Der Befehl fehlt, z. B. npx -y @modelcontextprotocol/server-github.")
+            variable = str(m.get("variable") or "").strip()
+            if variable and not VARIABLE_OK.fullmatch(variable):
+                raise OpencodeFehler(f"{name}: „{variable}“ ist kein gültiger Name einer Umgebungsvariable.")
+            eintrag.update(befehl=[b[:500] for b in befehl[:40]], variable=variable)
+        schluessel = m.get("schluessel")
+        eintrag["schluessel"] = (vorher.get(name, {}).get("schluessel", "") if schluessel is None
+                                 else str(schluessel).strip()[:4000])
+        raus.append(eintrag)
+    return raus
+
+
+def mcp_fuer(e: dict[str, Any], user: User) -> list[dict[str, Any]]:
+    """Die weiteren MCP-Server, die dieser Mensch bekommt."""
+    meine = {str(g.id) for g in user.groups}
+    return [m for m in e["mcp"] if m.get("an")
+            and (not m.get("gruppen") or user.is_admin or meine & set(m["gruppen"]))]
+
+
+def freigaben(db: DbSession) -> list[dict[str, str]]:
+    """Für die Firewall: die entfernten MCP-Server, solange opencode an ist."""
+    return freigaben_von(einstellungen(db))
+
+
+def freigaben_von(e: dict[str, Any]) -> list[dict[str, str]]:
+    if not e["an"]:
+        return []
+    raus = []
+    for m in e["mcp"]:
+        if m.get("an") and m.get("typ") == "entfernt" and m.get("freigeben"):
+            teile = urlparse(m["url"])
+            raus.append({"ziel": teile.hostname or "",
+                         "ports": str(teile.port or (443 if teile.scheme == "https" else 80)),
+                         "protokoll": "tcp", "notiz": f"opencode: MCP-Server {m['name']} (Einstellungen → opencode)"})
+    return raus
+
+
 def speichern(db: DbSession, body: dict[str, Any]) -> dict[str, Any]:
     neu = einstellungen(db)
     if "gruppen" in body:
@@ -110,6 +189,9 @@ def speichern(db: DbSession, body: dict[str, Any]) -> dict[str, Any]:
     if "zusatz" in body:
         _zusatz(str(body["zusatz"] or ""))
         neu["zusatz"] = str(body["zusatz"] or "")
+    if "mcp" in body:
+        belegt = {x.slug for x in erweiterungen.alle(db)}
+        neu["mcp"] = _mcp_pruefen(body["mcp"], neu["mcp"], belegt)
     if "an" in body:
         neu["an"] = bool(body["an"])
     ki = ide_ai.einstellungen(db)
@@ -141,7 +223,8 @@ def _mischen(basis: dict[str, Any], oben: dict[str, Any]) -> dict[str, Any]:
     return raus
 
 
-def konfiguration(e: dict[str, Any], ki: dict[str, Any], angaben: list[dict[str, Any]]) -> str:
+def konfiguration(e: dict[str, Any], ki: dict[str, Any], angaben: list[dict[str, Any]],
+                  weitere: list[dict[str, Any]] | None = None) -> str:
     """Die verwaltete Konfiguration (JSONC), mit OTAs Marke in der ersten Zeile."""
     modelle: dict[str, Any] = {}
     for m in ki["modelle"]:
@@ -180,6 +263,18 @@ def konfiguration(e: dict[str, Any], ki: dict[str, Any], angaben: list[dict[str,
                 fragen[f"{a['slug']}_{w}"] = "ask"
         if "ota-sitzung" in (a.get("plugins") or []):
             sitzung_server.append(a["slug"])
+    for m in weitere or []:
+        datei = f"{{file:{MCP_SCHLUESSEL}/{m['name']}}}"
+        if m["typ"] == "entfernt":
+            eintrag: dict[str, Any] = {"type": "remote", "url": m["url"], "enabled": True, "codemode": False}
+            if m.get("schluessel"):
+                eintrag["headers"] = {m["kopf"]: f"{m['praefix']}{datei}"}
+                eintrag["oauth"] = False
+        else:
+            eintrag = {"type": "local", "command": list(m["befehl"]), "enabled": True, "codemode": False}
+            if m.get("schluessel") and m.get("variable"):
+                eintrag["environment"] = {m["variable"]: datei}
+        mcp[m["name"]] = eintrag
     if mcp:
         inhalt["mcp"] = mcp
     if sitzung_server:
@@ -233,9 +328,12 @@ def fuer_sitzung(db: DbSession, sess: Any, user: User, tpl: Any) -> dict[str, An
     ki = ide_ai.einstellungen(db)
     angaben = erweiterungen.fuer_sitzung(db, sess, user, tpl)
     vorlage = getattr(tpl, "name", "") or ""
+    weitere = mcp_fuer(e, user)
     return {
         "fassung": fassung(db),
-        "config": konfiguration(e, ki, angaben),
+        "config": konfiguration(e, ki, angaben, weitere),
+        # Je MCP-Server mit Schlüssel eine Datei; opencode liest sie mit {file:…}.
+        "mcp_schluessel": {m["name"]: m["schluessel"] for m in weitere if m.get("schluessel")},
         "anweisungen": anweisungen(db, e, user, vorlage, angaben),
         "ki_schluessel": ki["api_key"] or "",
         "erweiterungen": [{"slug": a["slug"], "token": a["token"]} for a in angaben],
@@ -246,8 +344,11 @@ def vorschau(db: DbSession, user: User, entwurf: dict[str, Any] | None = None) -
     """Für die Einstellungen: so sähe es für diesen Menschen aus — auf Wunsch
     mit einem noch nicht gespeicherten Entwurf. Ohne Tokens; die
     Erweiterungen werden nicht gefragt."""
-    e = {**einstellungen(db), **{k: v for k, v in (entwurf or {}).items() if k in VORGABEN}}
+    gespeichert = einstellungen(db)
+    e = {**gespeichert, **{k: v for k, v in (entwurf or {}).items() if k in VORGABEN}}
     _zusatz(str(e["zusatz"] or ""))
+    if entwurf and "mcp" in entwurf:
+        e["mcp"] = _mcp_pruefen(entwurf["mcp"], gespeichert["mcp"], {x.slug for x in erweiterungen.alle(db)})
     ki = ide_ai.einstellungen(db)
     angaben = []
     for x in erweiterungen.alle(db):
@@ -262,7 +363,7 @@ def vorschau(db: DbSession, user: User, entwurf: dict[str, Any] | None = None) -
                         "prompt": "(Schnipsel der Erweiterung, kommt beim Start)"
                         if "prompt" in liefert and x.prompt_an else ""})
     anw = anweisungen(db, e, user, "<Vorlage>", angaben)
-    return {"berechtigt": berechtigt(db, user, e), "config": konfiguration(e, ki, angaben),
+    return {"berechtigt": berechtigt(db, user, e), "config": konfiguration(e, ki, angaben, mcp_fuer(e, user)),
             "anweisungen": anw, "tokens_geschaetzt": len(anw) // 4}
 
 
@@ -273,7 +374,10 @@ def stand(db: DbSession) -> dict[str, Any]:
         f = fassung(db)
     except Exception:  # noqa: BLE001 — Paketquelle nicht erreichbar
         f = ""
-    return {**e, "fassung": f, "ki_url": ki["url"],
+    # Die Schlüssel der MCP-Server verlassen den Server nie.
+    mcp = [{**{k: v for k, v in m.items() if k != "schluessel"}, "schluessel_gesetzt": bool(m.get("schluessel"))}
+           for m in e["mcp"]]
+    return {**e, "mcp": mcp, "fassung": f, "ki_url": ki["url"],
             "modelle": [{"id": m["id"], "titel": m["titel"]} for m in ki["modelle"]],
             "ki_standard": ki["standard"], "prompt_warnung_tokens": PROMPT_WARNUNG_TOKENS,
             "gruppen_namen": {str(g.id): g.name for g in db.query(Group).all()}}

@@ -16,6 +16,7 @@ Was OTA dabei übernimmt:
   KI-Server, die Modelle, das Standardmodell, der Prompt-Zusatz und die MCP-Server der
   Erweiterungen.
 - **Prompt-Zusatz**: ein Text, der bei jeder Anfrage an das Modell mitgeht, global und je Gruppe.
+- **Weitere MCP-Server**: entfernt oder lokal, mit API-Schlüssel, je Server für Gruppen.
 - **Erweiterungen**: Was eine Erweiterung für opencode liefert, kommt mit. Ein Beispiel ist das
   Gedächtnis ([Kapitel 39](39-erweiterungen.md)).
 
@@ -81,6 +82,30 @@ Titel und Zusammenfassungen sieht das zum Beispiel so aus:
 Der Anbieter heißt in opencode immer `ota`, ein Modell also `ota/<Modell>`. Es müssen Modelle
 sein, die unter IDE-AI ausgewählt sind.
 
+## Weitere MCP-Server
+
+Unter **Weitere MCP-Server** bekommt opencode zusätzliche Werkzeuge, etwa ein Wiki, ein
+Ticketsystem oder GitHub. **Je Server legst du fest, wer ihn bekommt:** Ohne Gruppe bekommen ihn
+alle, für die opencode an ist, sonst nur Mitglieder der gewählten Gruppen; Administratoren immer.
+Wer opencode selbst nicht bekommt, bekommt auch keinen MCP-Server.
+
+| Feld | Entfernt (Adresse) | Lokal (Befehl) |
+|---|---|---|
+| Name | erscheint in opencode als Vorsilbe der Werkzeuge, z. B. `wiki_suche`. a–z, 0–9, `-`, `_`; nicht der Name einer Erweiterung | ebenso |
+| Adresse bzw. Befehl | z. B. `https://mcp.firma.de/mcp` (Streamable HTTP) | z. B. `npx -y @modelcontextprotocol/server-github`; läuft im Arbeitsplatz als der Mensch |
+| API-Schlüssel | geht als Kopfzeile mit, Vorgabe `Authorization: Bearer <Schlüssel>`; Name der Kopfzeile und Präfix sind einstellbar, z. B. `X-API-Key` ohne Präfix | geht als Umgebungsvariable mit, z. B. `GITHUB_TOKEN` |
+| In der Firewall freigeben | Vorgabe an: die Firewall lässt die Arbeitsplätze zu Rechner und Port der Adresse | – (was der Befehl braucht, muss die Firewall sonst erlauben) |
+
+**Der Schlüssel** verlässt OTA nie in Richtung Browser; im Formular steht nur „gesetzt“. Ins Audit-Log
+kommt nur, dass er sich geändert hat. Im Arbeitsplatz liegt er als eigene Datei
+`/etc/opencode/ota-mcp/<Name>`, und die Konfiguration verweist nur darauf (`{file:…}`). Der Mensch
+kann ihn dort lesen — opencode läuft mit seinen Rechten und muss ihn senden können. Für Server, deren
+Schlüssel niemand sehen soll, ist deshalb ein Schlüssel je Mensch oder ein Server ohne Schlüssel
+hinter der Firewall der bessere Weg.
+
+Die Werkzeuge kommen direkt zum Modell, nicht über opencodes „Code Mode“; das finden auch lokale
+Modelle. Es gilt ab dem nächsten Start oder Fortsetzen eines Arbeitsplatzes.
+
 ## Im Arbeitsplatz
 
 Bei jedem Start und Fortsetzen schreibt OTA als root:
@@ -90,6 +115,7 @@ Bei jedem Start und Fortsetzen schreibt OTA als root:
 | `/etc/opencode/opencode.jsonc` | die verwaltete Konfiguration. Die erste Zeile ist OTAs Marke |
 | `/etc/opencode/ota-anweisungen.md` | der Prompt-Zusatz: global, die Gruppen des Menschen, die Schnipsel der Erweiterungen |
 | `/etc/opencode/ota-ki-schluessel` | der API-Schlüssel des KI-Servers, nur wenn einer eingetragen ist |
+| `/etc/opencode/ota-mcp/<Name>` | der Schlüssel eines weiteren MCP-Servers |
 | `/etc/ota/erweiterungen/<slug>/token` | das Token je Erweiterung, siehe [Kapitel 39](39-erweiterungen.md) |
 | `/etc/hosts` | `ota-erweiterungen` zeigt auf Traefik im eigenen Sitzungsnetz |
 

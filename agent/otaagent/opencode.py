@@ -62,7 +62,7 @@ fi
 if [ "$WAS" != an ]; then
   ours "$D/opencode.jsonc" && rm -f "$D/opencode.jsonc" && echo "konfig-weg"
   rm -f "$D/ota-anweisungen.md" "$D/ota-ki-schluessel"
-  rm -rf /etc/ota/erweiterungen
+  rm -rf /etc/ota/erweiterungen "$D/ota-mcp"
   rmdir "$D" 2>/dev/null || true
   exit 0
 fi
@@ -82,6 +82,11 @@ fi
 install -m 0644 "$T/ota-anweisungen.md" "$D/ota-anweisungen.md"
 if [ -s "$T/ota-ki-schluessel" ]; then install -m 0644 "$T/ota-ki-schluessel" "$D/ota-ki-schluessel"
 else rm -f "$D/ota-ki-schluessel"; fi
+# Die Schlüssel der weiteren MCP-Server (Kapitel 38).
+rm -rf "$D/ota-mcp"
+if [ -d "$T/ota-mcp" ]; then
+  cp -r "$T/ota-mcp" "$D/ota-mcp"; chmod 755 "$D/ota-mcp"; chmod 644 "$D/ota-mcp"/*
+fi
 rm -rf /etc/ota/erweiterungen.neu
 if [ -d "$T/erweiterungen" ]; then
   cp -r "$T/erweiterungen" /etc/ota/erweiterungen.neu
@@ -279,6 +284,9 @@ def _dateien(container, angaben: dict[str, Any], heim: str, traefik_ip: str,
     dateien = {"opencode.jsonc": _konfig_anpassen(konfig, _setzt_modell(eigene)),
                "ota-anweisungen.md": str(angaben.get("anweisungen") or ""),
                "ota-ki-schluessel": str(angaben.get("ki_schluessel") or "")}
+    for name, schluessel in (angaben.get("mcp_schluessel") or {}).items():
+        if re.fullmatch(r"[a-z][a-z0-9_-]{1,30}", str(name)) and schluessel:
+            dateien[f"ota-mcp/{name}"] = str(schluessel)
     for e in angaben.get("erweiterungen") or []:
         slug, token = str(e.get("slug") or ""), str(e.get("token") or "")
         if SLUG_OK.fullmatch(slug) and token:

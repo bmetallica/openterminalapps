@@ -304,6 +304,8 @@ export type OpencodeStand = {
   /** Gruppenkennung → Text */
   prompt_gruppen: Record<string, string>
   zusatz: string
+  /** Weitere MCP-Server; die Schlüssel kommen nie zurück, nur `schluessel_gesetzt`. */
+  mcp: OpencodeMcp[]
   /** Fassung von ota-opencode in der Paketquelle; leer, wenn sie fehlt. */
   fassung: string
   ki_url: string
@@ -311,6 +313,24 @@ export type OpencodeStand = {
   ki_standard: string
   prompt_warnung_tokens: number
   gruppen_namen: Record<string, string>
+}
+
+/** Ein weiterer MCP-Server für opencode (api/ota/opencode.py, Kapitel 38). */
+export type OpencodeMcp = {
+  name: string
+  typ: 'entfernt' | 'lokal'
+  an: boolean
+  /** Leer: alle, die opencode bekommen. Sonst nur diese Gruppen; Admins immer. */
+  gruppen: string[]
+  url?: string
+  kopf?: string
+  praefix?: string
+  freigeben?: boolean
+  befehl?: string[]
+  variable?: string
+  schluessel_gesetzt?: boolean
+  /** Nur beim Speichern, und nur wenn geändert: '' entfernt ihn. */
+  schluessel?: string
 }
 
 export type OpencodeVorschau = { berechtigt: boolean; config: string; anweisungen: string; tokens_geschaetzt: number }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ChipSelect, Field, Toggle } from './controls'
-import { ApiError, api, type Group, type OpencodeStand, type OpencodeVorschau, type User } from '../lib/api'
+import { ApiError, api, type Group, type OpencodeMcp, type OpencodeStand, type OpencodeVorschau, type User } from '../lib/api'
 import { t as tr } from '../lib/i18n'
 
 /**
@@ -13,11 +13,12 @@ import { t as tr } from '../lib/i18n'
  * ~/.config/opencode einstellt, kommt dazu.
  */
 
-type Entwurf = Pick<OpencodeStand, 'gruppen' | 'standard' | 'klein' | 'prompt' | 'prompt_gruppen' | 'zusatz'>
+type Entwurf = Pick<OpencodeStand, 'gruppen' | 'standard' | 'klein' | 'prompt' | 'prompt_gruppen' | 'zusatz' | 'mcp'>
 
 function entwurfAus(s: OpencodeStand): Entwurf {
   return { gruppen: [...s.gruppen], standard: s.standard, klein: s.klein, prompt: s.prompt,
-    prompt_gruppen: { ...s.prompt_gruppen }, zusatz: s.zusatz }
+    prompt_gruppen: { ...s.prompt_gruppen }, zusatz: s.zusatz,
+    mcp: s.mcp.map((m) => ({ ...m, gruppen: [...m.gruppen], befehl: m.befehl ? [...m.befehl] : undefined })) }
 }
 
 export function OpencodeEinstellungen({ onToast }: {
@@ -158,6 +159,18 @@ export function OpencodeEinstellungen({ onToast }: {
           onChange={(namen) => setze({ gruppen: namen.map((n) => byName[n]).filter(Boolean) })} />
       </Field>
 
+      <Field label={tr('Weitere MCP-Server')}
+        hint={tr('Werkzeuge für opencode, etwa ein Wiki, ein Ticketsystem oder GitHub. Entfernt über eine Adresse oder lokal als Befehl im Arbeitsplatz. Der Schlüssel bleibt auf dem Server und kommt als eigene Datei in den Arbeitsplatz. Je Server lässt sich festlegen, welche Gruppen ihn bekommen.')}>
+        {e.mcp.map((m, i) => (
+          <McpZeile key={i} m={m} gruppen={gruppen}
+            aendern={(neu) => setze({ mcp: e.mcp.map((x, j) => (j === i ? neu : x)) })}
+            weg={() => setze({ mcp: e.mcp.filter((_, j) => j !== i) })} />
+        ))}
+        <button className="btn" onClick={() => setze({ mcp: [...e.mcp, {
+          name: '', typ: 'entfernt', an: true, gruppen: [], url: '', kopf: 'Authorization',
+          praefix: 'Bearer ', freigeben: true }] })}>{tr('MCP-Server hinzufügen')}</button>
+      </Field>
+
       <Field label={tr('Vorschau')}
         hint={tr('So sähe es für diesen Menschen aus — mit den Änderungen, die noch nicht gespeichert sind.')}>
         <div className="row-item">
@@ -200,6 +213,71 @@ export function OpencodeEinstellungen({ onToast }: {
       <p className="field__hint" style={{ marginTop: 4 }}>
         {tr('Selbst installiertes opencode (Installationsskript, npm) lenkt OTA auf seine Fassung um; das Original bleibt als *.vor-ota liegen. Handbuch Kapitel 38.')}
       </p>
+    </div>
+  )
+}
+
+function McpZeile({ m, gruppen, aendern, weg }: {
+  m: OpencodeMcp
+  gruppen: Group[]
+  aendern: (m: OpencodeMcp) => void
+  weg: () => void
+}) {
+  const setze = (patch: Partial<OpencodeMcp>) => aendern({ ...m, ...patch })
+  const namen = gruppen.filter((g) => m.gruppen.includes(g.id)).map((g) => g.name)
+  const byName = Object.fromEntries(gruppen.map((g) => [g.name, g.id]))
+  return (
+    <div className="panel" style={{ padding: '10px 14px', marginBottom: 10, background: 'var(--well)' }}>
+      <div className="row-item" style={{ flexWrap: 'wrap', gap: 8 }}>
+        <input value={m.name} placeholder={tr('Name, z. B. wiki')} aria-label={tr('Name des MCP-Servers')}
+          style={{ width: 160 }} onChange={(ev) => setze({ name: ev.target.value.toLowerCase() })} />
+        <select value={m.typ} aria-label={tr('Art')} onChange={(ev) => setze({ typ: ev.target.value as OpencodeMcp['typ'] })}>
+          <option value="entfernt">{tr('Entfernt (Adresse)')}</option>
+          <option value="lokal">{tr('Lokal (Befehl)')}</option>
+        </select>
+        <label className="sub" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <input type="checkbox" checked={m.an} onChange={(ev) => setze({ an: ev.target.checked })} />{tr('an')}
+        </label>
+        <button className="btn btn--ghost" onClick={weg}>{tr('Entfernen')}</button>
+      </div>
+      {m.typ === 'entfernt' ? (
+        <>
+          <input value={m.url ?? ''} placeholder="https://mcp.firma.de/mcp" aria-label={tr('Adresse')}
+            style={{ width: '100%', marginTop: 8 }} onChange={(ev) => setze({ url: ev.target.value })} />
+          <div className="row-item" style={{ marginTop: 8, flexWrap: 'wrap', gap: 8 }}>
+            <input value={m.kopf ?? 'Authorization'} aria-label={tr('Kopfzeile für den Schlüssel')} style={{ width: 160 }}
+              title={tr('Kopfzeile für den Schlüssel')} onChange={(ev) => setze({ kopf: ev.target.value })} />
+            <input value={m.praefix ?? ''} aria-label={tr('Vor dem Schlüssel')} style={{ width: 90 }}
+              title={tr('Vor dem Schlüssel')} onChange={(ev) => setze({ praefix: ev.target.value })} />
+            <label className="sub" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <input type="checkbox" checked={m.freigeben ?? true} onChange={(ev) => setze({ freigeben: ev.target.checked })} />
+              {tr('In der Firewall freigeben')}
+            </label>
+          </div>
+        </>
+      ) : (
+        <div className="row-item" style={{ marginTop: 8, flexWrap: 'wrap', gap: 8 }}>
+          <input value={(m.befehl ?? []).join(' ')} placeholder="npx -y @modelcontextprotocol/server-github"
+            aria-label={tr('Befehl')} style={{ flex: 1, minWidth: 260 }}
+            onChange={(ev) => setze({ befehl: ev.target.value.split(' ').filter(Boolean) })} />
+          <input value={m.variable ?? ''} placeholder="GITHUB_TOKEN" aria-label={tr('Umgebungsvariable für den Schlüssel')}
+            title={tr('Umgebungsvariable für den Schlüssel')} style={{ width: 180 }}
+            onChange={(ev) => setze({ variable: ev.target.value.toUpperCase() })} />
+        </div>
+      )}
+      <div className="row-item" style={{ marginTop: 8, gap: 8 }}>
+        <input type="password" autoComplete="new-password" value={m.schluessel ?? ''} aria-label={tr('API-Schlüssel')}
+          placeholder={m.schluessel_gesetzt ? tr('gesetzt — leer lassen, um ihn zu behalten') : tr('API-Schlüssel (optional)')}
+          onChange={(ev) => setze({ schluessel: ev.target.value })} />
+        {m.schluessel_gesetzt && m.schluessel === undefined && (
+          <button className="btn" onClick={() => setze({ schluessel: '' })}>{tr('Schlüssel entfernen')}</button>
+        )}
+      </div>
+      <div style={{ marginTop: 8 }}>
+        <span className="sub">{tr('Wer bekommt ihn — ohne Gruppe alle, die opencode bekommen:')}</span>
+        <ChipSelect label={tr('Gruppen')} selected={namen} options={gruppen.map((g) => g.name)}
+          onChange={(n) => setze({ gruppen: n.map((x) => byName[x]).filter(Boolean) })} />
+      </div>
     </div>
   )
 }

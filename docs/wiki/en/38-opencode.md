@@ -16,6 +16,7 @@ What OTA takes care of:
   models, the default model, the prompt addition and the MCP servers of the extensions.
 - **Prompt addition**: a text that goes along with every request to the model, globally and per
   group.
+- **Additional MCP servers**: remote or local, with an API key, per server for groups.
 - **Extensions**: whatever an extension delivers for opencode comes along. One example is the
   memory ([chapter 39](39-erweiterungen.md)).
 
@@ -80,6 +81,29 @@ summaries, it looks like this, for example:
 The provider is always called `ota` in opencode, so a model is `ota/<model>`. They must be models
 selected under IDE-AI.
 
+## Additional MCP servers
+
+Under **Additional MCP servers** opencode gets extra tools, such as a wiki, a ticket system or
+GitHub. **Per server you decide who gets it:** without a group everyone for whom opencode is on,
+otherwise only members of the chosen groups; administrators always. Whoever does not get opencode
+gets no MCP server either.
+
+| Field | Remote (address) | Local (command) |
+|---|---|---|
+| Name | appears in opencode as the prefix of the tools, e.g. `wiki_search`. a–z, 0–9, `-`, `_`; not the name of an extension | likewise |
+| Address or command | e.g. `https://mcp.company.com/mcp` (Streamable HTTP) | e.g. `npx -y @modelcontextprotocol/server-github`; runs in the workspace as the person |
+| API key | sent as a header, default `Authorization: Bearer <key>`; header name and prefix are adjustable, e.g. `X-API-Key` without prefix | passed as an environment variable, e.g. `GITHUB_TOKEN` |
+| Allow in the firewall | default on: the firewall lets the workspaces reach host and port of the address | – (whatever the command needs must otherwise be allowed by the firewall) |
+
+**The key** never leaves OTA towards the browser; the form only shows "set". The audit log only
+records that it changed. In the workspace it is a file of its own, `/etc/opencode/ota-mcp/<name>`,
+and the configuration only refers to it (`{file:…}`). The person can read it there — opencode runs
+with their permissions and must be able to send it. For servers whose key nobody should see, a key
+per person or a server without a key behind the firewall is therefore the better way.
+
+The tools go to the model directly, not through opencode's "Code Mode"; local models find them too.
+It applies from the next start or resume of a workspace.
+
 ## In the workspace
 
 At every start and resume OTA writes as root:
@@ -89,6 +113,7 @@ At every start and resume OTA writes as root:
 | `/etc/opencode/opencode.jsonc` | the managed configuration. The first line is OTA's mark |
 | `/etc/opencode/ota-anweisungen.md` | the prompt addition: global, the person's groups, the snippets of the extensions |
 | `/etc/opencode/ota-ki-schluessel` | the API key of the AI server, only if one is entered |
+| `/etc/opencode/ota-mcp/<name>` | the key of an additional MCP server |
 | `/etc/ota/erweiterungen/<slug>/token` | the token per extension, see [chapter 39](39-erweiterungen.md) |
 | `/etc/hosts` | `ota-erweiterungen` points to Traefik in the workspace's own session network |
 
