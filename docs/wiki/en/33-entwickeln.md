@@ -106,8 +106,12 @@ session days later with `opencode -c`.
   - The tile's **⋯** menu shows, under **Memory (opencode sessions)**, only those of this
     workspace.
   - There you can edit entries, pin them (they then always come along), delete them, create your
-    own and copy or move them to another session. That is the way to carry knowledge from one
-    session to another.
+    own and copy or move them to another session.
+  - **Continue working with what another session knows:** open the new session B, choose session A
+    under **Access to other sessions** and click **Grant access**. From the next recall B also
+    reads A's memory, marked with its origin. A itself stays unchanged: B cannot change anything
+    there, and whatever B saves stays with B. **Revoke access** undoes it. B appears in the list as
+    soon as opencode has used the memory in it once, that is right at the start of the session.
   - There is also an export as JSON or Markdown.
 - The memory does not accept **credentials**.
 - **Nobody but you** sees your entries, not even the administration.

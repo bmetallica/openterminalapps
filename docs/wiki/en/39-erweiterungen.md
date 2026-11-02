@@ -94,7 +94,9 @@ and embeds later.
   `memory_forget`. Every session sees only its own memory; subagents and forks share that of their
   root session.
 - **My account → Memory**: all sessions, grouped by workspace. There entries can be read, edited,
-  pinned, deleted, created and copied or moved to other sessions. There is also the export as JSON
+  pinned, deleted, created and copied or moved to other sessions. A session can also be given
+  **access to the memory of another one**: it then reads it along, read-only and not further
+  through that session's own accesses. There is also the export as JSON
   and Markdown and "delete everything".
 - **⋯ → Memory (opencode sessions)** on the tile: the same for the sessions of this workspace.
 

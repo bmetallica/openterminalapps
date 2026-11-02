@@ -98,7 +98,8 @@ trotzdem und bettet später nach.
   das ihrer Wurzelsitzung.
 - **Mein Konto → Gedächtnis**: alle Sitzungen, nach Arbeitsplatz gegliedert. Dort lassen sich
   Einträge lesen, bearbeiten, anheften, löschen, neu anlegen und in andere Sitzungen kopieren oder
-  verschieben. Außerdem gibt es den Export als JSON und Markdown und „alles löschen“.
+  verschieben. Eine Sitzung kann außerdem **Zugriff auf das Gedächtnis einer anderen** bekommen:
+  Sie liest es dann mit, nur lesend und nicht weiter über deren eigene Zugriffe. Außerdem gibt es den Export als JSON und Markdown und „alles löschen“.
 - **⋯ → Gedächtnis (opencode-Sitzungen)** auf der Kachel: dasselbe für die Sitzungen dieses
   Arbeitsplatzes.
 

@@ -110,8 +110,13 @@ Verlauf zusammenfasst und wenn du die Sitzung Tage später mit `opencode -c` for
   - Das Menü **⋯** der Kachel zeigt unter **Gedächtnis (opencode-Sitzungen)** nur die dieses
     Arbeitsplatzes.
   - Dort kannst du Einträge bearbeiten, anheften (sie kommen dann immer mit), löschen, selbst
-    anlegen und in eine andere Sitzung kopieren oder verschieben. Das ist der Weg, Wissen von einer
-    Sitzung in eine andere zu tragen.
+    anlegen und in eine andere Sitzung kopieren oder verschieben.
+  - **Mit dem Wissen einer anderen Sitzung weiterarbeiten:** Öffne die neue Sitzung B, wähle unter
+    **Zugriff auf andere Sitzungen** die Sitzung A und klicke **Zugriff geben**. Ab dem nächsten
+    Abruf liest B das Gedächtnis von A mit, gekennzeichnet mit seiner Herkunft. A selbst bleibt
+    unverändert: B kann dort nichts ändern, und was B speichert, bleibt bei B. **Zugriff entziehen**
+    macht es rückgängig. B erscheint in der Liste, sobald opencode darin einmal das Gedächtnis
+    benutzt hat, also gleich zu Beginn der Sitzung.
   - Dazu gibt es den Export als JSON oder Markdown.
 - **Zugangsdaten** nimmt das Gedächtnis nicht an.
 - **Niemand außer dir** sieht deine Einträge, auch die Verwaltung nicht.
