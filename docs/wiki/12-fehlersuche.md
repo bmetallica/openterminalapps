@@ -3,6 +3,22 @@
 Die hier dokumentierten Fälle sind beim Aufbau tatsächlich aufgetreten. Sie haben gemeinsam, dass sie
 **lautlos** scheitern — nichts stürzt ab, es funktioniert nur nicht.
 
+## Docker ist auf dem Wirt langsam
+
+Dauern `make update`, das Starten von Arbeitsplätzen oder schon `docker ps` Sekunden bis Minuten, findet
+`sudo scripts/docker-diagnose.sh` die üblichen Ursachen. Das Skript ändert nichts, es misst nur:
+
+- Antwortzeiten von Docker.
+- Last, Speicher und Swap, dazu PSI (wie lange Prozesse auf CPU, Platte und Speicher warten).
+- Platte: Füllstand, Inodes und ein kurzer Schreibtest, auch mit kleinen synchronen Schreibvorgängen,
+  wie Docker sie für seine Metadaten macht.
+- Wie viele Container, Netze, Images und wie viel Build-Cache es gibt; große Protokolle.
+- dockerd und containerd: CPU, Speicher und die Fehler im Protokoll der letzten Stunde.
+- Regeln in iptables und nft, Netz-Namensräume, conntrack.
+- Sysbox, Kernel-Meldungen zu Plattenfehlern und hängenden Aufgaben, Steal-Zeit in einer VM.
+
+Am Ende stehen Hinweise auf das, was auffällt. Der Bericht liegt unter `/tmp/docker-diagnose-<Zeit>.txt`.
+
 ## „Diese Sitzung läuft nicht mehr", obwohl sie gerade gestartet wurde
 
 Diese Seite kommt vom Schutzwall aus `deploy/traefik/dynamic/session-guard.yml`. Er antwortet, wenn

@@ -3,6 +3,22 @@
 The cases documented here actually occurred while building. What they have in common is that they
 fail **silently** — nothing crashes, it just does not work.
 
+## Docker is slow on the host
+
+If `make update`, starting workspaces or even `docker ps` take seconds to minutes,
+`sudo scripts/docker-diagnose.sh` finds the usual causes. The script changes nothing, it only measures:
+
+- Response times of Docker.
+- Load, memory and swap, plus PSI (how long processes wait for CPU, disk and memory).
+- Disk: fill level, inodes and a short write test, also with small synchronous writes, the way Docker
+  writes its metadata.
+- How many containers, networks, images and how much build cache there are; large logs.
+- dockerd and containerd: CPU, memory and the errors in the log of the last hour.
+- Rules in iptables and nft, network namespaces, conntrack.
+- Sysbox, kernel messages about disk errors and hung tasks, steal time in a VM.
+
+At the end there are hints about what stands out. The report is at `/tmp/docker-diagnose-<time>.txt`.
+
 ## "This session is no longer running", although it was just started
 
 This page comes from the guard in `deploy/traefik/dynamic/session-guard.yml`. It answers when **no**
