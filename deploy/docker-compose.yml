@@ -389,6 +389,9 @@ services:
       # der Oberfläche schalten. Die Fassung steht hier fest.
       OTA_GIT_IMAGE: "${OTA_GIT_IMAGE:-codeberg.org/forgejo/forgejo:15.0.11}"
       OTA_GIT_DB_PW: "${OTA_GIT_DB_PW:-}"
+      # Wo die Daten liegen (Kapitel 40). Leer: in Docker-Volumes.
+      OTA_GIT_DIR: "${OTA_GIT_DIR:-}"
+      OTA_PLATZ_DOCKER_ROOT: "${OTA_PLATZ_DOCKER_ROOT:-}"
       OTA_GIT_ADMIN_PW: "${OTA_GIT_ADMIN_PW:-}"
       POSTGRES_DB: "${POSTGRES_DB:-ota}"
     volumes:
@@ -409,6 +412,11 @@ services:
       # lässt es sich später ohne Änderung an OTA durch einen NFS-Mount
       # ersetzen — die Anwendung sieht weiterhin nur diesen Pfad.
       - ${OTA_BACKUP_ROOT:-/srv/ota/backups}:${OTA_BACKUP_ROOT:-/srv/ota/backups}
+      # Die Docker-Daten der Root-Arbeitsplätze, wenn sie ausserhalb des
+      # Docker-Verzeichnisses liegen (Kapitel 40): Der Agent legt dort an,
+      # misst und räumt. Ohne Einstellung ein leeres Verzeichnis, das er
+      # nicht benutzt.
+      - ${OTA_PLATZ_DOCKER_ROOT:-${OTA_RUNTIME_ROOT:-/srv/ota/runtime}/platz-docker}:${OTA_PLATZ_DOCKER_ROOT:-${OTA_RUNTIME_ROOT:-/srv/ota/runtime}/platz-docker}
       # Traefiks Dateien für OTA-Git: Zertifikat der Subdomain und dessen
       # Eintrag (ota-git.yml, git/). Nur diese schreibt der Agent; Traefik
       # liest das Verzeichnis und merkt Änderungen von selbst.
@@ -532,7 +540,9 @@ services:
       # verstecken, nicht entfernen.
       REGISTRY_STORAGE_DELETE_ENABLED: "true"
     volumes:
-      - registry-data:/var/lib/registry
+      # Ein Verzeichnis statt des Volumes, wenn OTA_REGISTRY_DIR gesetzt ist
+      # (Kapitel 40, scripts/daten-umziehen.sh).
+      - ${OTA_REGISTRY_DIR:-registry-data}:/var/lib/registry
     ports:
       - "127.0.0.1:${OTA_REGISTRY_PORT:-5000}:5000"
     networks:
@@ -556,7 +566,9 @@ services:
       # Deutsche Sortierung, damit Namenslisten erwartungsgemäss sortieren.
       POSTGRES_INITDB_ARGS: "--encoding=UTF8"
     volumes:
-      - db-data:/var/lib/postgresql/data
+      # Ein Verzeichnis statt des Volumes, wenn OTA_DB_DIR gesetzt ist
+      # (Kapitel 40, scripts/daten-umziehen.sh).
+      - ${OTA_DB_DIR:-db-data}:/var/lib/postgresql/data
     networks:
       # Bewusst NICHT im Netz "public" und nicht im Netz "sessions":
       # Die Datenbank ist von aussen und aus Session-Containern nicht erreichbar.

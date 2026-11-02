@@ -1876,15 +1876,105 @@ def docker_volume_name(session_id: str) -> str:
     return f"ota-platz-docker-{session_id}"
 
 
+# Wo die Docker-Daten der Root-Arbeitsplaetze liegen (Handbuch Kapitel 40).
+# Leer: im Docker-Verzeichnis des Wirts, wie bis zum 2026-11-02. Gesetzt: je
+# Platz ein Unterverzeichnis `<Wurzel>/<Volume-Name>`. Das Volume behaelt in
+# beiden Faellen seinen Namen; neue binden das Verzeichnis ein, umgezogene
+# (scripts/daten-umziehen.sh) zeigen per Verweis dorthin.
+PLATZ_DOCKER_ROOT = os.environ.get("OTA_PLATZ_DOCKER_ROOT", "").strip().rstrip("/")
+
+
+def _platz_docker_ort(name: str) -> str:
+    """Das Verzeichnis eines Volumes unter PLATZ_DOCKER_ROOT, wenn es eines gibt."""
+    if not PLATZ_DOCKER_ROOT:
+        return ""
+    ort = os.path.join(PLATZ_DOCKER_ROOT, name)
+    return ort if os.path.isdir(ort) else ""
+
+
+# Den Umzug zu Ende fuehren, den scripts/daten-umziehen.sh fuer einen
+# laufenden Platz nur vorkopieren konnte. Laeuft auf dem Wirt (chroot), weil
+# nur dort der Pfad des Volumes sichtbar ist, und mit dessen rsync — das
+# Skript braucht es ohnehin. Nachkopiert wird alles, was sich seit dem Start
+# der Vorkopie geaendert hat: am ctime, nicht an Groesse und Zeit wie bei
+# rsync ueblich, die fuer gleich grosse, in derselben Sekunde
+# ueberschriebene Dateien nichts merken.
+_NACHZIEHEN = r"""
+set -eu
+A=$1 Z=$2 M=$2.ota-umzug
+[ -f "$M" ] || exit 0
+[ "$(readlink -f "$A")" = "$(readlink -f "$Z")" ] && { rm -f "$M"; exit 0; }
+Q=$(readlink -f "$A")
+rsync -aHAXS --numeric-ids --delete "$Q"/ "$Z"/
+(cd "$Q" && find . -newercm "$M" \( -type f -o -type l \) -print0) \
+  | rsync -aHAXS --numeric-ids -I --from0 --files-from=- "$Q"/ "$Z"/
+if [ -L "$A" ]; then rm "$A"; else mv "$A" "$A.vor-umzug"; fi
+ln -s "$Z" "$A"
+[ "$Q" != "$A" ] && [ -d "$Q" ] && mv "$Q" "$Q.vor-umzug"
+rm -f "$M"
+"""
+
+
+def _platz_nachziehen(client, name: str) -> None:
+    """Vor dem Start eines angehaltenen Platzes: eine offene Vorkopie umschalten."""
+    if not PLATZ_DOCKER_ROOT:
+        return
+    ziel = os.path.join(PLATZ_DOCKER_ROOT, name)
+    if not os.path.exists(ziel + ".ota-umzug"):
+        return
+    try:
+        v = client.volumes.get(name)
+        anker = (v.attrs.get("Options") or {}).get("device") or v.attrs["Mountpoint"]
+        bild = client.containers.get(os.environ.get("HOSTNAME", "ota-agent")).image.id
+        beginn = time.monotonic()
+        client.containers.run(
+            bild, entrypoint=["chroot", "/host", "sh", "-c", _NACHZIEHEN, "nachziehen", anker, ziel],
+            remove=True, network_disabled=True, privileged=True, user="0",
+            volumes={"/": {"bind": "/host", "mode": "rw"}})
+        log.info("Docker-Daten von %s nach %s umgezogen (%.0f s)", name, ziel, time.monotonic() - beginn)
+    except (APIError, docker.errors.ContainerError, KeyError) as exc:
+        # Kein Grund, den Start zu verhindern: Er laeuft vom alten Ort.
+        log.warning("Umzug der Docker-Daten von %s nicht abgeschlossen: %s", name, exc)
+
+
 def _docker_volume(client, session_id: str) -> str:
     """Das Volume fuer `/var/lib/docker` — einmal je Platz, mit Kennzeichnung."""
     name = docker_volume_name(session_id)
     try:
         client.volumes.get(name)
+        _platz_nachziehen(client, name)
     except NotFound:
-        client.volumes.create(name=name, labels={"ota.session_id": session_id,
-                                                 "ota.zweck": "docker"})
+        optionen: dict[str, str] = {}
+        if PLATZ_DOCKER_ROOT:
+            ort = os.path.join(PLATZ_DOCKER_ROOT, name)
+            os.makedirs(ort, mode=0o711, exist_ok=True)
+            optionen = {"type": "none", "o": "bind", "device": ort}
+        client.volumes.create(name=name, driver="local", driver_opts=optionen or None,
+                              labels={"ota.session_id": session_id, "ota.zweck": "docker"})
     return name
+
+
+def _docker_volume_entfernen(client, name: str) -> None:
+    """Das Docker-Volume eines Platzes samt Daten, wo immer sie liegen.
+
+    Ein eingebundenes Verzeichnis laesst Docker beim Entfernen stehen; das
+    raeumt der Agent danach selbst. Ein umgezogenes Volume (Verweis nach
+    PLATZ_DOCKER_ROOT) entfernt Docker gar nicht, solange das Ziel besteht
+    („outside of the local volume root“) — erst ohne Ziel faellt es auf das
+    eigene Verzeichnis zurueck und loescht es ganz.
+    """
+    ort = _platz_docker_ort(name)
+    try:
+        client.volumes.get(name).remove(force=True)
+    except NotFound:
+        pass
+    except APIError as exc:
+        if not (ort and "outside of the local volume root" in str(exc)):
+            raise
+        shutil.rmtree(ort, ignore_errors=True)
+        client.volumes.get(name).remove(force=True)
+    if ort:
+        shutil.rmtree(ort, ignore_errors=True)
 
 
 def _anlagen_umgebung() -> dict[str, str]:
@@ -2397,9 +2487,7 @@ def remove_container(cid: str, daten: bool = False) -> dict[str, str]:
 
     if daten and session_id:
         try:
-            client.volumes.get(docker_volume_name(session_id)).remove(force=True)
-        except NotFound:
-            pass
+            _docker_volume_entfernen(client, docker_volume_name(session_id))
         except APIError as exc:
             log.warning("Docker-Volume von %s bleibt: %s", session_id, exc)
         try:
@@ -2487,6 +2575,8 @@ def fortsetzen(cid: str, body: "FortsetzenRequest | None" = None) -> dict[str, A
         )
     netz_ops.anbindung_sichern(client)
     lauf.schritt("container")
+    if c.status not in ("running", "paused"):
+        _platz_nachziehen(client, docker_volume_name(sid))
     try:
         if c.status == "paused":
             c.unpause()
@@ -2612,7 +2702,10 @@ def _platz_messen(client, c) -> dict[str, int]:
     except APIError:
         schicht = 0
     sid = (c.labels or {}).get("ota.session_id", "")
-    docker_bytes = _volume_groessen(client).get(docker_volume_name(sid), 0)
+    # Liegt das Volume unter PLATZ_DOCKER_ROOT, kennt `docker system df` seine
+    # Groesse nicht (eingebunden: keine Angabe, umgezogen: die des Verweises).
+    ort = _platz_docker_ort(docker_volume_name(sid))
+    docker_bytes = _du(ort) if ort else _volume_groessen(client).get(docker_volume_name(sid), 0)
     wert = {"schicht": schicht, "docker": docker_bytes, "gesamt": schicht + docker_bytes}
     _platz_zwischen[c.id] = wert
     return wert

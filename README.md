@@ -362,6 +362,11 @@ dabei **nicht** zurückwandert, ist die Datenbank: Neue Spalten bleiben stehen. 
     opencode-Sitzung bekommt ein eigenes Langzeitgedächtnis, mit Embeddings von vLLM oder
     llama.cpp.
   - Siehe [Kapitel 39](docs/wiki/39-erweiterungen.md).
+- **Datenorte:** Datenbanken, Registry, OTA-Git und die Docker-Daten der Root-Arbeitsplätze lassen
+  sich über `.env` auf eine eigene Platte legen, etwa eine SSD; die Nutzerdaten bleiben auf der
+  großen. `scripts/daten-umziehen.sh` zieht im laufenden Betrieb um und schaltet in Sekunden um.
+  Laufende Root-Arbeitsplätze werden nie angehalten, sondern beim nächsten Fortsetzen umgeschaltet.
+  Siehe [Kapitel 40](docs/wiki/40-datenorte.md).
 - **Softwaremonitoring:** Stündlich wird erfasst, welche Anwendungen in jedem laufenden
   Arbeitsplatz installiert sind (apt, Startmenü, Flatpak, Snap), ohne Versionen. Dazu gibt es eine
   Whitelist, befüllbar aus dem aktuellen Stand. Was nicht darauf steht, sehen Administratoren auf

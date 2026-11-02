@@ -68,6 +68,7 @@ heute schon funktioniert.
 12. [Fehlersuche](12-fehlersuche.md)
 13. [Lizenzen](13-lizenzen.md)
 14. [Sicherung und Wiederherstellung](14-sicherung.md)
+40. [Wo die Daten liegen: Datenbanken auf SSD, Nutzerdaten auf HDD](40-datenorte.md)
 15. [Ein Profil aus Kasm übernehmen](15-migration-aus-kasm.md)
 24. [Betrieb hinter einer Firewall mit NAT](24-hinter-nat.md)
 26. [Die eigene Paketquelle](26-paketquellen.md)

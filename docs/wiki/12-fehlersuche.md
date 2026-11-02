@@ -24,7 +24,8 @@ Schreibvorgänge je Sekunde (unter 100). Dann wartet jeder Container-Start, jede
 jede Datenbank in einem Volume auf die Platte. Abhilfe schafft nur schnellerer Speicher im Hypervisor
 (SSD statt HDD oder Netzspeicher, passender Cache-Modus des virtuellen Laufwerks). btrfs unter dem
 Docker-Verzeichnis verstärkt das, weil btrfs bei vielen `fsync` deutlich langsamer ist als ext4 oder
-xfs. Der Bericht liegt unter `/tmp/docker-diagnose-<Zeit>.txt`.
+xfs. Datenbanken und Docker-Daten von OTA lassen sich im laufenden Betrieb auf eine SSD umziehen
+([Kapitel 40](40-datenorte.md)). Der Bericht liegt unter `/tmp/docker-diagnose-<Zeit>.txt`.
 
 ## „Diese Sitzung läuft nicht mehr", obwohl sie gerade gestartet wurde
 

@@ -23,7 +23,8 @@ At the end there are hints about what stands out. The most common finding in VMs
 synchronous writes per second (below 100). Then every container start, every image layer and every
 database in a volume waits for the disk. Only faster storage in the hypervisor helps (SSD instead of
 HDD or network storage, a suitable cache mode for the virtual drive). btrfs under the Docker
-directory makes it worse, because btrfs is much slower than ext4 or xfs with many `fsync` calls. The report is at `/tmp/docker-diagnose-<time>.txt`.
+directory makes it worse, because btrfs is much slower than ext4 or xfs with many `fsync` calls.
+OTA's databases and Docker data can be moved to an SSD while running ([chapter 40](40-datenorte.md)). The report is at `/tmp/docker-diagnose-<time>.txt`.
 
 ## "This session is no longer running", although it was just started
 

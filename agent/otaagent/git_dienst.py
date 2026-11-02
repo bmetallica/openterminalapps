@@ -34,6 +34,9 @@ log = logging.getLogger("otaagent.git")
 
 NAME = "ota-git"
 VOLUME = "ota_git_daten"
+# Statt des Volumes ein Verzeichnis auf dem Wirt (Handbuch Kapitel 40), etwa
+# auf einer SSD. Leer: das Volume.
+DATEN = os.environ.get("OTA_GIT_DIR", "").strip() or VOLUME
 BILD = os.environ.get("OTA_GIT_IMAGE", "codeberg.org/forgejo/forgejo:15.0.11")
 RUNTIME_ROOT = os.environ.get("OTA_RUNTIME_ROOT", "/srv/ota/runtime")
 TRAEFIK_DYNAMIC = "/ota/traefik-dynamic"
@@ -271,9 +274,12 @@ def status(client) -> dict[str, Any]:
     # Update mit neuer Forgejo-Fassung (Sicherheitskorrektur) läuft er
     # sonst auf der alten weiter, bis jemand Git aus- und einschaltet.
     angelegt = (c.attrs.get("Config") or {}).get("Image") or ""
+    # Ebenso nach einem Umzug der Daten: Der Container haengt noch das alte ein.
+    quelle = next((m.get("Name") or m.get("Source") or "" for m in c.attrs.get("Mounts") or []
+                   if m.get("Destination") == "/data"), "")
     return {"container": c.status, "gesund": gesund, "bild": c.image.tags[0] if c.image.tags else BILD,
             "domain": (c.labels or {}).get("ota.git.domain", ""),
-            "veraltet": bool(angelegt) and angelegt != BILD}
+            "veraltet": (bool(angelegt) and angelegt != BILD) or (bool(quelle) and quelle != DATEN)}
 
 
 def an(client, domain: str, umgebung: dict[str, str], ota_url: str = "") -> dict[str, Any]:
@@ -299,7 +305,8 @@ def an(client, domain: str, umgebung: dict[str, str], ota_url: str = "") -> dict
     env.setdefault("USER_GID", "1000")
 
     fingerabdruck = hashlib.sha256(json.dumps(
-        {"bild": BILD, "domain": domain, "ota": name, "env": sorted(env.items())}, sort_keys=True
+        {"bild": BILD, "domain": domain, "ota": name, "env": sorted(env.items()),
+         **({"daten": DATEN} if DATEN != VOLUME else {})}, sort_keys=True
     ).encode()).hexdigest()[:16]
 
     try:
@@ -320,7 +327,7 @@ def an(client, domain: str, umgebung: dict[str, str], ota_url: str = "") -> dict
     c = client.containers.create(
         BILD, name=NAME, hostname=NAME, detach=True,
         environment=env, labels=beschriftung,
-        volumes={VOLUME: {"bind": "/data", "mode": "rw"},
+        volumes={DATEN: {"bind": "/data", "mode": "rw"},
                  _ca_ordner(): {"bind": "/etc/ota-ca", "mode": "ro"}},
         network=OEFFENTLICH,
         restart_policy={"Name": "unless-stopped"},

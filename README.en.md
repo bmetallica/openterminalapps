@@ -356,6 +356,10 @@ that did not exist before is simply there.
     ([plugin_ota-opencode](https://github.com/bmetallica/plugin_ota-opencode)). Every opencode
     session gets its own long-term memory, with embeddings from vLLM or llama.cpp.
   - See [chapter 39](docs/wiki/en/39-erweiterungen.md).
+- **Data locations:** databases, registry, OTA-Git and the Docker data of root workspaces can be
+  placed on a disk of their own via `.env`, e.g. an SSD; user data stays on the big one.
+  `scripts/daten-umziehen.sh` copies while running and switches in seconds. Running root workspaces
+  are never stopped but switched at their next resume. See [chapter 40](docs/wiki/en/40-datenorte.md).
 - **Software monitoring:** every hour OTA records which applications are installed in each running
   workspace (apt, start menu, Flatpak, Snap), without versions. There is a whitelist that can be
   filled from the current state. Whatever is not on it, administrators see on the dashboard and

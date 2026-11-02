@@ -7,6 +7,7 @@ deploy/certs/*
 !deploy/certs/.gitkeep
 
 deploy/.env
+deploy/.umzug-alte-orte
 .env
 __pycache__/
 *.pyc

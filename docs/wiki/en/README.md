@@ -68,6 +68,7 @@ configuration decisions can be made with foresight — but it always says what a
 12. [Troubleshooting](12-fehlersuche.md)
 13. [Licences](13-lizenzen.md)
 14. [Backup and restore](14-sicherung.md)
+40. [Where the data lives: databases on SSD, user data on HDD](40-datenorte.md)
 15. [Taking over a profile from Kasm](15-migration-aus-kasm.md)
 24. [Operating behind a firewall with NAT](24-hinter-nat.md)
 26. [The own package repository](26-paketquellen.md)
