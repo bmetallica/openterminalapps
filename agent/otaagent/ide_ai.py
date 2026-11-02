@@ -303,6 +303,31 @@ def _ueber_exec(container, quelle: str, ziel: str) -> None:
         raise OSError(f"{ziel}: Groesse stimmt nicht ({out!r})")
 
 
+# Ein dpkg je Container zur Zeit. IDE-AI und opencode (opencode.py)
+# installieren beide im Hintergrund — gleichzeitig scheiterte das zweite an
+# der Sperre von dpkg und versuchte es nicht wieder (2026-11-02, ein
+# Arbeitsplatz mit VSCodium: opencode fehlte).
+_dpkg_sperren: dict[str, threading.Lock] = {}
+
+
+def dpkg_installieren(container, datei: str, run_as_root: Callable) -> tuple[int, str]:
+    """`dpkg -i` für eine Datei im Container; danach ist sie weg. Wartet auf
+    die eigene andere Installation und, bis zu fünf Minuten, auf ein dpkg
+    oder apt, das jemand im Arbeitsplatz selbst gestartet hat."""
+    with _sperre:
+        sperre = _dpkg_sperren.setdefault(container.id, threading.Lock())
+    with sperre:
+        frist = time.monotonic() + 300
+        while True:
+            c, aus = run_as_root(container, ["sh", "-c", f"DEBIAN_FRONTEND=noninteractive dpkg -i '{datei}' 2>&1"])
+            belegt = c != 0 and re.search(r"(frontend lock|Frontend-Sperre|lock.*held|gesperrt)", aus)
+            if not belegt or time.monotonic() > frist:
+                break
+            time.sleep(5)
+        run_as_root(container, ["rm", "-f", datei])
+    return c, aus
+
+
 def _pakete(container, fassungen: dict[str, str], run_as_root: Callable,
             erzwingen: bool = False) -> bool:
     """True, wenn ein Paket neu installiert oder angehoben wurde.
@@ -332,9 +357,7 @@ def _pakete(container, fassungen: dict[str, str], run_as_root: Callable,
         except (urllib.error.URLError, OSError) as exc:
             log.warning("IDE-AI in %s: %s %s nicht geholt: %s", container.name, name, soll, exc)
             continue
-        c, aus = run_as_root(container, ["sh", "-c",
-                                         f"DEBIAN_FRONTEND=noninteractive dpkg -i '{datei}' 2>&1; "
-                                         f"r=$?; rm -f '{datei}'; exit $r"])
+        c, aus = dpkg_installieren(container, datei, run_as_root)
         if c == 0:
             neu = True
             log.info("IDE-AI in %s: %s %s -> %s", container.name, name, ist or "neu", soll)

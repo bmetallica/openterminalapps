@@ -1,0 +1,71 @@
+# ERZEUGT vom Agent aus den Erweiterungen in OTA (Kapitel 39).
+{
+  "http": {
+    "routers": {
+      "erw-gedaechtnis-platz": {
+        "rule": "Host(`ota-erweiterungen`) && ClientIP(`10.99.0.0/16`) && (PathPrefix(`/gedaechtnis/mcp`))",
+        "entryPoints": [
+          "erweiterungen"
+        ],
+        "middlewares": [
+          "erw-gedaechtnis-ab"
+        ],
+        "service": "erw-gedaechtnis"
+      },
+      "erw-gedaechtnis-ansicht": {
+        "rule": "PathPrefix(`/x/gedaechtnis/ansicht/`)",
+        "entryPoints": [
+          "websecure"
+        ],
+        "tls": {},
+        "priority": 900,
+        "service": "erw-gedaechtnis",
+        "middlewares": [
+          "erw-gedaechtnis-anmeldung",
+          "erw-gedaechtnis-ansicht-ab",
+          "ota-headers@file"
+        ]
+      }
+    },
+    "middlewares": {
+      "erw-gedaechtnis-ab": {
+        "stripPrefix": {
+          "prefixes": [
+            "/gedaechtnis"
+          ]
+        }
+      },
+      "erw-gedaechtnis-anmeldung": {
+        "forwardAuth": {
+          "address": "http://api:8000/api/erweiterungen/gedaechtnis/pruefen",
+          "trustForwardHeader": true,
+          "authResponseHeaders": [
+            "X-OTA-Nutzer",
+            "X-OTA-Name",
+            "X-OTA-Arbeitsplaetze",
+            "X-OTA-Zeit",
+            "X-OTA-Signatur"
+          ]
+        }
+      },
+      "erw-gedaechtnis-ansicht-ab": {
+        "stripPrefix": {
+          "prefixes": [
+            "/x/gedaechtnis"
+          ]
+        }
+      }
+    },
+    "services": {
+      "erw-gedaechtnis": {
+        "loadBalancer": {
+          "servers": [
+            {
+              "url": "http://ota-gedaechtnis:8080"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

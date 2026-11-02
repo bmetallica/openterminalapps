@@ -144,6 +144,31 @@ if [ -d "$PLUGIN" ]; then
   ERW=1
 fi
 
+# ------------------------------------------------------------------ normaler Arbeitsplatz mit Editor
+# Dort installiert IDE-AI im Hintergrund gleichzeitig sein Paket. Bis zum
+# 2026-11-02 scheiterte opencode dann an der Sperre von dpkg.
+echo
+echo "Im normalen Arbeitsplatz mit Editor (IDE-AI installiert gleichzeitig)"
+ED_TID=""
+for zeile in $(docker exec ota-db psql -U ota -d ota -At -c "select id || '|' || image_ref from templates where is_enabled and klasse = 'standard'"); do
+  IMG="${zeile#*|}"
+  docker run --rm --entrypoint sh "$IMG" -c 'command -v dpkg >/dev/null && ls -d /usr/share/codium /usr/share/code /opt/*/product-info.json 2>/dev/null | head -1' 2>/dev/null | grep -q . \
+    && { ED_TID="${zeile%%|*}"; break; }
+done
+if [ -z "$ED_TID" ] || [ "$(jqp "d['an']" <<<"$VORHER_KI")" != "True" ]; then
+  info "(übersprungen — keine Vorlage mit Editor und dpkg, oder IDE-AI aus)"
+else
+  ED_SID=$(api -X POST "$B/api/sessions" -d "{\"template_id\":\"$ED_TID\"}" | jqp "d['id']")
+  ED_CN="ota-s-${ED_SID:0:12}"
+  for _ in $(seq 1 80); do
+    docker exec "$ED_CN" dpkg-query -W -f='${Version}' ota-opencode 2>/dev/null | grep -q "$FASSUNG" && break; sleep 3
+  done
+  expect "$FASSUNG" "$(docker exec "$ED_CN" dpkg-query -W -f='${Version}' ota-opencode 2>/dev/null)" "opencode installiert, obwohl IDE-AI gleichzeitig installiert"
+  docker logs ota-agent --since 5m 2>&1 | grep "$ED_CN" | grep -q "Sperre\|lock" \
+    && info "(dpkg war belegt — der Agent hat gewartet)"
+  api -X DELETE "$B/api/sessions/$ED_SID" >/dev/null
+fi
+
 # ------------------------------------------------------------------ Arbeitsplatz
 echo
 echo "Im Root-Arbeitsplatz"

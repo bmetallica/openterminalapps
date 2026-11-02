@@ -252,8 +252,7 @@ def _paket(container, soll: str, run_as_root: Callable, erzwingen: bool = False)
     except (urllib.error.URLError, OSError) as exc:
         log.warning("opencode in %s: %s %s nicht geholt: %s", container.name, PAKET, soll, exc)
         return False
-    c, aus = run_as_root(container, ["sh", "-c", f"DEBIAN_FRONTEND=noninteractive dpkg -i '{datei}' 2>&1; "
-                                                 f"r=$?; rm -f '{datei}'; exit $r"])
+    c, aus = ide_ai.dpkg_installieren(container, datei, run_as_root)
     if c != 0:
         log.warning("opencode in %s: %s nicht installiert: %s", container.name, PAKET, aus.strip()[-300:])
         return False
