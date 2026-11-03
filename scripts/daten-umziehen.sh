@@ -104,8 +104,16 @@ kopieren() { # <Quelle> <Ziel> — Besitzer, Rechte, Hardlinks, ACLs, xattrs (Ov
   mkdir -p "$2"
   local fortschritt=()
   [ -t 1 ] && fortschritt=(--info=progress2 --no-inc-recursive)
-  rsync -aHAXS --numeric-ids --delete "${fortschritt[@]}" "$1"/ "$2"/
+  local rc=0
+  rsync -aHAXS --numeric-ids --delete "${fortschritt[@]}" "$1"/ "$2"/ || rc=$?
+  # 24: Dateien verschwanden während des Kopierens — im laufenden Betrieb
+  # normal (Temporäres, Logs, WAL). Was fehlt, holt der letzte Abgleich.
+  [ "$rc" = 24 ] && { echo "  (Einige Dateien verschwanden beim Kopieren — im laufenden Betrieb normal.)"; rc=0; }
+  return "$rc"
 }
+# Die Marke zeigt den Beginn der ersten Vorkopie. Spätere Läufe lassen sie
+# stehen: Der letzte Abgleich kopiert alles neu, was sich seitdem geändert hat.
+marke() { [ -f "$1.ota-umzug" ] || touch "$1.ota-umzug"; }
 # Der letzte Abgleich, mit angehaltenem Dienst. rsync allein vergleicht
 # Größe und Zeit auf die Sekunde — Postgres überschreibt WAL-Dateien gleicher
 # Größe aber mehrmals je Sekunde, und so eine Kopie startet nicht (im Test
@@ -182,7 +190,7 @@ platz_umziehen() { # <Volume> <Wurzel|volume> — 0: umgeschaltet, 1: Fehler, 2:
   [ "$quelle" = "$(readlink -f "$ziel" 2>/dev/null)" ] && { echo "  $v liegt schon dort."; return 0; }
   ziel_pruefen "$ziel" "$quelle" || return 1
   echo "  $v: kopieren …"
-  touch "$ziel.ota-umzug"
+  marke "$ziel"
   kopieren "$quelle" "$ziel" || return 1
   [ "$NUR_KOPIEREN" = 1 ] && return 2
   if platz_belegt "$v"; then
@@ -231,7 +239,7 @@ dienst_umziehen() {
   if [ "$wunsch" = volume ]; then
     docker volume inspect "$vol" >/dev/null 2>&1 || docker volume create "$vol" >/dev/null
     ziel=$(volume_pfad "$vol"); wert=""
-    touch "$ziel.ota-umzug"
+    marke "$ziel"
   else
     ziel=$wunsch; wert=$wunsch
   fi
@@ -243,7 +251,7 @@ dienst_umziehen() {
   [ "$wunsch" = volume ] || ziel_pruefen "$ziel" "$quelle" || return 1
   echo "  Von $quelle"
   echo "  nach $ziel — kopieren im laufenden Betrieb …"
-  touch "$ziel.ota-umzug"
+  marke "$ziel"
   kopieren "$quelle" "$ziel" || return 1
   [ "$NUR_KOPIEREN" = 1 ] && { echo "  Vorkopiert."; return 0; }
   fragen "  $teil jetzt umschalten? Der Dienst steht dafür einige Sekunden." || { echo "  Nicht umgeschaltet."; return 0; }
@@ -386,7 +394,9 @@ if [ -n "${ZIEL[platz-docker]:-}" ]; then
     fi
     AGENT_NEU=1
   fi
-  [ ${#OFFEN[@]} -gt 0 ] && echo "  Laufend, vorkopiert: ${OFFEN[*]}"
+  if [ ${#OFFEN[@]} -gt 0 ]; then
+    [ "$NUR_KOPIEREN" = 1 ] && echo "  Vorkopiert: ${OFFEN[*]}" || echo "  Laufend, vorkopiert: ${OFFEN[*]}"
+  fi
 fi
 
 if [ "$AGENT_NEU" = 1 ] && [ "$NUR_KOPIEREN" = 0 ]; then

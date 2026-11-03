@@ -60,6 +60,8 @@ sudo scripts/daten-umziehen.sh --db /ssd/ota/db --platz-docker /ssd2/platz-docke
 Je Teil:
 
 1. **Kopieren im laufenden Betrieb** mit `rsync`. Das dauert je nach Platte, stört aber niemanden.
+   Meldungen `file has vanished` sind dabei normal: Dienste und Plätze löschen weiter Temporäres,
+   Logs und WAL-Dateien. Was dadurch fehlt, holt der letzte Abgleich nach.
 2. **Umschalten.** Der Dienst hält an, ein letzter Abgleich überträgt nur noch die Änderungen
    (Sekunden). Dann trägt das Skript den Ort in `.env` ein, legt den Dienst neu an und wartet, bis
    er gesund ist. Wird er es nicht, schaltet es auf den alten Ort zurück.
@@ -69,6 +71,7 @@ Während die Datenbank umschaltet, zeigt OTA das Update-Banner. Die Oberfläche 
 niemanden hinaus. Laufende Arbeitsplätze bleiben verbunden.
 
 `--nur-kopieren` macht nur Schritt 1. Das geht beliebig oft; danach ist das Umschalten schneller.
+Der letzte Abgleich rechnet dabei immer ab dem Beginn der ersten Vorkopie.
 `--ja` fragt nicht nach.
 
 ### Laufende Root-Arbeitsplätze

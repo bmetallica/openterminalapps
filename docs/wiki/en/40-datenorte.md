@@ -59,6 +59,8 @@ sudo scripts/daten-umziehen.sh --db /ssd/ota/db --platz-docker /ssd2/platz-docke
 Per part:
 
 1. **Copy while running** with `rsync`. This takes as long as the disk needs, but disturbs nobody.
+   Messages `file has vanished` are normal here: services and workspaces keep deleting temporary
+   files, logs and WAL files. The last sync fetches whatever is missing because of that.
 2. **Switch.** The service stops, a last sync transfers only the changes (seconds). Then the script
    writes the location into `.env`, recreates the service and waits until it is healthy. If it does
    not become healthy, it switches back to the old location.
@@ -68,6 +70,7 @@ While the database switches, OTA shows the update banner. The UI waits briefly a
 Running workspaces stay connected.
 
 `--nur-kopieren` does only step 1. It can run any number of times; afterwards switching is faster.
+The last sync always counts from the start of the first pre-copy.
 `--ja` does not ask.
 
 ### Running root workspaces
