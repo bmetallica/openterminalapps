@@ -20,9 +20,9 @@ kopf() { printf '\n\033[1m== %s ==\033[0m\n' "$1"; }
 z() { timeout "${2:-30}" bash -c "$1" 2>&1 || echo "(abgebrochen oder Fehler: $?)"; }
 # messen <Name> <Befehl>: Dauer in Millisekunden
 messen() {
-  local beginn ende
+  local beginn ende code=0
   beginn=$(date +%s%N)
-  timeout 120 bash -c "$2" >/dev/null 2>&1
+  timeout 120 bash -c "$2" >/dev/null 2>&1 || code=$?
   ende=$(date +%s%N)
   local ms=$(( (ende - beginn) / 1000000 ))
   printf '  %-34s %7d ms%s\n' "$1" "$ms" "$([ $code -eq 124 ] && echo '   (nach 120 s abgebrochen!)')" >&2
@@ -138,8 +138,47 @@ if [ -d /var/lib/containerd ] && [ "$(stat -c %d /var/lib/containerd)" != "$(sta
   echo "(/var/lib/containerd liegt auf $(df --output=source /var/lib/containerd | tail -1) — dort liegen Images und Container-Schichten)"
   schreibtest /var/lib/containerd
 fi
-if [ "$FSTYP" = btrfs ]; then
+# Die Datenorte von OTA (scripts/daten-umziehen.sh) — je Platte einmal.
+OTA_ENV="$(dirname "$(readlink -f "$0")")/../deploy/.env"
+GEPRUEFT=" $(stat -c %d "$ROOTDIR") $(stat -c %d /var/lib/containerd 2>/dev/null) "
+DB_ANDERSWO=0
+if [ -f "$OTA_ENV" ]; then
+  for k in OTA_DB_DIR OTA_REGISTRY_DIR OTA_GIT_DIR OTA_PLATZ_DOCKER_ROOT; do
+    d=$(sed -n "s/^$k=//p" "$OTA_ENV" | tail -1 | tr -d "\"' ")
+    [ -n "$d" ] && [ -d "$d" ] || continue
+    [ "$k" = OTA_DB_DIR ] && DB_ANDERSWO=1
+    g=$(stat -c %d "$d")
+    case "$GEPRUEFT" in *" $g "*) continue ;; esac
+    GEPRUEFT="$GEPRUEFT$g "
+    echo "($k liegt auf $(df --output=source "$d" | tail -1))"
+    schreibtest "$d"
+  done
+fi
+if [ "$FSTYP" = btrfs ] && [ "$DB_ANDERSWO" = 0 ]; then
   hinweis "$ROOTDIR liegt auf btrfs. btrfs schreibt jede Änderung an eine neue Stelle (Copy-on-Write) und ist bei vielen fsync — Datenbanken in Volumes — deutlich langsamer als ext4/xfs; in einer VM auf einem qcow2-Abbild kommt ein zweites Copy-on-Write dazu. Für Volumes mit Datenbanken hilft 'chattr +C' auf ein leeres Verzeichnis, besser ext4 oder xfs."
+fi
+
+# ------------------------------------------------------------------ OTA
+if docker inspect ota-db >/dev/null 2>&1; then
+  kopf "OTA (normal: Abfrage und Seiten unter 100 ms)"
+  messen "Datenbank: SELECT 1" "docker exec ota-db sh -c 'psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -qAtc \"select 1\"'" >/dev/null
+  docker inspect ota-registry >/dev/null 2>&1 &&
+    messen "Registry: Katalog" "docker exec ota-registry wget -qO- http://127.0.0.1:5000/v2/_catalog" >/dev/null
+  PORT=$( [ -f "$OTA_ENV" ] && sed -n 's/^OTA_HTTPS_PORT=//p' "$OTA_ENV" | tail -1)
+  if command -v curl >/dev/null; then
+    for u in / /auth/; do
+      printf '  %-34s %s\n' "Seite $u" "$(curl -sk -o /dev/null -m 30 -w '%{http_code} in %{time_total} s' "https://127.0.0.1:${PORT:-443}$u" 2>&1)"
+    done
+  fi
+  # Wie oft je Sekunde Postgres auf seiner Platte sicher schreiben kann —
+  # das bestimmt, wie schnell jede Änderung in OTA fertig ist.
+  echo "  fsync im Datenverzeichnis der Datenbank (pg_test_fsync, ~15 s):"
+  FS=$(timeout 90 docker exec ota-db pg_test_fsync -s 2 -f /var/lib/postgresql/data/.ota-diagnose-fsync 2>&1 | grep -E '^\s+(fdatasync|open_datasync)' | head -2)
+  docker exec ota-db rm -f /var/lib/postgresql/data/.ota-diagnose-fsync 2>/dev/null
+  echo "${FS:-    (nicht messbar)}"
+  FS_OPS=$(echo "$FS" | awk '/fdatasync/ {print int($2)}' | head -1)
+  [ -n "$FS_OPS" ] && [ "$FS_OPS" -lt 200 ] &&
+    hinweis "Postgres schafft nur $FS_OPS fdatasync/s (gesund auf SSD: > 1000) — jede Änderung in OTA wartet darauf."
 fi
 
 # ------------------------------------------------------------------ Docker selbst

@@ -13,7 +13,10 @@ If `make update`, starting workspaces or even `docker ps` take seconds to minute
 - Disk: fill level, inodes and a short write test, also with small synchronous writes, the way Docker
   writes its metadata. It tests the Docker directory and, if it is on another disk,
   `/var/lib/containerd`: with the `overlayfs` storage driver (containerd) images and container layers
-  live there, not under `DockerRootDir`.
+  live there, not under `DockerRootDir`. Plus every separate disk OTA's data was moved to
+  ([chapter 40](40-datenorte.md)).
+- OTA itself: a database query, the registry catalog, the start page and the login, plus
+  `pg_test_fsync` in the database's data directory (healthy on SSD: above 1000/s).
 - How many containers, networks, images and how much build cache there are; large logs.
 - dockerd and containerd: CPU, memory and the errors in the log of the last hour.
 - Rules in iptables and nft, network namespaces, conntrack.
