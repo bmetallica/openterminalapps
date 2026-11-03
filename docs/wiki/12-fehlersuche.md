@@ -30,6 +30,10 @@ Docker-Verzeichnis verstärkt das, weil btrfs bei vielen `fsync` deutlich langsa
 xfs. Datenbanken und Docker-Daten von OTA lassen sich im laufenden Betrieb auf eine SSD umziehen
 ([Kapitel 40](40-datenorte.md)). Der Bericht liegt unter `/tmp/docker-diagnose-<Zeit>.txt`.
 
+Ist die Platte am Limit, zeigt `sudo scripts/platten-last.sh [Pfad] [Sekunden]`, wer sie belastet:
+Lesen und Schreiben je Container und je Prozess, die Auslastung der Platte, wer auf sie wartet, und
+bei btrfs Quotas, Snapshots, Balance und Scrub. Ohne Angabe misst es `/storage` 30 Sekunden lang.
+
 ## „Diese Sitzung läuft nicht mehr", obwohl sie gerade gestartet wurde
 
 Diese Seite kommt vom Schutzwall aus `deploy/traefik/dynamic/session-guard.yml`. Er antwortet, wenn

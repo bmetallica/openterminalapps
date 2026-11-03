@@ -29,6 +29,10 @@ HDD or network storage, a suitable cache mode for the virtual drive). btrfs unde
 directory makes it worse, because btrfs is much slower than ext4 or xfs with many `fsync` calls.
 OTA's databases and Docker data can be moved to an SSD while running ([chapter 40](40-datenorte.md)). The report is at `/tmp/docker-diagnose-<time>.txt`.
 
+If the disk is at its limit, `sudo scripts/platten-last.sh [path] [seconds]` shows who loads it:
+reads and writes per container and per process, the disk's utilisation, who waits for it, and for
+btrfs quotas, snapshots, balance and scrub. Without arguments it measures `/storage` for 30 seconds.
+
 ## "This session is no longer running", although it was just started
 
 This page comes from the guard in `deploy/traefik/dynamic/session-guard.yml`. It answers when **no**
