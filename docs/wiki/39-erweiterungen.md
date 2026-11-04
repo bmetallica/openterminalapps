@@ -101,8 +101,14 @@ trotzdem und bettet später nach.
   Einträge lesen, bearbeiten, anheften, löschen, neu anlegen und in andere Sitzungen kopieren oder
   verschieben. Eine Sitzung kann außerdem **Zugriff auf das Gedächtnis einer anderen** bekommen:
   Sie liest es dann mit, nur lesend und nicht weiter über deren eigene Zugriffe. Außerdem gibt es den Export als JSON und Markdown und „alles löschen“.
+- **Hauptgedächtnis**, ganz oben in der Liste: Einträge, die **alle** Sitzungen dieses Menschen
+  mitlesen, auch künftige. Nur er pflegt es, hier in OTA; opencode liest es nur und weist Ändern,
+  Löschen und Speichern dorthin ab. Angeheftetes bekommt jede Sitzung bei jedem Abruf
+  (`memory_recall`), alles andere findet sie über `memory_search`. So füllt ein großes
+  Hauptgedächtnis nicht jeden Sitzungsstart. Es läuft nicht ab. Einträge aus einer Sitzung lassen
+  sich hineinkopieren.
 - **⋯ → Gedächtnis (opencode-Sitzungen)** auf der Kachel: dasselbe für die Sitzungen dieses
-  Arbeitsplatzes.
+  Arbeitsplatzes, ohne das Hauptgedächtnis.
 
 Mehr für die Menschen steht in [Kapitel 33](33-entwickeln.md#opencode-und-sein-gedächtnis-).
 

@@ -100,7 +100,12 @@ and embeds later.
   **access to the memory of another one**: it then reads it along, read-only and not further
   through that session's own accesses. There is also the export as JSON
   and Markdown and "delete everything".
-- **⋯ → Memory (opencode sessions)** on the tile: the same for the sessions of this workspace.
+- **Main memory**, at the top of the list: entries that **all** sessions of this person read along,
+  future ones too. Only the person maintains it, here in OTA; opencode only reads it and refuses
+  to change, delete or save into it. Every session gets pinned entries with every recall
+  (`memory_recall`) and finds everything else via `memory_search`, so a large main memory does not
+  fill every session start. It does not expire. Entries from a session can be copied into it.
+- **⋯ → Memory (opencode sessions)** on the tile: the same for the sessions of this workspace, without the main memory.
 
 More for the people is in [chapter 33](33-entwickeln.md#opencode-and-its-memory-).
 
