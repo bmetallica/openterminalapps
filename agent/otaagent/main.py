@@ -2098,6 +2098,20 @@ def _umgebung_datei(session_id: str) -> Path:
     return Path(RUNTIME_ROOT) / "plaetze" / session_id / "umgebung.sh"
 
 
+# **Alte PID-Dateien weg, bevor `dockerd` startet.** `/run` liegt im Root-
+# Arbeitsplatz in der Schicht des Containers und überlebt Anhalten und
+# Fortsetzen. Endet `dockerd` nicht geordnet, bleibt die PID-Datei von
+# containerd liegen; beim nächsten Start trägt oft schon ein anderer Prozess
+# dieselbe Nummer, und `dockerd` gibt auf („failed to save containerd pid to
+# disk: process with PID 117 is still running"). Gefunden am 2026-11-04 nach
+# einem Anhalten, bei dem containerd nicht in der Frist fertig wurde.
+# Nur wenn root_startup.sh liest (PID 1): Dann läuft noch kein `dockerd`.
+_DOCKER_PIDS_SKRIPT = r"""
+if [ "$$" = 1 ] && [ "$(id -u)" = 0 ] && [ "${OTA_DOCKER:-0}" = 1 ]; then
+  rm -f /var/run/docker.pid /var/run/docker/containerd/containerd.pid
+fi"""
+
+
 def _umgebung_schreiben(session_id: str) -> str:
     """Die Anlagenwerte als Shell-Datei, eingehaengt nach /etc/ota/umgebung.sh.
 
@@ -2114,6 +2128,7 @@ def _umgebung_schreiben(session_id: str) -> str:
         else:
             zeilen.append(f"unset {name}")
     zeilen.append(_DOCKER_NETZE_SKRIPT.replace("@NETZE@", shlex.quote(json.dumps(_docker_netze()))))
+    zeilen.append(_DOCKER_PIDS_SKRIPT)
     with open(datei, "w", encoding="utf-8") as fh:
         fh.write("\n".join(zeilen) + "\n")
     # Der Container liest sie als root und als 1000; der Wirt sieht sie nur

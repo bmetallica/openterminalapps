@@ -161,6 +161,10 @@ developers, not an administrative right.
   `default-address-pools` in `daemon.json` themselves keeps their entry. The range is set with
   `OTA_ROOT_DOCKER_NETZE` in `.env` (`range:size`, several separated by commas, empty = Docker
   decides); `make update` warns if it overlaps a network of the host.
+- **Stale PID files:** `/run` survives stopping in the workspace. If `dockerd` did not end cleanly,
+  it did not start again afterwards ("failed to save containerd pid to disk: process with PID … is
+  still running"), because another process already had that number. OTA therefore deletes the PID
+  files of `dockerd` and containerd on every start, before `dockerd` starts.
 - **Git:** if [OTA Git](27-git.md) is on, OTA sets it up on every start **and every resume**, as in
   every workspace. The token is revoked when stopping, and there is a new one when resuming. A new Git
   subdomain also arrives with resuming, without "Rebuild". It requires `git` in the workspace: the

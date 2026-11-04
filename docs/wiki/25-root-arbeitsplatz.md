@@ -162,6 +162,10 @@ Werkzeug für Entwickler, kein Verwaltungsrecht.
   selbst `default-address-pools` setzt, behält seinen Eintrag. Der Bereich ist einstellbar über
   `OTA_ROOT_DOCKER_NETZE` in der `.env` (`Bereich:Grösse`, mehrere mit Komma, leer = Docker
   entscheidet); `make update` warnt, wenn er sich mit einem Netz des Wirts überschneidet.
+- **Alte PID-Dateien:** `/run` überlebt im Arbeitsplatz das Anhalten. Endete `dockerd` nicht
+  geordnet, startete er danach nicht mehr („failed to save containerd pid to disk: process with PID
+  … is still running“), weil die Nummer schon ein anderer Prozess trug. OTA löscht die PID-Dateien von
+  `dockerd` und containerd deshalb bei jedem Start, bevor `dockerd` startet.
 - **Git:** Ist [OTA-Git](27-git.md) an, richtet OTA es bei jedem Start **und jedem Fortsetzen**
   ein, wie in jedem Arbeitsplatz. Das Token wird beim Anhalten widerrufen, beim Fortsetzen gibt es
   ein neues. Eine neue Git-Subdomain kommt ebenfalls mit dem Fortsetzen an, ohne „Neu aufsetzen“.
