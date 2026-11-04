@@ -34,6 +34,14 @@ Ist die Platte am Limit, zeigt `sudo scripts/platten-last.sh [Pfad] [Sekunden]`,
 Lesen und Schreiben je Container und je Prozess, die Auslastung der Platte, wer auf sie wartet, und
 bei btrfs Quotas, Snapshots, Balance und Scrub. Ohne Angabe misst es `/storage` 30 Sekunden lang.
 
+Erreicht ein Arbeitsplatz OTA, die KI oder das Netz nicht mehr, prüft
+`sudo scripts/platz-diagnose.sh ota-s-<Sitzung> [host:port …]` beide Seiten. Von aussen: ob der
+Container an seinem Sitzungsnetz hängt, der Router darin, und Adressen und Routen im Platz. Von
+innen: Routen, DNS, den Weg zu Router, Proxy und KI (aus den Einstellungen von Continue und
+opencode), beim Root-Arbeitsplatz die Netze des Docker darin und ob eines eine benötigte Adresse
+überdeckt, dazu Paketfilter, Prozess- und Speichergrenzen. Das Skript läuft auch direkt im
+Arbeitsplatz (`bash platz-diagnose.sh`). Der Bericht liegt unter `/tmp/platz-diagnose-<Name>-<Zeit>.txt`.
+
 ## „Diese Sitzung läuft nicht mehr", obwohl sie gerade gestartet wurde
 
 Diese Seite kommt vom Schutzwall aus `deploy/traefik/dynamic/session-guard.yml`. Er antwortet, wenn

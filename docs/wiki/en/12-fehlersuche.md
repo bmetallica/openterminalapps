@@ -33,6 +33,15 @@ If the disk is at its limit, `sudo scripts/platten-last.sh [path] [seconds]` sho
 reads and writes per container and per process, the disk's utilisation, who waits for it, and for
 btrfs quotas, snapshots, balance and scrub. Without arguments it measures `/storage` for 30 seconds.
 
+If a workspace no longer reaches OTA, the AI or the network,
+`sudo scripts/platz-diagnose.sh ota-s-<session> [host:port …]` checks both sides. From outside:
+whether the container is attached to its session network, the router in it, and addresses and
+routes in the workspace. From inside: routes, DNS, the way to router, proxy and AI (from the
+settings of Continue and opencode), for root workspaces the networks of the Docker inside and
+whether one covers an address that is needed, plus packet filters, process and memory limits. The
+script also runs directly in the workspace (`bash platz-diagnose.sh`). The report is at
+`/tmp/platz-diagnose-<name>-<time>.txt`.
+
 ## "This session is no longer running", although it was just started
 
 This page comes from the guard in `deploy/traefik/dynamic/session-guard.yml`. It answers when **no**
