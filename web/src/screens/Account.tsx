@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Field, Segmented } from '../components/controls'
 import { ApiError, api, type ErweiterungAnsicht as Ansicht, type KontoArt, type Me, type TotpSetup } from '../lib/api'
 import { ErweiterungAnsicht } from '../components/ErweiterungAnsicht'
+import { GEDAECHTNIS } from './Erinnerungen'
 import { getLang, setLang, t as tr, useLang, type Lang } from '../lib/i18n'
 
 /**
@@ -22,11 +23,14 @@ export function Account({ me, onMe, onToast }: {
 }) {
   useLang()
   const [tab, setTab] = useState<string>('Passwort')
-  // Ansichten der Erweiterungen für dieses Konto, z. B. das Gedächtnis
-  // (Kapitel 39) — je eine weitere Lasche.
+  // Ansichten der Erweiterungen für dieses Konto (Kapitel 39) — je eine
+  // weitere Lasche. Das Gedächtnis nicht: Es hat einen eigenen Punkt in der
+  // Seitenleiste (screens/Erinnerungen.tsx).
   const [ansichten, setAnsichten] = useState<Ansicht[]>([])
   useEffect(() => {
-    api.erweiterungAnsichten().then((a) => setAnsichten(a.filter((x) => x.ort === 'konto'))).catch(() => setAnsichten([]))
+    api.erweiterungAnsichten()
+      .then((a) => setAnsichten(a.filter((x) => x.ort === 'konto' && x.slug !== GEDAECHTNIS)))
+      .catch(() => setAnsichten([]))
   }, [])
   // Ein Konto der zentralen Anmeldung ändert Passwort und zweiten Faktor dort
   // (Betreiber, 2026-10-08) — hier gesetzt, wirkte es an der Anmeldung nicht.

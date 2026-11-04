@@ -106,7 +106,7 @@ Verlauf zusammenfasst und wenn du die Sitzung Tage später mit `opencode -c` for
   Unteragenten und Forks (`--fork`) teilen das Gedächtnis ihrer Sitzung.
 - Ob opencode vor dem Speichern fragt, stellt die Verwaltung ein.
 - **Ansehen und bearbeiten** kannst du alles in OTA:
-  - **Mein Konto → Gedächtnis** zeigt alle Sitzungen.
+  - **opencode · Erinnerungen** in der Seitenleiste zeigt alle Sitzungen.
   - Das Menü **⋯** der Kachel zeigt unter **Gedächtnis (opencode-Sitzungen)** nur die dieses
     Arbeitsplatzes.
   - Dort kannst du Einträge bearbeiten, anheften (sie kommen dann immer mit), löschen, selbst

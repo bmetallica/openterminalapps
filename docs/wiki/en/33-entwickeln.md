@@ -102,7 +102,7 @@ session days later with `opencode -c`.
   (`--fork`) share the memory of their session.
 - Whether opencode asks before saving is set by the administration.
 - **You can see and edit everything** in OTA:
-  - **My account → Memory** shows all sessions.
+  - **opencode · Memories** in the sidebar shows all sessions.
   - The tile's **⋯** menu shows, under **Memory (opencode sessions)**, only those of this
     workspace.
   - There you can edit entries, pin them (they then always come along), delete them, create your

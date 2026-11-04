@@ -17,7 +17,8 @@ OTA übernimmt dabei:
 - Den **MCP-Server** für opencode und den **Schnipsel für den Systemprompt**
   ([Kapitel 38](38-opencode.md)).
 - Die **Ansichten** der Erweiterung in OTA: unter **Mein Konto** und im Menü **⋯** der Kachel eines
-  Arbeitsplatzes.
+  Arbeitsplatzes. Das Gedächtnis hat statt der Lasche unter Mein Konto einen eigenen Punkt in der
+  Seitenleiste, **opencode · Erinnerungen**.
 - Die **Ereignisse** im Leben eines Kontos: Sperren, Entsperren, Löschen.
 
 Netz, Daten und Updates bleiben bei der Erweiterung.
@@ -96,7 +97,7 @@ trotzdem und bettet später nach.
 - **In opencode** die Werkzeuge `memory_recall`, `memory_search`, `memory_save`, `memory_update`
   und `memory_forget`. Jede Sitzung sieht nur ihr eigenes Gedächtnis; Unteragenten und Forks teilen
   das ihrer Wurzelsitzung.
-- **Mein Konto → Gedächtnis**: alle Sitzungen, nach Arbeitsplatz gegliedert. Dort lassen sich
+- **opencode · Erinnerungen** in der Seitenleiste (bis 2026-11-04 unter Mein Konto): alle Sitzungen, nach Arbeitsplatz gegliedert. Dort lassen sich
   Einträge lesen, bearbeiten, anheften, löschen, neu anlegen und in andere Sitzungen kopieren oder
   verschieben. Eine Sitzung kann außerdem **Zugriff auf das Gedächtnis einer anderen** bekommen:
   Sie liest es dann mit, nur lesend und nicht weiter über deren eigene Zugriffe. Außerdem gibt es den Export als JSON und Markdown und „alles löschen“.
@@ -185,5 +186,5 @@ nimmt OTA nicht an: `opencode_plugin` nennt nur Plugins aus dem Paket `ota-openc
 | Koppeln: 403 | Falscher Kopplungsschlüssel: `grep KOPPLUNG .env` im Verzeichnis der Erweiterung |
 | opencode: „Memory not set up: the OTA plugin did not provide the session“ | opencode lief nicht in OTAs Fassung oder ohne OTAs Konfiguration (eigene Installation vor der Übernahme, Arbeitsplatz noch nicht neu gestartet) |
 | opencode: „invalid or revoked token“ | Der Arbeitsplatz wurde fortgesetzt, opencode lief aber weiter: opencode neu starten |
-| Mein Konto zeigt keine Lasche „Gedächtnis“ | Erweiterung aus, oder der Mensch ist nicht in einer berechtigten Gruppe |
+| Kein Punkt „opencode · Erinnerungen“ in der Seitenleiste | Erweiterung aus, oder der Mensch ist nicht in einer berechtigten Gruppe |
 | Suche findet Sinnverwandtes nicht | Embedding-Server prüfen (**Testen**); bei nomic-embed-text die Präfixe setzen |

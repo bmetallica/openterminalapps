@@ -921,6 +921,7 @@ export const EN: Record<string, string> = {
 
   // --------------------------------------------------------- Mein Konto
   'Mein Konto': 'My account',
+  'Erinnerungen': 'Memories',
   'Noch einmal': 'Once more',
   'Die beiden neuen Passwörter sind nicht gleich.': 'The two new passwords do not match.',
   'Passwort geändert. Deine anderen Sitzungen sind jetzt abgemeldet.':

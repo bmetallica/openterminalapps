@@ -16,6 +16,8 @@ What OTA takes care of:
 - The **MCP server** for opencode and the **snippet for the system prompt**
   ([chapter 38](38-opencode.md)).
 - The extension's **views** in OTA: under **My account** and in the **⋯** menu of a workspace tile.
+  Instead of a tab under My account, the memory has its own item in the sidebar,
+  **opencode · Memories**.
 - The **events** in an account's life: locking, unlocking, deleting.
 
 Network, data and updates stay with the extension.
@@ -93,7 +95,7 @@ and embeds later.
 - **In opencode** the tools `memory_recall`, `memory_search`, `memory_save`, `memory_update` and
   `memory_forget`. Every session sees only its own memory; subagents and forks share that of their
   root session.
-- **My account → Memory**: all sessions, grouped by workspace. There entries can be read, edited,
+- **opencode · Memories** in the sidebar (until 2026-11-04 under My account): all sessions, grouped by workspace. There entries can be read, edited,
   pinned, deleted, created and copied or moved to other sessions. A session can also be given
   **access to the memory of another one**: it then reads it along, read-only and not further
   through that session's own accesses. There is also the export as JSON
@@ -181,5 +183,5 @@ foreign plugin code: `opencode_plugin` names only plugins from the package `ota-
 | Pairing: 403 | Wrong pairing key: `grep KOPPLUNG .env` in the extension's directory |
 | opencode: "Memory not set up: the OTA plugin did not provide the session" | opencode did not run in OTA's version or without OTA's configuration (own installation before the takeover, workspace not restarted yet) |
 | opencode: "invalid or revoked token" | The workspace was resumed but opencode kept running: restart opencode |
-| My account shows no "Memory" tab | Extension off, or the person is not in an entitled group |
+| No item "opencode · Memories" in the sidebar | Extension off, or the person is not in an entitled group |
 | Search does not find related meaning | Check the embedding server (**Test**); with nomic-embed-text set the prefixes |

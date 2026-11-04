@@ -18,14 +18,15 @@ import { Paketquellen } from './screens/Paketquellen'
 import { Softwaremonitoring } from './screens/Softwaremonitoring'
 import { StandaloneViewer } from './screens/StandaloneViewer'
 import { anmeldePfad, openInTab, parseRoute, viewPath, type Route } from './lib/routes'
-import { ApiError, alsAngemeldet, api, type Host, type Me, type Session, type Stream, type Template } from './lib/api'
+import { ApiError, alsAngemeldet, api, type ErweiterungAnsicht, type Host, type Me, type Session, type Stream, type Template } from './lib/api'
+import { Erinnerungen, GEDAECHTNIS } from './screens/Erinnerungen'
 import { gb } from './lib/format'
 import { setKontoLang, setLang, t, useLang, type Lang } from './lib/i18n'
 import { setTheme, useTheme, type Theme } from './lib/theme'
 import './styles/app.css'
 
 type View = 'dashboard' | 'news' | 'workspaces' | 'webapps' | 'images' | 'registries' | 'paketquellen' | 'storage'
-  | 'files' | 'people' | 'monitor' | 'software' | 'netz' | 'settings' | 'account' | 'help'
+  | 'files' | 'people' | 'monitor' | 'software' | 'netz' | 'settings' | 'account' | 'help' | 'erinnerungen'
 type Toast = { id: number; msg: string; tone: 'ok' | 'bad' }
 
 const NAV: { id: View; glyph: string; cap: string; adminOnly: boolean }[] = [
@@ -86,6 +87,7 @@ export default function App() {
   const [host, setHost] = useState<Host | null>(null)
   const [toasts, setToasts] = useState<Toast[]>([])
   const [newsNeu, setNewsNeu] = useState(0)
+  const [gedaechtnis, setGedaechtnis] = useState<ErweiterungAnsicht | null>(null)
 
   const toast = useCallback((msg: string, tone: 'ok' | 'bad' = 'ok') => {
     const id = Date.now() + Math.random()
@@ -145,6 +147,15 @@ export default function App() {
     load()
     const timer = setInterval(load, 300_000)
     return () => clearInterval(timer)
+  }, [me])
+
+  // Die Gedächtnis-Erweiterung bekommt einen eigenen Punkt, wenn sie diesem
+  // Menschen eine Ansicht anbietet (siehe screens/Erinnerungen.tsx).
+  useEffect(() => {
+    if (!me) return
+    api.erweiterungAnsichten()
+      .then((a) => setGedaechtnis(a.find((x) => x.slug === GEDAECHTNIS && x.ort === 'konto') ?? null))
+      .catch(() => setGedaechtnis(null))
   }, [me])
 
   // Für den App-Umschalter im Viewer wird der Katalog gebraucht.
@@ -268,7 +279,7 @@ export default function App() {
      `account` steht bewusst nicht in NAV — es ist keine Ansicht der Anlage,
      sondern die des eigenen Kontos — muss hier aber trotzdem gelten. Ohne
      diese Ausnahme sprang der Punkt „Mein Konto" wirkungslos zurück. */
-  const outsideNav: View[] = ['account']
+  const outsideNav: View[] = ['account', ...(gedaechtnis ? ['erinnerungen' as View] : [])]
   const current = visible.some((n) => n.id === view) || outsideNav.includes(view)
     ? view : 'dashboard'
   const freePct = host ? (host.memory_available / host.memory_total) * 100 : null
@@ -297,6 +308,15 @@ export default function App() {
         ))}
 
         <div className="rail__spacer" />
+
+        {gedaechtnis && (
+          <button className={`rail__btn${current === 'erinnerungen' ? ' is-on' : ''}`}
+            onClick={() => setView('erinnerungen')}
+            aria-current={current === 'erinnerungen' ? 'page' : undefined}>
+            <span className="rail__glyph" aria-hidden="true">✧</span>
+            <span className="rail__cap">opencode<br />{t('Erinnerungen')}</span>
+          </button>
+        )}
 
         <button className={`rail__btn${current === 'account' ? ' is-on' : ''}`}
           onClick={() => setView('account')}
@@ -368,6 +388,7 @@ export default function App() {
         {current === 'netz' && <Netz onToast={toast} />}
         {current === 'settings' && <Settings onToast={toast} />}
         {current === 'account' && <Account me={me} onMe={setMe} onToast={toast} />}
+        {current === 'erinnerungen' && gedaechtnis && <Erinnerungen ansicht={gedaechtnis} />}
         {current === 'help' && <Help onToast={toast} />}
       </main>
 
