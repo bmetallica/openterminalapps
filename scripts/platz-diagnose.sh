@@ -271,6 +271,12 @@ if [ -r $CG/pids.max ]; then
   echo "  Prozesse: $(cat $CG/pids.current 2>/dev/null) von $(cat $CG/pids.max)"
   pm=$(cat $CG/pids.max); pc=$(cat $CG/pids.current 2>/dev/null || echo 0)
   [ "$pm" != max ] && [ "$pc" -ge $(( pm * 9 / 10 )) ] && hinweis "Fast alle erlaubten Prozesse belegt ($pc von $pm) — neue Verbindungen und Programme scheitern."
+  # Wie oft ein fork an der Grenze gescheitert ist, seit der Platz läuft.
+  PMAX=$(awk '$1 == "max" {print $2}' $CG/pids.events 2>/dev/null)
+  echo "  An der Prozessgrenze gescheitert (seit Start): ${PMAX:-?}"
+  [ "${PMAX:-0}" -gt 0 ] && hinweis "$PMAX-mal ist ein neuer Prozess an der Grenze von $pm gescheitert (Threads zählen mit). Dann startet nichts mehr, auch keine Verbindung — es sieht aus wie „kein Netz“. Grenze: OTA_ROOT_PIDS_LIMIT bzw. OTA_PIDS_LIMIT in der .env."
+  echo "  Die meisten Threads:"
+  ps -eo nlwp=,comm= 2>/dev/null | awk '{n[$2] += $1} END {for (k in n) print n[k], k}' | sort -rn | head -8 | sed 's/^/    /'
 fi
 if [ -r $CG/memory.events ]; then
   echo "  Speicher: $(( $(cat $CG/memory.current 2>/dev/null || echo 0) / 1048576 )) MB von $(cat $CG/memory.max 2>/dev/null)"

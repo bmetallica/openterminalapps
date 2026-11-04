@@ -354,6 +354,8 @@ services:
       OTA_SESSION_MTU: "${OTA_SESSION_MTU:-1500}"
       # Die Netze von Docker **in** Root-Arbeitsplätzen (Kapitel 25).
       OTA_ROOT_DOCKER_NETZE: "${OTA_ROOT_DOCKER_NETZE-172.16.0.0/12:24}"
+      OTA_PIDS_LIMIT: "${OTA_PIDS_LIMIT:-4096}"
+      OTA_ROOT_PIDS_LIMIT: "${OTA_ROOT_PIDS_LIMIT:-32768}"
       OTA_TRAEFIK_CONTAINER: ota-traefik
       OTA_FW_SOCKET: "${OTA_RUNTIME_ROOT:-/srv/ota/runtime}/firewall.sock"
       # Damit der Browser im Arbeitsplatz OTA selbst erreicht — die

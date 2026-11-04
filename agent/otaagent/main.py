@@ -1445,7 +1445,7 @@ def start_container(req: StartRequest) -> dict[str, Any]:
             # eigenen Benutzer-Namensraum, nicht auf dem Wirt.
             runtime="sysbox-runc" if ist_root else None,
             user=start_als,
-            pids_limit=4096,
+            pids_limit=PIDS_GRENZE_ROOT if ist_root else PIDS_GRENZE,
             # Keine Speicherabbilder. dockerd vererbt `LimitCORE=infinity`,
             # und jedes abstuerzende Programm legte sonst ein `core.<pid>`
             # ins Zuhause — gemessen bis 4,3 GB, auf die Platzgrenze
@@ -1882,6 +1882,41 @@ def docker_volume_name(session_id: str) -> str:
 # beiden Faellen seinen Namen; neue binden das Verzeichnis ein, umgezogene
 # (scripts/daten-umziehen.sh) zeigen per Verweis dorthin.
 PLATZ_DOCKER_ROOT = os.environ.get("OTA_PLATZ_DOCKER_ROOT", "").strip().rstrip("/")
+
+
+# **Prozesse je Arbeitsplatz** (Threads zählen mit). Ist die Grenze voll,
+# scheitert jedes fork mit EAGAIN: kein Terminal, keine neue Verbindung, kein
+# Healthcheck, opencode stürzt ab — es sieht aus wie „kein Netz". Gefunden am
+# 2026-11-04 in einem Root-Arbeitsplatz mit Compose-Stack (Postgres, Celery,
+# Grafana) und Playwright-Läufen, an den damals festen 4096.
+def _zahl_env(name: str, vorgabe: int) -> int:
+    try:
+        return max(256, int(os.environ.get(name, "") or vorgabe))
+    except ValueError:
+        log.warning("%s ist keine Zahl — %d gilt", name, vorgabe)
+        return vorgabe
+
+
+PIDS_GRENZE = _zahl_env("OTA_PIDS_LIMIT", 4096)
+PIDS_GRENZE_ROOT = _zahl_env("OTA_ROOT_PIDS_LIMIT", 32768)
+
+
+def _pids_nachziehen(client, c) -> None:
+    """Einem bestehenden Root-Arbeitsplatz die aktuelle Grenze geben.
+
+    Er behält seinen Container und damit die Grenze vom Tag seiner Erzeugung.
+    docker-py kennt `PidsLimit` beim Ändern nicht, die Docker-API schon.
+    """
+    ist = (c.attrs.get("HostConfig") or {}).get("PidsLimit") or 0
+    if ist == PIDS_GRENZE_ROOT:
+        return
+    try:
+        antwort = client.api._post_json(client.api._url("/containers/{0}/update", c.id),
+                                        data={"PidsLimit": PIDS_GRENZE_ROOT})
+        client.api._raise_for_status(antwort)
+        log.info("%s: Prozessgrenze %s → %d", c.name, ist or "keine", PIDS_GRENZE_ROOT)
+    except APIError as exc:
+        log.warning("%s: Prozessgrenze nicht geändert: %s", c.name, exc)
 
 
 def _platz_docker_ort(name: str) -> str:
@@ -2590,6 +2625,7 @@ def fortsetzen(cid: str, body: "FortsetzenRequest | None" = None) -> dict[str, A
         )
     netz_ops.anbindung_sichern(client)
     lauf.schritt("container")
+    _pids_nachziehen(client, c)
     if c.status not in ("running", "paused"):
         _platz_nachziehen(client, docker_volume_name(sid))
     try:

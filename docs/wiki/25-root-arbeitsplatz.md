@@ -166,6 +166,13 @@ Werkzeug für Entwickler, kein Verwaltungsrecht.
   geordnet, startete er danach nicht mehr („failed to save containerd pid to disk: process with PID
   … is still running“), weil die Nummer schon ein anderer Prozess trug. OTA löscht die PID-Dateien von
   `dockerd` und containerd deshalb bei jedem Start, bevor `dockerd` startet.
+- **Prozesse:** Ein Root-Arbeitsplatz darf 32768 Prozesse und Threads haben (`OTA_ROOT_PIDS_LIMIT`),
+  andere Arbeitsplätze 4096 (`OTA_PIDS_LIMIT`). Ist die Grenze voll, startet darin nichts mehr: kein
+  Terminal, keine neue Verbindung, kein Healthcheck, opencode stürzt ab („Resource temporarily
+  unavailable“). Von aussen sieht das aus wie ein Platz ohne Netz. Ein Compose-Stack mit Datenbank,
+  Workern und Browsern kam mit den früheren 4096 nicht aus. Bestehende Plätze bekommen den Wert beim
+  nächsten Fortsetzen, laufende sofort mit `docker update --pids-limit 32768 <Container>`.
+  `scripts/platz-diagnose.sh` zeigt, wie oft die Grenze erreicht wurde.
 - **Git:** Ist [OTA-Git](27-git.md) an, richtet OTA es bei jedem Start **und jedem Fortsetzen**
   ein, wie in jedem Arbeitsplatz. Das Token wird beim Anhalten widerrufen, beim Fortsetzen gibt es
   ein neues. Eine neue Git-Subdomain kommt ebenfalls mit dem Fortsetzen an, ohne „Neu aufsetzen“.
