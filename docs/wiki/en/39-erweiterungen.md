@@ -93,7 +93,7 @@ and embeds later.
 ## What people see
 
 - **In opencode** the tools `memory_recall`, `memory_search`, `memory_save`, `memory_update` and
-  `memory_forget`. Every session sees only its own memory; subagents and forks share that of their
+  `memory_forget`, plus `document_search` and `document_list` for the documents (below). Every session sees only its own memory; subagents and forks share that of their
   root session.
 - **opencode · Memories** in the sidebar (until 2026-11-04 under My account): all sessions, grouped by workspace. There entries can be read, edited,
   pinned, deleted, created and copied or moved to other sessions. A session can also be given
@@ -106,6 +106,23 @@ and embeds later.
   (`memory_recall`) and finds everything else via `memory_search`, so a large main memory does not
   fill every session start. It does not expire. Entries from a session can be copied into it.
 - **⋯ → Memory (opencode sessions)** on the tile: the same for the sessions of this workspace, without the main memory.
+- **Documents**, below the main memory: a library per person. Upload by dragging or clicking: PDF
+  with a text layer, DOCX, XLSX, PPTX, ODT, ODS, ODP, HTML, TXT, MD, CSV and other text files.
+  - Reading happens in the background and in a separate process with time and memory limits.
+    Office files that would unpack too large (zip bombs) are refused.
+  - Scanned PDFs without a text layer are refused with a hint; there is no text recognition. The
+    old formats `.doc`, `.xls` and `.ppt` do not work; please save as `…x` or PDF.
+  - **Credentials** in the text are replaced by `[entfernt]` when reading, and the view shows how
+    many places. The original stays unchanged and can be downloaded.
+  - **Sharing:** tick it on a session's page under "Documents for this session", or choose "for
+    all sessions" on the document (future ones too).
+  - **In opencode** `document_search` searches the shared documents and names the source (document,
+    page, heading or sheet), `document_list` shows what is shared. The system prompt tells opencode
+    to search there first for questions that are not about this session.
+  - **Limits** in the extension's settings: MB per file (default 25) and MB per person (default
+    1024, originals and text together).
+  - The originals live in the extension's database. So they are in OTA's backup, and they are gone
+    with the account or "delete everything".
 
 More for the people is in [chapter 33](33-entwickeln.md#opencode-and-its-memory-).
 

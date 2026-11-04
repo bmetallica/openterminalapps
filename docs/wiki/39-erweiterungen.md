@@ -95,7 +95,7 @@ trotzdem und bettet später nach.
 ## Was die Menschen sehen
 
 - **In opencode** die Werkzeuge `memory_recall`, `memory_search`, `memory_save`, `memory_update`
-  und `memory_forget`. Jede Sitzung sieht nur ihr eigenes Gedächtnis; Unteragenten und Forks teilen
+  und `memory_forget`, dazu `document_search` und `document_list` für die Dokumente (unten). Jede Sitzung sieht nur ihr eigenes Gedächtnis; Unteragenten und Forks teilen
   das ihrer Wurzelsitzung.
 - **opencode · Erinnerungen** in der Seitenleiste (bis 2026-11-04 unter Mein Konto): alle Sitzungen, nach Arbeitsplatz gegliedert. Dort lassen sich
   Einträge lesen, bearbeiten, anheften, löschen, neu anlegen und in andere Sitzungen kopieren oder
@@ -109,6 +109,25 @@ trotzdem und bettet später nach.
   sich hineinkopieren.
 - **⋯ → Gedächtnis (opencode-Sitzungen)** auf der Kachel: dasselbe für die Sitzungen dieses
   Arbeitsplatzes, ohne das Hauptgedächtnis.
+- **Dokumente**, unter dem Hauptgedächtnis: eine Bibliothek je Mensch. Hochladen per Ziehen oder
+  Klicken: PDF mit Textschicht, DOCX, XLSX, PPTX, ODT, ODS, ODP, HTML, TXT, MD, CSV und andere
+  Textdateien.
+  - Ausgelesen wird im Hintergrund und in einem eigenen Prozess mit Zeit- und Speichergrenze.
+    Office-Dateien, die entpackt zu groß würden (ZIP-Bomben), werden abgelehnt.
+  - Gescannte PDFs ohne Textschicht werden mit Hinweis abgelehnt, eine Texterkennung gibt es nicht.
+    Die alten Formate `.doc`, `.xls` und `.ppt` gehen nicht, bitte als `…x` oder PDF speichern.
+  - **Zugangsdaten** im Text werden beim Auslesen durch `[entfernt]` ersetzt, die Ansicht nennt
+    die Zahl der Stellen. Das Original bleibt unverändert und lässt sich herunterladen.
+  - **Freigeben:** auf der Seite einer Sitzung unter „Dokumente für diese Sitzung“ anhaken, oder
+    am Dokument „für alle Sitzungen“ (auch künftige).
+  - **In opencode** durchsucht `document_search` die freigegebenen Dokumente und nennt die Quelle
+    (Dokument, Seite, Überschrift oder Tabellenblatt), `document_list` zeigt, was freigegeben ist.
+    Der Systemprompt sagt opencode, dass es bei Fragen, die nicht diese Sitzung betreffen, zuerst
+    dort suchen soll.
+  - **Grenzen** in den Einstellungen der Erweiterung: MB je Datei (Vorgabe 25) und MB je Mensch
+    (Vorgabe 1024, Originale und Text zusammen).
+  - Die Originale liegen in der Datenbank der Erweiterung. Damit sind sie in OTAs Sicherung, und
+    mit dem Konto oder „alles löschen“ sind sie weg.
 
 Mehr für die Menschen steht in [Kapitel 33](33-entwickeln.md#opencode-und-sein-gedächtnis-).
 
