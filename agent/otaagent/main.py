@@ -2711,14 +2711,15 @@ def _volume_groessen(client) -> dict[str, int]:
 _platz_zwischen: dict[str, dict[str, int]] = {}
 _platz_zeit: dict[str, float] = {}
 _platz_misst: set[str] = set()
-# **Höchstens eine Messung zur Zeit, und nicht öfter als alle zehn Minuten.**
+# **Höchstens eine Messung zur Zeit, und je Platz einmal in der Stunde**
+# (`OTA_PLATZ_MESSEN_MINUTEN`).
 # Betrieb → Arbeitsplätze fragt alle 15 Sekunden für jeden Root-Platz. Jede
 # Messung lässt Docker die Schicht des Containers durchgehen (`ps --size`)
 # und `du` über die Docker-Daten laufen — bei grossen Plätzen über eine
 # Million Dateien. Am 2026-11-05 stauten sich so zwei Dutzend Messungen,
 # Docker antwortete selbst auf `inspect` nicht mehr in 60 s, und neue
 # Arbeitsplätze scheiterten mit „Läuft ota-agent?“.
-_PLATZ_FRISCH = 600
+_PLATZ_FRISCH = max(5, int(os.environ.get("OTA_PLATZ_MESSEN_MINUTEN", "") or 60)) * 60
 _platz_eine = threading.Semaphore(1)
 
 

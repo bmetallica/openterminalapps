@@ -50,8 +50,8 @@ the used space measured for every root workspace. Each measurement makes Docker 
 container's layer and runs `du` over its Docker data, over a million files for large workspaces.
 Two dozen such measurements piled up.
 
-Since then the agent returns the last measured value and measures again at most every ten minutes,
-in the background and one workspace after another. Right after the agent restarts, 0 shows briefly.
+Since then the agent returns the last measured value and measures each workspace again at most once
+an hour (`OTA_PLATZ_MESSEN_MINUTEN`), in the background and one workspace after another. Right after the agent restarts, 0 shows briefly.
 Starting a workspace may also take 300 s instead of 60 s. If the answer still times out, the
 message now reads "did not answer in time — Docker is overloaded right now" instead of
 "unreachable". Then `sudo scripts/docker-diagnose.sh` shows why Docker is slow, and

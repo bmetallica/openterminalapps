@@ -50,8 +50,8 @@ Sekunden neu und ließ dabei für jeden Root-Arbeitsplatz den belegten Platz mes
 lässt Docker die Schicht des Containers durchgehen und `du` über seine Docker-Daten laufen, bei
 großen Plätzen über eine Million Dateien. Zwei Dutzend solcher Messungen stauten sich.
 
-Seitdem gibt der Agent den letzten Messwert zurück und misst höchstens alle zehn Minuten neu, im
-Hintergrund und einen Platz nach dem anderen. Direkt nach einem Neustart des Agents steht deshalb
+Seitdem gibt der Agent den letzten Messwert zurück und misst je Platz höchstens einmal in der Stunde
+neu (`OTA_PLATZ_MESSEN_MINUTEN`), im Hintergrund und einen Platz nach dem anderen. Direkt nach einem Neustart des Agents steht deshalb
 kurz 0 da. Der Start eines Arbeitsplatzes darf außerdem 300 s statt 60 s dauern. Läuft die Antwort
 trotzdem ab, heißt die Meldung jetzt „antwortet nicht rechtzeitig — Docker ist gerade überlastet“,
 nicht mehr „nicht erreichbar“. Dann zeigt `sudo scripts/docker-diagnose.sh`, warum Docker langsam
