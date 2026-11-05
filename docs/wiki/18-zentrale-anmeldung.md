@@ -60,6 +60,14 @@ Protokoll. Die Übernahme (unten) lässt ihn unangetastet.
 - Wer dort den Namen eines Kontos der zentralen Anmeldung eingibt, landet bei Keycloak — mit dem
   Namen schon im Feld.
 - Mit `?fehler=…` (wenn bei Keycloak etwas schiefging) bleibt die Seite stehen und sagt, was war.
+
+**Mehrere Tabs gleichzeitig** (*seit dem 2026-11-05*): Endet die Sitzung, schickt jeder offene Tab
+von OTA den Browser zur Anmeldung, das Dashboard und jeder Arbeitsplatz in seinem eigenen Tab.
+Jede dieser Anmeldungen hat ihren eigenen Merkzettel (`ota_oidc_<state>`). Bis dahin gab es nur
+einen, jeder Tab überschrieb ihn, und alle bis auf den letzten zeigten „Die Anmeldung passte
+nicht zusammen“. Passt ein Rückweg von Keycloak trotzdem nicht, etwa über ein Lesezeichen auf
+Keycloaks Seite oder den Zurück-Knopf, und der Browser ist schon angemeldet, geht es ohne
+Meldung hinein.
   Sonst liefe der Browser in eine Schleife.
 
 Bis zum 2026-10-08 zeigte `/login` jedem eine lokale Maske. Ein Konto, das in OTA angelegt wurde,

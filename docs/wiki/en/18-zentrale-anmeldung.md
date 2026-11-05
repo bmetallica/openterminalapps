@@ -61,6 +61,13 @@ audit log. The migration (below) leaves it untouched.
 - With `?fehler=…` (when something went wrong at Keycloak) the page stays and says what happened.
   Otherwise the browser would run into a loop.
 
+**Several tabs at once** (*since 2026-11-05*): when the session ends, every open OTA tab sends the
+browser to the sign-in, the dashboard and every workspace in its own tab. Each of these sign-ins
+has its own note (`ota_oidc_<state>`). Until then there was only one, each tab overwrote it, and all
+but the last showed "Die Anmeldung passte nicht zusammen" (the sign-in did not match). If a way back
+from Keycloak still does not match, for example via a bookmark on Keycloak's page or the back
+button, and the browser is already signed in, it goes straight in without a message.
+
 Until 2026-10-08 `/login` showed everyone a local form. An account created in OTA got in **only**
 there — bypassing the central sign-in and its second step. Found on the production installation.
 

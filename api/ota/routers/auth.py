@@ -25,7 +25,7 @@ from ..schemas import (
     LocaleIn, LoginIn, MeOut, OidcTokenIn, PasswordChangeIn, PasswordIn,
     TotpActivateIn, TotpCodesOut, TotpDisableIn, TotpSetupOut,
 )
-from ..security import hash_password, needs_totp, password_problem, verify_password
+from ..security import as_uuid, hash_password, needs_totp, password_problem, read_token, verify_password
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 log = logging.getLogger("ota.auth")
@@ -750,8 +750,15 @@ def oidc_start(request: Request, next: str = "/", aktion: str = "",
                                aktion=aktion, login_hint=login_hint, sprache=lang),
         status_code=status.HTTP_303_SEE_OTHER,
     )
+    # **Ein Merkzettel je Anmeldung**, nicht einer je Browser. Mit einem
+    # einzigen überschrieb jede neue Anmeldung die laufende: Endet die
+    # Sitzung, schickt jeder offene Tab von OTA (Dashboard und jeder
+    # Arbeitsplatz im eigenen Tab) den Browser zugleich hierher, Keycloak
+    # kennt den Menschen noch und antwortet sofort — und alle Tabs bis auf den
+    # letzten landeten bei „Die Anmeldung passte nicht zusammen“ (gemeldet
+    # am 2026-11-05).
     antwort.set_cookie(
-        OIDC_COOKIE, merkzettel, max_age=OIDC_MINUTEN * 60,
+        _merkzettel_name(state), merkzettel, max_age=OIDC_MINUTEN * 60,
         httponly=True, secure=settings().cookie_secure,
         # Lax und nicht Strict: Der Rückweg von Keycloak ist eine Navigation
         # von einer anderen Seite. Bei Strict schickte der Browser das Cookie
@@ -759,6 +766,24 @@ def oidc_start(request: Request, next: str = "/", aktion: str = "",
         samesite="lax", path="/api/auth",
     )
     return antwort
+
+
+def _merkzettel_name(state: str) -> str:
+    return f"{OIDC_COOKIE}_{state}"
+
+
+def _schon_angemeldet(request: Request, db: DbSession) -> bool:
+    """Hat dieser Browser schon eine gültige Sitzung? Dann ist ein
+    gescheiterter Rückweg kein Grund für eine Fehlermeldung: Ein anderer Tab
+    hat die Anmeldung längst abgeschlossen, oder jemand kam über eine alte
+    Adresse von Keycloak (Lesezeichen, Zurück-Knopf)."""
+    claims = read_token(request.cookies.get(settings().cookie_name) or "")
+    if not claims or claims.get("typ") != "access":
+        return False
+    uid = as_uuid(claims.get("sub", ""))
+    user = db.get(User, uid) if uid else None
+    return bool(user and user.is_active and not user.is_locked
+                and claims.get("epoch") == user.token_epoch)
 
 
 @router.get("/oidc/callback")
@@ -772,32 +797,44 @@ def oidc_callback(
 ) -> Response:
     """Nimmt den Code entgegen und macht daraus eine OTA-Sitzung."""
 
-    def zurueck_mit(grund: str) -> Response:
+    def zurueck_mit(grund: str, verzeihlich: bool = False) -> Response:
         # Fehler landen auf der Anmeldeseite und nicht in einem JSON-Fetzen:
         # Hier steht ein Mensch vor dem Bildschirm, kein Programm.
+        #
+        # `verzeihlich`: Der Rückweg passt nicht zu einer laufenden Anmeldung.
+        # Ist der Browser trotzdem angemeldet, geht es einfach hinein.
         from urllib.parse import quote
-        r = RedirectResponse(f"/login?fehler={quote(grund)}",
-                             status_code=status.HTTP_303_SEE_OTHER)
+        if verzeihlich and _schon_angemeldet(request, db):
+            r = RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
+        else:
+            r = RedirectResponse(f"/login?fehler={quote(grund)}",
+                                 status_code=status.HTTP_303_SEE_OTHER)
+        if state:
+            r.delete_cookie(_merkzettel_name(state), path="/api/auth")
         r.delete_cookie(OIDC_COOKIE, path="/api/auth")
         return r
 
     if error:
         return zurueck_mit(f"Keycloak hat abgelehnt: {error}")
 
-    merkzettel = request.cookies.get(OIDC_COOKIE)
+    # Der Merkzettel dieser Anmeldung; der alte, einzelne nur noch für
+    # Anmeldungen, die vor dem Update begonnen haben.
+    merkzettel = (request.cookies.get(_merkzettel_name(state)) if state else None) \
+        or request.cookies.get(OIDC_COOKIE)
     if not merkzettel or not code or not state:
-        return zurueck_mit("Die Anmeldung ist unterwegs verlorengegangen. Bitte noch einmal.")
+        return zurueck_mit("Die Anmeldung ist unterwegs verlorengegangen. Bitte noch einmal.",
+                           verzeihlich=True)
 
     try:
         notiz = jwt.decode(merkzettel, settings().jwt_secret,
                            algorithms=[settings().jwt_algorithm])
     except jwt.PyJWTError:
-        return zurueck_mit("Die Anmeldung hat zu lange gedauert. Bitte noch einmal.")
+        return zurueck_mit("Die Anmeldung hat zu lange gedauert. Bitte noch einmal.", verzeihlich=True)
 
     if not secrets.compare_digest(str(notiz.get("state", "")), state):
         audit.record(db, "login.oidc_state_mismatch", request=request)
         db.commit()
-        return zurueck_mit("Die Anmeldung passte nicht zusammen. Bitte noch einmal.")
+        return zurueck_mit("Die Anmeldung passte nicht zusammen. Bitte noch einmal.", verzeihlich=True)
 
     try:
         token_antwort = keycloak.tausche_code(
@@ -818,6 +855,7 @@ def oidc_callback(
 
     fertig = RedirectResponse(_sicheres_ziel(str(notiz.get("ziel"))),
                               status_code=status.HTTP_303_SEE_OTHER)
+    fertig.delete_cookie(_merkzettel_name(state), path="/api/auth")
     fertig.delete_cookie(OIDC_COOKIE, path="/api/auth")
     minuten = settings_store.idle_minutes(db)
     set_session_cookie(fertig, user, minuten)
