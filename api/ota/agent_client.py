@@ -23,6 +23,15 @@ def _call(method: str, path: str, **kw: Any) -> Any:
     try:
         with httpx.Client(timeout=timeout) as client:
             resp = client.request(method, url, headers=_headers(), **kw)
+    except httpx.TimeoutException as exc:
+        # Der Agent läuft, aber die Antwort kam nicht rechtzeitig — fast immer
+        # ein überlastetes Docker. „Nicht erreichbar“ schickte die Leute auf
+        # die Suche nach einem Agent, der lief (2026-11-05).
+        raise HTTPException(
+            status.HTTP_504_GATEWAY_TIMEOUT,
+            "Der Container-Dienst antwortet nicht rechtzeitig — Docker ist gerade überlastet. "
+            "Bitte gleich noch einmal versuchen.",
+        ) from exc
     except httpx.HTTPError as exc:
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -106,7 +115,10 @@ def image_packages(ref: str, names: list[str]) -> list[dict[str, Any]]:
 
 
 def start_container(payload: dict[str, Any]) -> dict[str, Any]:
-    return _call("POST", "/containers", json=payload)
+    # Mehr als die üblichen 60 s: Auf einem Wirt mit langsamer Platte braucht
+    # ein neuer Container samt Netz und Regeln schon mal länger. Wer hier
+    # aufgibt, lässt einen halb gestarteten Arbeitsplatz zurück.
+    return _call("POST", "/containers", json=payload, timeout=300.0)
 
 
 def firewall_global(payload: dict[str, Any]) -> dict[str, Any]:

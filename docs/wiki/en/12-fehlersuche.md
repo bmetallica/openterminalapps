@@ -42,6 +42,21 @@ whether one covers an address that is needed, plus packet filters, process and m
 script also runs directly in the workspace (`bash platz-diagnose.sh`). The report is at
 `/tmp/platz-diagnose-<name>-<time>.txt`.
 
+## "Is ota-agent running?" or "did not answer in time", although the agent runs
+
+*2026-11-05.* The agent was healthy, but Docker needed more than a minute for simple queries, and
+starts failed. The cause was **Operations → Workspaces**: the page reloads every 15 seconds and had
+the used space measured for every root workspace. Each measurement makes Docker walk the
+container's layer and runs `du` over its Docker data, over a million files for large workspaces.
+Two dozen such measurements piled up.
+
+Since then the agent returns the last measured value and measures again at most every ten minutes,
+in the background and one workspace after another. Right after the agent restarts, 0 shows briefly.
+Starting a workspace may also take 300 s instead of 60 s. If the answer still times out, the
+message now reads "did not answer in time — Docker is overloaded right now" instead of
+"unreachable". Then `sudo scripts/docker-diagnose.sh` shows why Docker is slow, and
+`sudo scripts/platten-last.sh` who loads the disk.
+
 ## "This session is no longer running", although it was just started
 
 This page comes from the guard in `deploy/traefik/dynamic/session-guard.yml`. It answers when **no**

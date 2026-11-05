@@ -1685,6 +1685,8 @@ export const EN: Record<string, string> = {
   'Symbol nicht verfügbar': 'Icon not available',
   'Die Datei liess sich nicht lesen.': 'The file could not be read.',
   'Der Container-Dienst ist nicht erreichbar. Läuft ota-agent?': 'The container service is unreachable. Is ota-agent running?',
+  'Der Container-Dienst antwortet nicht rechtzeitig — Docker ist gerade überlastet. Bitte gleich noch einmal versuchen.':
+    'The container service did not answer in time — Docker is overloaded right now. Please try again shortly.',
   'Die zentrale Anmeldung ist beendet': 'The central sign-in has ended',
   'OTA_GIT_DB_PW fehlt in deploy/.env. „sudo make update“ ergänzt es.': 'OTA_GIT_DB_PW is missing in deploy/.env. “sudo make update” adds it.',
   'Die Adresse von OTA fehlt (so, wie Browser sie sehen, mit https://).': 'The OTA address is missing (as browsers see it, with https://).',

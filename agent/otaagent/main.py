@@ -2707,9 +2707,19 @@ def _volume_groessen(client) -> dict[str, int]:
     return _df_zwischen["volumes"]
 
 
-# Der letzte gemessene Platz je Container, fuer `schnell`.
+# Der letzte gemessene Platz je Container, und wann.
 _platz_zwischen: dict[str, dict[str, int]] = {}
+_platz_zeit: dict[str, float] = {}
 _platz_misst: set[str] = set()
+# **Höchstens eine Messung zur Zeit, und nicht öfter als alle zehn Minuten.**
+# Betrieb → Arbeitsplätze fragt alle 15 Sekunden für jeden Root-Platz. Jede
+# Messung lässt Docker die Schicht des Containers durchgehen (`ps --size`)
+# und `du` über die Docker-Daten laufen — bei grossen Plätzen über eine
+# Million Dateien. Am 2026-11-05 stauten sich so zwei Dutzend Messungen,
+# Docker antwortete selbst auf `inspect` nicht mehr in 60 s, und neue
+# Arbeitsplätze scheiterten mit „Läuft ota-agent?“.
+_PLATZ_FRISCH = 600
+_platz_eine = threading.Semaphore(1)
 
 
 @app.get("/containers/{cid}/platz", dependencies=[Depends(require_token)])
@@ -2724,24 +2734,28 @@ def platz(cid: str, schnell: bool = False) -> dict[str, int]:
     wird im Hintergrund neu. Gibt es noch keinen (erster Start nach einem
     Neustart des Agents), meldet `schnell` 0 — eine Messung darf keinen Start
     verhindern, und beim naechsten Mal gilt der Wert.
+
+    Seit dem 2026-11-05 gilt das immer, nicht nur mit `schnell`: Die Antwort
+    ist der letzte Wert, und ist er älter als `_PLATZ_FRISCH`, wird im
+    Hintergrund neu gemessen — einer nach dem anderen.
     """
     client = dc()
     c = _root_container(client, cid)
-    if schnell:
-        if c.id not in _platz_misst:
-            _platz_misst.add(c.id)
+    frisch = time.time() - _platz_zeit.get(c.id, 0) < _PLATZ_FRISCH
+    if not frisch and c.id not in _platz_misst:
+        _platz_misst.add(c.id)
 
-            def nachmessen() -> None:
-                try:
+        def nachmessen() -> None:
+            try:
+                with _platz_eine:
                     _platz_messen(client, c)
-                except Exception as exc:  # noqa: BLE001 — nur ein Messwert
-                    log.warning("Platz von %s nicht gemessen: %s", c.name, exc)
-                finally:
-                    _platz_misst.discard(c.id)
+            except Exception as exc:  # noqa: BLE001 — nur ein Messwert
+                log.warning("Platz von %s nicht gemessen: %s", c.name, exc)
+            finally:
+                _platz_misst.discard(c.id)
 
-            threading.Thread(target=nachmessen, daemon=True).start()
-        return _platz_zwischen.get(c.id) or {"schicht": 0, "docker": 0, "gesamt": 0}
-    return _platz_messen(client, c)
+        threading.Thread(target=nachmessen, daemon=True).start()
+    return _platz_zwischen.get(c.id) or {"schicht": 0, "docker": 0, "gesamt": 0}
 
 
 def _platz_messen(client, c) -> dict[str, int]:
@@ -2759,6 +2773,7 @@ def _platz_messen(client, c) -> dict[str, int]:
     docker_bytes = _du(ort) if ort else _volume_groessen(client).get(docker_volume_name(sid), 0)
     wert = {"schicht": schicht, "docker": docker_bytes, "gesamt": schicht + docker_bytes}
     _platz_zwischen[c.id] = wert
+    _platz_zeit[c.id] = time.time()
     return wert
 
 

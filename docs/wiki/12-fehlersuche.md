@@ -42,6 +42,21 @@ opencode), beim Root-Arbeitsplatz die Netze des Docker darin und ob eines eine b
 überdeckt, dazu Paketfilter, Prozess- und Speichergrenzen. Das Skript läuft auch direkt im
 Arbeitsplatz (`bash platz-diagnose.sh`). Der Bericht liegt unter `/tmp/platz-diagnose-<Name>-<Zeit>.txt`.
 
+## „Läuft ota-agent?“ oder „antwortet nicht rechtzeitig“, obwohl der Agent läuft
+
+*2026-11-05.* Der Agent war gesund, aber Docker brauchte für einfache Abfragen über eine Minute,
+und Starts scheiterten. Die Ursache war **Betrieb → Arbeitsplätze**: Die Seite lädt alle 15
+Sekunden neu und ließ dabei für jeden Root-Arbeitsplatz den belegten Platz messen. Jede Messung
+lässt Docker die Schicht des Containers durchgehen und `du` über seine Docker-Daten laufen, bei
+großen Plätzen über eine Million Dateien. Zwei Dutzend solcher Messungen stauten sich.
+
+Seitdem gibt der Agent den letzten Messwert zurück und misst höchstens alle zehn Minuten neu, im
+Hintergrund und einen Platz nach dem anderen. Direkt nach einem Neustart des Agents steht deshalb
+kurz 0 da. Der Start eines Arbeitsplatzes darf außerdem 300 s statt 60 s dauern. Läuft die Antwort
+trotzdem ab, heißt die Meldung jetzt „antwortet nicht rechtzeitig — Docker ist gerade überlastet“,
+nicht mehr „nicht erreichbar“. Dann zeigt `sudo scripts/docker-diagnose.sh`, warum Docker langsam
+ist, und `sudo scripts/platten-last.sh`, wer die Platte belastet.
+
 ## „Diese Sitzung läuft nicht mehr", obwohl sie gerade gestartet wurde
 
 Diese Seite kommt vom Schutzwall aus `deploy/traefik/dynamic/session-guard.yml`. Er antwortet, wenn
