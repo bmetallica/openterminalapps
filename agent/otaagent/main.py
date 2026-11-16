@@ -2508,7 +2508,11 @@ def container_action(cid: str, action: str) -> dict[str, str]:
             # inneren Container staenden mitten im Schreiben still.
             c.stop(timeout=45)
             # Jetzt ist der Platz endgueltig: Gemessen im Hintergrund, steht
-            # der Wert beim Fortsetzen schon bereit (siehe `platz`).
+            # der Wert beim Fortsetzen schon bereit (siehe `platz`). Der alte
+            # Wert gilt dafuer nicht mehr, auch wenn er juenger als
+            # `_PLATZ_FRISCH` ist: Wer gerade aufgeraeumt hat, soll beim
+            # Fortsetzen nicht an der Grenze von vorher scheitern.
+            _platz_zeit.pop(c.id, None)
             threading.Thread(target=platz, args=(cid, True), daemon=True).start()
         else:
             getattr(c, action)()
