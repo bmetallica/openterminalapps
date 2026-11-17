@@ -281,6 +281,13 @@ What is counted:
 - The server returns the tokens in its response. For streamed responses the gateway requests them
   as well (`stream_options.include_usage`) and removes the extra block again before it reaches the
   tool.
+- **Only calls to a model count**: chat, completions, embeddings, responses, messages, rerank,
+  Ollama `api/chat`, `api/generate` and `api/embed`, llama.cpp `completion`, `infill` and
+  `embedding`. The gateway passes everything else on but does not count it. That covers the model
+  list, `/health`, login pages and metrics. Otherwise a health check polling a server's real
+  address every few seconds would dominate the statistics as "model unknown". If a request names
+  no model, the only model of its server is used, otherwise "ohne Angabe (shortname)". Counts of
+  such calls from before this update were removed by migration `e8a2c6d4f193`.
 
 **Retention:** individual requests 30 days, hourly totals 365 days. Both are adjustable; for hourly
 totals 0 means unlimited. OTA deletes older data once a day. **Delete all usage data** under

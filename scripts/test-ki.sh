@@ -154,6 +154,10 @@ else
 fi
 A=$(frage "$C" "$KI/v1" false | jqp "d['choices'][0]['message']['content'].strip()")
 [ -n "$A" ] && ok "Frage an die echte Adresse bekommt Antwort ($A) — abgefangen" || bad "Keine Antwort von der echten Adresse"
+# Eine Gesundheitsprüfung an der echten Adresse: abgefangen, aber keine
+# Anfrage an ein Modell — darf in der Statistik nicht erscheinen.
+docker exec -u 1000 "$C" curl -s -m 15 -o /dev/null "$KI/v1/models"
+docker exec -u 1000 "$C" curl -s -m 15 -o /dev/null "${KI%/v1}/health"
 # Zwei Anfragen, wie sie Erweiterungen schicken: eine JetBrains-Erweiterung
 # (Java-Bibliothek okhttp) und Cline in VS Code (X-Title) — für den Ring
 # „Je Anwendung“ unten.
@@ -344,6 +348,8 @@ if [ -n "${EXT_K:-}" ]; then
   expect "True" "$(jqp "str(d['zu_wenige'] or d['summe']['anfragen'] >= 2)" <<<"$F")" "Filter nur $EXT_K läuft"
 fi
 expect "400" "$(code "$B/api/admin/ki-nutzung?quelle=irgendwas")" "Unbekannte Quelle: 400"
+expect "False" "$(jqp "str(any(m['name'] in ('', 'unbekannt') for m in d['modelle']))" <<<"$UE")" \
+  "Modellliste und /health an der echten Adresse zählen nicht als Anfrage"
 expect "403" "$(code "$B/api/admin/ki-nutzung/personen")" "Namen ohne Auskunft: 403"
 expect "403" "$(code "$B/api/admin/ki-nutzung/nutzer/$ADMIN_ID")" "Ein Mensch ohne Auskunft: 403"
 expect "422" "$(code -X POST "$B/api/admin/ki-nutzung/auskunft" -d '{"grund":"kurz"}')" "Zu kurze Begründung abgelehnt"

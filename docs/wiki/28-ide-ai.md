@@ -281,6 +281,14 @@ Was gezählt wird:
 - Die Tokens liefert der Server in seiner Antwort. Bei gestreamten Antworten bestellt der
   Durchgang sie mit (`stream_options.include_usage`) und nimmt den zusätzlichen Block wieder heraus,
   bevor er beim Werkzeug ankommt.
+- **Nur Aufrufe eines Modells zählen**: Chat, Completions, Embeddings, Responses, Messages,
+  Rerank, Ollama `api/chat`, `api/generate` und `api/embed`, llama.cpp `completion`, `infill` und
+  `embedding`. Alles andere reicht der Durchgang weiter, zählt es aber nicht. Das betrifft
+  Modellliste, `/health`, Anmeldeseiten und Metriken. Sonst beherrschte eine Gesundheitsprüfung,
+  die einen Server über seine echte Adresse alle paar Sekunden abfragt, die Statistik als „Modell
+  unbekannt“. Nennt eine Anfrage kein Modell, gilt das einzige Modell ihres Servers, sonst „ohne
+  Angabe (kürzel)“. Zählungen solcher Abrufe von vor diesem Update hat die Migration
+  `e8a2c6d4f193` herausgenommen.
 
 **Aufbewahrung:** Einzelne Anfragen 30 Tage, Stundensummen 365 Tage. Beides ist einstellbar, bei den
 Stundensummen heißt 0 unbegrenzt. Älteres löscht OTA einmal am Tag. **Alle Nutzungsdaten löschen**

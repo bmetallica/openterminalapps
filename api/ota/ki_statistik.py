@@ -103,6 +103,32 @@ def anwendung(werkzeug: str, ides: set[str]) -> str:
     return werkzeug
 
 
+# Was als Anfrage zählt: nur Aufrufe, bei denen ein Modell rechnet. Der
+# Durchgang reicht alles durch, und abgefangen wird jeder Abruf an die
+# Adresse des Servers — auch Modellliste, /health, eine Anmeldeseite.
+# Solche Abrufe kommen von Gesundheitsprüfungen oft im Sekundentakt und
+# würden die Statistik sonst als „Modell unbekannt“ beherrschen.
+RECHNEN = ("/completions", "/embeddings", "/responses", "/messages", "/rerank",
+           "/api/chat", "/api/generate", "/api/embed", "/api/embeddings",
+           "/completion", "/infill", "/embedding")
+
+
+def rechenaufruf(pfad: str) -> bool:
+    p = pfad.split("?")[0].rstrip("/").lower()
+    return p.endswith(RECHNEN)
+
+
+def _ohne_modell(e: dict[str, Any]) -> dict[str, str]:
+    """Server → was als Modell gilt, wenn eine Anfrage keins nennt: sein
+    einziges Modell, sonst „ohne Angabe (kürzel)“."""
+    raus: dict[str, str] = {}
+    for srv in ide_ai.server_liste(e) + list(e.get("weitere") or []):
+        modelle = srv.get("modelle") or []
+        raus.setdefault(srv["kuerzel"], modelle[0]["id"] if len(modelle) == 1
+                        else f"ohne Angabe ({srv['kuerzel']})")
+    return raus
+
+
 def _uuid(roh: Any) -> uuid.UUID | None:
     try:
         return uuid.UUID(str(roh))
@@ -147,12 +173,17 @@ def _datei_uebernehmen(db: DbSession, name: str, zeilen: list[dict[str, Any]]) -
             wer[s] = (u.id, u.username, t.id, t.friendly_name)
     ides = _ides(db, {w[2] for w in wer.values()})
     personen = _personen(db, [z for z in zeilen if z.get("extern")])
+    ohne_modell = _ohne_modell(ide_ai.einstellungen(db))
 
     werte = []
     for i, z in enumerate(zeilen):
         ts = _zeit(z.get("zeit"))
         if ts is None:
             continue
+        if z.get("weg") != "tls" and not rechenaufruf(str(z.get("pfad") or "")):
+            continue  # Modellliste, /health, Anmeldeseite …: keine Anfrage an ein Modell
+        if z.get("weg") != "tls" and not z.get("modell"):
+            z = {**z, "modell": ohne_modell.get(str(z.get("server") or ""), "ohne Angabe")}
         sid = _uuid(z.get("session_id"))
         uid, uname, tid, tname = wer.get(sid, (None, "", None, "")) if sid else (None, "", None, "")
         if z.get("extern"):
