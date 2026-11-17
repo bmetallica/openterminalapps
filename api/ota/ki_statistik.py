@@ -311,3 +311,81 @@ def nutzer(db: DbSession, user_id: uuid.UUID | None, von: datetime | None, bis: 
             "arbeitsplaetze": plaetze, "modelle": modelle, "werkzeuge": werkzeuge,
             "verlauf": _verlauf(db, von, bis, tz, int(e["frist_roh"]), uid, True),
             "frist_roh": int(e["frist_roh"])}
+
+
+# ------------------------------------------------- Die Übersicht ohne Namen
+
+# Unter so vielen Menschen (oder Arbeitsplätzen) im Zeitraum gibt es keine
+# Aufteilung: Bei zweien weiss jeder, wer „Person 1“ ist.
+MINDESTENS = 3
+
+
+def _anteile(zeilen: list[tuple[Any, Any, Any]]) -> list[dict[str, int]]:
+    """Nur die Grössen, ohne Kennung — die Reihenfolge ist die der Grösse,
+    und die Namen vergibt erst die Oberfläche nach dem Rang."""
+    raus = [{"anfragen": int(a or 0), "tokens": int(t or 0)} for _, a, t in zeilen]
+    return sorted(raus, key=lambda r: (-r["anfragen"], -r["tokens"]))
+
+
+def anonym(db: DbSession, von: datetime | None, bis: datetime | None, tz: str) -> dict[str, Any]:
+    """Was die Seite ohne Auskunft zeigt: Summen, Verlauf und Anteile — kein
+    Name, keine Kennung eines Menschen oder seines Arbeitsplatzes."""
+    e = ide_ai.einstellungen(db)
+    von, bis = _zeitraum(von, bis)
+    ab = von.replace(minute=0, second=0, microsecond=0)
+    im = (KiStunde.stunde >= ab, KiStunde.stunde < bis)
+    tokens = func.sum(KiStunde.ein + KiStunde.aus)
+    bekannt = KiStunde.user_id != NULL
+
+    summe = db.execute(select(
+        func.coalesce(func.sum(KiStunde.anfragen), 0), func.coalesce(func.sum(KiStunde.fehler), 0),
+        func.coalesce(func.sum(KiStunde.verbindungen), 0), func.coalesce(func.sum(KiStunde.ein), 0),
+        func.coalesce(func.sum(KiStunde.aus), 0), func.coalesce(func.sum(KiStunde.dauer_ms), 0),
+    ).where(*im)).one()
+
+    personen = db.execute(select(KiStunde.user_id, func.sum(KiStunde.anfragen), tokens)
+                          .where(*im, bekannt).group_by(KiStunde.user_id)).all()
+    plaetze = db.execute(select(KiStunde.user_id, func.sum(KiStunde.anfragen), tokens)
+                         .where(*im, bekannt)
+                         .group_by(KiStunde.user_id, KiStunde.template_id)).all()
+    ohne = db.execute(select(func.coalesce(func.sum(KiStunde.anfragen), 0),
+                             func.coalesce(tokens, 0)).where(*im, ~bekannt)).one()
+
+    def benannt(spalte_name, spalte_gruppe) -> list[dict[str, Any]]:
+        return sorted(({"name": n or "", "anfragen": int(a or 0), "tokens": int(t or 0)}
+                       for n, a, t in db.execute(
+                           select(spalte_name, func.sum(KiStunde.anfragen), tokens)
+                           .where(*im).group_by(spalte_gruppe)).all()),
+                      key=lambda r: (-r["anfragen"], -r["tokens"]))
+
+    # Vorlagen und Modelle sind keine Menschen: Sie stehen mit Namen da.
+    vorlagen = sorted(({"name": n or "", "anfragen": int(a or 0), "tokens": int(t or 0)}
+                       for _, n, a, t in db.execute(
+                           select(KiStunde.template_id, func.max(KiStunde.arbeitsplatz),
+                                  func.sum(KiStunde.anfragen), tokens)
+                           .where(*im).group_by(KiStunde.template_id)).all()),
+                      key=lambda r: (-r["anfragen"], -r["tokens"]))
+    modelle = benannt(KiStunde.modell, KiStunde.modell)
+    server = benannt(KiStunde.server, KiStunde.server)
+
+    tageszeit = [{"anfragen": 0, "tokens": 0} for _ in range(24)]
+    for h, a, t in db.execute(text(
+            "SELECT extract(hour FROM stunde AT TIME ZONE :tz)::int, sum(anfragen), sum(ein + aus) "
+            "FROM ki_stunden WHERE stunde >= :von AND stunde < :bis GROUP BY 1"),
+            {"tz": tz, "von": ab, "bis": bis}).all():
+        if 0 <= h < 24:
+            tageszeit[h] = {"anfragen": int(a or 0), "tokens": int(t or 0)}
+
+    a = int(summe[0])
+    return {
+        "von": von.isoformat(), "bis": bis.isoformat(), "mindestens": MINDESTENS,
+        "summe": {"anfragen": a, "fehler": int(summe[1]), "verbindungen": int(summe[2]),
+                  "ein": int(summe[3]), "aus": int(summe[4]),
+                  "dauer_mittel_ms": int(summe[5] / a) if a else 0,
+                  "personen": len(personen), "arbeitsplaetze": len(plaetze)},
+        "verlauf": _verlauf(db, von, bis, tz, int(e["frist_roh"]), None, False),
+        "personen": _anteile(personen) if len(personen) >= MINDESTENS else [],
+        "arbeitsplaetze": _anteile(plaetze) if len(plaetze) >= MINDESTENS else [],
+        "nicht_zuzuordnen": {"anfragen": int(ohne[0]), "tokens": int(ohne[1])},
+        "vorlagen": vorlagen, "modelle": modelle, "server": server, "tageszeit": tageszeit,
+    }

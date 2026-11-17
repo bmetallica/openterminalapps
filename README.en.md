@@ -339,9 +339,12 @@ that did not exist before is simply there.
     also intercepts connections from scripts to a server's real address. If the gateway is down,
     traffic goes direct again by itself. The first server applies to everyone, each further one
     is added for its **groups**.
-  - **AI usage under Operations** (optional, off by default): who talks to the AI how often, per
-    person and workspace, with model, tokens and a graph that extends over days. Never contents;
-    retention adjustable, viewing is logged.
+  - **AI usage under Operations** (optional, off by default): at first **without names**, i.e.
+    totals, trend, donuts per person and workspace (by rank only, from three upwards), template,
+    model and server, and a distribution by time of day. Names and individual trends only after a
+    **reason** that is logged with the name, for 30 minutes. Everyone sees their own figures under
+    **My AI usage**, and a **GDPR** item in the sidebar informs everyone (text adaptable by
+    administrators). Never contents; retention adjustable.
   - If a Marketplace update or an own configuration has displaced Continue, **⋯ → Set up AI tools
     again** on the workspace's tile restores OTA's version. Root workspaces have **Rebuild** in the
     same menu.

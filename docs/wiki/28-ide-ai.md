@@ -198,16 +198,51 @@ Administratoren immer. Ohne Gruppe gilt er für alle.
 ### Nutzungsstatistik
 
 Mit eingeschaltetem Durchgang lässt sich unter **Einstellungen → IDE-AI → Nutzungsstatistik**
-zählen, wer die KI wie oft anspricht. Zu sehen ist das unter **Betrieb → KI-Nutzung**:
+zählen, wer die KI wie oft anspricht. Zu sehen ist das an drei Stellen.
 
-- **Übersicht** für einen wählbaren Zeitraum (24 h, 3, 7, 30 Tage oder frei): je Mensch Anfragen,
-  Tokens hinein und heraus, Arbeitsplätze, meistgenutztes Modell, Verlauf, zuletzt.
-- **Ein Klick auf den Namen** zeigt seine Arbeitsplätze mit einem Graphen, je Arbeitsplatz eine
-  Linie. Standard sind die letzten 24 Stunden. **« 1 Tag mehr** erweitert den Graphen nach hinten,
-  **‹ früher / später ›** verschiebt ihn, und ein im Graphen aufgezogener Bereich vergrößert ihn.
-  Darunter Modelle und Werkzeuge (opencode, Continue, Skript).
-- Gezählt werden **Zeit, Mensch, Arbeitsplatz, Server, Modell, Dauer und Tokens, nie Inhalte**.
-  Den Menschen findet OTA über die Absenderadresse des Arbeitsplatzes.
+**Betrieb → KI-Nutzung, ohne Namen.** Was die Verwaltung zuerst sieht, für einen wählbaren
+Zeitraum (24 h, 3, 7, 30 Tage oder frei), wahlweise nach Anfragen oder Tokens:
+
+- Kacheln: Anfragen, Tokens hinein und heraus, Menschen, Arbeitsplätze, mittlere Dauer, Fehler.
+- Der Verlauf aller Anfragen. Ein im Graphen aufgezogener Bereich vergrößert ihn.
+- Ringdiagramme **je Mensch** und **je Arbeitsplatz**. Sie zeigen nur Grössen: „Person 1“ ist im
+  gewählten Zeitraum und Maß die grösste, nicht immer dieselbe, und die API liefert dafür weder
+  Namen noch Kennungen. Unter **drei** Menschen oder Arbeitsplätzen im Zeitraum entfällt die
+  Aufteilung, denn bei zweien wüsste jeder, wer wer ist. Dazu Ringe je Vorlage, je Modell und,
+  bei mehreren Servern, je Server. Mehr als sieben Stücke fasst „Übrige“ zusammen.
+- Eine Verteilung **nach Tageszeit**, über den ganzen Zeitraum zusammengezählt.
+
+**Personenbezogene Auskunft.** Namen, die Übersicht je Mensch und seine Arbeitsplätze mit Verlauf
+gibt es erst nach einer **Begründung** (mindestens zehn Zeichen, z. B. eine Ticketnummer). Sie
+steht als `ki.auskunft` mit dem Namen der fragenden Person im Prüfprotokoll und dort unter
+Betrieb → Protokoll sichtbar. Die Auskunft gilt **30 Minuten**, nur für dieses Konto und nur in
+diesem Fenster: Neu laden heißt neu begründen. Jeder Blick auf einen einzelnen Menschen steht
+zusätzlich als `ki.nutzung_angesehen` mit dem Vorgang der Auskunft im Protokoll.
+Technisch ist die Auskunft ein signiertes Merkmal (Kopfzeile `X-OTA-Auskunft`). Ohne sie
+antworten `/api/admin/ki-nutzung/personen` und `/nutzer/{id}` mit 403.
+
+Ein Klick auf einen Namen zeigt seine Arbeitsplätze mit einem Graphen, je Arbeitsplatz eine
+Linie. **« 1 Tag mehr** erweitert ihn nach hinten, **‹ früher / später ›** verschiebt ihn. Darunter
+stehen Modelle und Werkzeuge (opencode, Continue, Skript).
+
+**Meine KI-Nutzung.** Solange die Statistik läuft, sieht **jeder** seine eigenen Zahlen in der
+Seitenleiste: Summen, Verlauf je Arbeitsplatz, Modelle, Werkzeuge. Das ist Selbstauskunft
+(Art. 15 DSGVO), deshalb ohne Begründung und ohne Protokolleintrag.
+
+**DSGVO.** Ebenfalls solange die Statistik läuft, steht für alle ein Punkt **DSGVO** in der
+Seitenleiste. Er erklärt, was OTA über Arbeitsplätze und KI-Nutzung erfasst, wozu, wie lange und
+wer es sehen darf. Die Verwaltung sieht den Punkt immer und passt den Text dort mit
+**Bearbeiten** an, Markdown wie bei den News. Die Platzhalter `{frist_roh}`, `{frist_stunden}`
+und `{statistik}` setzt OTA ein, so stimmen genannte Fristen auch nach einer Änderung.
+**Mitgelieferten Text verwenden** stellt die Vorlage wieder her (deutsch und englisch nach der
+Sprache der Oberfläche). Die verantwortliche Stelle und die Datenschutzbeauftragte bzw. den
+Datenschutzbeauftragten müsst ihr selbst eintragen. Jede Änderung steht als
+`dsgvo.hinweis_geaendert` im Protokoll.
+
+Was gezählt wird:
+
+- **Zeit, Mensch, Arbeitsplatz, Server, Modell, Dauer und Tokens, nie Inhalte**. Den Menschen
+  findet OTA über die Absenderadresse des Arbeitsplatzes.
 - Die Tokens liefert der Server in seiner Antwort. Bei gestreamten Antworten bestellt der
   Durchgang sie mit (`stream_options.include_usage`) und nimmt den zusätzlichen Block wieder heraus,
   bevor er beim Werkzeug ankommt.
@@ -217,11 +252,18 @@ Stundensummen heißt 0 unbegrenzt. Älteres löscht OTA einmal am Tag. **Alle Nu
 unter Betrieb → KI-Nutzung leert beides.
 
 **Auf der Platte** kostet das wenig: Der Durchgang schreibt in eine Spool-Datei unter
-`/srv/ota/runtime/ki/spool/`, die API holt sie einmal in der Minute in einem Zug ab.
+`/srv/ota/runtime/ki/spool/`, die API holt sie einmal in der Minute in einem Zug ab. Das tut sie
+auch, wenn Statistik und Durchgang inzwischen aus sind. Was dort liegt, wurde gezählt, als die
+Statistik lief, und gehört in die Datenbank, wo die Fristen es löschen.
 
-> **Vor dem Einschalten:** Eine Auswertung je Person kann unter die Leistungs- und
-> Verhaltenskontrolle fallen (§ 87 Abs. 1 Nr. 6 BetrVG). Gibt es einen Betriebsrat, gehört er
-> gefragt, und die Menschen gehören informiert. Ein- und Ausschalten und jedes Öffnen der Zahlen
+> **Vor dem Einschalten:** Auch ohne Namen auf der ersten Seite ist die Statistik eine technische
+> Einrichtung, die sich zur Leistungs- und Verhaltenskontrolle *eignet* (§ 87 Abs. 1 Nr. 6
+> BetrVG). Gibt es einen Betriebsrat, gehört er gefragt. Eine Betriebsvereinbarung sollte
+> festhalten, wofür die Zahlen da sind (Kapazität, Kosten, Fehler, keine Leistungsbewertung) und
+> welche Gründe eine personenbezogene Auskunft rechtfertigen. Mit eurer bzw. eurem
+> Datenschutzbeauftragten klären, ob eine Datenschutz-Folgenabschätzung nötig ist, und den Eintrag
+> im Verarbeitungsverzeichnis anlegen. Informiert werden die Menschen über den Punkt **DSGVO**. Den
+> Text vorher anpassen. Ein- und Ausschalten, jede Auskunft mit Grund und jedes Öffnen der Zahlen
 > eines Menschen stehen im Protokoll.
 
 ### Verschlüsselte Verbindungen
@@ -275,7 +317,9 @@ Die Einstellungsseite zeigt, welche Fassungen in der Paketquelle liegen.
 - Ein API-Schlüssel steht in `~/.continue/config.yaml` im Zuhause, also auch in der Sicherung.
   Mit dem KI-Durchgang nicht: Dann kennt ihn nur der Durchgang.
 - Die Nutzungsstatistik ist aus, solange niemand sie einschaltet. Was sie zählt, steht oben unter
-  [Nutzungsstatistik](#nutzungsstatistik).
+  [Nutzungsstatistik](#nutzungsstatistik). Läuft sie, zeigt OTA allen den Punkt **DSGVO** und
+  jedem seine eigenen Zahlen. Die Verwaltung sieht Namen nur nach einer protokollierten
+  Begründung.
 
 ## Wenn etwas nicht geht
 
@@ -297,6 +341,9 @@ Die Einstellungsseite zeigt, welche Fassungen in der Paketquelle liegen.
 | Unter IDE-AI „Der Durchgang antwortet nicht“ | `docker logs ota-ki`. Läuft er, aber die Firewall war neu gestartet: Der Agent startet ihn beim nächsten Abgleich mit, sonst `docker restart ota-ki`. Bis dahin geht der Verkehr direkt |
 | „Das Modell … ist in OTA nicht eingetragen“ | Ein Werkzeug fragt über `ki.ota` nach einem Modell, das unter IDE-AI nicht angeboten wird. Anbieten oder im Werkzeug ein anderes wählen |
 | In der KI-Nutzung „nicht zuzuordnen“ | Anfragen von einer Adresse ohne laufende Sitzung, etwa kurz nach dem Beenden |
+| „Personenbezogene Zahlen nur mit einer Auskunft“ / „Die Auskunft ist abgelaufen“ | Die halbe Stunde ist um, oder die Seite wurde neu geladen: Begründung erneut eingeben |
+| Kein Ringdiagramm je Mensch, nur „Erst ab 3 Menschen …“ | Gewollt: Bei weniger als drei Menschen bzw. Arbeitsplätzen im Zeitraum wäre erkennbar, wer wer ist. Zeitraum vergrößern |
+| Kein Punkt „DSGVO“ / „Meine KI-Nutzung“ in der Seitenleiste | Beide erscheinen nur, solange die Nutzungsstatistik läuft. Die Verwaltung sieht „DSGVO“ immer. Die Seitenleiste fragt alle fünf Minuten nach, sonst Seite neu laden |
 | In der KI-Nutzung keine Zahlen | Statistik an? Durchgang bereit (Einstellungen → IDE-AI)? Die API holt jede Minute ab: `docker logs ota-api 2>&1 \| grep KI-Nutzung` |
 
 Prüfreihe: `scripts/test-ide-ai.sh`. Sie startet jede Vorlage mit einem passenden Editor und fragt

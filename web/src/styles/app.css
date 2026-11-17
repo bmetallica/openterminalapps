@@ -1967,4 +1967,19 @@ input[type="color"] {
 .ki-kachel__name { font-size: 12px; color: var(--label); margin-top: 2px; }
 .ki-leiste { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 16px; }
 .ki-funke { display: block; }
+.ki-titel { font-size: 13px; font-weight: 600; color: var(--label); margin: 0 0 10px; }
+.ki-torten { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); gap: 14px; margin-bottom: 18px; }
+.ki-torte { padding: 14px 16px; min-width: 0; }
+.ki-torte__inhalt { display: flex; gap: 16px; align-items: center; }
+.ki-torte__inhalt svg { flex: none; }
+.ki-torte__stueck { transition: opacity .12s; cursor: default; }
+.ki-torte__mitte { fill: var(--text); font-size: 15px; font-variant-numeric: tabular-nums; }
+.ki-torte__legende { list-style: none; margin: 0; padding: 0; flex: 1; min-width: 0; font-size: 12.5px; }
+.ki-torte__legende li { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto auto; gap: 8px; align-items: center; padding: 3px 4px; border-radius: 4px; color: var(--label); }
+.ki-torte__legende li.is-on { background: var(--btn-hover); color: var(--text); }
+.ki-torte__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ki-maske { padding: 14px 16px; margin-bottom: 8px; }
+.ki-maske textarea { width: 100%; resize: vertical; }
+.ki-auskunft { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+@media (max-width: 480px) { .ki-torte__inhalt { flex-direction: column; align-items: stretch; } .ki-torte__inhalt svg { align-self: center; } }
 .ki-funke path { fill: none; stroke: var(--serie-1); stroke-width: 1.5; }

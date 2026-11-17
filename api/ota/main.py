@@ -22,7 +22,7 @@ from .routers import (
     registries as registries_router,
     sessions, shared as shared_router, skeleton as skeleton_router,
     software as software_router, git as git_router, ide_ai as ide_ai_router, opencode as opencode_router,
-    ki_nutzung as ki_nutzung_router,
+    ki_nutzung as ki_nutzung_router, dsgvo as dsgvo_router,
     erweiterungen as erweiterungen_router, templates,
     news as news_router,
 )
@@ -186,13 +186,14 @@ def _ki_haushalt(runde: int) -> None:
     from . import ide_ai, ki_statistik
 
     with SessionLocal() as db:
-        e = ide_ai.einstellungen(db)
         if runde % 10 == 0:
             ide_ai.durchgang_schieben(db)
-        if e["durchgang"] or e["statistik"]:
-            neu = ki_statistik.abholen(db)
-            if neu:
-                log.info("KI-Nutzung: %d Anfragen übernommen", neu)
+        # Immer abholen, auch ausgeschaltet: Was im Spool liegt, wurde
+        # gezählt, als die Statistik lief — es gehört in die Datenbank, wo
+        # die Fristen es löschen, nicht vergessen auf die Platte.
+        neu = ki_statistik.abholen(db)
+        if neu:
+            log.info("KI-Nutzung: %d Anfragen übernommen", neu)
 
 
 def _ki_aufraeumen() -> dict[str, int]:
@@ -542,6 +543,8 @@ app.include_router(ki_nutzung_router.router)
 app.include_router(opencode_router.router)
 app.include_router(erweiterungen_router.router)
 app.include_router(news_router.router)
+app.include_router(dsgvo_router.router)
+app.include_router(ki_nutzung_router.eigen)
 
 
 @app.exception_handler(Exception)

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  ApiError, api, type KiNutzerDetail, type KiUebersicht, type KiVerlauf,
+  ApiError, api, type KiAnonym, type KiAuskunft, type KiBenannt, type KiNutzerDetail,
+  type KiUebersicht, type KiVerlauf,
 } from '../lib/api'
 import { getLang, t as tr, useLang } from '../lib/i18n'
 
@@ -8,9 +9,11 @@ import { getLang, t as tr, useLang } from '../lib/i18n'
  * Betrieb → KI-Nutzung (Handbuch Kapitel 28).
  *
  * Wer die KI wie oft anspricht — gezählt vom KI-Durchgang (ota-ki), nie mit
- * Inhalten. Oben die Übersicht je Mensch für einen wählbaren Zeitraum; ein
- * Klick auf einen Namen zeigt seine Arbeitsplätze mit einem Graphen, der sich
- * nach vorn und hinten erweitern und durch Aufziehen vergrößern lässt.
+ * Inhalten. Die Seite zeigt zuerst nur, was ohne Namen geht: Summen, Verlauf,
+ * Anteile je Mensch und Arbeitsplatz nach Rang („Person 1“ ist im gewählten
+ * Zeitraum und Maß die grösste, nicht immer dieselbe), Vorlagen, Modelle,
+ * Tageszeiten. Namen und Einzelverläufe gibt es erst nach einer Begründung,
+ * die im Prüfprotokoll landet (routers/ki_nutzung.py).
  */
 
 const STUNDE = 3600_000
@@ -40,9 +43,13 @@ const iso = (ms: number) => new Date(ms).toISOString()
 export function KiNutzung({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad') => void }) {
   useLang()
   const [raum, setRaum] = useState<Zeitraum>(() => ({ von: Date.now() - TAG, bis: Date.now() }))
-  const [daten, setDaten] = useState<KiUebersicht | null>(null)
-  const [wer, setWer] = useState<string | null>(null)
+  const [metrik, setMetrik] = useState<Metrik>('anfragen')
+  const [daten, setDaten] = useState<KiAnonym | null>(null)
   const [fehler, setFehler] = useState('')
+  // Die Auskunft lebt nur hier im Speicher: Wer die Seite neu lädt oder
+  // verlässt, muss wieder begründen.
+  const [auskunft, setAuskunft] = useState<KiAuskunft | null>(null)
+  const [wer, setWer] = useState<string | null>(null)
 
   const laden = useCallback(async () => {
     try {
@@ -53,11 +60,41 @@ export function KiNutzung({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad
   }, [raum])
   useEffect(() => { if (!wer) void laden() }, [laden, wer])
 
-  if (wer) {
-    return <NutzerDetail id={wer} start={raum} onZurueck={() => setWer(null)} onToast={onToast} />
+  // Abgelaufen ist abgelaufen — auch ohne dass jemand klickt.
+  useEffect(() => {
+    if (!auskunft) return
+    const rest = new Date(auskunft.bis).getTime() - Date.now()
+    const t = setTimeout(() => {
+      setAuskunft(null); setWer(null)
+      onToast(tr('Die Auskunft ist abgelaufen.'))
+    }, Math.max(0, rest))
+    return () => clearTimeout(t)
+  }, [auskunft, onToast])
+
+  const beenden = useCallback(() => { setAuskunft(null); setWer(null) }, [])
+  const abgelehnt = useCallback((err: unknown) => {
+    if (err instanceof ApiError && err.status === 403) beenden()
+    onToast(err instanceof ApiError ? err.message : tr('Hat nicht geklappt'), 'bad')
+  }, [beenden, onToast])
+
+  if (wer && auskunft) {
+    return (
+      <div>
+        <AuskunftLeiste auskunft={auskunft} onBeenden={beenden} />
+        <NutzerDetail id={wer} merkmal={auskunft.merkmal} start={raum} onZurueck={() => setWer(null)}
+          onFehler={abgelehnt} />
+      </div>
+    )
   }
   if (fehler) return <p className="note-warn">{fehler}</p>
   if (!daten) return <p className="sub">{tr('Wird geladen…')}</p>
+
+  const wert = (x: { anfragen: number; tokens: number }) => metrik === 'anfragen' ? x.anfragen : x.tokens
+  const nachRang = (liste: { anfragen: number; tokens: number }[], name: string) =>
+    [...liste].sort((x, y) => wert(y) - wert(x)).map((x, i) => ({ name: tr(name, { n: i + 1 }), wert: wert(x) }))
+  const benannt = (liste: KiBenannt[], leer: string) =>
+    [...liste].sort((x, y) => wert(y) - wert(x)).map((x) => ({ name: x.name || tr(leer), wert: wert(x) }))
+  const ohne = wert(daten.nicht_zuzuordnen)
 
   return (
     <div>
@@ -72,19 +109,135 @@ export function KiNutzung({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad
         <Kachel wert={zahl(daten.summe.anfragen)} name={tr('Anfragen')} />
         <Kachel wert={kurz(daten.summe.ein)} name={tr('Tokens hinein')} />
         <Kachel wert={kurz(daten.summe.aus)} name={tr('Tokens heraus')} />
-        <Kachel wert={zahl(daten.nutzer.filter((n) => n.bekannt).length)} name={tr('Menschen')} />
+        <Kachel wert={zahl(daten.summe.personen)} name={tr('Menschen')} />
+        <Kachel wert={zahl(daten.summe.arbeitsplaetze)} name={tr('Arbeitsplätze')} />
+        <Kachel wert={`${(daten.summe.dauer_mittel_ms / 1000).toLocaleString(getLang() === 'en' ? 'en-US' : 'de-DE', { maximumFractionDigits: 1 })} s`}
+          name={tr('Mittlere Dauer')} />
         <Kachel wert={zahl(daten.summe.fehler)} name={tr('Fehler')} />
       </div>
 
-      <div className="panel" style={{ padding: '14px 16px', marginBottom: 18 }}>
-        <Graf verlauf={daten.verlauf} raum={raum} namen={{ '': tr('Alle') }} metrik="anfragen"
-          onZoom={setRaum} />
+      <div className="ki-leiste" style={{ marginBottom: 10 }}>
+        <div className="seg" role="radiogroup" aria-label={tr('Größe')}>
+          {(['anfragen', 'tokens'] as Metrik[]).map((m) => (
+            <button key={m} type="button" role="radio" aria-checked={metrik === m}
+              className={`seg__opt${metrik === m ? ' is-on' : ''}`} onClick={() => setMetrik(m)}>
+              {m === 'anfragen' ? tr('Anfragen') : tr('Tokens')}
+            </button>
+          ))}
+        </div>
+        <span className="sub" style={{ fontSize: 12 }}>
+          {tr('Ohne Namen: Menschen und Arbeitsplätze erscheinen nur nach ihrem Rang im gewählten Zeitraum.')}
+        </span>
       </div>
 
-      {daten.nutzer.length === 0 ? (
-        <div className="empty">
-          <p className="empty__title">{tr('In diesem Zeitraum keine Anfragen')}</p>
-        </div>
+      <div className="panel" style={{ padding: '14px 16px', marginBottom: 18 }}>
+        <h3 className="ki-titel">{metrik === 'anfragen' ? tr('Anfragen im Verlauf') : tr('Tokens im Verlauf')}</h3>
+        <Graf verlauf={daten.verlauf} raum={raum} namen={{ '': tr('Alle') }} metrik={metrik} onZoom={setRaum} />
+      </div>
+
+      <div className="ki-torten">
+        <Torte titel={tr('Je Mensch')} metrik={metrik}
+          teile={daten.personen.length ? nachRang(daten.personen, 'Person {n}') : []}
+          rest={ohne ? { name: tr('nicht zuzuordnen'), wert: ohne } : undefined}
+          leer={daten.summe.personen > 0
+            ? tr('Erst ab {n} Menschen im Zeitraum — bei weniger wäre erkennbar, wer wer ist.', { n: daten.mindestens })
+            : undefined} />
+        <Torte titel={tr('Je Arbeitsplatz')} metrik={metrik}
+          teile={daten.arbeitsplaetze.length ? nachRang(daten.arbeitsplaetze, 'Arbeitsplatz {n}') : []}
+          leer={daten.summe.arbeitsplaetze > 0
+            ? tr('Erst ab {n} Arbeitsplätzen im Zeitraum — bei weniger wäre erkennbar, wem welcher gehört.', { n: daten.mindestens })
+            : undefined} />
+        <Torte titel={tr('Je Vorlage')} metrik={metrik} teile={benannt(daten.vorlagen, 'nicht zuzuordnen')} />
+        <Torte titel={tr('Je Modell')} metrik={metrik} teile={benannt(daten.modelle, 'unbekannt')} />
+        {daten.server.length > 1 && (
+          <Torte titel={tr('Je KI-Server')} metrik={metrik} teile={benannt(daten.server, 'unbekannt')} />
+        )}
+      </div>
+
+      <div className="panel" style={{ padding: '14px 16px', marginBottom: 18 }}>
+        <h3 className="ki-titel">{tr('Nach Tageszeit')}</h3>
+        <Tageszeit werte={daten.tageszeit.map(wert)} metrik={metrik} />
+      </div>
+
+      {auskunft ? (
+        <Personen auskunft={auskunft} raum={raum} onBeenden={beenden} onWer={setWer} onFehler={abgelehnt} />
+      ) : (
+        <AuskunftMaske onAuskunft={setAuskunft} onToast={onToast} />
+      )}
+
+      <p className="field__hint" style={{ marginTop: 14 }}>
+        {tr('Einzelne Anfragen werden {r} Tage aufbewahrt, Stundensummen {s}. Wer die Zahlen eines Menschen öffnet, steht im Protokoll.', {
+          r: daten.frist_roh, s: daten.frist_stunden ? tr('{n} Tage', { n: daten.frist_stunden }) : tr('unbegrenzt') })}
+        {' '}
+        <button className="btn btn--sm btn--ghost" onClick={() => {
+          if (!confirm(tr('Alle gezählten KI-Anfragen löschen? Das lässt sich nicht rückgängig machen.'))) return
+          void api.kiNutzungLoeschen().then((r) => {
+            onToast(tr('{n} Anfragen und {s} Stundensummen gelöscht.', { n: r.anfragen, s: r.stunden }))
+            void laden()
+          }).catch((err) => onToast(err instanceof ApiError ? err.message : tr('Hat nicht geklappt'), 'bad'))
+        }}>{tr('Alle Nutzungsdaten löschen')}</button>
+      </p>
+    </div>
+  )
+}
+
+/** Die Maske vor den Namen: ohne Begründung keine personenbezogenen Zahlen. */
+function AuskunftMaske({ onAuskunft, onToast }: {
+  onAuskunft: (a: KiAuskunft) => void; onToast: (m: string, tone?: 'ok' | 'bad') => void
+}) {
+  const [grund, setGrund] = useState('')
+  const [busy, setBusy] = useState(false)
+  const genug = grund.trim().length >= 10
+  return (
+    <div className="panel ki-maske">
+      <h3 className="ki-titel">{tr('Personenbezogene Auskunft')}</h3>
+      <p className="sub" style={{ margin: '0 0 10px' }}>
+        {tr('Namen, einzelne Arbeitsplätze und ihr Verlauf erscheinen erst nach einer Begründung. Sie steht mit deinem Namen im Prüfprotokoll; die Auskunft gilt 30 Minuten und nur in diesem Fenster.')}
+      </p>
+      <textarea className="input" rows={3} maxLength={500} value={grund}
+        aria-label={tr('Begründung für die Auskunft')}
+        placeholder={tr('z. B. Ticket 4711: ungewöhnlich viele Fehler, Ursache klären; Kostenumlage Q3 nach Betriebsvereinbarung')}
+        onChange={(e) => setGrund(e.target.value)} />
+      <div className="ki-leiste" style={{ margin: '10px 0 0' }}>
+        <button className="btn btn--primary" disabled={!genug || busy} onClick={() => {
+          setBusy(true)
+          api.kiAuskunft(grund.trim()).then((a) => { onAuskunft(a); setGrund('') })
+            .catch((err) => onToast(err instanceof ApiError ? err.message : tr('Hat nicht geklappt'), 'bad'))
+            .finally(() => setBusy(false))
+        }}>{tr('Auskunft öffnen')}</button>
+        {!genug && <span className="sub" style={{ fontSize: 12 }}>{tr('Mindestens 10 Zeichen.')}</span>}
+      </div>
+    </div>
+  )
+}
+
+function AuskunftLeiste({ auskunft, onBeenden }: { auskunft: KiAuskunft; onBeenden: () => void }) {
+  return (
+    <div className="note-warn ki-auskunft">
+      <span>
+        <b>{tr('Auskunft offen bis {z}', { z: zeitText(new Date(auskunft.bis).getTime(), false) })}</b>
+        {' · '}{tr('Grund')}: {auskunft.grund}
+        <span className="sub"> · {tr('Vorgang')} {auskunft.vorgang}</span>
+      </span>
+      <button className="btn btn--sm" onClick={onBeenden}>{tr('Auskunft beenden')}</button>
+    </div>
+  )
+}
+
+/** Die alte Übersicht mit Namen — nur mit Auskunft. */
+function Personen({ auskunft, raum, onBeenden, onWer, onFehler }: {
+  auskunft: KiAuskunft; raum: Zeitraum; onBeenden: () => void; onWer: (id: string) => void
+  onFehler: (err: unknown) => void
+}) {
+  const [d, setD] = useState<KiUebersicht | null>(null)
+  useEffect(() => {
+    void api.kiPersonen(auskunft.merkmal, iso(raum.von), iso(raum.bis), TZ).then(setD).catch(onFehler)
+  }, [auskunft, raum, onFehler])
+  return (
+    <div className="panel ki-maske">
+      <AuskunftLeiste auskunft={auskunft} onBeenden={onBeenden} />
+      {!d ? <p className="sub">{tr('Wird geladen…')}</p> : d.nutzer.length === 0 ? (
+        <div className="empty"><p className="empty__title">{tr('In diesem Zeitraum keine Anfragen')}</p></div>
       ) : (
         <div style={{ overflowX: 'auto' }}>
           <table className="tbl">
@@ -96,8 +249,8 @@ export function KiNutzung({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad
               </tr>
             </thead>
             <tbody>
-              {daten.nutzer.map((n) => (
-                <tr key={n.user_id || 'unbekannt'} onClick={() => setWer(n.user_id || 'unbekannt')}>
+              {d.nutzer.map((n) => (
+                <tr key={n.user_id || 'unbekannt'} onClick={() => onWer(n.user_id || 'unbekannt')}>
                   <td>
                     <span className="data">{n.bekannt ? n.name : tr('nicht zuzuordnen')}</span>
                     {n.anzeigename && <div className="sub" style={{ fontSize: 12 }}>{n.anzeigename}</div>}
@@ -119,18 +272,144 @@ export function KiNutzung({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad
           </table>
         </div>
       )}
-      <p className="field__hint" style={{ marginTop: 14 }}>
-        {tr('Einzelne Anfragen werden {r} Tage aufbewahrt, Stundensummen {s}. Wer die Zahlen eines Menschen öffnet, steht im Protokoll.', {
-          r: daten.frist_roh, s: daten.frist_stunden ? tr('{n} Tage', { n: daten.frist_stunden }) : tr('unbegrenzt') })}
-        {' '}
-        <button className="btn btn--sm btn--ghost" onClick={() => {
-          if (!confirm(tr('Alle gezählten KI-Anfragen löschen? Das lässt sich nicht rückgängig machen.'))) return
-          void api.kiNutzungLoeschen().then((r) => {
-            onToast(tr('{n} Anfragen und {s} Stundensummen gelöscht.', { n: r.anfragen, s: r.stunden }))
-            void laden()
-          }).catch((err) => onToast(err instanceof ApiError ? err.message : tr('Hat nicht geklappt'), 'bad'))
-        }}>{tr('Alle Nutzungsdaten löschen')}</button>
-      </p>
+    </div>
+  )
+}
+
+type Stueck = { name: string; wert: number }
+
+/**
+ * Ringdiagramm: höchstens sieben Stücke, der Rest als „Übrige“. Farben in
+ * fester Reihenfolge nach Rang; „nicht zuzuordnen“ grau, weil es kein
+ * Mitglied der Reihe ist. Daneben die Legende mit Wert und Anteil — die
+ * Farbe ist nie die einzige Auskunft.
+ */
+function Torte({ titel, teile, rest, leer, metrik }: {
+  titel: string; teile: Stueck[]; rest?: Stueck; leer?: string; metrik: Metrik
+}) {
+  const [zeig, setZeig] = useState<number | null>(null)
+  const stuecke = useMemo(() => {
+    const positiv = teile.filter((x) => x.wert > 0)
+    const raus: (Stueck & { farbe: string })[] = positiv.slice(0, 7)
+      .map((x, i) => ({ ...x, farbe: `var(--serie-${i + 1})` }))
+    if (positiv.length > 7) {
+      raus.push({ name: tr('Übrige ({n})', { n: positiv.length - 7 }),
+        wert: positiv.slice(7).reduce((a, x) => a + x.wert, 0), farbe: 'var(--serie-8)' })
+    }
+    if (rest && rest.wert > 0 && raus.length) raus.push({ ...rest, farbe: 'var(--mute)' })
+    return raus
+  }, [teile, rest])
+  const summe = stuecke.reduce((a, x) => a + x.wert, 0)
+  const R = 62, r = 40, M = 70
+
+  let winkel = -Math.PI / 2
+  const boegen = stuecke.map((x) => {
+    const w = (x.wert / Math.max(1, summe)) * Math.PI * 2
+    const a0 = winkel, a1 = winkel + w
+    winkel = a1
+    if (stuecke.length === 1) return `M${M},${M - R}A${R},${R} 0 1 1 ${M - 0.01},${M - R}Z M${M},${M - r}A${r},${r} 0 1 0 ${M + 0.01},${M - r}Z`
+    const gross = w > Math.PI ? 1 : 0
+    const p = (rad: number, a: number) => `${(M + rad * Math.cos(a)).toFixed(2)},${(M + rad * Math.sin(a)).toFixed(2)}`
+    return `M${p(R, a0)}A${R},${R} 0 ${gross} 1 ${p(R, a1)}L${p(r, a1)}A${r},${r} 0 ${gross} 0 ${p(r, a0)}Z`
+  })
+  const anteil = (v: number) => `${((v / Math.max(1, summe)) * 100).toLocaleString(getLang() === 'en' ? 'en-US' : 'de-DE', { maximumFractionDigits: 1 })} %`
+
+  return (
+    <div className="panel ki-torte">
+      <h3 className="ki-titel">{titel}</h3>
+      {!stuecke.length ? (
+        <p className="sub" style={{ fontSize: 13 }}>{leer ?? tr('In diesem Zeitraum keine Anfragen')}</p>
+      ) : (
+        <div className="ki-torte__inhalt">
+          <svg width={M * 2} height={M * 2} viewBox={`0 0 ${M * 2} ${M * 2}`} role="img"
+            aria-label={`${titel}: ${stuecke.map((x) => `${x.name} ${anteil(x.wert)}`).join(', ')}`}
+            onMouseLeave={() => setZeig(null)}>
+            {boegen.map((d, i) => (
+              <path key={i} d={d} fill={stuecke[i].farbe} fillRule="evenodd" className="ki-torte__stueck"
+                stroke="var(--bay)" strokeWidth={2} opacity={zeig === null || zeig === i ? 1 : 0.35}
+                onMouseEnter={() => setZeig(i)} />
+            ))}
+            <text x={M} y={M - 2} textAnchor="middle" className="ki-torte__mitte">
+              {zeig === null ? kurz(summe) : anteil(stuecke[zeig].wert)}
+            </text>
+            <text x={M} y={M + 14} textAnchor="middle" className="ki-graf__achse">
+              {zeig === null ? (metrik === 'anfragen' ? tr('Anfragen') : tr('Tokens')) : kurz(stuecke[zeig].wert)}
+            </text>
+          </svg>
+          <ul className="ki-torte__legende" onMouseLeave={() => setZeig(null)}>
+            {stuecke.map((x, i) => (
+              <li key={x.name} className={zeig === i ? 'is-on' : ''} onMouseEnter={() => setZeig(i)}>
+                <span className="ki-punkt" style={{ background: x.farbe }} />
+                <span className="ki-torte__name" title={x.name}>{x.name}</span>
+                <span className="data">{kurz(x.wert)}</span>
+                <span className="sub data">{anteil(x.wert)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Säulen je Stunde des Tages, über den ganzen Zeitraum zusammengezählt. */
+function Tageszeit({ werte, metrik }: { werte: number[]; metrik: Metrik }) {
+  const box = useRef<HTMLDivElement>(null)
+  const [breite, setBreite] = useState(800)
+  const [zeig, setZeig] = useState<number | null>(null)
+  useEffect(() => {
+    if (!box.current) return
+    const ro = new ResizeObserver(([e]) => setBreite(Math.max(280, e.contentRect.width)))
+    ro.observe(box.current)
+    return () => ro.disconnect()
+  }, [])
+  const H = 160, L = 46, R = 8, O = 8, U = 22
+  const max = Math.max(1, ...werte)
+  const oben = max <= 4 ? 4 : (() => {
+    const p = 10 ** Math.floor(Math.log10(max))
+    for (const f of [1, 2, 4, 5, 10]) if (f * p >= max) return f * p
+    return 10 * p
+  })()
+  const feld = (breite - L - R) / 24
+  const y = (v: number) => O + (1 - v / oben) * (H - O - U)
+  const stunde = (h: number) => `${String(h).padStart(2, '0')}`
+  if (!werte.some((v) => v > 0)) return <p className="sub">{tr('In diesem Zeitraum keine Anfragen')}</p>
+  return (
+    <div className="ki-graf" ref={box} onMouseLeave={() => setZeig(null)}>
+      <svg height={H} viewBox={`0 0 ${breite} ${H}`} role="img" aria-label={tr('Nach Tageszeit')}>
+        {[0, 0.5, 1].map((f) => (
+          <g key={f}>
+            <line className="ki-graf__gitter" x1={L} x2={breite - R} y1={y(oben * f)} y2={y(oben * f)} />
+            <text className="ki-graf__achse" x={L - 6} y={y(oben * f) + 4} textAnchor="end">{kurz(oben * f)}</text>
+          </g>
+        ))}
+        {werte.map((v, h) => {
+          const x = L + h * feld + 2, b = Math.max(2, feld - 4), top = y(v), hoch = H - U - top
+          return (
+            <g key={h} onMouseEnter={() => setZeig(h)}>
+              <rect x={L + h * feld} y={O} width={feld} height={H - O - U} fill="transparent" />
+              {v > 0 && (
+                <path fill="var(--serie-1)" opacity={zeig === null || zeig === h ? 1 : 0.45}
+                  d={hoch > 4
+                    ? `M${x},${H - U}V${top + 4}Q${x},${top} ${x + 4},${top}H${x + b - 4}Q${x + b},${top} ${x + b},${top + 4}V${H - U}Z`
+                    : `M${x},${H - U}V${top}H${x + b}V${H - U}Z`} />
+              )}
+              {h % 3 === 0 && (
+                <text className="ki-graf__achse" x={x + b / 2} y={H - 6} textAnchor="middle">{stunde(h)}</text>
+              )}
+            </g>
+          )
+        })}
+      </svg>
+      {zeig !== null && (
+        <div className="ki-graf__tipp" style={{ left: Math.min(L + zeig * feld + feld, breite - 170), top: 8 }}>
+          <b>{tr('{a}–{b} Uhr', { a: stunde(zeig), b: stunde((zeig + 1) % 24) })}</b>
+          <div className="ki-graf__zeile">
+            <span>{metrik === 'anfragen' ? tr('Anfragen') : tr('Tokens')}</span>
+            <span className="data">{zahl(werte[zeig])}</span>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -191,33 +470,51 @@ function Funke({ werte }: { werte: number[] }) {
   return <svg className="ki-funke" width={b} height={h} aria-hidden="true"><path d={d} /></svg>
 }
 
-function NutzerDetail({ id, start, onZurueck, onToast }: {
-  id: string; start: Zeitraum; onZurueck: () => void; onToast: (m: string, tone?: 'ok' | 'bad') => void
+function NutzerDetail({ id, merkmal, start, onZurueck, onFehler }: {
+  id?: string; merkmal?: string; start: Zeitraum; onZurueck?: () => void; onFehler: (err: unknown) => void
 }) {
+  // Ohne Kennung: die eigenen Zahlen (Seitenleiste → Meine KI-Nutzung).
+  const eigen = id === undefined
   const [raum, setRaum] = useState<Zeitraum>(start)
   const [d, setD] = useState<KiNutzerDetail | null>(null)
   const [metrik, setMetrik] = useState<Metrik>('anfragen')
 
   useEffect(() => {
-    void api.kiNutzer(id, iso(raum.von), iso(raum.bis), TZ).then(setD)
-      .catch((err) => onToast(err instanceof ApiError ? err.message : tr('Hat nicht geklappt'), 'bad'))
+    void (eigen ? api.kiMeine(iso(raum.von), iso(raum.bis), TZ)
+      : api.kiNutzer(merkmal ?? '', id, iso(raum.von), iso(raum.bis), TZ)).then(setD).catch(onFehler)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, raum])
+  }, [id, merkmal, raum, eigen])
 
   const namen = useMemo(() => Object.fromEntries((d?.arbeitsplaetze ?? []).map((p) => [p.template_id, p.name])), [d])
 
   return (
     <div>
-      <div className="ki-leiste">
-        <button className="btn btn--sm" onClick={onZurueck}>{tr('← Übersicht')}</button>
-        <h2 style={{ margin: 0, fontSize: 18 }}>
-          {d ? (d.nutzer.name || tr('nicht zuzuordnen')) : '…'}
-          {d?.nutzer.anzeigename && <span className="sub" style={{ fontSize: 14 }}> · {d.nutzer.anzeigename}</span>}
-        </h2>
-      </div>
+      {!eigen && (
+        <div className="ki-leiste">
+          <button className="btn btn--sm" onClick={onZurueck}>{tr('← Übersicht')}</button>
+          <h2 style={{ margin: 0, fontSize: 18 }}>
+            {d ? (d.nutzer.name || tr('nicht zuzuordnen')) : '…'}
+            {d?.nutzer.anzeigename && <span className="sub" style={{ fontSize: 14 }}> · {d.nutzer.anzeigename}</span>}
+          </h2>
+        </div>
+      )}
       <Zeitwahl raum={raum} onRaum={setRaum} />
       {!d ? <p className="sub">{tr('Wird geladen…')}</p> : (
         <>
+          {(() => {
+            const s = d.arbeitsplaetze.reduce((a, p) => ({ anfragen: a.anfragen + p.anfragen,
+              ein: a.ein + p.ein, aus: a.aus + p.aus, fehler: a.fehler + p.fehler }),
+            { anfragen: 0, ein: 0, aus: 0, fehler: 0 })
+            return (
+              <div className="ki-kacheln">
+                <Kachel wert={zahl(s.anfragen)} name={tr('Anfragen')} />
+                <Kachel wert={kurz(s.ein)} name={tr('Tokens hinein')} />
+                <Kachel wert={kurz(s.aus)} name={tr('Tokens heraus')} />
+                <Kachel wert={zahl(d.arbeitsplaetze.length)} name={tr('Arbeitsplätze')} />
+                <Kachel wert={zahl(s.fehler)} name={tr('Fehler')} />
+              </div>
+            )
+          })()}
           <div className="panel" style={{ padding: '14px 16px', marginBottom: 18 }}>
             <div className="ki-leiste" style={{ marginBottom: 8 }}>
               <div className="seg" role="radiogroup" aria-label={tr('Größe')}>
@@ -300,6 +597,28 @@ function NutzerDetail({ id, start, onZurueck, onToast }: {
           </div>
         </>
       )}
+    </div>
+  )
+}
+
+/** Seitenleiste → Meine KI-Nutzung: die eigenen Zahlen, ohne Begründung. */
+export function MeineKiNutzung({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad') => void }) {
+  useLang()
+  const [start] = useState<Zeitraum>(() => ({ von: Date.now() - TAG, bis: Date.now() }))
+  const fehler = useCallback((err: unknown) =>
+    onToast(err instanceof ApiError ? err.message : tr('Hat nicht geklappt'), 'bad'), [onToast])
+  return (
+    <div className="wrap">
+      <header className="topbar">
+        <div>
+          <p className="silk" style={{ marginBottom: 6 }}>{tr('Deine eigenen Zahlen')}</p>
+          <h1 className="h-page">{tr('Meine KI-Nutzung')}</h1>
+        </div>
+      </header>
+      <p className="sub" style={{ marginTop: 0 }}>
+        {tr('Wie oft deine Arbeitsplätze die KI angesprochen haben — gezählt ohne Inhalte. Was genau erfasst wird und wie lange, steht unter „DSGVO“.')}
+      </p>
+      <NutzerDetail start={start} onFehler={fehler} />
     </div>
   )
 }

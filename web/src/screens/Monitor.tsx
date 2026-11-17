@@ -136,6 +136,8 @@ const ACTION_TEXT: Record<string, string> = {
   'ide_ai.neu_eingerichtet': 'IDE-AI im Arbeitsplatz neu eingerichtet',
   // KI-Durchgang und Nutzungsstatistik (Kapitel 28)
   'ki.nutzung_angesehen': 'KI-Nutzung eines Menschen angesehen',
+  'ki.auskunft': 'Personenbezogene KI-Auskunft geöffnet',
+  'dsgvo.hinweis_geaendert': 'Datenschutzhinweis geändert',
   'ki.nutzung_geloescht': 'Alle KI-Nutzungsdaten gelöscht',
   'ki.statistik_an': 'KI-Nutzungsstatistik eingeschaltet',
   'ki.statistik_aus': 'KI-Nutzungsstatistik ausgeschaltet',
@@ -529,6 +531,10 @@ export function Monitor({ onToast, darfTerminal = false }: {
                       <td style={{ color: 'var(--label)' }}>{e.actor ?? '—'}</td>
                       <td style={{ color: bad ? 'var(--halt)' : 'var(--text)' }}>
                         {tr(ACTION_TEXT[e.action] ?? e.action)}
+                        {/* Die Begründung einer Auskunft gehört sichtbar dazu. */}
+                        {typeof e.detail?.grund === 'string' && (
+                          <div className="sub" style={{ fontSize: 12 }}>{tr('Grund')}: {e.detail.grund}</div>
+                        )}
                       </td>
                       <td className="data" style={{ color: 'var(--mute)', fontSize: 11.5 }}>
                         {e.object_id ?? '—'}

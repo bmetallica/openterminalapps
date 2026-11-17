@@ -200,16 +200,50 @@ Without a group it applies to everyone.
 ### Usage statistics
 
 With the gateway on, **Settings → IDE-AI → Usage statistics** counts who talks to the AI how
-often. It is shown under **Operations → AI usage**:
+often. It is shown in three places.
 
-- **Overview** for a selectable period (24 h, 3, 7, 30 days or custom): per person requests,
-  tokens in and out, workspaces, most-used model, trend, last.
-- **A click on the name** shows that person's workspaces with a graph, one line per workspace. The
-  default is the last 24 hours. **« 1 more day** extends the graph backwards, **‹ earlier / later ›**
-  shifts it, and dragging across the graph zooms into that range. Below, models and tools
-  (opencode, Continue, script).
-- Counted are **time, person, workspace, server, model, duration and tokens, never contents**.
-  OTA finds the person through the workspace's sender address.
+**Operations → AI usage, without names.** What administrators see first, for a selectable period
+(24 h, 3, 7, 30 days or custom), either by requests or by tokens:
+
+- Tiles: requests, tokens in and out, people, workspaces, average duration, errors.
+- The trend of all requests. Dragging across the graph zooms into that range.
+- Donut charts **per person** and **per workspace**. They show only sizes: "Person 1" is the
+  largest in the selected period and measure, not always the same one, and the API returns no
+  names or IDs for them. With fewer than **three** people or workspaces in the period the split
+  is left out, because with two everyone would know who is who. There are also donuts per
+  template, per model and, with several servers, per server. More than seven slices are grouped
+  as "Others".
+- A distribution **by time of day**, summed over the whole period.
+
+**Personal access.** Names, the per-person overview and a person's workspaces with their trend
+appear only after a **reason** is given (at least ten characters, e.g. a ticket number). It is
+recorded as `ki.auskunft` with the name of the person asking and is visible under Operations →
+Log. Access is valid for **30 minutes**, only for that account and only in that window: reloading
+means giving a reason again. Every look at an individual person is also recorded as
+`ki.nutzung_angesehen` together with the access case. Technically the access is a signed token
+(header `X-OTA-Auskunft`). Without it, `/api/admin/ki-nutzung/personen` and `/nutzer/{id}`
+return 403.
+
+A click on a name shows that person's workspaces with a graph, one line per workspace.
+**« 1 more day** extends it backwards and **‹ earlier / later ›** shifts it. Below are the models
+and tools (opencode, Continue, script).
+
+**My AI usage.** While the statistics run, **everyone** sees their own figures in the sidebar:
+totals, the trend per workspace, models and tools. This is self-disclosure (Art. 15 GDPR), so no
+reason is asked and nothing is logged.
+
+**GDPR.** Also while the statistics run, everyone sees a **GDPR** item in the sidebar. It explains
+what OTA records about workspaces and AI usage, why, for how long and who may see it.
+Administrators always see the item and adapt the text there with **Edit**, in Markdown as for the
+news. OTA fills in the placeholders `{frist_roh}`, `{frist_stunden}` and `{statistik}`, so the
+stated retention periods stay correct after a change. **Use built-in text** restores the template
+(German or English, following the UI language). You must fill in the controller and the data
+protection officer yourselves. Every change is recorded as `dsgvo.hinweis_geaendert` in the log.
+
+What is counted:
+
+- **Time, person, workspace, server, model, duration and tokens, never contents**. OTA finds the
+  person through the workspace's sender address.
 - The server returns the tokens in its response. For streamed responses the gateway requests them
   as well (`stream_options.include_usage`) and removes the extra block again before it reaches the
   tool.
@@ -219,11 +253,18 @@ totals 0 means unlimited. OTA deletes older data once a day. **Delete all usage 
 Operations → AI usage empties both.
 
 **On disk** this costs little: the gateway writes to a spool file under
-`/srv/ota/runtime/ki/spool/`, the API collects it once a minute in one go.
+`/srv/ota/runtime/ki/spool/`, the API collects it once a minute in one go. It also does so when
+the statistics and the gateway have since been switched off. What is there was counted while the
+statistics ran, and it belongs in the database, where the retention periods delete it.
 
-> **Before switching it on:** an evaluation per person can count as performance and behaviour
-> monitoring (in Germany § 87 (1) no. 6 BetrVG). If there is a works council, ask it, and inform the
-> people. Switching on and off and every opening of a person's figures are recorded in the log.
+> **Before switching it on:** even without names on the first page, the statistics are a technical
+> facility *suitable* for monitoring performance and behaviour (in Germany § 87 (1) no. 6 BetrVG).
+> If there is a works council, ask it. A works agreement should state what the figures are for
+> (capacity, cost, errors, not performance appraisal) and which reasons justify personal access.
+> Ask your data protection officer whether a data protection impact assessment is needed, and add
+> the entry to the record of processing activities. People are informed through the **GDPR** item:
+> adapt its text first. Switching on and off, every access with its reason and every opening of a
+> person's figures are recorded in the log.
 
 ### Encrypted connections
 
@@ -276,7 +317,8 @@ The settings page shows which versions are in the package source.
 - An API key is stored in `~/.continue/config.yaml` in the home, so also in the backup.
   Not with the AI gateway: then only the gateway knows it.
 - Usage statistics are off as long as nobody switches them on. What they count is described above
-  under [Usage statistics](#usage-statistics).
+  under [Usage statistics](#usage-statistics). While they run, OTA shows everyone the **GDPR**
+  item and their own figures. Administrators see names only after a logged reason.
 
 ## When something does not work
 
@@ -298,6 +340,9 @@ The settings page shows which versions are in the package source.
 | Under IDE-AI "The gateway does not respond" | `docker logs ota-ki`. If it runs but the firewall was restarted: the agent restarts it with the next reconciliation, otherwise `docker restart ota-ki`. Until then traffic goes direct |
 | "The model … is not registered in OTA" | A tool asks through `ki.ota` for a model that is not offered under IDE-AI. Offer it, or choose another in the tool |
 | "not attributable" in AI usage | Requests from an address without a running session, e.g. shortly after it ended |
+| "Personal figures only with access" / "The access has expired" | The half hour is over, or the page was reloaded: enter a reason again |
+| No donut per person, only "Only from 3 people …" | Intended: with fewer than three people or workspaces in the period it would be obvious who is who. Widen the period |
+| No "GDPR" / "My AI usage" item in the sidebar | Both appear only while usage statistics run. Administrators always see "GDPR". The sidebar checks every five minutes; otherwise reload the page |
 | No figures in AI usage | Statistics on? Gateway ready (Settings → IDE-AI)? The API collects every minute: `docker logs ota-api 2>&1 \| grep KI-Nutzung` |
 
 Test suite: `scripts/test-ide-ai.sh`. It starts every template with a matching editor and asks the

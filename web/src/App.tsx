@@ -7,6 +7,8 @@ import { WebApps } from './screens/WebApps'
 import { Workspaces } from './screens/Workspaces'
 import { Help } from './screens/Help'
 import { News } from './screens/News'
+import { Dsgvo } from './screens/Dsgvo'
+import { MeineKiNutzung } from './screens/KiNutzung'
 import { Netz } from './screens/Netz'
 import { Settings } from './screens/Settings'
 import { Images } from './screens/Images'
@@ -26,7 +28,7 @@ import { setTheme, useTheme, type Theme } from './lib/theme'
 import './styles/app.css'
 
 type View = 'dashboard' | 'news' | 'workspaces' | 'webapps' | 'images' | 'registries' | 'paketquellen' | 'storage'
-  | 'files' | 'people' | 'monitor' | 'software' | 'netz' | 'settings' | 'account' | 'help' | 'erinnerungen'
+  | 'files' | 'people' | 'monitor' | 'software' | 'netz' | 'settings' | 'account' | 'help' | 'erinnerungen' | 'dsgvo' | 'meineki'
 type Toast = { id: number; msg: string; tone: 'ok' | 'bad' }
 
 const NAV: { id: View; glyph: string; cap: string; adminOnly: boolean }[] = [
@@ -52,6 +54,9 @@ const NAV: { id: View; glyph: string; cap: string; adminOnly: boolean }[] = [
   // ist der Weg der Verwaltung zu allen; wer sie nicht verwaltet, hat dort
   // nichts zu bestellen und sieht sie ohnehin in seinem Container.
   { id: 'files', glyph: '▤', cap: 'Meine Ablage', adminOnly: false },
+  // Die eigenen KI-Zahlen — solange die Statistik läuft. Selbstauskunft,
+  // deshalb für jeden und ohne Begründung.
+  { id: 'meineki', glyph: '◐', cap: 'Meine KI-Nutzung', adminOnly: false },
   { id: 'storage', glyph: '▦', cap: 'Gemeinsame Ablage', adminOnly: true },
   { id: 'people', glyph: '◔', cap: 'Nutzer', adminOnly: true },
   { id: 'monitor', glyph: '◈', cap: 'Betrieb', adminOnly: true },
@@ -67,6 +72,9 @@ const NAV: { id: View; glyph: string; cap: string; adminOnly: boolean }[] = [
   // die API anhand der Rechte — Betriebs- und Verwaltungskapitel bleiben
   // Administratoren vorbehalten.
   { id: 'help', glyph: '?', cap: 'Hilfe', adminOnly: false },
+  // Der Datenschutzhinweis. Für alle, solange die KI-Nutzungsstatistik
+  // läuft; die Verwaltung sieht ihn immer, um den Text vorher anzupassen.
+  { id: 'dsgvo', glyph: '§', cap: 'DSGVO', adminOnly: false },
 ]
 
 /* Das eigene Konto sitzt unten bei „Abmelden", nicht oben bei den Ansichten:
@@ -87,6 +95,8 @@ export default function App() {
   const [host, setHost] = useState<Host | null>(null)
   const [toasts, setToasts] = useState<Toast[]>([])
   const [newsNeu, setNewsNeu] = useState(0)
+  const [dsgvo, setDsgvo] = useState(false)
+  const [kiStatistik, setKiStatistik] = useState(false)
   const [gedaechtnis, setGedaechtnis] = useState<ErweiterungAnsicht | null>(null)
 
   const toast = useCallback((msg: string, tone: 'ok' | 'bad' = 'ok') => {
@@ -143,7 +153,10 @@ export default function App() {
   // Minute später auftaucht, verpasst niemand.
   useEffect(() => {
     if (!me) return
-    const load = () => { api.newsUngelesen().then((x) => setNewsNeu(x.anzahl)).catch(() => {}) }
+    const load = () => {
+      api.newsUngelesen().then((x) => setNewsNeu(x.anzahl)).catch(() => {})
+      api.dsgvo().then((x) => { setDsgvo(x.sichtbar); setKiStatistik(x.aktiv) }).catch(() => {})
+    }
     load()
     const timer = setInterval(load, 300_000)
     return () => clearInterval(timer)
@@ -272,6 +285,8 @@ export default function App() {
   const visible = NAV.filter((n) =>
     n.id === 'storage' ? darfVerteilen
       : n.id === 'webapps' ? darfAnwendungen
+      : n.id === 'dsgvo' ? dsgvo
+      : n.id === 'meineki' ? kiStatistik
         : !n.adminOnly || me.is_admin)
 
   /* Der Rückfall auf das Dashboard fängt den Fall ab, dass jemand seine
@@ -390,6 +405,8 @@ export default function App() {
         {current === 'account' && <Account me={me} onMe={setMe} onToast={toast} />}
         {current === 'erinnerungen' && gedaechtnis && <Erinnerungen ansicht={gedaechtnis} />}
         {current === 'help' && <Help onToast={toast} />}
+        {current === 'dsgvo' && <Dsgvo onToast={toast} />}
+        {current === 'meineki' && <MeineKiNutzung onToast={toast} />}
       </main>
 
       <Toasts items={toasts} />

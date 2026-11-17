@@ -98,6 +98,9 @@ GIT_OTA_URL = "git.ota_url"
 IDE_AI = "ide_ai"
 # opencode (opencode.py, Handbuch Kapitel 38).
 OPENCODE = "opencode"
+# Der Datenschutzhinweis (routers/dsgvo.py): eigener Text der Verwaltung,
+# leer heisst der mitgelieferte.
+DSGVO = "dsgvo.hinweis"
 
 # Softwaremonitoring (Kapitel 11): was die letzte stündliche Erfassung ergab.
 SOFTWARE_LETZTE = "software.letzte_erfassung"

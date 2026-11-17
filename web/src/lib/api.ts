@@ -328,6 +328,22 @@ export type KiUebersicht = {
   summe: { anfragen: number; fehler: number; verbindungen: number; ein: number; aus: number }
   statistik: boolean; durchgang: boolean; frist_roh: number; frist_stunden: number
 }
+export type KiAnteil = { anfragen: number; tokens: number }
+export type KiBenannt = KiAnteil & { name: string }
+/** Die Übersicht ohne Namen: Menschen und Arbeitsplätze nur als Grössen. */
+export type KiAnonym = {
+  von: string; bis: string; mindestens: number; verlauf: KiVerlauf
+  summe: { anfragen: number; fehler: number; verbindungen: number; ein: number; aus: number
+    dauer_mittel_ms: number; personen: number; arbeitsplaetze: number }
+  personen: KiAnteil[]; arbeitsplaetze: KiAnteil[]; nicht_zuzuordnen: KiAnteil
+  vorlagen: KiBenannt[]; modelle: KiBenannt[]; server: KiBenannt[]; tageszeit: KiAnteil[]
+  statistik: boolean; durchgang: boolean; frist_roh: number; frist_stunden: number
+}
+export type KiAuskunft = { merkmal: string; vorgang: string; bis: string; grund: string }
+export type DsgvoHinweis = {
+  aktiv: boolean; sichtbar: boolean; darf_schreiben: boolean; text: string; geaendert_am: string | null
+  werte: { frist_roh: number; frist_stunden: number; statistik: boolean; durchgang: boolean }
+}
 export type KiNutzerDetail = {
   von: string; bis: string
   nutzer: { user_id: string; name: string; anzeigename: string }
@@ -1464,9 +1480,20 @@ export const api = {
     call<{ ok: boolean; ms: number; antwort: string; denkt: boolean; abbruch: string }>(
       '/admin/ide-ai/testen', { method: 'POST', body: JSON.stringify({ modell, kuerzel }) }),
   kiNutzung: (von: string, bis: string, tz: string) =>
-    call<KiUebersicht>(`/admin/ki-nutzung?${new URLSearchParams({ von, bis, tz })}`),
-  kiNutzer: (id: string, von: string, bis: string, tz: string) =>
-    call<KiNutzerDetail>(`/admin/ki-nutzung/nutzer/${encodeURIComponent(id)}?${new URLSearchParams({ von, bis, tz })}`),
+    call<KiAnonym>(`/admin/ki-nutzung?${new URLSearchParams({ von, bis, tz })}`),
+  /** Personenbezogene Auskunft: die Begründung landet im Prüfprotokoll. */
+  kiAuskunft: (grund: string) =>
+    call<KiAuskunft>('/admin/ki-nutzung/auskunft', { method: 'POST', body: JSON.stringify({ grund }) }),
+  kiPersonen: (merkmal: string, von: string, bis: string, tz: string) =>
+    call<KiUebersicht>(`/admin/ki-nutzung/personen?${new URLSearchParams({ von, bis, tz })}`,
+      { headers: { 'X-OTA-Auskunft': merkmal } }),
+  kiNutzer: (merkmal: string, id: string, von: string, bis: string, tz: string) =>
+    call<KiNutzerDetail>(`/admin/ki-nutzung/nutzer/${encodeURIComponent(id)}?${new URLSearchParams({ von, bis, tz })}`,
+      { headers: { 'X-OTA-Auskunft': merkmal } }),
+  kiMeine: (von: string, bis: string, tz: string) =>
+    call<KiNutzerDetail>(`/ki-nutzung/meine?${new URLSearchParams({ von, bis, tz })}`),
+  dsgvo: () => call<DsgvoHinweis>('/dsgvo'),
+  dsgvoSetzen: (text: string) => call<DsgvoHinweis>('/dsgvo', { method: 'PUT', body: JSON.stringify({ text }) }),
   kiStatus: () => call<KiStatus>('/admin/ki-nutzung/status'),
   kiNutzungLoeschen: () => call<{ anfragen: number; stunden: number }>('/admin/ki-nutzung', { method: 'DELETE' }),
   gitAbgleich: () => call<Record<string, unknown>>('/admin/git/abgleich', { method: 'POST' }),

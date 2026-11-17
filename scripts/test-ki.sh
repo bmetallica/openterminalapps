@@ -63,6 +63,7 @@ frage() {  # frage <container> <url> <stream:true|false>
 }
 
 VORHER=""; SID=""; USID=""
+BEGINN=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 aufraeumen() {
   echo
   echo "Aufräumen"
@@ -217,22 +218,70 @@ fi
 # ------------------------------------------------------------------ Statistik
 echo
 echo "Statistik (bis zu drei Minuten)"
+# Ab Beginn dieses Laufs: Für kurze Zeiträume zählt der Verlauf die
+# einzelnen Anfragen — Reste eines früheren Laufs zählen dort nicht mit.
+VON="$BEGINN"
 N=0
 for _ in $(seq 1 36); do
-  U=$(api "$B/api/admin/ki-nutzung/nutzer/$ADMIN_ID?von=$(date -u -d '-1 hour' +%Y-%m-%dT%H:%M:%SZ)")
+  # Die eigenen Zahlen: ohne Auskunft, ohne Protokoll (Seitenleiste → Meine KI-Nutzung).
+  U=$(api "$B/api/ki-nutzung/meine?von=$VON")
   N=$(jqp "sum(p['anfragen'] for p in d['arbeitsplaetze'])" <<<"$U")
   Z=$(jqp "str(any(m['server'] == 'zwei' for m in d['modelle']))" <<<"$U")
-  [ "${N:-0}" -ge 3 ] 2>/dev/null && [ "$Z" = "True" ] && break
+  R=$(jqp "sum(p[1] for r in d['verlauf']['reihen'].values() for p in r)" <<<"$U")
+  [ "${R:-0}" -ge 3 ] 2>/dev/null && [ "$Z" = "True" ] && break
   sleep 5
 done
-[ "${N:-0}" -ge 3 ] 2>/dev/null && ok "Anfragen stehen beim Menschen ($N)" || bad "Anfragen fehlen in der Statistik (${N:-0})"
+[ "${N:-0}" -ge 3 ] 2>/dev/null && ok "Die eigenen Anfragen stehen unter „Meine KI-Nutzung“ ($N)" || bad "Anfragen fehlen in der Statistik (${N:-0})"
 expect "True" "$(jqp "str(any(p['ein'] > 0 and p['aus'] > 0 for p in d['arbeitsplaetze']))" <<<"$U")" "Mit Tokens"
 expect "True" "$(jqp "str(len(d['verlauf']['reihen']) > 0)" <<<"$U")" "Verlauf je Arbeitsplatz"
 expect "True" "$Z" "Der zweite Server steht in der Statistik"
-UE=$(api "$B/api/admin/ki-nutzung")
-expect "True" "$(jqp "str(any(n['user_id'] == '$ADMIN_ID' for n in d['nutzer']))" <<<"$UE")" "Der Mensch steht in der Übersicht"
-expect "True" "$(docker exec ota-db psql -U ota -d ota -At -c "select count(*) > 0 from audit_log where action = 'ki.nutzung_angesehen' and object_id = '$ADMIN_ID'" | sed 's/t/True/;s/f/False/')" \
-  "Das Ansehen steht im Prüfprotokoll"
+if [ -n "${USID:-}" ]; then
+  UM=$(curl -sk -b "$TMP/u.jar" "$B/api/ki-nutzung/meine?von=$VON")
+  expect "True" "$(jqp "str(d['nutzer']['name'] == '$TEST_USER')" <<<"$UM")" "$TEST_USER sieht nur sich selbst"
+  expect "403" "$(curl -sk -o /dev/null -w '%{http_code}' -b "$TMP/u.jar" "$B/api/admin/ki-nutzung")" \
+    "… aber nicht die Übersicht der Verwaltung"
+fi
+
+# Ohne Auskunft: keine Namen, keine Kennungen.
+UE=$(api "$B/api/admin/ki-nutzung?von=$VON")
+expect "True" "$(jqp "str(d['summe']['anfragen'] >= 3 and len(d['tageszeit']) == 24)" <<<"$UE")" "Übersicht ohne Namen: Summen und Tageszeit"
+expect "False" "$(jqp "str('$ADMIN_ID' in json.dumps(d) or 'user_id' in json.dumps(d))" <<<"$UE")" "… ohne eine Kennung eines Menschen"
+expect "True" "$(jqp "str(all(set(x) == {'anfragen','tokens'} for x in d['personen'] + d['arbeitsplaetze']))" <<<"$UE")" \
+  "… Menschen und Arbeitsplätze nur als Grössen"
+expect "403" "$(code "$B/api/admin/ki-nutzung/personen")" "Namen ohne Auskunft: 403"
+expect "403" "$(code "$B/api/admin/ki-nutzung/nutzer/$ADMIN_ID")" "Ein Mensch ohne Auskunft: 403"
+expect "422" "$(code -X POST "$B/api/admin/ki-nutzung/auskunft" -d '{"grund":"kurz"}')" "Zu kurze Begründung abgelehnt"
+GRUND="test-ki $(date +%s): Prüfung der Auskunft"
+AK=$(api -X POST "$B/api/admin/ki-nutzung/auskunft" -d "{\"grund\":\"$GRUND\"}")
+MK=$(jqp "d['merkmal']" <<<"$AK")
+[ -n "$MK" ] && ok "Auskunft mit Begründung erteilt" || bad "Keine Auskunft: $AK"
+expect "403" "$(code -H "X-OTA-Auskunft: ${MK%?}x" "$B/api/admin/ki-nutzung/personen")" "Verfälschtes Merkmal: 403"
+P=$(api -H "X-OTA-Auskunft: $MK" "$B/api/admin/ki-nutzung/personen?von=$VON")
+expect "True" "$(jqp "str(any(n['user_id'] == '$ADMIN_ID' for n in d['nutzer']))" <<<"$P")" "Mit Auskunft: der Mensch mit Namen"
+expect "200" "$(code -H "X-OTA-Auskunft: $MK" "$B/api/admin/ki-nutzung/nutzer/$ADMIN_ID?von=$VON")" "Mit Auskunft: Einzelansicht"
+if [ -n "${USID:-}" ]; then
+  expect "403" "$(curl -sk -o /dev/null -w '%{http_code}' -b "$TMP/u.jar" -H "X-OTA-Auskunft: $MK" "$B/api/admin/ki-nutzung/personen")" \
+    "Das Merkmal taugt nicht für ein anderes Konto"
+fi
+sql() { docker exec ota-db psql -U ota -d ota -At -c "$1" | sed 's/^t$/True/;s/^f$/False/'; }
+expect "True" "$(sql "select count(*) > 0 from audit_log where action = 'ki.auskunft' and detail->>'grund' = '$GRUND'")" \
+  "Die Begründung steht im Prüfprotokoll"
+expect "True" "$(sql "select count(*) > 0 from audit_log where action = 'ki.nutzung_angesehen' and object_id = '$ADMIN_ID' and detail->>'vorgang' = '$(jqp "d['vorgang']" <<<"$AK")'")" \
+  "Das Ansehen steht mit dem Vorgang im Prüfprotokoll"
+
+# Der Datenschutzhinweis
+D=$(api "$B/api/dsgvo")
+expect "True" "$(jqp "str(d['aktiv'] and d['sichtbar'])" <<<"$D")" "DSGVO-Punkt sichtbar, solange die Statistik läuft"
+ALT_TEXT=$(jqp "json.dumps(d['text'])" <<<"$D")
+expect "200" "$(code -X PUT "$B/api/dsgvo" -d '{"text":"## Test {frist_roh}"}')" "Verwaltung passt den Hinweis an"
+expect "## Test {frist_roh}" "$(api "$B/api/dsgvo" | jqp "d['text']")" "… und er steht so da"
+api -X PUT "$B/api/dsgvo" -d "{\"text\":${ALT_TEXT:-\"\"}}" >/dev/null
+if [ -n "${USID:-}" ]; then
+  expect "True" "$(curl -sk -b "$TMP/u.jar" "$B/api/dsgvo" | jqp "str(d['sichtbar'] and not d['darf_schreiben'])")" \
+    "$TEST_USER sieht den Hinweis"
+  expect "403" "$(curl -sk -o /dev/null -w '%{http_code}' -b "$TMP/u.jar" -H 'Content-Type: application/json' -X PUT "$B/api/dsgvo" -d '{"text":"x"}')" \
+    "… darf ihn aber nicht ändern"
+fi
 
 # ------------------------------------------------------------------ Ausfall
 echo
