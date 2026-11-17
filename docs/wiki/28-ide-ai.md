@@ -287,8 +287,9 @@ Was gezählt wird:
   Modellliste, `/health`, Anmeldeseiten und Metriken. Sonst beherrschte eine Gesundheitsprüfung,
   die einen Server über seine echte Adresse alle paar Sekunden abfragt, die Statistik als „Modell
   unbekannt“. Nennt eine Anfrage kein Modell, gilt das einzige Modell ihres Servers, sonst „ohne
-  Angabe (kürzel)“. Zählungen solcher Abrufe von vor diesem Update hat die Migration
-  `e8a2c6d4f193` herausgenommen.
+  Angabe (kürzel)“. Zählungen solcher Abrufe von vor diesem Update haben die Migrationen
+  `e8a2c6d4f193` und `f4c7a1e3b852` herausgenommen. Die zweite räumt die Stunde auf, in der die
+  Anwendung in die Stundensummen kam; dort waren die Abrufe auf zwei Zeilen verteilt.
 
 **Aufbewahrung:** Einzelne Anfragen 30 Tage, Stundensummen 365 Tage. Beides ist einstellbar, bei den
 Stundensummen heißt 0 unbegrenzt. Älteres löscht OTA einmal am Tag. **Alle Nutzungsdaten löschen**

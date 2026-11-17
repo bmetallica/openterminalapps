@@ -287,7 +287,9 @@ What is counted:
   list, `/health`, login pages and metrics. Otherwise a health check polling a server's real
   address every few seconds would dominate the statistics as "model unknown". If a request names
   no model, the only model of its server is used, otherwise "ohne Angabe (shortname)". Counts of
-  such calls from before this update were removed by migration `e8a2c6d4f193`.
+  such calls from before this update were removed by migrations `e8a2c6d4f193` and
+  `f4c7a1e3b852`. The second cleans up the hour in which the application was added to the hourly
+  totals; there the calls were split across two rows.
 
 **Retention:** individual requests 30 days, hourly totals 365 days. Both are adjustable; for hourly
 totals 0 means unlimited. OTA deletes older data once a day. **Delete all usage data** under
