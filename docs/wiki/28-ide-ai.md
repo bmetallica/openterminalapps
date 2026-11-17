@@ -211,6 +211,41 @@ Zeitraum (24 h, 3, 7, 30 Tage oder frei), wahlweise nach Anfragen oder Tokens:
   Aufteilung, denn bei zweien wüsste jeder, wer wer ist. Dazu Ringe je Vorlage, je Modell und,
   bei mehreren Servern, je Server. Mehr als sieben Stücke fasst „Übrige“ zusammen.
 - Eine Verteilung **nach Tageszeit**, über den ganzen Zeitraum zusammengezählt.
+- Ein Ring **je Anwendung**: welcher Anteil aus opencode, VS Code, PyCharm, Open WebUI usw.
+  kommt (siehe unten, wie OTA die Anwendung erkennt).
+
+**Filter.** Über den Kacheln lässt sich die ganze Seite einschränken:
+
+- **Gesamt / Nur OTA / Nur Open WebUI**: alle Anfragen, nur die aus den Arbeitsplätzen oder nur
+  die eines angebundenen Dienstes (je Dienst ein Knopf, siehe [Externe Dienste](#externe-dienste-open-webui)).
+  Die Knöpfe erscheinen erst, wenn es mindestens einen Dienst gibt.
+- **Modell**: ein einzelnes Modell.
+- **Anwendung**: eine einzelne Anwendung, z. B. nur PyCharm.
+
+Alle drei lassen sich kombinieren; **Filter zurücksetzen** hebt sie auf. Zur Wahl steht, was im
+Zeitraum vorkommt. Die Mindestzahl gilt auch für die Auswahl selbst: Nutzen **weniger als drei
+Menschen**, was gefiltert ist, zeigt die Seite keine Zahl, sondern nur einen Hinweis. Sonst
+verriete schon der Verlauf von „nur PyCharm“, wann die eine Person mit PyCharm gearbeitet hat.
+Für diesen Fall gibt es die Auskunft mit Begründung.
+
+**Wie OTA die Anwendung erkennt.** Allein an der Anfrage, ohne in den Arbeitsplatz zu schauen:
+
+| Erkannt als | woran |
+|---|---|
+| opencode, Continue, Cline, Roo Code, Kilo Code, Aider | User-Agent, bei Cline/Roo/Kilo auch `X-Title` oder `HTTP-Referer` |
+| VS Code, PyCharm, IntelliJ IDEA … | der Name im User-Agent, oder: eine allgemeine Bibliothek, und die Vorlage hat genau diese IDE (siehe unten) |
+| Open WebUI (bzw. der Name des Dienstes) | der Schlüssel des externen Dienstes |
+| Java-, Node-, Python-Programm | nur die Bibliothek ist erkennbar (`okhttp`, OpenAI-SDK für JS oder Python …) |
+| Skript / Kommandozeile | `curl`, `wget`, Go |
+| nicht erfasst | gezählt vor diesem Update: Die Stundensummen kennen die Anwendung erst seitdem |
+
+VS Code und PyCharm schicken selbst keine KI-Anfragen, das tun ihre Erweiterungen, und die melden
+sich oft nur mit ihrer Bibliothek. OTA ergänzt deshalb aus der **Vorlage** des Arbeitsplatzes:
+Eine Java-Anfrage aus einer Vorlage mit genau einer JetBrains-IDE zählt für diese (z. B. PyCharm),
+bei mehreren als „JetBrains-IDE“. Eine Node-Anfrage aus einer Vorlage mit VS Code oder VSCodium
+zählt für VS Code. Ohne passende IDE in der Vorlage bleibt es beim Programm, statt zu raten.
+Ein Skript, das im Arbeitsplatz mit dem OpenAI-SDK für Node läuft, zählt dort also ebenfalls als
+VS Code. Wie genau der Ring wird, hängt davon ab, welche Erweiterungen ihr nutzt.
 
 **Personenbezogene Auskunft.** Namen, die Übersicht je Mensch und seine Arbeitsplätze mit Verlauf
 gibt es erst nach einer **Begründung** (mindestens zehn Zeichen, z. B. eine Ticketnummer). Sie
@@ -223,7 +258,7 @@ antworten `/api/admin/ki-nutzung/personen` und `/nutzer/{id}` mit 403.
 
 Ein Klick auf einen Namen zeigt seine Arbeitsplätze mit einem Graphen, je Arbeitsplatz eine
 Linie. **« 1 Tag mehr** erweitert ihn nach hinten, **‹ früher / später ›** verschiebt ihn. Darunter
-stehen Modelle und Werkzeuge (opencode, Continue, Skript).
+stehen Modelle und Anwendungen.
 
 **Meine KI-Nutzung.** Solange die Statistik läuft, sieht **jeder** seine eigenen Zahlen in der
 Seitenleiste: Summen, Verlauf je Arbeitsplatz, Modelle, Werkzeuge. Das ist Selbstauskunft

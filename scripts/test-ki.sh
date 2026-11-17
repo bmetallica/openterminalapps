@@ -154,6 +154,14 @@ else
 fi
 A=$(frage "$C" "$KI/v1" false | jqp "d['choices'][0]['message']['content'].strip()")
 [ -n "$A" ] && ok "Frage an die echte Adresse bekommt Antwort ($A) — abgefangen" || bad "Keine Antwort von der echten Adresse"
+# Zwei Anfragen, wie sie Erweiterungen schicken: eine JetBrains-Erweiterung
+# (Java-Bibliothek okhttp) und Cline in VS Code (X-Title) — für den Ring
+# „Je Anwendung“ unten.
+for kopf in "User-Agent: okhttp/4.12.0" "X-Title: Cline"; do
+  docker exec -u 1000 "$C" curl -s -m 180 -o /dev/null "http://ki.ota:8790/v1/chat/completions" \
+    -H 'Content-Type: application/json' -H "$kopf" \
+    -d "{\"model\":\"$MODELL\",\"max_tokens\":8,\"messages\":[{\"role\":\"user\",\"content\":\"Antworte nur mit: OK\"}]}"
+done
 H=$(docker exec "$C" sh -c 'getent passwd 1000 | cut -d: -f6')
 if docker exec "$C" test -f "$H/.continue/config.yaml"; then
   docker exec "$C" grep -q "apiBase: http://ki.ota:8790/v1" "$H/.continue/config.yaml" \
@@ -316,6 +324,26 @@ expect "True" "$(jqp "str(d['summe']['anfragen'] >= 3 and len(d['tageszeit']) ==
 expect "False" "$(jqp "str('$ADMIN_ID' in json.dumps(d) or 'user_id' in json.dumps(d))" <<<"$UE")" "… ohne eine Kennung eines Menschen"
 expect "True" "$(jqp "str(all(set(x) == {'anfragen','tokens'} for x in d['personen'] + d['arbeitsplaetze']))" <<<"$UE")" \
   "… Menschen und Arbeitsplätze nur als Grössen"
+# Je Anwendung und Filter (Handbuch Kapitel 28, „Filter“).
+for _ in $(seq 1 12); do
+  [ "$(jqp "str('cline' in [a['name'] for a in d['anwendungen']])" <<<"$UE")" = "True" ] && break
+  sleep 5; UE=$(api "$B/api/admin/ki-nutzung?von=$VON")
+done
+expect "True" "$(jqp "str('cline' in [a['name'] for a in d['anwendungen']])" <<<"$UE")" "Ring „Je Anwendung“: Cline erkannt (X-Title)"
+expect "True" "$(jqp "str(any(a['name'] in ('pycharm','intellij','jetbrains','java') for a in d['anwendungen']))" <<<"$UE")" \
+  "… und die Java-Anfrage als JetBrains-IDE bzw. Java ($(jqp "','.join(a['name'] for a in d['anwendungen'])" <<<"$UE"))"
+expect "True" "$(jqp "str('cline' in [a['werkzeug'] for a in d['auswahl']['anwendungen']] and d['auswahl']['quellen'][0]['quelle'] == 'ota')" <<<"$UE")" \
+  "… und in der Auswahl der Filter"
+F=$(api "$B/api/admin/ki-nutzung?von=$VON&anwendung=cline")
+expect "True False" "$(jqp "str(d['zu_wenige']) + ' ' + str('summe' in d or 'verlauf' in d)" <<<"$F")" \
+  "Filter mit weniger als drei Menschen: nur der Hinweis, keine Zahl"
+F=$(api "$B/api/admin/ki-nutzung?von=$VON&quelle=ota&modell=gibt-es-nicht")
+expect "False 0" "$(jqp "str(d['zu_wenige']) + ' ' + str(d['summe']['anfragen'])" <<<"$F")" "Filter nur OTA und ein leeres Modell: null"
+if [ -n "${EXT_K:-}" ]; then
+  F=$(api "$B/api/admin/ki-nutzung?von=$VON&quelle=extern:$EXT_K&anwendung=x:$EXT_K")
+  expect "True" "$(jqp "str(d['zu_wenige'] or d['summe']['anfragen'] >= 2)" <<<"$F")" "Filter nur $EXT_K läuft"
+fi
+expect "400" "$(code "$B/api/admin/ki-nutzung?quelle=irgendwas")" "Unbekannte Quelle: 400"
 expect "403" "$(code "$B/api/admin/ki-nutzung/personen")" "Namen ohne Auskunft: 403"
 expect "403" "$(code "$B/api/admin/ki-nutzung/nutzer/$ADMIN_ID")" "Ein Mensch ohne Auskunft: 403"
 expect "422" "$(code -X POST "$B/api/admin/ki-nutzung/auskunft" -d '{"grund":"kurz"}')" "Zu kurze Begründung abgelehnt"

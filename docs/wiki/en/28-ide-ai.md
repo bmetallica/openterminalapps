@@ -214,6 +214,40 @@ often. It is shown in three places.
   template, per model and, with several servers, per server. More than seven slices are grouped
   as "Others".
 - A distribution **by time of day**, summed over the whole period.
+- A donut **per application**: which share comes from opencode, VS Code, PyCharm, Open WebUI and
+  so on (see below for how OTA recognises the application).
+
+**Filters.** Above the tiles the whole page can be narrowed down:
+
+- **Overall / OTA only / Open WebUI only**: all requests, only those from workspaces, or only
+  those of a connected service (one button per service, see [External services](#external-services-open-webui)).
+  The buttons only appear once there is at least one service.
+- **Model**: a single model.
+- **Application**: a single application, e.g. PyCharm only.
+
+All three can be combined; **Reset filters** clears them. The choices are what occurs in the
+period. The minimum also applies to the selection itself: if **fewer than three people** use what
+is filtered, the page shows no figures, only a notice. Otherwise the trend of "PyCharm only" alone
+would reveal when the one PyCharm user was working. For that case there is the justified access.
+
+**How OTA recognises the application.** From the request alone, without looking into the workspace:
+
+| Shown as | based on |
+|---|---|
+| opencode, Continue, Cline, Roo Code, Kilo Code, Aider | user agent, for Cline/Roo/Kilo also `X-Title` or `HTTP-Referer` |
+| VS Code, PyCharm, IntelliJ IDEA … | the name in the user agent, or: a generic library and the template has exactly that IDE (see below) |
+| Open WebUI (or the service's name) | the key of the external service |
+| Java, Node, Python program | only the library is recognisable (`okhttp`, OpenAI SDK for JS or Python …) |
+| Script / command line | `curl`, `wget`, Go |
+| not recorded | counted before this update: the hourly totals only know the application since then |
+
+VS Code and PyCharm do not send AI requests themselves, their extensions do, and these often only
+identify their library. OTA therefore adds information from the workspace's **template**: a Java
+request from a template with exactly one JetBrains IDE counts for that IDE (e.g. PyCharm), with
+several as "JetBrains IDE". A Node request from a template with VS Code or VSCodium counts for
+VS Code. Without a matching IDE in the template it stays the program rather than a guess. A script
+using the OpenAI SDK for Node inside such a workspace therefore also counts as VS Code. How
+precise the donut is depends on which extensions you use.
 
 **Personal access.** Names, the per-person overview and a person's workspaces with their trend
 appear only after a **reason** is given (at least ten characters, e.g. a ticket number). It is
@@ -226,7 +260,7 @@ return 403.
 
 A click on a name shows that person's workspaces with a graph, one line per workspace.
 **« 1 more day** extends it backwards and **‹ earlier / later ›** shifts it. Below are the models
-and tools (opencode, Continue, script).
+and applications.
 
 **My AI usage.** While the statistics run, **everyone** sees their own figures in the sidebar:
 totals, the trend per workspace, models and tools. This is self-disclosure (Art. 15 GDPR), so no

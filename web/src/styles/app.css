@@ -1983,3 +1983,6 @@ input[type="color"] {
 .ki-auskunft { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 14px; }
 @media (max-width: 480px) { .ki-torte__inhalt { flex-direction: column; align-items: stretch; } .ki-torte__inhalt svg { align-self: center; } }
 .ki-funke path { fill: none; stroke: var(--serie-1); stroke-width: 1.5; }
+.ki-filter { margin-top: -6px; }
+.ki-filter__wahl { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; }
+.ki-filter__wahl select { max-width: min(260px, 60vw); }

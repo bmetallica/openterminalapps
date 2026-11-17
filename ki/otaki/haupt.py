@@ -260,13 +260,43 @@ def _jetzt() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="milliseconds")
 
 
-def _werkzeug(ua: str) -> str:
+# Welche Anwendung fragt? Nur aus dem, was die Anfrage selbst mitbringt:
+# User-Agent, bei Erweiterungen wie Cline oder Roo auch X-Title und
+# HTTP-Referer, sonst die Kopfzeilen der OpenAI-SDKs (x-stainless-lang).
+# Bekannte Anwendungen stehen mit Namen da; allgemeine Bibliotheken als
+# node, python, java — welche IDE dahintersteckt, ergänzt die API aus der
+# Vorlage des Arbeitsplatzes (ki_statistik.anwendung). Höchstens 16 Zeichen.
+_ANWENDUNGEN = (
+    ("roo", ("roo-code", "roo code", "roocode", "roo-cline", "roovetgit")),
+    ("kilo", ("kilo-code", "kilo code", "kilocode")),
+    ("cline", ("cline",)),
+    ("opencode", ("opencode", "ai-sdk")),
+    ("continue", ("continue",)),
+    ("aider", ("aider",)),
+    ("copilot", ("copilot",)),
+    ("pycharm", ("pycharm",)),
+    ("intellij", ("intellij", "idea/")),
+    ("jetbrains", ("jetbrains", "proxyai", "codegpt")),
+    ("vscode", ("vscode", "visual studio code", "vscodium", "codium")),
+)
+
+
+def _werkzeug(ua: str, kopf: dict[bytes, bytes] | None = None) -> str:
+    kopf = kopf or {}
+    titel = b" ".join(kopf.get(k, b"") for k in (b"x-title", b"http-referer")).decode("latin-1")
     u = ua.lower()
-    if "opencode" in u or "ai-sdk" in u:
-        return "opencode"
-    if "continue" in u:
-        return "continue"
-    if "python" in u or "curl" in u or "node" in u or "go-http" in u:
+    for text in (titel.lower(), u):
+        for name, merkmale in _ANWENDUNGEN:
+            if any(m in text for m in merkmale):
+                return name
+    sprache = kopf.get(b"x-stainless-lang", b"").decode("latin-1").lower()
+    if "okhttp" in u or "ktor" in u or "java" in u or sprache in ("java", "kotlin"):
+        return "java"
+    if sprache == "js" or "openai/js" in u or "node" in u or "axios" in u or "undici" in u:
+        return "node"
+    if sprache == "python" or "python" in u or "httpx" in u or "aiohttp" in u or "litellm" in u:
+        return "python"
+    if "curl" in u or "wget" in u or "go-http" in u:
         return "skript"
     return "sonstiges"
 
@@ -519,7 +549,7 @@ async def _beantworten(conn: h11.Connection, writer: asyncio.StreamWriter, anfra
         url = server["basis"] + rest
     else:
         url = server["ursprung"] + pfad
-    werkzeug = _werkzeug(ua)
+    werkzeug = _werkzeug(ua, kopf)
     herkunft: dict[str, Any] = {}
     if dienst is not None:
         werkzeug = "x:" + str(dienst.get("kuerzel") or "")[:14]

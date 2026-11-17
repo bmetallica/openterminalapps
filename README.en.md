@@ -341,7 +341,9 @@ that did not exist before is simply there.
     is added for its **groups**.
   - **AI usage under Operations** (optional, off by default): at first **without names**, i.e.
     totals, trend, donuts per person and workspace (by rank only, from three upwards), template,
-    model and server, and a distribution by time of day. Names and individual trends only after a
+    model, server and **application** (opencode, VS Code, PyCharm, Open WebUI …), and a
+    distribution by time of day, filterable by source (OTA only, Open WebUI only), model and
+    application (no figures with fewer than three people in the selection). Names and individual trends only after a
     **reason** that is logged with the name, for 30 minutes. Everyone sees their own figures under
     **My AI usage**, and a **GDPR** item in the sidebar informs everyone (text adaptable by
     administrators). Never contents; retention adjustable.

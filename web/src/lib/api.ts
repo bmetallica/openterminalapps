@@ -335,7 +335,20 @@ export type KiUebersicht = {
 export type KiAnteil = { anfragen: number; tokens: number }
 export type KiBenannt = KiAnteil & { name: string }
 /** Die Übersicht ohne Namen: Menschen und Arbeitsplätze nur als Grössen. */
+/** Die Auswahl der Seite KI-Nutzung; `undefined` heisst „alle“. */
+export type KiFilter = { modell?: string; anwendung?: string; quelle?: string }
+export type KiAuswahl = {
+  modelle: string[]; anwendungen: { werkzeug: string; name: string }[]
+  quellen: { quelle: string; name: string }[]
+}
+/** Mit Filter und weniger als `mindestens` Menschen darin: nur der Hinweis. */
+export type KiAnonymZuWenige = {
+  von: string; bis: string; mindestens: number; gefiltert: true; zu_wenige: true; auswahl: KiAuswahl
+  statistik: boolean; durchgang: boolean; frist_roh: number; frist_stunden: number
+}
 export type KiAnonym = {
+  gefiltert: boolean; zu_wenige: false; auswahl: KiAuswahl
+  anwendungen: (KiBenannt & { titel: string })[]
   von: string; bis: string; mindestens: number; verlauf: KiVerlauf
   summe: { anfragen: number; fehler: number; verbindungen: number; ein: number; aus: number
     dauer_mittel_ms: number; personen: number; arbeitsplaetze: number }
@@ -354,7 +367,7 @@ export type KiNutzerDetail = {
   arbeitsplaetze: { template_id: string; name: string; anfragen: number; fehler: number; verbindungen: number
     ein: number; aus: number; dauer_mittel_ms: number; zuletzt: string }[]
   modelle: { server: string; modell: string; anfragen: number; ein: number; aus: number }[]
-  werkzeuge: { werkzeug: string; anfragen: number }[]
+  werkzeuge: { werkzeug: string; name?: string; anfragen: number }[]
   verlauf: KiVerlauf
   frist_roh: number
 }
@@ -1483,8 +1496,11 @@ export const api = {
   ideAiTesten: (modell: string, kuerzel?: string) =>
     call<{ ok: boolean; ms: number; antwort: string; denkt: boolean; abbruch: string }>(
       '/admin/ide-ai/testen', { method: 'POST', body: JSON.stringify({ modell, kuerzel }) }),
-  kiNutzung: (von: string, bis: string, tz: string) =>
-    call<KiAnonym>(`/admin/ki-nutzung?${new URLSearchParams({ von, bis, tz })}`),
+  kiNutzung: (von: string, bis: string, tz: string, f: KiFilter = {}) => {
+    const q = new URLSearchParams({ von, bis, tz })
+    for (const k of ['modell', 'anwendung', 'quelle'] as const) if (f[k] !== undefined) q.set(k, f[k] as string)
+    return call<KiAnonym | KiAnonymZuWenige>(`/admin/ki-nutzung?${q}`)
+  },
   /** Personenbezogene Auskunft: die Begründung landet im Prüfprotokoll. */
   kiAuskunft: (grund: string) =>
     call<KiAuskunft>('/admin/ki-nutzung/auskunft', { method: 'POST', body: JSON.stringify({ grund }) }),

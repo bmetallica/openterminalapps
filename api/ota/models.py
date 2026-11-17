@@ -1120,7 +1120,7 @@ class KiAnfrage(Base):
 
 
 class KiStunde(Base):
-    """Die Summen einer Stunde je Mensch, Arbeitsplatz, Server und Modell —
+    """Die Summen einer Stunde je Mensch, Arbeitsplatz, Server, Modell und Anwendung —
     für Graphen über Tage und Wochen und über die Frist der Einzelanfragen
     hinaus. Unbekannt (keine Sitzung zur Absenderadresse) steht als Null-UUID."""
 
@@ -1130,6 +1130,9 @@ class KiStunde(Base):
     template_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
     server: Mapped[str] = mapped_column(String(32), primary_key=True)
     modell: Mapped[str] = mapped_column(String(200), primary_key=True)
+    # Die Anwendung (ki_statistik.anwendung); leer: vor ihrer Erfassung gezählt.
+    werkzeug: Mapped[str] = mapped_column(String(16), primary_key=True, default="",
+                                          server_default="")
     user_name: Mapped[str] = mapped_column(String(128), default="")
     arbeitsplatz: Mapped[str] = mapped_column(String(200), default="")
     anfragen: Mapped[int] = mapped_column(Integer, default=0)

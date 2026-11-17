@@ -24,7 +24,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session as DbSession
 
 from . import agent_client, ide_ai
-from .models import KiAnfrage, KiStunde, Session as SessionModel, Template, User
+from .models import KiAnfrage, KiStunde, Session as SessionModel, Template, TemplateApp, User
 
 log = logging.getLogger("ota.ki")
 
@@ -60,6 +60,47 @@ def _personen(db: DbSession, zeilen: list[dict[str, Any]]) -> dict[str, tuple[uu
         if len(treffer) == 1:
             raus.setdefault(name, treffer[0])
     return raus
+
+
+# Die IDEs, die eine Vorlage mitbringt — erkannt an Kürzel, Name oder Befehl
+# ihrer Anwendungen. JetBrains einzeln, weil man PyCharm von IntelliJ
+# unterscheiden will; VS Code und VSCodium sind für die Statistik eins.
+_JETBRAINS = ("pycharm", "intellij", "webstorm", "goland", "clion", "phpstorm", "rider",
+              "rubymine", "datagrip", "rustrover")
+
+
+def _ides(db: DbSession, vorlagen: set[uuid.UUID]) -> dict[uuid.UUID, set[str]]:
+    raus: dict[uuid.UUID, set[str]] = {}
+    if not vorlagen:
+        return raus
+    for tid, slug, name, befehl in db.execute(
+            select(TemplateApp.template_id, TemplateApp.slug, TemplateApp.name, TemplateApp.exec_cmd)
+            .where(TemplateApp.template_id.in_(vorlagen))).all():
+        text_ = f"{slug} {name} {befehl}".lower()
+        menge = raus.setdefault(tid, set())
+        if "vscode" in text_ or "visual studio code" in text_ or "codium" in text_ \
+                or "/code/code" in text_:
+            menge.add("vscode")
+        for jb in _JETBRAINS:
+            if jb in text_ or (jb == "intellij" and "idea" in text_.split()):
+                menge.add(jb)
+    return raus
+
+
+def anwendung(werkzeug: str, ides: set[str]) -> str:
+    """Was der Durchgang erkannt hat, um die IDE ergänzt, wo er nur eine
+    allgemeine Bibliothek sah: Java-Anfragen kommen in OTA aus JetBrains-
+    Erweiterungen, Node-Anfragen aus VS-Code-Erweiterungen — sofern die
+    Vorlage eine solche IDE überhaupt hat. Sonst bleibt es bei der
+    Bibliothek: lieber „java“ als eine geratene IDE."""
+    if werkzeug == "java":
+        jb = sorted(ides & set(_JETBRAINS))
+        if len(jb) == 1:
+            return jb[0]
+        return "jetbrains" if jb else "java"
+    if werkzeug == "node" and "vscode" in ides:
+        return "vscode"
+    return werkzeug
 
 
 def _uuid(roh: Any) -> uuid.UUID | None:
@@ -104,6 +145,7 @@ def _datei_uebernehmen(db: DbSession, name: str, zeilen: list[dict[str, Any]]) -
                 .join(Template, Template.id == SessionModel.template_id)
                 .where(SessionModel.id.in_(sitzungen))).all():
             wer[s] = (u.id, u.username, t.id, t.friendly_name)
+    ides = _ides(db, {w[2] for w in wer.values()})
     personen = _personen(db, [z for z in zeilen if z.get("extern")])
 
     werte = []
@@ -127,7 +169,8 @@ def _datei_uebernehmen(db: DbSession, name: str, zeilen: list[dict[str, Any]]) -
             "session_id": sid, "template_id": tid, "arbeitsplatz": tname,
             "quelle": (f"extern:{z['extern']}" if z.get("extern") else str(z.get("quelle") or ""))[:64], "server": str(z.get("server") or "")[:32],
             "modell": str(z.get("modell") or (z.get("sni") or ""))[:200],
-            "werkzeug": str(z.get("werkzeug") or ("tls" if z.get("weg") == "tls" else ""))[:16],
+            "werkzeug": anwendung(str(z.get("werkzeug") or ("tls" if z.get("weg") == "tls" else "")),
+                                  ides.get(tid, set()) if tid and not z.get("extern") else set())[:16],
             "weg": str(z.get("weg") or "")[:12], "pfad": str(z.get("pfad") or "")[:120],
             "status": int(z.get("status") or 0), "dauer_ms": int(z.get("dauer_ms") or 0),
             "erstes_ms": z.get("erstes_ms") if isinstance(z.get("erstes_ms"), int) else None,
@@ -151,7 +194,8 @@ def _datei_uebernehmen(db: DbSession, name: str, zeilen: list[dict[str, Any]]) -
         if w["herkunft"] not in neu:
             continue
         stunde = w["ts"].replace(minute=0, second=0, microsecond=0)
-        schl = (stunde, w["user_id"] or NULL, w["template_id"] or NULL, w["server"], w["modell"])
+        schl = (stunde, w["user_id"] or NULL, w["template_id"] or NULL, w["server"], w["modell"],
+                w["werkzeug"])
         s = summen.setdefault(schl, {"user_name": w["user_name"], "arbeitsplatz": w["arbeitsplatz"],
                                      "anfragen": 0, "fehler": 0, "verbindungen": 0, "ein": 0,
                                      "aus": 0, "dauer_ms": 0, "bytes": 0})
@@ -164,11 +208,11 @@ def _datei_uebernehmen(db: DbSession, name: str, zeilen: list[dict[str, Any]]) -
             s["ein"] += w["ein"] or 0
             s["aus"] += w["aus"] or 0
         s["dauer_ms"] += w["dauer_ms"]
-    for (stunde, uid, tid, server, modell), s in summen.items():
+    for (stunde, uid, tid, server, modell, werkzeug), s in summen.items():
         stmt = insert(KiStunde).values(stunde=stunde, user_id=uid, template_id=tid,
-                                       server=server, modell=modell, **s)
+                                       server=server, modell=modell, werkzeug=werkzeug, **s)
         stmt = stmt.on_conflict_do_update(
-            index_elements=["stunde", "user_id", "template_id", "server", "modell"],
+            index_elements=["stunde", "user_id", "template_id", "server", "modell", "werkzeug"],
             set_={k: getattr(KiStunde, k) + stmt.excluded[k]
                   for k in ("anfragen", "fehler", "verbindungen", "ein", "aus", "dauer_ms", "bytes")}
             | {"user_name": stmt.excluded.user_name, "arbeitsplatz": stmt.excluded.arbeitsplatz})
@@ -214,9 +258,10 @@ def _raster(von: datetime, bis: datetime, frist_roh: int) -> tuple[str, int]:
 
 
 def _verlauf(db: DbSession, von: datetime, bis: datetime, tz: str, frist_roh: int,
-             user_id: uuid.UUID | None, je_platz: bool) -> dict[str, Any]:
+             user_id: uuid.UUID | None, je_platz: bool,
+             filter_: tuple[str, dict[str, Any]] = ("", {})) -> dict[str, Any]:
     quelle, schritt = _raster(von, bis, frist_roh)
-    params: dict[str, Any] = {"von": von, "bis": bis, "tz": tz}
+    params: dict[str, Any] = {"von": von, "bis": bis, "tz": tz, **filter_[1]}
     if quelle == "roh":
         eimer = "date_bin(interval '5 minutes', ts, timestamptz '2000-01-01')"
         tabelle, zeit, anfragen = "ki_anfragen", "ts", "count(*) FILTER (WHERE weg <> 'tls')"
@@ -226,7 +271,7 @@ def _verlauf(db: DbSession, von: datetime, bis: datetime, tz: str, frist_roh: in
                  else "(date_trunc('day', stunde AT TIME ZONE :tz) AT TIME ZONE :tz)")
         tabelle, zeit, anfragen = "ki_stunden", "stunde", "sum(anfragen)"
         tokens = "sum(ein + aus)"
-    wo = f"{zeit} >= :von AND {zeit} < :bis"
+    wo = f"{zeit} >= :von AND {zeit} < :bis" + (f" AND {filter_[0]}" if filter_[0] else "")
     if user_id is not None:
         wo += " AND coalesce(user_id, '00000000-0000-0000-0000-000000000000'::uuid) = :uid"
         params["uid"] = user_id
@@ -339,12 +384,16 @@ def nutzer(db: DbSession, user_id: uuid.UUID | None, von: datetime | None, bis: 
                    .where(KiStunde.user_id == uid, KiStunde.stunde >= ab, KiStunde.stunde < bis)
                    .group_by(KiStunde.server, KiStunde.modell)
                    .order_by(func.sum(KiStunde.anfragen).desc())).all()]
-    # Werkzeuge gibt es nur einzeln — so weit die Einzelanfragen zurückreichen.
-    werkzeuge = [{"werkzeug": w, "anfragen": int(n)} for w, n in db.execute(
-        select(KiAnfrage.werkzeug, func.count())
-        .where(KiAnfrage.user_id == user_id if user_id else KiAnfrage.user_id.is_(None),
-               KiAnfrage.ts >= von, KiAnfrage.ts < bis)
-        .group_by(KiAnfrage.werkzeug).order_by(func.count().desc())).all()]
+    # Die Anwendungen aus den Stundensummen; was vor ihrer Erfassung gezählt
+    # wurde, steht mit leerem Namen da.
+    werkzeuge = [{"werkzeug": w, "name": n or "", "anfragen": int(a or 0)}
+                 for w, n, a in db.execute(
+                     select(KiStunde.werkzeug, func.max(KiStunde.arbeitsplatz),
+                            func.sum(KiStunde.anfragen))
+                     .where(KiStunde.user_id == uid, KiStunde.stunde >= ab, KiStunde.stunde < bis)
+                     .group_by(KiStunde.werkzeug)
+                     .having(func.sum(KiStunde.anfragen) > 0)
+                     .order_by(func.sum(KiStunde.anfragen).desc())).all()]
     u = db.get(User, user_id) if user_id else None
     return {"von": von.isoformat(), "bis": bis.isoformat(),
             "nutzer": {"user_id": str(user_id) if user_id else "",
@@ -368,13 +417,81 @@ def _anteile(zeilen: list[tuple[Any, Any, Any]]) -> list[dict[str, int]]:
     return sorted(raus, key=lambda r: (-r["anfragen"], -r["tokens"]))
 
 
-def anonym(db: DbSession, von: datetime | None, bis: datetime | None, tz: str) -> dict[str, Any]:
+def _externe(db: DbSession) -> list[uuid.UUID]:
+    """Die Kennungen der eingetragenen externen Dienste — für Summen von
+    vor der Erfassung der Anwendung, in denen ihr Kürzel noch fehlt."""
+    return [extern_kennung(d["kuerzel"]) for d in ide_ai.einstellungen(db).get("extern") or []]
+
+
+def _filter(db: DbSession, modell: str | None, anwendung_: str | None,
+            quelle: str | None) -> tuple[str, dict[str, Any]]:
+    """Die Auswahl der Seite als SQL-Bedingung, die für `ki_stunden` und
+    `ki_anfragen` gleich lautet (dieselben Spalten). Quelle: `ota` (die
+    Arbeitsplätze) oder `extern:<kürzel>` (ein angebundener Dienst)."""
+    teile: list[str] = []
+    p: dict[str, Any] = {}
+    if modell is not None:
+        teile.append("modell = :f_modell")
+        p["f_modell"] = modell
+    if anwendung_ is not None:
+        teile.append("werkzeug = :f_werkzeug")
+        p["f_werkzeug"] = anwendung_
+    platz = "coalesce(template_id, '00000000-0000-0000-0000-000000000000'::uuid)"
+    if quelle == "ota":
+        teile.append(f"NOT (werkzeug LIKE 'x:%' OR {platz} = ANY(CAST(:f_ext AS uuid[])))")
+        p["f_ext"] = [str(k) for k in _externe(db)]
+    elif quelle and quelle.startswith("extern:"):
+        k = quelle[7:]
+        teile.append(f"(werkzeug = :f_xw OR {platz} = CAST(:f_xid AS uuid))")
+        p["f_xw"], p["f_xid"] = ("x:" + k)[:16], str(extern_kennung(k))
+    return " AND ".join(teile), p
+
+
+def _auswahl(db: DbSession, ab: datetime, bis: datetime) -> dict[str, Any]:
+    """Was sich im Zeitraum auswählen lässt — ohne Filter, sonst ließe sich
+    eine Auswahl nicht mehr ändern."""
+    im = (KiStunde.stunde >= ab, KiStunde.stunde < bis, KiStunde.anfragen > 0)
+    modelle = [m for m, in db.execute(select(KiStunde.modell).where(*im).group_by(KiStunde.modell)
+                                      .order_by(func.sum(KiStunde.anfragen).desc())).all()]
+    anwendungen = [{"werkzeug": w, "name": n or ""} for w, n in db.execute(
+        select(KiStunde.werkzeug, func.max(KiStunde.arbeitsplatz)).where(*im)
+        .group_by(KiStunde.werkzeug).order_by(func.sum(KiStunde.anfragen).desc())).all()]
+    externe = {extern_kennung(d["kuerzel"]): d for d in ide_ai.einstellungen(db).get("extern") or []}
+    quellen = [{"quelle": "ota", "name": ""}]
+    gesehen: set[str] = set()
+    for a in anwendungen:
+        if a["werkzeug"].startswith("x:"):
+            gesehen.add(a["werkzeug"][2:])
+            quellen.append({"quelle": "extern:" + a["werkzeug"][2:], "name": a["name"]})
+    for tid, d in externe.items():
+        if d["kuerzel"] not in gesehen:
+            quellen.append({"quelle": "extern:" + d["kuerzel"], "name": d.get("name") or d["kuerzel"]})
+    return {"modelle": modelle, "anwendungen": anwendungen, "quellen": quellen}
+
+
+def anonym(db: DbSession, von: datetime | None, bis: datetime | None, tz: str,
+           modell: str | None = None, anwendung_: str | None = None,
+           quelle: str | None = None) -> dict[str, Any]:
     """Was die Seite ohne Auskunft zeigt: Summen, Verlauf und Anteile — kein
-    Name, keine Kennung eines Menschen oder seines Arbeitsplatzes."""
+    Name, keine Kennung eines Menschen oder seines Arbeitsplatzes.
+
+    Mit Filter (Modell, Anwendung, Quelle) gilt die Mindestzahl auch für die
+    Auswahl selbst: Nutzen weniger als `MINDESTENS` Menschen, was gefiltert
+    ist, gäbe schon die Summe und erst recht der Verlauf preis, wer wann
+    gearbeitet hat — dann gibt es nur den Hinweis, keine Zahl."""
     e = ide_ai.einstellungen(db)
     von, bis = _zeitraum(von, bis)
     ab = von.replace(minute=0, second=0, microsecond=0)
-    im = (KiStunde.stunde >= ab, KiStunde.stunde < bis)
+    bed, bp = _filter(db, modell, anwendung_, quelle)
+    im = (KiStunde.stunde >= ab, KiStunde.stunde < bis) + ((text(bed).bindparams(**bp),) if bed else ())
+    auswahl = _auswahl(db, ab, bis)
+    filter_aktiv = bool(bed)
+    if filter_aktiv:
+        zahl = db.execute(select(func.count(func.distinct(KiStunde.user_id)))
+                          .where(*im, KiStunde.user_id != NULL)).scalar() or 0
+        if 0 < zahl < MINDESTENS:
+            return {"von": von.isoformat(), "bis": bis.isoformat(), "mindestens": MINDESTENS,
+                    "gefiltert": True, "zu_wenige": True, "auswahl": auswahl}
     tokens = func.sum(KiStunde.ein + KiStunde.aus)
     bekannt = KiStunde.user_id != NULL
 
@@ -408,12 +525,23 @@ def anonym(db: DbSession, von: datetime | None, bis: datetime | None, tz: str) -
                       key=lambda r: (-r["anfragen"], -r["tokens"]))
     modelle = benannt(KiStunde.modell, KiStunde.modell)
     server = benannt(KiStunde.server, KiStunde.server)
+    # Je Anwendung: der Schlüssel (opencode, vscode, x:<dienst> …); bei
+    # externen Diensten dazu ihr Name. Ohne Zahl bleibt nichts im Ring.
+    anwendungen = sorted(({"name": w or "", "titel": (n or "") if (w or "").startswith("x:") else "",
+                           "anfragen": int(a or 0), "tokens": int(t or 0)}
+                          for w, n, a, t in db.execute(
+                              select(KiStunde.werkzeug, func.max(KiStunde.arbeitsplatz),
+                                     func.sum(KiStunde.anfragen), tokens)
+                              .where(*im).group_by(KiStunde.werkzeug)).all()
+                          if a or t),
+                         key=lambda r: (-r["anfragen"], -r["tokens"]))
 
     tageszeit = [{"anfragen": 0, "tokens": 0} for _ in range(24)]
     for h, a, t in db.execute(text(
             "SELECT extract(hour FROM stunde AT TIME ZONE :tz)::int, sum(anfragen), sum(ein + aus) "
-            "FROM ki_stunden WHERE stunde >= :von AND stunde < :bis GROUP BY 1"),
-            {"tz": tz, "von": ab, "bis": bis}).all():
+            "FROM ki_stunden WHERE stunde >= :von AND stunde < :bis"
+            + (f" AND {bed}" if bed else "") + " GROUP BY 1"),
+            {"tz": tz, "von": ab, "bis": bis, **bp}).all():
         if 0 <= h < 24:
             tageszeit[h] = {"anfragen": int(a or 0), "tokens": int(t or 0)}
 
@@ -424,9 +552,10 @@ def anonym(db: DbSession, von: datetime | None, bis: datetime | None, tz: str) -
                   "ein": int(summe[3]), "aus": int(summe[4]),
                   "dauer_mittel_ms": int(summe[5] / a) if a else 0,
                   "personen": len(personen), "arbeitsplaetze": len(plaetze)},
-        "verlauf": _verlauf(db, von, bis, tz, int(e["frist_roh"]), None, False),
+        "verlauf": _verlauf(db, von, bis, tz, int(e["frist_roh"]), None, False, (bed, bp)),
         "personen": _anteile(personen) if len(personen) >= MINDESTENS else [],
         "arbeitsplaetze": _anteile(plaetze) if len(plaetze) >= MINDESTENS else [],
         "nicht_zuzuordnen": {"anfragen": int(ohne[0]), "tokens": int(ohne[1])},
         "vorlagen": vorlagen, "modelle": modelle, "server": server, "tageszeit": tageszeit,
+        "anwendungen": anwendungen, "auswahl": auswahl, "gefiltert": filter_aktiv, "zu_wenige": False,
     }

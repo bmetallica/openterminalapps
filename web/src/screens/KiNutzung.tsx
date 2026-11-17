@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  ApiError, api, type KiAnonym, type KiAuskunft, type KiBenannt, type KiNutzerDetail,
+  ApiError, api, type KiAnonym, type KiAnonymZuWenige, type KiAuskunft, type KiAuswahl, type KiBenannt,
+  type KiFilter, type KiNutzerDetail,
   type KiUebersicht, type KiVerlauf,
 } from '../lib/api'
 import { getLang, t as tr, useLang } from '../lib/i18n'
@@ -44,7 +45,8 @@ export function KiNutzung({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad
   useLang()
   const [raum, setRaum] = useState<Zeitraum>(() => ({ von: Date.now() - TAG, bis: Date.now() }))
   const [metrik, setMetrik] = useState<Metrik>('anfragen')
-  const [daten, setDaten] = useState<KiAnonym | null>(null)
+  const [daten, setDaten] = useState<KiAnonym | KiAnonymZuWenige | null>(null)
+  const [filter, setFilter] = useState<KiFilter>({})
   const [fehler, setFehler] = useState('')
   // Die Auskunft lebt nur hier im Speicher: Wer die Seite neu lädt oder
   // verlässt, muss wieder begründen.
@@ -53,11 +55,11 @@ export function KiNutzung({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad
 
   const laden = useCallback(async () => {
     try {
-      setDaten(await api.kiNutzung(iso(raum.von), iso(raum.bis), TZ)); setFehler('')
+      setDaten(await api.kiNutzung(iso(raum.von), iso(raum.bis), TZ, filter)); setFehler('')
     } catch (err) {
       setFehler(err instanceof ApiError ? err.message : tr('Hat nicht geklappt'))
     }
-  }, [raum])
+  }, [raum, filter])
   useEffect(() => { if (!wer) void laden() }, [laden, wer])
 
   // Abgelaufen ist abgelaufen — auch ohne dass jemand klickt.
@@ -88,6 +90,24 @@ export function KiNutzung({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad
   }
   if (fehler) return <p className="note-warn">{fehler}</p>
   if (!daten) return <p className="sub">{tr('Wird geladen…')}</p>
+  if (daten.zu_wenige) {
+    return (
+      <div>
+        <Zeitwahl raum={raum} onRaum={setRaum} />
+        <Filterzeile auswahl={daten.auswahl} filter={filter} onFilter={setFilter} />
+        <p className="note-warn">
+          {tr('Diese Auswahl nutzen im Zeitraum weniger als {n} Menschen. Ohne Namen lässt sie sich nicht zeigen — schon die Summe verriete, wer wann gearbeitet hat. Bitte die Auswahl erweitern oder unten eine Auskunft mit Begründung öffnen.', { n: daten.mindestens })}
+        </p>
+        <div style={{ marginTop: 18 }}>
+          {auskunft ? (
+            <Personen auskunft={auskunft} raum={raum} onBeenden={beenden} onWer={setWer} onFehler={abgelehnt} />
+          ) : (
+            <AuskunftMaske onAuskunft={setAuskunft} onToast={onToast} />
+          )}
+        </div>
+      </div>
+    )
+  }
 
   const wert = (x: { anfragen: number; tokens: number }) => metrik === 'anfragen' ? x.anfragen : x.tokens
   const nachRang = (liste: { anfragen: number; tokens: number }[], name: string) =>
@@ -104,6 +124,7 @@ export function KiNutzung({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad
         </p>
       )}
       <Zeitwahl raum={raum} onRaum={setRaum} />
+      <Filterzeile auswahl={daten.auswahl} filter={filter} onFilter={setFilter} />
 
       <div className="ki-kacheln">
         <Kachel wert={zahl(daten.summe.anfragen)} name={tr('Anfragen')} />
@@ -132,7 +153,8 @@ export function KiNutzung({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad
 
       <div className="panel" style={{ padding: '14px 16px', marginBottom: 18 }}>
         <h3 className="ki-titel">{metrik === 'anfragen' ? tr('Anfragen im Verlauf') : tr('Tokens im Verlauf')}</h3>
-        <Graf verlauf={daten.verlauf} raum={raum} namen={{ '': tr('Alle') }} metrik={metrik} onZoom={setRaum} />
+        <Graf verlauf={daten.verlauf} raum={raum} namen={{ '': daten.gefiltert ? tr('Auswahl') : tr('Alle') }}
+          metrik={metrik} onZoom={setRaum} />
       </div>
 
       <div className="ki-torten">
@@ -147,6 +169,9 @@ export function KiNutzung({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad
           leer={daten.summe.arbeitsplaetze > 0
             ? tr('Erst ab {n} Arbeitsplätzen im Zeitraum — bei weniger wäre erkennbar, wem welcher gehört.', { n: daten.mindestens })
             : undefined} />
+        <Torte titel={tr('Je Anwendung')} metrik={metrik}
+          teile={[...daten.anwendungen].sort((x, y) => wert(y) - wert(x))
+            .map((x) => ({ name: werkzeugName(x.name, x.titel), wert: wert(x) }))} />
         <Torte titel={tr('Je Vorlage')} metrik={metrik} teile={benannt(daten.vorlagen, 'nicht zuzuordnen')} />
         <Torte titel={tr('Je Modell')} metrik={metrik} teile={benannt(daten.modelle, 'unbekannt')} />
         {daten.server.length > 1 && (
@@ -424,6 +449,56 @@ function Kachel({ wert, name }: { wert: string; name: string }) {
 }
 
 /** Zeitraum wählen: feste Spannen, früher/später, eigene Grenzen. */
+/**
+ * Die Auswahl über allem: Quelle (alle, nur die Arbeitsplätze, nur ein
+ * angebundener Dienst wie Open WebUI), Modell, Anwendung. Was zur Wahl
+ * steht, kommt ungefiltert aus dem Zeitraum — sonst ließe sich eine Auswahl
+ * nicht mehr ändern.
+ */
+function Filterzeile({ auswahl, filter, onFilter }: {
+  auswahl: KiAuswahl; filter: KiFilter; onFilter: (f: KiFilter) => void
+}) {
+  const setze = (k: keyof KiFilter, v: string) => onFilter({ ...filter, [k]: v === '__alle__' ? undefined : v })
+  // Eine gewählte, im Zeitraum aber leere Größe bleibt wählbar.
+  const modelle = filter.modell !== undefined && !auswahl.modelle.includes(filter.modell)
+    ? [...auswahl.modelle, filter.modell] : auswahl.modelle
+  const anwendungen = filter.anwendung !== undefined && !auswahl.anwendungen.some((a) => a.werkzeug === filter.anwendung)
+    ? [...auswahl.anwendungen, { werkzeug: filter.anwendung, name: '' }] : auswahl.anwendungen
+  const quellen: { quelle: string | undefined; name: string }[] = [
+    { quelle: undefined, name: tr('Gesamt') },
+    ...auswahl.quellen.map((q) => ({ quelle: q.quelle, name: q.quelle === 'ota' ? tr('Nur OTA') : tr('Nur {n}', { n: q.name || q.quelle.slice(7) }) })),
+  ]
+  const aktiv = filter.modell !== undefined || filter.anwendung !== undefined || filter.quelle !== undefined
+  return (
+    <div className="ki-leiste ki-filter">
+      {quellen.length > 2 && (
+        <div className="seg" role="radiogroup" aria-label={tr('Quelle')}>
+          {quellen.map((q) => (
+            <button key={q.quelle ?? ''} type="button" role="radio" aria-checked={filter.quelle === q.quelle}
+              className={`seg__opt${filter.quelle === q.quelle ? ' is-on' : ''}`}
+              onClick={() => onFilter({ ...filter, quelle: q.quelle })}>{q.name}</button>
+          ))}
+        </div>
+      )}
+      <label className="sub ki-filter__wahl">
+        {tr('Modell')}
+        <select value={filter.modell ?? '__alle__'} aria-label={tr('Modell')} onChange={(ev) => setze('modell', ev.target.value)}>
+          <option value={'__alle__'}>{tr('alle')}</option>
+          {modelle.map((m) => <option key={m} value={m}>{m || tr('unbekannt')}</option>)}
+        </select>
+      </label>
+      <label className="sub ki-filter__wahl">
+        {tr('Anwendung')}
+        <select value={filter.anwendung ?? '__alle__'} aria-label={tr('Anwendung')} onChange={(ev) => setze('anwendung', ev.target.value)}>
+          <option value={'__alle__'}>{tr('alle')}</option>
+          {anwendungen.map((a) => <option key={a.werkzeug} value={a.werkzeug}>{werkzeugName(a.werkzeug, a.name)}</option>)}
+        </select>
+      </label>
+      {aktiv && <button className="btn btn--sm btn--ghost" onClick={() => onFilter({})}>{tr('Filter zurücksetzen')}</button>}
+    </div>
+  )
+}
+
 function Zeitwahl({ raum, onRaum }: { raum: Zeitraum; onRaum: (r: Zeitraum) => void }) {
   const spanne = raum.bis - raum.von
   const jetzt = Date.now()
@@ -588,7 +663,7 @@ function NutzerDetail({ id, merkmal, start, onZurueck, onFehler }: {
                 <table className="tbl ide-ai__modelle">
                   <tbody>
                     {d.werkzeuge.map((w) => (
-                      <tr key={w.werkzeug}><td>{werkzeugName(w.werkzeug)}</td><td className="data">{zahl(w.anfragen)}</td></tr>
+                      <tr key={w.werkzeug}><td>{werkzeugName(w.werkzeug, w.name)}</td><td className="data">{zahl(w.anfragen)}</td></tr>
                     ))}
                   </tbody>
                 </table>
@@ -623,11 +698,35 @@ export function MeineKiNutzung({ onToast }: { onToast: (m: string, tone?: 'ok' |
   )
 }
 
-function werkzeugName(w: string): string {
-  if (w.startsWith('x:')) return tr('Externer Dienst ({k})', { k: w.slice(2) })
+/** Die Anwendung, wie sie der Durchgang erkennt (ki/otaki/haupt.py
+ *  `_werkzeug`) und die API um die IDE der Vorlage ergänzt. `titel`: der
+ *  Name eines externen Dienstes. */
+function werkzeugName(w: string, titel = ''): string {
+  if (w.startsWith('x:')) return titel || tr('Externer Dienst ({k})', { k: w.slice(2) })
   switch (w) {
+    case '': return tr('nicht erfasst')
     case 'opencode': return 'opencode'
-    case 'continue': return tr('Continue (IDE-AI)')
+    case 'continue': return 'Continue'
+    case 'cline': return 'Cline'
+    case 'roo': return 'Roo Code'
+    case 'kilo': return 'Kilo Code'
+    case 'aider': return 'Aider'
+    case 'copilot': return 'Copilot'
+    case 'vscode': return 'VS Code'
+    case 'pycharm': return 'PyCharm'
+    case 'intellij': return 'IntelliJ IDEA'
+    case 'webstorm': return 'WebStorm'
+    case 'goland': return 'GoLand'
+    case 'clion': return 'CLion'
+    case 'phpstorm': return 'PhpStorm'
+    case 'rider': return 'Rider'
+    case 'rubymine': return 'RubyMine'
+    case 'datagrip': return 'DataGrip'
+    case 'rustrover': return 'RustRover'
+    case 'jetbrains': return tr('JetBrains-IDE')
+    case 'java': return tr('Java-Programm')
+    case 'node': return tr('Node-Programm')
+    case 'python': return tr('Python-Programm')
     case 'skript': return tr('Skript / Kommandozeile')
     case 'tls': return tr('verschlüsselt (nur Verbindungen)')
     default: return tr('sonstiges')

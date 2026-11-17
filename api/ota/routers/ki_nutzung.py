@@ -107,9 +107,18 @@ def _rahmen(db: DbSession) -> dict:
 
 @router.get("", dependencies=[Depends(verwalten)])
 def uebersicht(von: str | None = Query(None), bis: str | None = Query(None),
-               tz: str | None = Query(None), db: DbSession = Depends(get_db)) -> dict:
-    """Ohne Namen — das, was die Seite ohne Auskunft zeigt."""
-    return {**ki_statistik.anonym(db, _zeit(von), _zeit(bis), _tz(tz)), **_rahmen(db)}
+               tz: str | None = Query(None),
+               modell: str | None = Query(None, max_length=200),
+               anwendung: str | None = Query(None, max_length=16),
+               quelle: str | None = Query(None, max_length=24),
+               db: DbSession = Depends(get_db)) -> dict:
+    """Ohne Namen — das, was die Seite ohne Auskunft zeigt. Filter: ein
+    Modell, eine Anwendung (`opencode`, `vscode`, `x:<dienst>`, leer für
+    „nicht erfasst“), eine Quelle (`ota` oder `extern:<kürzel>`)."""
+    if quelle is not None and quelle != "ota" and not quelle.startswith("extern:"):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Unbekannte Quelle.")
+    return {**ki_statistik.anonym(db, _zeit(von), _zeit(bis), _tz(tz), modell, anwendung, quelle),
+            **_rahmen(db)}
 
 
 @router.post("/auskunft", dependencies=[Depends(verwalten)])

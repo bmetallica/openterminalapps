@@ -346,7 +346,9 @@ dabei **nicht** zurückwandert, ist die Datenbank: Neue Spalten bleiben stehen. 
     alle, jeder weitere kommt für seine **Gruppen** dazu.
   - **KI-Nutzung unter Betrieb** (optional, standardmäßig aus): zunächst **ohne Namen**, also
     Summen, Verlauf, Ringdiagramme je Mensch und Arbeitsplatz (nur nach Rang, erst ab drei),
-    Vorlage, Modell und Server sowie eine Verteilung nach Tageszeit. Namen und Einzelverläufe gibt
+    Vorlage, Modell, Server und **Anwendung** (opencode, VS Code, PyCharm, Open WebUI …) sowie
+    eine Verteilung nach Tageszeit, filterbar nach Quelle (nur OTA, nur Open WebUI), Modell und
+    Anwendung (keine Zahlen bei weniger als drei Menschen in der Auswahl). Namen und Einzelverläufe gibt
     es nur nach einer **Begründung**, die mit Namen im Protokoll steht, für 30 Minuten. Jeder
     sieht unter **Meine KI-Nutzung** seine eigenen Zahlen, und ein Punkt **DSGVO** in der
     Seitenleiste informiert alle (Text durch die Verwaltung anpassbar). Nie Inhalte, Aufbewahrung
