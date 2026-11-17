@@ -310,7 +310,7 @@ export function IdeAiEinstellungen({ onToast }: {
       <h3 className="ide-ai__abschnitt">{tr('Weitere KI-Server')}</h3>
       <p className="field__hint" style={{ marginTop: 0 }}>
         {e.durchgang
-          ? tr('Continue und opencode sehen die Modelle aller Server in einer Liste. Der Durchgang leitet jede Anfrage an den Server weiter, zu dem das Modell gehört.')
+          ? tr('Der Server oben gilt für alle. Jeder weitere kommt für die gewählten Gruppen dazu; Continue und opencode sehen die Modelle ihrer Server in einer Liste, und der Durchgang leitet jede Anfrage an den Server, zu dem das Modell gehört.')
           : tr('Weitere Server wirken nur mit dem KI-Durchgang (unten) — ohne ihn kennen die Werkzeuge nur den Server oben.')}
       </p>
       {e.weitere.map((w, i) => (
@@ -322,10 +322,10 @@ export function IdeAiEinstellungen({ onToast }: {
             setze({ weitere: e.weitere.filter((_, j) => j !== i) })
             setWeitereSchluessel(weitereSchluessel.filter((_, j) => j !== i))
           }}
-          tun={tun} />
+          tun={tun} gruppen={gruppen} />
       ))}
       <button className="btn" style={{ marginBottom: 18 }} onClick={() => {
-        setze({ weitere: [...e.weitere, { name: '', kuerzel: `ki${e.weitere.length + 2}`, url: '', modelle: [], _vorher: '' }] })
+        setze({ weitere: [...e.weitere, { name: '', kuerzel: `ki${e.weitere.length + 2}`, url: '', modelle: [], gruppen: [], _vorher: '' }] })
         setWeitereSchluessel([...weitereSchluessel, ''])
       }}>{tr('+ Weiteren KI-Server')}</button>
 
@@ -392,8 +392,9 @@ export function IdeAiEinstellungen({ onToast }: {
 }
 
 /** Ein weiterer KI-Server: Adresse, Schlüssel, Modelle. */
-function WeitererServer({ w, gesetzt, schluessel, busy, onToast, onSchluessel, onChange, onEntfernen, tun }: {
+function WeitererServer({ w, gesetzt, schluessel, busy, onToast, onSchluessel, onChange, onEntfernen, tun, gruppen }: {
   w: WeitererEntwurf
+  gruppen: Group[]
   gesetzt: boolean
   schluessel: string | null
   busy: string | null
@@ -439,6 +440,16 @@ function WeitererServer({ w, gesetzt, schluessel, busy, onToast, onSchluessel, o
         {gesetzt && schluessel === null && (
           <button className="btn" onClick={() => onSchluessel('')}>{tr('Entfernen')}</button>
         )}
+      </div>
+      <div style={{ marginTop: 10 }}>
+        <ChipSelect label={tr('Gruppen')} selected={gruppen.filter((g) => w.gruppen.includes(g.id)).map((g) => g.name)}
+          options={gruppen.map((g) => g.name)}
+          onChange={(namen) => onChange({ gruppen: namen.map((n) => gruppen.find((g) => g.name === n)?.id).filter((x): x is string => !!x) })} />
+        <p className="field__hint" style={{ marginTop: 4 }}>
+          {w.gruppen.length
+            ? tr('Nur Mitglieder dieser Gruppen bekommen diesen Server zusätzlich zum ersten; Administratoren immer. Erreichbar ist er dann nur über den Durchgang.')
+            : tr('Ohne Gruppe bekommen ihn alle, die IDE-AI oder opencode haben.')}
+        </p>
       </div>
       {zeilen.length > 0 && (
         <div style={{ overflowX: 'auto', marginTop: 8 }}>

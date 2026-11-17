@@ -243,8 +243,25 @@ def _weitere_pruefen(roh: Any, alt: list[dict[str, Any]]) -> list[dict[str, Any]
             schluessel = (vorher.get(str(w.get("kuerzel_vorher") or kuerzel)) or {}).get("api_key", "")
         raus.append({"name": str(w.get("name") or "").strip()[:60] or kuerzel,
                      "kuerzel": kuerzel, "url": url, "api_key": str(schluessel or "").strip(),
-                     "modelle": _modelle_pruefen(w.get("modelle"))})
+                     "modelle": _modelle_pruefen(w.get("modelle")),
+                     # Wer ihn zusätzlich bekommt. Leer: alle.
+                     "gruppen": [str(g) for g in w.get("gruppen") or []]})
     return raus
+
+
+def server_fuer(e: dict[str, Any], user: User | None) -> set[str]:
+    """Die Kürzel der Server, die dieser Mensch bekommt.
+
+    Der Server oben gilt für alle, die IDE-AI oder opencode haben. Ein
+    weiterer Server ohne Gruppe auch; mit Gruppen nur deren Mitglieder — und
+    Administratoren immer. `None`: alle (Verwaltung, Vorschau ohne Mensch).
+    """
+    alle = {s["kuerzel"] for s in server_liste(e)}
+    if user is None or user.is_admin:
+        return alle
+    meine = {str(g.id) for g in user.groups}
+    return {e["kuerzel"]} | {w["kuerzel"] for w in e["weitere"]
+                             if w["kuerzel"] in alle and (not w.get("gruppen") or meine & set(w["gruppen"]))}
 
 
 def server_liste(e: dict[str, Any]) -> list[dict[str, Any]]:
@@ -285,15 +302,36 @@ def durchgang_aktiv(db: DbSession, e: dict[str, Any] | None = None) -> bool:
     return bool(e["durchgang"] and e["url"] and (e["an"] or opencode.an(db)))
 
 
-def sicht(e: dict[str, Any], db: DbSession | None = None) -> dict[str, Any]:
+def sicht(e: dict[str, Any], db: DbSession | None = None, user: User | None = None) -> dict[str, Any]:
     """Die Einstellungen so, wie die Werkzeuge sie brauchen: mit Durchgang
-    zeigt alles auf ki.ota, ohne Schlüssel, mit allen Modellen aller Server."""
+    zeigt alles auf ki.ota, ohne Schlüssel, mit den Modellen aller Server,
+    die dieser Mensch bekommt."""
     if not e["durchgang"] or not e["url"]:
         return e
     if db is not None and not durchgang_aktiv(db, e):
         return e
-    return {**e, "url": KI_URL, "api_key": "", "modelle": modelle_aussen(e),
+    meine = server_fuer(e, user)
+    modelle = [m for m in modelle_aussen(e) if m["server"] in meine]
+    ids = {m["id"] for m in modelle}
+    standard = e["standard"] if e["standard"] in ids else (e["modelle"][0]["id"] if e["modelle"] else "")
+    return {**e, "url": KI_URL, "api_key": "", "modelle": modelle,
+            "standard": standard, "autocomplete": e["autocomplete"] if e["autocomplete"] in ids else "",
             "ohne_proxy": True, "ueber_durchgang": True}
+
+
+def _sitzungen_fuer(db: DbSession, w: dict[str, Any]) -> list[str]:
+    """Die laufenden Sitzungen, deren Mensch diesen weiteren Server bekommt."""
+    from .models import Session as SessionModel
+
+    raus = []
+    for sess in db.query(SessionModel).filter(
+            SessionModel.status.in_(("starting", "running", "paused"))).all():
+        u = sess.user
+        if u is None:
+            continue
+        if u.is_admin or {str(g.id) for g in u.groups} & set(w["gruppen"]):
+            raus.append(str(sess.id))
+    return raus
 
 
 def durchgang_konfig(db: DbSession) -> dict[str, Any]:
@@ -309,7 +347,11 @@ def durchgang_konfig(db: DbSession) -> dict[str, Any]:
         "zeitlimit": e["zeitlimit"],
         "ohne_proxy": e["ohne_proxy"],
         "server": [{"name": s["name"], "kuerzel": s["kuerzel"], "url": s["url"],
-                    "api_key": s["api_key"], "modelle": nach_server.get(s["kuerzel"], [])}
+                    "api_key": s["api_key"], "modelle": nach_server.get(s["kuerzel"], []),
+                    # Ein weiterer Server mit Gruppen: nur diese Sitzungen.
+                    # Der Durchgang kennt Sitzungen, keine Menschen.
+                    **({"alle": False, "sitzungen": _sitzungen_fuer(db, s)} if s.get("gruppen")
+                       else {"alle": True})}
                    for s in server_liste(e) if s["url"]] if aktiv else [],
     }
 
@@ -490,7 +532,7 @@ def fuer_sitzung(db: DbSession, user: User) -> dict[str, Any]:
     e = einstellungen(db)
     if not aktiv_fuer(db, user, e):
         return {}
-    return {"fassungen": fassungen(db), "config": konfiguration(sicht(e, db))}
+    return {"fassungen": fassungen(db), "config": konfiguration(sicht(e, db, user))}
 
 
 def freigaben(db: DbSession) -> list[dict[str, str]]:
@@ -504,6 +546,11 @@ def freigaben(db: DbSession) -> list[dict[str, str]]:
         return []
     raus = []
     for s in server_liste(e):
+        if s.get("gruppen"):
+            # Nur für bestimmte Gruppen: kein Weg an allen vorbei. Erreichbar
+            # ist er dann nur über den Durchgang, der die Gruppe prüft — liegt
+            # der, bleibt dieser Server zu, statt für alle offen zu sein.
+            continue
         teile = urlparse(s["url"])
         port = teile.port or (443 if teile.scheme == "https" else 80)
         raus.append({"ziel": teile.hostname or "", "ports": str(port), "protokoll": "tcp",

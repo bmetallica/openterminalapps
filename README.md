@@ -342,7 +342,8 @@ dabei **nicht** zurückwandert, ist die Datenbank: Neue Spalten bleiben stehen. 
   - **Mehrere KI-Server** unter einem Namen und **KI-Durchgang** (`ota-ki`, optional): Continue und
     opencode sehen ein Modellverzeichnis über alle Server, der Schlüssel bleibt aus den Zuhausen
     heraus. Die Firewall fängt auch Verbindungen von Skripten an die echte Adresse eines Servers ab.
-    Liegt der Durchgang, geht der Verkehr von selbst wieder direkt.
+    Liegt der Durchgang, geht der Verkehr von selbst wieder direkt. Der erste Server gilt für
+    alle, jeder weitere kommt für seine **Gruppen** dazu.
   - **KI-Nutzung unter Betrieb** (optional, standardmäßig aus): wer die KI wie oft anspricht, je
     Mensch und Arbeitsplatz, mit Modell, Tokens und einem Graphen, der sich über Tage erweitern
     lässt. Nie Inhalte; Aufbewahrung einstellbar, das Ansehen steht im Protokoll.

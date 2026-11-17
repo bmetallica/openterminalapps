@@ -337,7 +337,8 @@ that did not exist before is simply there.
   - **Several AI servers** under one name and an **AI gateway** (`ota-ki`, optional): Continue and
     opencode see one model list across all servers, the key stays out of the homes. The firewall
     also intercepts connections from scripts to a server's real address. If the gateway is down,
-    traffic goes direct again by itself.
+    traffic goes direct again by itself. The first server applies to everyone, each further one
+    is added for its **groups**.
   - **AI usage under Operations** (optional, off by default): who talks to the AI how often, per
     person and workspace, with model, tokens and a graph that extends over days. Never contents;
     retention adjustable, viewing is logged.

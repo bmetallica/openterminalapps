@@ -181,6 +181,20 @@ Name, Kürzel, Adresse, Schlüssel und Modellen. Sie wirken **nur mit dem Durchg
 - Ein Modell, das in OTA nicht eingetragen ist, beantwortet der Durchgang mit 404 und einer
   Erklärung.
 
+**Wer welchen Server bekommt:** Der Server oben gilt für alle, die IDE-AI oder opencode haben.
+Jeder weitere Server bekommt eigene **Gruppen**. Deren Mitglieder bekommen ihn zusätzlich,
+Administratoren immer. Ohne Gruppe gilt er für alle.
+
+- Continue und opencode bieten jedem Menschen nur die Modelle seiner Server an. Das Standardmodell
+  fällt auf das des ersten Servers zurück, wenn es auf einem Server liegt, den der Mensch nicht hat.
+- Der Durchgang prüft jede Anfrage: Wer ein Modell oder die Adresse eines Servers anspricht, der
+  ihm nicht zusteht, bekommt 403 („… ist für dich nicht freigegeben“). Eine direkte
+  HTTPS-Verbindung endet ohne Antwort.
+- Ein Server mit Gruppen ist in der Firewall **nicht** für alle freigegeben. Erreichbar ist er nur
+  über den Durchgang. Liegt der Durchgang, bleibt er zu, statt für alle offen zu sein.
+- Geänderte Gruppen gelten im Durchgang sofort. In Continue und opencode erscheinen neue Modelle
+  beim nächsten Start oder Fortsetzen des Arbeitsplatzes.
+
 ### Nutzungsstatistik
 
 Mit eingeschaltetem Durchgang lässt sich unter **Einstellungen → IDE-AI → Nutzungsstatistik**

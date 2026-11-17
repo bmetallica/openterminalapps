@@ -233,7 +233,11 @@ def konfiguration(e: dict[str, Any], ki: dict[str, Any], angaben: list[dict[str,
         if ki["temperatur"] is not None:
             eintrag["options"] = {"temperature": ki["temperatur"]}
         modelle[m["id"]] = eintrag
-    standard = e["standard"] or ki["standard"] or (ki["modelle"][0]["id"] if ki["modelle"] else "")
+    # Ein Standard auf einem Server, den dieser Mensch nicht hat, fällt auf
+    # den der KI-Werkzeuge zurück (Gruppen je KI-Server, Kapitel 28).
+    ids = {m["id"] for m in ki["modelle"]}
+    standard = next((x for x in (e["standard"], ki["standard"]) if x and x in ids),
+                    ki["modelle"][0]["id"] if ki["modelle"] else "")
     inhalt: dict[str, Any] = {
         "$schema": "https://opencode.ai/config.json",
         # Die Fassung legt OTA fest (Paket ota-opencode).
@@ -246,7 +250,7 @@ def konfiguration(e: dict[str, Any], ki: dict[str, Any], angaben: list[dict[str,
                         "timeout": int(ki["zeitlimit"]) * 1000},
             "models": modelle}},
         "model": f"{ANBIETER}/{standard}",
-        "small_model": f"{ANBIETER}/{e['klein'] or standard}",
+        "small_model": f"{ANBIETER}/{e['klein'] if e['klein'] in ids else standard}",
         "instructions": [ANWEISUNGEN],
     }
     mcp: dict[str, Any] = {}
@@ -325,7 +329,7 @@ def fuer_sitzung(db: DbSession, sess: Any, user: User, tpl: Any) -> dict[str, An
     e = einstellungen(db)
     if not aktiv_fuer(db, user, e):
         return {}
-    ki = ide_ai.sicht(ide_ai.einstellungen(db), db)
+    ki = ide_ai.sicht(ide_ai.einstellungen(db), db, user)
     angaben = erweiterungen.fuer_sitzung(db, sess, user, tpl)
     vorlage = getattr(tpl, "name", "") or ""
     weitere = mcp_fuer(e, user)
@@ -349,7 +353,7 @@ def vorschau(db: DbSession, user: User, entwurf: dict[str, Any] | None = None) -
     _zusatz(str(e["zusatz"] or ""))
     if entwurf and "mcp" in entwurf:
         e["mcp"] = _mcp_pruefen(entwurf["mcp"], gespeichert["mcp"], {x.slug for x in erweiterungen.alle(db)})
-    ki = ide_ai.sicht(ide_ai.einstellungen(db), db)
+    ki = ide_ai.sicht(ide_ai.einstellungen(db), db, user)
     angaben = []
     for x in erweiterungen.alle(db):
         if not erweiterungen.berechtigt(x, user):

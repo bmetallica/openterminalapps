@@ -183,6 +183,20 @@ short code, address, key and models. They take effect **only with the gateway**:
   their names, the default model stays valid.
 - A model that is not registered in OTA is answered by the gateway with 404 and an explanation.
 
+**Who gets which server:** the server above applies to everyone who has IDE-AI or opencode. Each
+further server gets its own **groups**. Their members get it in addition, administrators always.
+Without a group it applies to everyone.
+
+- Continue and opencode offer each person only the models of their servers. The default model
+  falls back to that of the first server if it lies on a server the person does not have.
+- The gateway checks every request: whoever addresses a model or the address of a server not
+  granted to them gets 403 ("… is not enabled for you"). A direct HTTPS connection ends without an
+  answer.
+- A server with groups is **not** allowed for everyone in the firewall. It is reachable only
+  through the gateway. If the gateway is down, it stays closed instead of being open to everyone.
+- Changed groups take effect in the gateway immediately. In Continue and opencode new models
+  appear with the next start or resume of the workspace.
+
 ### Usage statistics
 
 With the gateway on, **Settings → IDE-AI → Usage statistics** counts who talks to the AI how

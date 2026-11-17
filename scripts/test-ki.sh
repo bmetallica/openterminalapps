@@ -62,11 +62,12 @@ frage() {  # frage <container> <url> <stream:true|false>
     -d "{\"model\":\"$MODELL\",\"stream\":$3,\"max_tokens\":512,\"messages\":[{\"role\":\"user\",\"content\":\"Antworte nur mit: OK\"}]}"
 }
 
-VORHER=""; SID=""
+VORHER=""; SID=""; USID=""
 aufraeumen() {
   echo
   echo "Aufräumen"
   [ -n "$SID" ] && api -X DELETE "$B/api/sessions/$SID" >/dev/null
+  [ -n "$USID" ] && curl -sk -b "$TMP/u.jar" -X DELETE "$B/api/sessions/$USID" >/dev/null
   docker start ota-ki >/dev/null 2>&1
   if [ -n "$VORHER" ]; then
     jqp "json.dumps({k: v for k, v in d.items() if k not in ('api_key_gesetzt', 'fassungen', 'ki_url', 'durchgang_aktiv', 'modelle_alle')})" \
@@ -161,6 +162,57 @@ A=$(docker exec -u 1000 "$C" curl -s -m 180 "http://ki.ota:8790/v1/chat/completi
 [ -n "$A" ] && ok "Frage an zwei/$MODELL bekommt Antwort ($A)" || bad "Keine Antwort von zwei/$MODELL"
 expect "404" "$(docker exec -u 1000 "$C" curl -s -m 15 -o /dev/null -w '%{http_code}' "http://ki.ota:8790/v1/chat/completions" \
   -H 'Content-Type: application/json' -d '{"model":"gibt-es-nicht","messages":[]}')" "Unbekanntes Modell: 404 mit Erklärung"
+
+# ------------------------------------------------------------------ Gruppen je Server
+echo
+echo "Weiterer Server nur für eine Gruppe"
+# Ein normaler Mensch (nur Gruppe users); der zweite Server zuerst nur für
+# admins, dann für users.
+TEST_USER="ki-pruef"; TEST_PW="Ki-$(openssl rand -hex 8)"
+"$ROOT/scripts/lokales-testkonto.sh" "$TEST_USER" "$TEST_PW" "$TEST_USER@ota.invalid" users >/dev/null
+GID() { api "$B/api/admin/groups" | jqp "[g['id'] for g in d if g['slug'] == '$1'][0]"; }
+ADMINS=$(GID admins); USERS=$(GID users)
+weiter() {  # weiter <gruppen-kennung>
+  api -X PUT "$B/api/admin/ide-ai" -d "{\"weitere\":[{\"name\":\"Zweiter\",\"kuerzel\":\"zwei\",\"url\":\"$KI\",\"gruppen\":[\"$1\"],\"modelle\":[{\"id\":\"$MODELL\",\"kontext\":8192,\"max_tokens\":512}]}]}" >/dev/null
+}
+weiter "$ADMINS"
+curl -sk -c "$TMP/u.jar" -o /dev/null -X POST "$B/api/auth/login" -H 'Content-Type: application/json' \
+  -d "{\"username\":\"$TEST_USER\",\"password\":\"$TEST_PW\"}"
+for _ in 1 2 3; do
+  USID=$(curl -sk -b "$TMP/u.jar" -H 'Content-Type: application/json' -X POST "$B/api/sessions" \
+    -d "{\"template_id\":\"$T\"}" | jqp "d.get('id','')")
+  [ -n "$USID" ] && break; sleep 5
+done
+CU=$(container_von "$USID")
+if [ -z "$CU" ]; then
+  bad "Arbeitsplatz für $TEST_USER startet nicht"
+else
+  sleep 5
+  M=$(docker exec -u 1000 "$CU" curl -s -m 15 "http://ki.ota:8790/v1/models")
+  expect "False" "$(jqp "str('zwei/$MODELL' in [m['id'] for m in d['data']])" <<<"$M")" \
+    "$TEST_USER sieht den Server der Gruppe admins nicht"
+  expect "True" "$(jqp "str('$MODELL' in [m['id'] for m in d['data']])" <<<"$M")" "… den ersten Server aber schon"
+  expect "403" "$(docker exec -u 1000 "$CU" curl -s -m 30 -o /dev/null -w '%{http_code}' "http://ki.ota:8790/v1/chat/completions" \
+    -H 'Content-Type: application/json' -d "{\"model\":\"zwei/$MODELL\",\"max_tokens\":16,\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}")" \
+    "Frage an den Server der Gruppe admins: 403"
+  M=$(docker exec -u 1000 "$C" curl -s -m 15 "http://ki.ota:8790/v1/models")
+  expect "True" "$(jqp "str('zwei/$MODELL' in [m['id'] for m in d['data']])" <<<"$M")" "Administratoren sehen ihn immer"
+  HU=$(docker exec "$CU" sh -c 'getent passwd 1000 | cut -d: -f6')
+  if docker exec "$CU" test -f /etc/opencode/opencode.jsonc; then
+    docker exec "$CU" grep -q "zwei/$MODELL" /etc/opencode/opencode.jsonc \
+      && bad "opencode von $TEST_USER kennt den Server der Gruppe admins" \
+      || ok "opencode von $TEST_USER bietet ihn nicht an"
+  fi
+  weiter "$USERS"
+  sleep 2
+  M=$(docker exec -u 1000 "$CU" curl -s -m 15 "http://ki.ota:8790/v1/models")
+  expect "True" "$(jqp "str('zwei/$MODELL' in [m['id'] for m in d['data']])" <<<"$M")" \
+    "Für die Gruppe users freigegeben: $TEST_USER sieht ihn sofort"
+  A=$(docker exec -u 1000 "$CU" curl -s -m 180 "http://ki.ota:8790/v1/chat/completions" -H 'Content-Type: application/json' \
+    -d "{\"model\":\"zwei/$MODELL\",\"max_tokens\":512,\"messages\":[{\"role\":\"user\",\"content\":\"Antworte nur mit: OK\"}]}" \
+    | jqp "d['choices'][0]['message']['content'].strip()")
+  [ -n "$A" ] && ok "… und bekommt Antwort ($A)" || bad "Keine Antwort für $TEST_USER von zwei/$MODELL"
+fi
 
 # ------------------------------------------------------------------ Statistik
 echo

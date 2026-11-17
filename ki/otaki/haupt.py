@@ -155,6 +155,13 @@ class Lage:
             asyncio.get_running_loop().call_later(
                 zeit + 60, lambda: asyncio.ensure_future(alt.aclose()))
 
+    def erlaubt(self, server: dict[str, Any], sitzung: str) -> bool:
+        """Darf diese Sitzung an diesen Server? Ein Server mit Gruppen nennt
+        die Sitzungen, deren Mensch ihn bekommt (die API rechnet das aus)."""
+        if server.get("alle", True):
+            return True
+        return bool(sitzung) and sitzung in set(server.get("sitzungen") or [])
+
     def sitzung(self, ip: str) -> str:
         try:
             a = ipaddress.ip_address(ip)
@@ -320,6 +327,8 @@ async def verbindung(reader: asyncio.StreamReader, writer: asyncio.StreamWriter)
         if anfang[0] == 0x16:
             if server is None:
                 return  # TLS an den Durchgang selbst: spricht er nicht
+            if not LAGE.erlaubt(server, LAGE.sitzung(quelle)):
+                return  # keine HTTP-Antwort möglich: die Verbindung endet hier
             LAGE.zaehler["abgefangen"] += 1
             beginn = time.monotonic()
             zeit = _jetzt()
@@ -389,9 +398,9 @@ async def _senden(conn: h11.Connection, writer: asyncio.StreamWriter, code: int,
     await writer.drain()
 
 
-def _modellliste() -> bytes:
+def _modellliste(sitzung: str) -> bytes:
     daten = [{"id": aussen, "object": "model", "owned_by": s.get("name") or s.get("kuerzel", "")}
-             for aussen, (s, _echt) in LAGE.modelle.items()]
+             for aussen, (s, _echt) in LAGE.modelle.items() if LAGE.erlaubt(s, sitzung)]
     return json.dumps({"object": "list", "data": daten}, ensure_ascii=False).encode()
 
 
@@ -405,6 +414,7 @@ async def _beantworten(conn: h11.Connection, writer: asyncio.StreamWriter, anfra
     kopf = {k.lower(): v for k, v in anfrage.headers}
     ua = kopf.get(b"user-agent", b"").decode("latin-1")
     ueber_name = server is None
+    sitzung = LAGE.sitzung(quelle)
 
     # --- Körper lesen: Modell, Strom
     daten: dict[str, Any] | None = None
@@ -418,7 +428,7 @@ async def _beantworten(conn: h11.Connection, writer: asyncio.StreamWriter, anfra
     # --- Ziel bestimmen
     if ueber_name:
         if methode == "GET" and pfad.split("?")[0].rstrip("/") in ("/v1/models", "/models"):
-            await _senden(conn, writer, 200, [(b"content-type", b"application/json")], _modellliste())
+            await _senden(conn, writer, 200, [(b"content-type", b"application/json")], _modellliste(sitzung))
             return
         if modell:
             treffer = LAGE.modelle.get(modell)
@@ -439,6 +449,15 @@ async def _beantworten(conn: h11.Connection, writer: asyncio.StreamWriter, anfra
         url = server["basis"] + rest
     else:
         url = server["ursprung"] + pfad
+    if not LAGE.erlaubt(server, sitzung):
+        SPOOL_.schreiben({"zeit": zeit, "quelle": quelle, "session_id": sitzung,
+                          "weg": "name" if ueber_name else "abgefangen", "server": server.get("kuerzel", ""),
+                          "modell": modell, "pfad": pfad.split("?")[0][:120], "werkzeug": _werkzeug(ua),
+                          "status": 403, "dauer_ms": 0, "erstes_ms": None, "ein": None, "aus": None})
+        await _senden(conn, writer, *_fehler(
+            403, f"Der KI-Server {server.get('name') or server.get('kuerzel')} ist für dich nicht "
+                 "freigegeben. Freigeben kann ihn die Verwaltung (Einstellungen → IDE-AI)."))
+        return
 
     # --- Körper anpassen
     neu = False
@@ -469,7 +488,7 @@ async def _beantworten(conn: h11.Connection, writer: asyncio.StreamWriter, anfra
     weiter.append((b"accept-encoding", b"identity"))
 
     zeile: dict[str, Any] = {
-        "zeit": zeit, "quelle": quelle, "session_id": LAGE.sitzung(quelle),
+        "zeit": zeit, "quelle": quelle, "session_id": sitzung,
         "weg": "name" if ueber_name else "abgefangen", "server": server.get("kuerzel", ""),
         "modell": modell, "pfad": pfad.split("?")[0][:120], "werkzeug": _werkzeug(ua),
         "status": 0, "dauer_ms": 0, "erstes_ms": None, "ein": None, "aus": None,

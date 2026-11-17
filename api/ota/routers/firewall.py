@@ -332,3 +332,7 @@ def _schieben(db: DbSession) -> None:
 def schieben(db: DbSession) -> None:
     """Von aussen aufrufbar: nach jedem Sessionstart und -ende."""
     _schieben(db)
+    # Ein weiterer KI-Server mit Gruppen kennt im Durchgang nur Sitzungen —
+    # nach jedem Start und Ende gehören sie neu ausgerechnet.
+    if ide_ai.einstellungen(db)["durchgang"]:
+        ide_ai.durchgang_schieben(db)

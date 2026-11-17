@@ -311,6 +311,8 @@ export type IdeAiWeiterer = {
   kuerzel: string
   url: string
   modelle: IdeAiModell[]
+  /** Wer ihn zusätzlich bekommt (Gruppenkennungen). Leer: alle. */
+  gruppen: string[]
   api_key_gesetzt?: boolean
 }
 
