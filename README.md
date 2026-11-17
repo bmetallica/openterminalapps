@@ -339,6 +339,13 @@ dabei **nicht** zurückwandert, ist die Datenbank: Neue Spalten bleiben stehen. 
   - Die Pakete kommen aus der eigenen Paketquelle in jeden Arbeitsplatz mit passendem Editor, auch
     in Ubuntu- und Kasm-Images; Root-Arbeitsplätze heben sich beim Fortsetzen an.
   - Die Firewall gibt den KI-Server frei, solange IDE-AI an ist. Telemetrie von Continue aus.
+  - **Mehrere KI-Server** unter einem Namen und **KI-Durchgang** (`ota-ki`, optional): Continue und
+    opencode sehen ein Modellverzeichnis über alle Server, der Schlüssel bleibt aus den Zuhausen
+    heraus. Die Firewall fängt auch Verbindungen von Skripten an die echte Adresse eines Servers ab.
+    Liegt der Durchgang, geht der Verkehr von selbst wieder direkt.
+  - **KI-Nutzung unter Betrieb** (optional, standardmäßig aus): wer die KI wie oft anspricht, je
+    Mensch und Arbeitsplatz, mit Modell, Tokens und einem Graphen, der sich über Tage erweitern
+    lässt. Nie Inhalte; Aufbewahrung einstellbar, das Ansehen steht im Protokoll.
   - Hat ein Marketplace-Update oder eine eigene Konfiguration Continue verdrängt, stellt
     **⋯ → KI-Werkzeuge neu einrichten** auf der Kachel des Arbeitsplatzes OTAs Fassung wieder her.
     Im selben Menü steht bei Root-Arbeitsplätzen **Neu aufsetzen**.

@@ -87,6 +87,9 @@ class Sitzung(BaseModel):
     stufe: str = "internet"
     freigaben: list[Freigabe] = []
     namen: list[str] = []
+    # Welche Sitzung dahintersteht. Der KI-Durchgang (ota-ki) liest daraus,
+    # wem eine Anfrage gehört — der Router selbst braucht es nicht.
+    session_id: str = ""
 
 
 class Weiterleitung(BaseModel):
@@ -113,6 +116,14 @@ class Umleitung(BaseModel):
     protokoll: str = "beide"
 
 
+class KiZiel(BaseModel):
+    """Ein KI-Server, dessen Verkehr aus den Arbeitsplätzen der Durchgang
+    abfängt. `ziel` darf ein Name sein; aufgelöst wird hier."""
+
+    ziel: str
+    port: int
+
+
 class Regelwerk(BaseModel):
     sitzungen: list[Sitzung] = []
     # Was fuer alle gilt, an einer Stelle gepflegt.
@@ -120,6 +131,9 @@ class Regelwerk(BaseModel):
     grundfreigaben: list[tuple[str, str, str]] = []
     weiterleitungen: list[Weiterleitung] = []
     umleitungen: list[Umleitung] = []
+    # Der KI-Durchgang (Handbuch Kapitel 28): an, und wessen Verkehr er
+    # abfängt. Leer oder aus: keine Umleitung, alles geht direkt.
+    ki_ziele: list[KiZiel] = []
 
 
 def _umleitungen_aufloesen(liste: list[dict]) -> list[dict]:
@@ -181,6 +195,54 @@ def _ziel_pruefen(ziel: str) -> str:
     return ""
 
 
+def _ki_aufloesen(liste: list[dict]) -> list[dict]:
+    """Die KI-Ziele als Adresse und Port. Ein Name, der sich nicht auflösen
+    lässt, fällt heraus — sein Verkehr geht dann direkt, wie ohne Durchgang."""
+    raus = []
+    for z in liste:
+        ip = _ziel_pruefen(str(z.get("ziel", "")))
+        if ip and "/" not in ip and "-" not in ip and z.get("port"):
+            raus.append({"ip": ip, "port": int(z["port"])})
+    return raus
+
+
+# ---------------------------------------------------------- KI-Durchgang
+#
+# ota-ki läuft im Namensraum dieses Routers (network_mode: service:firewall)
+# und lauscht auf KI_PORT. Die Umleitung steht nur im Regelwerk, solange er
+# antwortet: Liegt er, geht der Verkehr wieder direkt zum KI-Server — eine
+# Statistik, die fehlt, ist besser als eine KI, die für alle ausfällt.
+KI_PORT = int(os.environ.get("OTA_KI_PORT", "8790"))
+KI_PRUEFEN = 10
+_ki_bereit = False
+
+
+def _ki_antwortet() -> bool:
+    import socket
+
+    try:
+        with socket.create_connection(("127.0.0.1", KI_PORT), timeout=2):
+            return True
+    except OSError:
+        return False
+
+
+def _ki_waechter() -> None:
+    global _ki_bereit
+    while True:
+        try:
+            jetzt = _ki_antwortet()
+            if jetzt != _ki_bereit:
+                _ki_bereit = jetzt
+                log.warning("KI-Durchgang %s — Umleitung %s",
+                            "antwortet" if jetzt else "antwortet NICHT",
+                            "gesetzt" if jetzt else "aufgehoben, der Verkehr geht direkt")
+                _durchsetzen()
+        except Exception as exc:  # noqa: BLE001 — der Wächter darf nie sterben
+            log.error("KI-Wächter: %s", exc)
+        time.sleep(KI_PRUEFEN)
+
+
 def _saetze_pruefen(zustand: dict) -> dict:
     """Eine Kopie des Zustands, in der jedes Ziel gueltig ist."""
     raus = dict(zustand)
@@ -231,6 +293,9 @@ def _durchsetzen() -> dict:
         _zustand["uplink"] = nft.uplink_finden()
         _zustand["umleitungen_ip"] = _umleitungen_aufloesen(
             _zustand.get("umleitungen", []))
+        _zustand["ki_ip"] = _ki_aufloesen(_zustand.get("ki_ziele", []))
+        _zustand["ki_bereit"] = _ki_bereit
+        _zustand["ki_port"] = KI_PORT
         geprueft = _saetze_pruefen(_zustand)
         satz = nft.regelwerk(geprueft)
         if satz == _letzter_satz and nft.tabelle_da():
@@ -291,6 +356,7 @@ def zustand() -> dict:
         "namensraeume": netns.erreichbar(),
         "routen": {s["subnetz"]: netns.route_lesen(s.get("sandbox", ""))
                    for s in _zustand.get("sitzungen", [])},
+        "ki": {"bereit": _ki_bereit, "ziele": _zustand.get("ki_ip", [])},
     }
 
 
@@ -333,3 +399,4 @@ def start() -> None:
     except Exception as exc:  # noqa: BLE001
         log.error("Regelwerk beim Start nicht setzbar: %s", exc)
     threading.Thread(target=_abgleichschleife, daemon=True).start()
+    threading.Thread(target=_ki_waechter, daemon=True).start()

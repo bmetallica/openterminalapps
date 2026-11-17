@@ -61,10 +61,31 @@ VORGABEN: dict[str, Any] = {
     # Den Firmenproxy für den KI-Server umgehen. Er steht fast immer im
     # eigenen Netz, und ein Proxy davor scheitert dann am Rückweg.
     "ohne_proxy": True,
+    # Name und Kürzel des Servers oben. Das Kürzel unterscheidet Modelle
+    # gleichen Namens auf mehreren Servern und steht in der Statistik.
+    "name": "KI-Server",
+    "kuerzel": "ki",
+    # Weitere KI-Server: [{name, kuerzel, url, api_key, modelle}]. Wirken nur
+    # mit dem Durchgang — er führt alle unter einem Namen zusammen.
+    "weitere": [],
+    # Der KI-Durchgang (ota-ki): Continue und opencode sprechen ki.ota an,
+    # die Firewall fängt Verbindungen an die Server ab.
+    "durchgang": False,
+    # Nutzungsstatistik je Person und Arbeitsplatz. Braucht den Durchgang.
+    "statistik": False,
+    # Aufbewahrung in Tagen: jede Anfrage einzeln, und Stundensummen (0 = immer).
+    "frist_roh": 30,
+    "frist_stunden": 365,
 }
 KONTEXT_VORGABE = 8192
 ANTWORT_VORGABE = 2048
 MODELL_OK = re.compile(r"[\w.:/@+-]{1,200}")
+KUERZEL_OK = re.compile(r"[a-z0-9][a-z0-9-]{0,15}")
+# Wie Continue und opencode den Durchgang ansprechen. Der Name löst der
+# Resolver der Firewall in jedem Sitzungsnetz zur Adresse des Routers auf.
+KI_NAME = "ki.ota"
+KI_PORT = 8790
+KI_URL = f"http://{KI_NAME}:{KI_PORT}/v1"
 
 
 class IdeAiFehler(Exception):
@@ -118,22 +139,22 @@ def speichern(db: DbSession, body: dict[str, Any]) -> dict[str, Any]:
     if "gruppen" in body:
         neu["gruppen"] = [str(g) for g in body["gruppen"] or []]
     if "modelle" in body:
-        modelle = []
-        for m in body["modelle"] or []:
-            mid = str(m.get("id") or "").strip()
-            if not MODELL_OK.fullmatch(mid):
-                raise IdeAiFehler(f"„{mid}“ ist kein gültiger Modellname.")
-            if any(x["id"] == mid for x in modelle):
-                continue
-            kontext = _zahl(m.get("kontext") or KONTEXT_VORGABE, 512, 2_000_000,
-                            f"{mid}: Das Kontextfenster liegt zwischen 512 und 2000000 Tokens.")
-            antwort = _zahl(m.get("max_tokens") or ANTWORT_VORGABE, 16, 1_000_000,
-                            f"{mid}: Die Antwortlänge liegt zwischen 16 und 1000000 Tokens.")
-            if antwort >= kontext:
-                raise IdeAiFehler(f"{mid}: Die Antwortlänge muss kleiner sein als das Kontextfenster.")
-            modelle.append({"id": mid, "titel": str(m.get("titel") or "").strip()[:80],
-                            "kontext": kontext, "max_tokens": antwort})
-        neu["modelle"] = modelle
+        neu["modelle"] = _modelle_pruefen(body["modelle"])
+    if "name" in body:
+        neu["name"] = str(body["name"] or "").strip()[:60] or "KI-Server"
+    if "kuerzel" in body:
+        neu["kuerzel"] = _kuerzel_pruefen(body["kuerzel"])
+    if "weitere" in body:
+        neu["weitere"] = _weitere_pruefen(body["weitere"], neu["weitere"])
+    for feld in ("durchgang", "statistik"):
+        if feld in body:
+            neu[feld] = bool(body[feld])
+    if "frist_roh" in body:
+        neu["frist_roh"] = _zahl(body["frist_roh"], 1, 3650,
+                                 "Die Aufbewahrung der einzelnen Anfragen liegt zwischen 1 und 3650 Tagen.")
+    if "frist_stunden" in body:
+        neu["frist_stunden"] = _zahl(body["frist_stunden"], 0, 36500,
+                                     "Die Aufbewahrung der Stundensummen: 0 (immer) bis 36500 Tage.")
     for feld in ("standard", "autocomplete"):
         if feld in body:
             neu[feld] = str(body[feld] or "").strip()
@@ -161,16 +182,161 @@ def speichern(db: DbSession, body: dict[str, Any]) -> dict[str, Any]:
         neu["an"] = bool(body["an"])
 
     ids = [m["id"] for m in neu["modelle"]]
-    if neu["standard"] not in ids:
+    # Mit Durchgang darf auch ein Modell eines weiteren Servers Standard sein.
+    alle = [m["id"] for m in modelle_aussen(neu)] if neu["durchgang"] else ids
+    if neu["standard"] not in alle:
         neu["standard"] = ids[0] if ids else ""
-    if neu["autocomplete"] and neu["autocomplete"] not in ids:
+    if neu["autocomplete"] and neu["autocomplete"] not in alle:
         neu["autocomplete"] = ""
     if neu["an"] and not neu["url"]:
         raise IdeAiFehler("Erst die Adresse des KI-Servers eintragen.")
     if neu["an"] and not ids:
         raise IdeAiFehler("Erst mindestens ein Modell auswählen.")
+    kuerzel = [neu["kuerzel"]] + [w["kuerzel"] for w in neu["weitere"]]
+    if len(set(kuerzel)) != len(kuerzel):
+        raise IdeAiFehler("Jeder KI-Server braucht ein eigenes Kürzel.")
+    if neu["statistik"] and not neu["durchgang"]:
+        raise IdeAiFehler("Die Nutzungsstatistik braucht den KI-Durchgang.")
     settings_store.put(db, settings_store.IDE_AI, neu)
     return neu
+
+
+def _modelle_pruefen(roh: Any) -> list[dict[str, Any]]:
+    modelle: list[dict[str, Any]] = []
+    for m in roh or []:
+        mid = str(m.get("id") or "").strip()
+        if not MODELL_OK.fullmatch(mid):
+            raise IdeAiFehler(f"„{mid}“ ist kein gültiger Modellname.")
+        if any(x["id"] == mid for x in modelle):
+            continue
+        kontext = _zahl(m.get("kontext") or KONTEXT_VORGABE, 512, 2_000_000,
+                        f"{mid}: Das Kontextfenster liegt zwischen 512 und 2000000 Tokens.")
+        antwort = _zahl(m.get("max_tokens") or ANTWORT_VORGABE, 16, 1_000_000,
+                        f"{mid}: Die Antwortlänge liegt zwischen 16 und 1000000 Tokens.")
+        if antwort >= kontext:
+            raise IdeAiFehler(f"{mid}: Die Antwortlänge muss kleiner sein als das Kontextfenster.")
+        modelle.append({"id": mid, "titel": str(m.get("titel") or "").strip()[:80],
+                        "kontext": kontext, "max_tokens": antwort})
+    return modelle
+
+
+def _kuerzel_pruefen(roh: Any) -> str:
+    k = str(roh or "").strip().lower()
+    if not KUERZEL_OK.fullmatch(k):
+        raise IdeAiFehler(f"„{k}“ taugt nicht als Kürzel: Kleinbuchstaben, Ziffern und "
+                          "Bindestrich, höchstens 16 Zeichen.")
+    return k
+
+
+def _weitere_pruefen(roh: Any, alt: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Die weiteren Server. Ein Schlüssel, der nicht mitkommt (None), bleibt —
+    die Oberfläche bekommt ihn nie zu sehen und kann ihn nicht zurückschicken."""
+    vorher = {w["kuerzel"]: w for w in alt}
+    raus = []
+    for w in roh or []:
+        kuerzel = _kuerzel_pruefen(w.get("kuerzel"))
+        url = url_pruefen(str(w.get("url") or ""))
+        if not url:
+            raise IdeAiFehler(f"{kuerzel}: Die Adresse des Servers fehlt.")
+        schluessel = w.get("api_key")
+        if schluessel is None:
+            schluessel = (vorher.get(str(w.get("kuerzel_vorher") or kuerzel)) or {}).get("api_key", "")
+        raus.append({"name": str(w.get("name") or "").strip()[:60] or kuerzel,
+                     "kuerzel": kuerzel, "url": url, "api_key": str(schluessel or "").strip(),
+                     "modelle": _modelle_pruefen(w.get("modelle"))})
+    return raus
+
+
+def server_liste(e: dict[str, Any]) -> list[dict[str, Any]]:
+    """Alle KI-Server: der oben eingetragene zuerst, dann die weiteren.
+    Ohne Durchgang zählt nur der erste — die Werkzeuge kennen dann nur ihn."""
+    erster = {"name": e["name"], "kuerzel": e["kuerzel"], "url": e["url"],
+              "api_key": e["api_key"], "modelle": e["modelle"]}
+    return [erster] + (list(e["weitere"]) if e["durchgang"] else [])
+
+
+def modelle_aussen(e: dict[str, Any]) -> list[dict[str, Any]]:
+    """Ein Modellverzeichnis über alle Server, wie die Werkzeuge es sehen.
+
+    Die Modelle des ersten Servers behalten ihren Namen; ein Modell eines
+    weiteren Servers, dessen Name schon vergeben ist, heißt `kürzel/name`.
+    So bleiben Standardmodell und Einstellungen von vorher gültig.
+    """
+    raus: list[dict[str, Any]] = []
+    belegt: set[str] = set()
+    for s in server_liste(e):
+        if not s["url"]:
+            continue
+        for m in s["modelle"]:
+            aussen = m["id"] if m["id"] not in belegt else f"{s['kuerzel']}/{m['id']}"
+            belegt.add(aussen)
+            titel = m["titel"] or m["id"]
+            if aussen != m["id"]:
+                titel = f"{titel} ({s['name']})"
+            raus.append({**m, "id": aussen, "echt": m["id"], "titel": titel,
+                         "server": s["kuerzel"]})
+    return raus
+
+
+def durchgang_aktiv(db: DbSession, e: dict[str, Any] | None = None) -> bool:
+    from . import opencode
+
+    e = e or einstellungen(db)
+    return bool(e["durchgang"] and e["url"] and (e["an"] or opencode.an(db)))
+
+
+def sicht(e: dict[str, Any], db: DbSession | None = None) -> dict[str, Any]:
+    """Die Einstellungen so, wie die Werkzeuge sie brauchen: mit Durchgang
+    zeigt alles auf ki.ota, ohne Schlüssel, mit allen Modellen aller Server."""
+    if not e["durchgang"] or not e["url"]:
+        return e
+    if db is not None and not durchgang_aktiv(db, e):
+        return e
+    return {**e, "url": KI_URL, "api_key": "", "modelle": modelle_aussen(e),
+            "ohne_proxy": True, "ueber_durchgang": True}
+
+
+def durchgang_konfig(db: DbSession) -> dict[str, Any]:
+    """Was ota-ki braucht (über den Agent nach ki/konfig.json)."""
+    e = einstellungen(db)
+    aktiv = durchgang_aktiv(db, e)
+    nach_server: dict[str, list[dict[str, str]]] = {}
+    for m in modelle_aussen(e):
+        nach_server.setdefault(m["server"], []).append({"aussen": m["id"], "echt": m["echt"]})
+    return {
+        "aktiv": aktiv,
+        "statistik": bool(aktiv and e["statistik"]),
+        "zeitlimit": e["zeitlimit"],
+        "ohne_proxy": e["ohne_proxy"],
+        "server": [{"name": s["name"], "kuerzel": s["kuerzel"], "url": s["url"],
+                    "api_key": s["api_key"], "modelle": nach_server.get(s["kuerzel"], [])}
+                   for s in server_liste(e) if s["url"]] if aktiv else [],
+    }
+
+
+def ki_ziele(db: DbSession) -> list[dict[str, Any]]:
+    """Für die Firewall: wessen Verkehr der Durchgang abfängt."""
+    e = einstellungen(db)
+    if not durchgang_aktiv(db, e):
+        return []
+    raus = []
+    for s in server_liste(e):
+        teile = urlparse(s["url"])
+        if teile.hostname:
+            raus.append({"ziel": teile.hostname,
+                         "port": teile.port or (443 if teile.scheme == "https" else 80)})
+    return raus
+
+
+def durchgang_schieben(db: DbSession) -> None:
+    """Die Konfiguration an ota-ki geben. Scheitert das, bleibt die alte —
+    beim nächsten Speichern oder Abholen kommt die neue."""
+    from . import agent_client
+
+    try:
+        agent_client.ki_konfig(durchgang_konfig(db))
+    except Exception as exc:  # noqa: BLE001 — darf keine Anfrage kippen
+        log.warning("Konfiguration des KI-Durchgangs nicht übertragbar: %s", exc)
 
 
 # --------------------------------------------------------------------------
@@ -222,14 +388,20 @@ def modelle_abrufen(url: str, schluessel: str) -> list[dict[str, Any]]:
     return raus
 
 
-def testen(db: DbSession, modell: str) -> dict[str, Any]:
+def testen(db: DbSession, modell: str, kuerzel: str = "") -> dict[str, Any]:
     """Eine kurze Frage an das Modell, so wie Continue sie stellt."""
     e = einstellungen(db)
     if not e["url"]:
         raise IdeAiFehler("Erst die Adresse des KI-Servers eintragen.")
-    m = next((x for x in e["modelle"] if x["id"] == modell), None)
-    if m is None:
+    # Ein Modell eines weiteren Servers: dorthin, mit dessen Schlüssel.
+    server = next((s for s in [{"url": e["url"], "api_key": e["api_key"], "modelle": e["modelle"],
+                                "kuerzel": e["kuerzel"]}] + e["weitere"]
+                   if (not kuerzel or s["kuerzel"] == kuerzel)
+                   and any(x["id"] == modell for x in s["modelle"])), None)
+    if server is None:
         raise IdeAiFehler("Dieses Modell ist nicht ausgewählt.")
+    m = next(x for x in server["modelle"] if x["id"] == modell)
+    e = {**e, "url": server["url"], "api_key": server["api_key"]}
     frage = {"model": modell, "stream": False, "max_tokens": min(m["max_tokens"], 1024),
              "messages": [{"role": "user", "content": "Antworte nur mit dem Wort: OK"}]}
     beginn = time.monotonic()
@@ -318,21 +490,25 @@ def fuer_sitzung(db: DbSession, user: User) -> dict[str, Any]:
     e = einstellungen(db)
     if not aktiv_fuer(db, user, e):
         return {}
-    return {"fassungen": fassungen(db), "config": konfiguration(e)}
+    return {"fassungen": fassungen(db), "config": konfiguration(sicht(e, db))}
 
 
-def freigabe(db: DbSession) -> dict[str, str] | None:
-    """Die Zeile für die Firewall: der KI-Server, für alle Arbeitsplätze —
-    solange IDE-AI oder opencode (Kapitel 38) an ist."""
+def freigaben(db: DbSession) -> list[dict[str, str]]:
+    """Die Zeilen für die Firewall: die KI-Server, für alle Arbeitsplätze —
+    solange IDE-AI oder opencode (Kapitel 38) an ist. Auch mit Durchgang:
+    Liegt er, geht der Verkehr wieder direkt, und dafür muss der Weg offen sein."""
     from . import opencode
 
     e = einstellungen(db)
     if not (e["an"] or opencode.an(db)) or not e["url"]:
-        return None
-    teile = urlparse(e["url"])
-    port = teile.port or (443 if teile.scheme == "https" else 80)
-    return {"ziel": teile.hostname or "", "ports": str(port), "protokoll": "tcp",
-            "notiz": "IDE-AI/opencode: der KI-Server (Einstellungen → IDE-AI)"}
+        return []
+    raus = []
+    for s in server_liste(e):
+        teile = urlparse(s["url"])
+        port = teile.port or (443 if teile.scheme == "https" else 80)
+        raus.append({"ziel": teile.hostname or "", "ports": str(port), "protokoll": "tcp",
+                     "notiz": f"IDE-AI/opencode: KI-Server {s['name']} (Einstellungen → IDE-AI)"})
+    return raus
 
 
 def stand(db: DbSession) -> dict[str, Any]:
@@ -342,5 +518,10 @@ def stand(db: DbSession) -> dict[str, Any]:
         f = fassungen(db)
     except Exception:  # noqa: BLE001 — Paketquelle nicht erreichbar
         f = {}
-    return {**{k: v for k, v in e.items() if k != "api_key"},
-            "api_key_gesetzt": bool(e["api_key"]), "fassungen": f}
+    weitere = [{**{k: v for k, v in w.items() if k != "api_key"}, "api_key_gesetzt": bool(w["api_key"])}
+               for w in e["weitere"]]
+    return {**{k: v for k, v in e.items() if k not in ("api_key", "weitere")},
+            "weitere": weitere, "api_key_gesetzt": bool(e["api_key"]), "fassungen": f,
+            "ki_url": KI_URL, "durchgang_aktiv": durchgang_aktiv(db, e),
+            "modelle_alle": [{"id": m["id"], "titel": m["titel"], "server": m["server"]}
+                             for m in modelle_aussen(e)]}

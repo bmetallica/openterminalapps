@@ -334,6 +334,13 @@ that did not exist before is simply there.
   - The packages come from the own package source into every workspace with a matching editor,
     also into Ubuntu and Kasm images; root workspaces move up when resuming.
   - The firewall allows the AI server while IDE-AI is on. Continue's telemetry off.
+  - **Several AI servers** under one name and an **AI gateway** (`ota-ki`, optional): Continue and
+    opencode see one model list across all servers, the key stays out of the homes. The firewall
+    also intercepts connections from scripts to a server's real address. If the gateway is down,
+    traffic goes direct again by itself.
+  - **AI usage under Operations** (optional, off by default): who talks to the AI how often, per
+    person and workspace, with model, tokens and a graph that extends over days. Never contents;
+    retention adjustable, viewing is logged.
   - If a Marketplace update or an own configuration has displaced Continue, **⋯ → Set up AI tools
     again** on the workspace's tile restores OTA's version. Root workspaces have **Rebuild** in the
     same menu.

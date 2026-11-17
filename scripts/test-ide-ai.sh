@@ -249,7 +249,13 @@ if [ -n "$T" ]; then
   expect "0" "$(docker exec "$C" sh -c "ls -d '$H'/.local/share/JetBrains/*/ota-continue 2>/dev/null | wc -l")" "Keine Verknüpfung im Zuhause"
   expect "0" "$(docker exec "$C" sh -c 'ls -d /usr/share/code*/resources/app/extensions/ota-* 2>/dev/null | wc -l')" \
     "Keine Verknüpfung in VS Code/VSCodium (Copilot wieder da)"
-  expect "000" "$(docker exec -u 1000 "$C" curl -s -m 8 -o /dev/null -w '%{http_code}' "$KI/v1/models")" \
-    "Die Firewall gibt den KI-Server nicht mehr frei"
+  # Ist opencode an, bleibt der Server frei — opencode braucht ihn auch.
+  if [ "$(api "$B/api/admin/opencode" | jqp "d['an']")" = "True" ]; then
+    expect "200" "$(docker exec -u 1000 "$C" curl -s -m 8 -o /dev/null -w '%{http_code}' "$KI/v1/models")" \
+      "Die Firewall gibt den KI-Server weiter frei, weil opencode an ist"
+  else
+    expect "000" "$(docker exec -u 1000 "$C" curl -s -m 8 -o /dev/null -w '%{http_code}' "$KI/v1/models")" \
+      "Die Firewall gibt den KI-Server nicht mehr frei"
+  fi
   beenden "$SID"; SID=""
 fi

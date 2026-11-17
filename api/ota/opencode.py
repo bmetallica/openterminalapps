@@ -194,7 +194,7 @@ def speichern(db: DbSession, body: dict[str, Any]) -> dict[str, Any]:
         neu["mcp"] = _mcp_pruefen(body["mcp"], neu["mcp"], belegt)
     if "an" in body:
         neu["an"] = bool(body["an"])
-    ki = ide_ai.einstellungen(db)
+    ki = ide_ai.sicht(ide_ai.einstellungen(db), db)
     ids = [m["id"] for m in ki["modelle"]]
     for feld in ("standard", "klein"):
         if neu[feld] and neu[feld] not in ids:
@@ -316,7 +316,7 @@ def fassung(db: DbSession) -> str:
 
 def aktiv_fuer(db: DbSession, user: User, e: dict[str, Any] | None = None) -> bool:
     e = e or einstellungen(db)
-    ki = ide_ai.einstellungen(db)
+    ki = ide_ai.sicht(ide_ai.einstellungen(db), db)
     return berechtigt(db, user, e) and bool(ki["url"]) and bool(ki["modelle"])
 
 
@@ -325,7 +325,7 @@ def fuer_sitzung(db: DbSession, sess: Any, user: User, tpl: Any) -> dict[str, An
     e = einstellungen(db)
     if not aktiv_fuer(db, user, e):
         return {}
-    ki = ide_ai.einstellungen(db)
+    ki = ide_ai.sicht(ide_ai.einstellungen(db), db)
     angaben = erweiterungen.fuer_sitzung(db, sess, user, tpl)
     vorlage = getattr(tpl, "name", "") or ""
     weitere = mcp_fuer(e, user)
@@ -349,7 +349,7 @@ def vorschau(db: DbSession, user: User, entwurf: dict[str, Any] | None = None) -
     _zusatz(str(e["zusatz"] or ""))
     if entwurf and "mcp" in entwurf:
         e["mcp"] = _mcp_pruefen(entwurf["mcp"], gespeichert["mcp"], {x.slug for x in erweiterungen.alle(db)})
-    ki = ide_ai.einstellungen(db)
+    ki = ide_ai.sicht(ide_ai.einstellungen(db), db)
     angaben = []
     for x in erweiterungen.alle(db):
         if not erweiterungen.berechtigt(x, user):
@@ -369,7 +369,7 @@ def vorschau(db: DbSession, user: User, entwurf: dict[str, Any] | None = None) -
 
 def stand(db: DbSession) -> dict[str, Any]:
     e = einstellungen(db)
-    ki = ide_ai.einstellungen(db)
+    ki = ide_ai.sicht(ide_ai.einstellungen(db), db)
     try:
         f = fassung(db)
     except Exception:  # noqa: BLE001 — Paketquelle nicht erreichbar

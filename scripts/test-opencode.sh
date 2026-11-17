@@ -128,7 +128,7 @@ jqp "d['config']" <<<"$V" | grep -q '"title"' && ok "Vorschau: Zusatzkonfigurati
 expect "True" "$(api "$B/api/firewall/zustand" >/dev/null; docker exec ota-api python -c "
 from ota.db import SessionLocal
 from ota import ide_ai
-with SessionLocal() as db: print(ide_ai.freigabe(db) is not None)")" "Firewall gibt den KI-Server frei, solange opencode an ist"
+with SessionLocal() as db: print(bool(ide_ai.freigaben(db)))")" "Firewall gibt den KI-Server frei, solange opencode an ist"
 
 # ------------------------------------------------------------------ Erweiterung
 ERW=""

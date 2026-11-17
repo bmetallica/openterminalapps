@@ -30,6 +30,12 @@ log = logging.getLogger("otafw.resolver")
 
 CONF = Path("/etc/dnsmasq.d/ota.conf")
 PORT = int(os.environ.get("OTA_FW_DNS_PORT", "53"))
+# Der Name des KI-Durchgangs. In jedem Sitzungsnetz die Adresse des Routers
+# in genau diesem Netz: `localise-queries` gibt aus den Hosts-Zeilen nur die
+# zurück, die im Netz der fragenden Schnittstelle liegt.
+KI_NAME = os.environ.get("OTA_KI_NAME", "ki.ota")
+HOSTS = Path("/etc/dnsmasq.d/ota.hosts")
+_hosts_text = ""
 
 _prozess: subprocess.Popen | None = None
 _pruefsumme = ""
@@ -94,6 +100,8 @@ def _konfiguration(zustand: dict) -> str:
         "log-facility=-",
         "domain-needed",
         "bogus-priv",
+        "localise-queries",
+        f"addn-hosts={HOSTS}",
     ]
     zeilen += [f"server={s}" for s in _upstream()]
 
@@ -109,9 +117,24 @@ def _konfiguration(zustand: dict) -> str:
     return "\n".join(zeilen) + "\n"
 
 
+def _hosts(zustand: dict) -> str:
+    return "".join(f"{s['gateway']} {KI_NAME}\n"
+                   for s in zustand.get("sitzungen", []) if s.get("gateway"))
+
+
 def anwenden(zustand: dict) -> dict:
     """Konfiguration schreiben, Resolver nur bei Aenderung neu starten."""
-    global _prozess, _pruefsumme
+    global _prozess, _pruefsumme, _hosts_text
+
+    # Die Hosts-Datei ändert sich mit jeder Sitzung. Dafür genügt ein SIGHUP
+    # — dnsmasq liest sie dann neu, ohne den Cache und die Mengen zu verlieren.
+    hosts = _hosts(zustand)
+    if hosts != _hosts_text:
+        HOSTS.parent.mkdir(parents=True, exist_ok=True)
+        HOSTS.write_text(hosts, encoding="utf-8")
+        _hosts_text = hosts
+        if _prozess is not None and _prozess.poll() is None:
+            _prozess.send_signal(signal.SIGHUP)
 
     text = _konfiguration(zustand)
     neu = hashlib.sha256(text.encode()).hexdigest()

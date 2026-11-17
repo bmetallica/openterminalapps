@@ -10,6 +10,7 @@
 | `ota-agent` | The **only** service with Docker access; starts containers and displays | ✅ |
 | `ota-db` | PostgreSQL 16 | ✅ |
 | `ota-firewall` | **The router of all workspaces**: nftables, NAT, name service, port forwards. Without it no workspace has network | ✅ |
+| `ota-ki` | The AI gateway, optional: combines several AI servers under `ki.ota` and counts usage. Runs in the namespace of `ota-firewall` ([chapter 28](28-ide-ai.md#several-ai-servers-ai-gateway-and-usage-statistics)) | ✅ |
 | `ota-turn` | Relays the media stream for golden images with Selkies 1.6.2 (WebRTC). Selkies 2.0 does not need it | ✅ |
 | `ota-repo`, `ota-repo-web` | The own package repository, with `ota-selkies`; the mirror in it only with `OTA_REPO_SPIEGEL=1` ([chapter 26](26-paketquellen.md)) | ✅ |
 | `ota-registry` | Own registry for the built images | ✅ |
@@ -24,6 +25,7 @@
 | `ota-traefik` | The video stream hangs for a few seconds, then the viewer reconnects |
 | `ota-firewall` | The workspaces are **briefly without network**. The sync restores the connection by itself (every 30 s); whoever is downloading at that moment sees an abort |
 | `ota-db` | The interface reports errors; running streams notice nothing |
+| `ota-ki` | With the AI gateway: requests through `ki.ota` fail for a few seconds. Intercepted traffic goes directly to the AI server meanwhile |
 
 ### Why the agent is separate
 
@@ -101,7 +103,8 @@ sends the logs to a collector — this driver is not meant for that.
 
 ### Where it shows: Operations → Audit log ✅
 
-**Operations** has three tabs: *Sessions* (who is working right now), *Audit log* and *Backup*. The
+**Operations** has four tabs: *Sessions* (who is working right now), *Audit log*, *Backup* and
+*AI usage* ([chapter 28](28-ide-ai.md#usage-statistics)). The
 audit log shows the last 120 events, newest first, in five columns:
 
 | Column | What it contains |

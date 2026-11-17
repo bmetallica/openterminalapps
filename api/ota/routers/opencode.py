@@ -48,6 +48,10 @@ def einstellen(body: dict, request: Request, actor: User = Depends(current_user)
     if vorher["an"] != neu["an"] or opencode.freigaben_von(vorher) != opencode.freigaben_von(neu):
         # Die Firewall gibt den KI-Server frei, solange IDE-AI oder opencode an ist.
         schieben(db)
+    if vorher["an"] != neu["an"]:
+        # Der Durchgang gilt, solange IDE-AI oder opencode an ist.
+        from .. import ide_ai
+        ide_ai.durchgang_schieben(db)
     return opencode.stand(db)
 
 

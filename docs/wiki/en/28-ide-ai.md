@@ -147,8 +147,80 @@ because it follows from this setting; it disappears when turned off.
 The groups under **Who may** decide who gets Continue set up, not who reaches the server.
 Whoever wants to open the server only to certain people gives it an API key.
 
-Continue addresses the server **from the workspace**, not through OTA. That is why the OTA host
+Without the gateway, Continue addresses the server **from the workspace**, not through OTA. That is why the OTA host
 must be able to reach the server (the workspaces go through its router).
+
+## Several AI servers, AI gateway and usage statistics
+
+*Since 2026-11-17. Everything here is optional and off by default.*
+
+### The AI gateway
+
+The gateway is a small service of its own, `ota-ki`. It runs in the firewall's network namespace
+and listens there on port 8790. It is turned on under **Settings → IDE-AI → AI gateway**.
+Then:
+
+- **Continue and opencode** talk to `http://ki.ota:8790/v1` instead of the server directly. The name
+  resolves in every workspace to the address of its router. The home holds **no API key** any
+  more; the gateway adds it.
+- **The firewall intercepts** what a workspace sends to the address and port of a registered AI
+  server and redirects it to the gateway (nft `redirect`). This way scripts, own configurations and
+  old instances with the real address go through it too, and so do containers in root workspaces.
+  The request then goes exactly to the server it wanted to reach.
+- **If the gateway is down**, the firewall removes the redirect within ten seconds, and traffic
+  goes directly to the server again. What goes through `ki.ota` does need it, though. If the
+  firewall restarts, the agent restarts `ota-ki` too; otherwise it would hang in the old namespace.
+
+### Several AI servers
+
+Under **Further AI servers** any number of servers can be added to the one above, each with name,
+short code, address, key and models. They take effect **only with the gateway**:
+
+- Continue and opencode see one model list across all servers. The gateway forwards each request
+  to the server the model belongs to.
+- If a further server has a model whose name is already taken, it is called `code/model` there,
+  e.g. `gpu2/qwen3-coder`. The gateway puts the real name back. The models of the server above keep
+  their names, the default model stays valid.
+- A model that is not registered in OTA is answered by the gateway with 404 and an explanation.
+
+### Usage statistics
+
+With the gateway on, **Settings → IDE-AI → Usage statistics** counts who talks to the AI how
+often. It is shown under **Operations → AI usage**:
+
+- **Overview** for a selectable period (24 h, 3, 7, 30 days or custom): per person requests,
+  tokens in and out, workspaces, most-used model, trend, last.
+- **A click on the name** shows that person's workspaces with a graph, one line per workspace. The
+  default is the last 24 hours. **« 1 more day** extends the graph backwards, **‹ earlier / later ›**
+  shifts it, and dragging across the graph zooms into that range. Below, models and tools
+  (opencode, Continue, script).
+- Counted are **time, person, workspace, server, model, duration and tokens, never contents**.
+  OTA finds the person through the workspace's sender address.
+- The server returns the tokens in its response. For streamed responses the gateway requests them
+  as well (`stream_options.include_usage`) and removes the extra block again before it reaches the
+  tool.
+
+**Retention:** individual requests 30 days, hourly totals 365 days. Both are adjustable; for hourly
+totals 0 means unlimited. OTA deletes older data once a day. **Delete all usage data** under
+Operations → AI usage empties both.
+
+**On disk** this costs little: the gateway writes to a spool file under
+`/srv/ota/runtime/ki/spool/`, the API collects it once a minute in one go.
+
+> **Before switching it on:** an evaluation per person can count as performance and behaviour
+> monitoring (in Germany § 87 (1) no. 6 BetrVG). If there is a works council, ask it, and inform the
+> people. Switching on and off and every opening of a person's figures are recorded in the log.
+
+### Encrypted connections
+
+If the AI server speaks HTTPS, nothing changes for Continue and opencode: they talk to the gateway
+through `ki.ota`, and the gateway speaks HTTPS to the server, verifying the certificate. The path
+from the workspace to the router is a private connection on the same host.
+
+What a script sends **directly via HTTPS** to the server's address the gateway cannot read without
+pushing an own CA onto the workspaces. OTA does not do that. Such connections it passes through
+unchanged and counts only as a connection, with the server name from the TLS hello. In the overview
+they appear as "encrypted (connections only)".
 
 ## Packages and versions
 
@@ -188,6 +260,9 @@ The settings page shows which versions are in the package source.
 - Continue stores histories in the home (`~/.continue/sessions/`). They therefore end up in the
   profile backup.
 - An API key is stored in `~/.continue/config.yaml` in the home, so also in the backup.
+  Not with the AI gateway: then only the gateway knows it.
+- Usage statistics are off as long as nobody switches them on. What they count is described above
+  under [Usage statistics](#usage-statistics).
 
 ## When something does not work
 
@@ -206,6 +281,12 @@ The settings page shows which versions are in the package source.
 | PyCharm does not show Continue | Is there `~/.local/share/JetBrains/<IDE><version>/ota-continue`? The name comes from the IDE's `product-info.json` |
 | Continue displaced: Marketplace update, disabled, own `config.yaml` | The person themselves: dashboard → tile → **⋯ → Set up AI tools again** ([chapter 33](33-entwickeln.md#continue-is-gone-or-behaves-differently-)). Removes the copies, switches Continue on, puts the own `config.yaml` aside and installs the packages once more. In the log: `ide_ai.neu_eingerichtet`, in the agent `IDE-AI in … neu eingerichtet: …` |
 
+| Under IDE-AI "The gateway does not respond" | `docker logs ota-ki`. If it runs but the firewall was restarted: the agent restarts it with the next reconciliation, otherwise `docker restart ota-ki`. Until then traffic goes direct |
+| "The model … is not registered in OTA" | A tool asks through `ki.ota` for a model that is not offered under IDE-AI. Offer it, or choose another in the tool |
+| "not attributable" in AI usage | Requests from an address without a running session, e.g. shortly after it ended |
+| No figures in AI usage | Statistics on? Gateway ready (Settings → IDE-AI)? The API collects every minute: `docker logs ota-api 2>&1 \| grep KI-Nutzung` |
+
 Test suite: `scripts/test-ide-ai.sh`. It starts every template with a matching editor and asks the
 AI server from the workspace. The default is the llama.cpp server of the test installation; another
-one via `OTA_TEST_KI_URL` and `OTA_TEST_KI_MODELL`.
+one via `OTA_TEST_KI_URL` and `OTA_TEST_KI_MODELL`. Gateway, several servers, statistics and
+outage are checked by `scripts/test-ki.sh` with the same settings.

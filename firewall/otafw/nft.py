@@ -92,6 +92,17 @@ def regelwerk(zustand: dict) -> str:
                 "  }",
             ]
 
+    # ----------------------------------------------------------- eingehend
+    # Der KI-Durchgang lauscht in diesem Namensraum. Erreichen sollen ihn nur
+    # die Arbeitsplätze (und der Wächter über lo) — nicht der Uplink.
+    ki_port = int(zustand.get("ki_port") or 8790)
+    zeilen += [
+        "  chain input {",
+        "    type filter hook input priority filter; policy accept;",
+        f"    tcp dport {ki_port} iifname != \"lo\" ip saddr != {pool} counter drop",
+        "  }",
+    ]
+
     # ---------------------------------------------------------- weiterleiten
     zeilen += [
         "  chain forward {",
@@ -176,6 +187,20 @@ def regelwerk(zustand: dict) -> str:
         "  chain prerouting {",
         "    type nat hook prerouting priority dstnat; policy accept;",
     ]
+    # Der KI-Durchgang: Was aus einem Arbeitsplatz an einen KI-Server geht,
+    # landet bei ota-ki — auch Skripte und alte Konfigurationen mit der
+    # echten Adresse. Je Port eine Zeile, die Adressen als Menge. Nur solange
+    # der Durchgang antwortet (main._ki_waechter).
+    if zustand.get("ki_bereit"):
+        je_port: dict[int, list[str]] = {}
+        for z in zustand.get("ki_ip", []):
+            je_port.setdefault(int(z["port"]), [])
+            if z["ip"] not in je_port[int(z["port"])]:
+                je_port[int(z["port"])].append(z["ip"])
+        for port, adressen in sorted(je_port.items()):
+            zeilen.append(
+                f"    ip saddr {pool} ip daddr {{ {', '.join(adressen)} }} tcp dport {port} "
+                f"counter redirect to :{ki_port}")
     # Umleitungen aus den Arbeitsplaetzen: ein veroeffentlichtes Ziel auf ein
     # inneres. Nur fuer Pakete **aus dem Pool** — was von aussen kommt, geht
     # dieses Regelwerk nichts an. Der Port bleibt, es aendert sich nur die

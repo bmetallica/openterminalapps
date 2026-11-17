@@ -10,6 +10,7 @@
 | `ota-agent` | **Einziger** Dienst mit Docker-Zugriff; startet Container und Displays | ✅ |
 | `ota-db` | PostgreSQL 16 | ✅ |
 | `ota-firewall` | **Der Router aller Arbeitsplätze**: nftables, NAT, Namensdienst, Portfreigaben. Ohne ihn hat kein Arbeitsplatz Netz | ✅ |
+| `ota-ki` | Der KI-Durchgang, optional: führt mehrere KI-Server unter `ki.ota` zusammen und zählt die Nutzung. Läuft im Namensraum von `ota-firewall` ([Kapitel 28](28-ide-ai.md#mehrere-ki-server-ki-durchgang-und-nutzungsstatistik)) | ✅ |
 | `ota-turn` | Vermittelt den Medienstrom für Golden Images mit Selkies 1.6.2 (WebRTC). Selkies 2.0 braucht ihn nicht | ✅ |
 | `ota-repo`, `ota-repo-web` | Die eigene Paketquelle, mit `ota-selkies`; der Spiegel darin nur mit `OTA_REPO_SPIEGEL=1` ([Kapitel 26](26-paketquellen.md)) | ✅ |
 | `ota-registry` | Eigene Registry für die gebauten Images | ✅ |
@@ -24,6 +25,7 @@
 | `ota-traefik` | Der Bildstrom hängt für ein paar Sekunden, dann verbindet sich der Betrachter neu |
 | `ota-firewall` | Die Arbeitsplätze sind **kurz ohne Netz**. Der Abgleich zieht die Anbindung selbst nach (alle 30 s); wer währenddessen lädt, sieht einen Abbruch |
 | `ota-db` | Die Oberfläche meldet Fehler; laufende Ströme merken nichts |
+| `ota-ki` | Mit KI-Durchgang: Anfragen über `ki.ota` scheitern ein paar Sekunden. Abgefangener Verkehr geht solange direkt zum KI-Server |
 
 ### Warum der Agent getrennt ist
 
@@ -103,7 +105,8 @@ gedacht.
 
 ### Wo es steht: Betrieb → Protokoll ✅
 
-**Betrieb** hat drei Reiter: *Sessions* (wer arbeitet gerade), *Protokoll* und *Sicherung*. Das
+**Betrieb** hat vier Reiter: *Sessions* (wer arbeitet gerade), *Protokoll*, *Sicherung* und
+*KI-Nutzung* ([Kapitel 28](28-ide-ai.md#nutzungsstatistik)). Das
 Protokoll zeigt die letzten 120 Vorgänge, neueste zuerst, in fünf Spalten:
 
 | Spalte | Was darin steht |

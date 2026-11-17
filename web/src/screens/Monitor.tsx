@@ -5,10 +5,11 @@ import {
   ApiError, api, type Arbeitsplatz, type AuditEntry, type Auslastung, type Platz, type WirtAuslastung,
 } from '../lib/api'
 import { Backups } from './Backups'
+import { KiNutzung } from './KiNutzung'
 import { ago, duration, gb, size } from '../lib/format'
 import { getLang, t as tr, useLang } from '../lib/i18n'
 
-type Tab = 'Arbeitsplätze' | 'Protokoll' | 'Sicherung'
+type Tab = 'Arbeitsplätze' | 'Protokoll' | 'Sicherung' | 'KI-Nutzung'
 
 /* Technische Vorgangsnamen in Klartext. Wer ins Protokoll schaut, will
    wissen was passiert ist — nicht, wie der Endpunkt heisst.
@@ -133,6 +134,11 @@ const ACTION_TEXT: Record<string, string> = {
   'platz.fortgesetzt': 'Root-Arbeitsplatz fortgesetzt',
   'platz.neu_aufgesetzt': 'Root-Arbeitsplatz neu aufgesetzt',
   'ide_ai.neu_eingerichtet': 'IDE-AI im Arbeitsplatz neu eingerichtet',
+  // KI-Durchgang und Nutzungsstatistik (Kapitel 28)
+  'ki.nutzung_angesehen': 'KI-Nutzung eines Menschen angesehen',
+  'ki.nutzung_geloescht': 'Alle KI-Nutzungsdaten gelöscht',
+  'ki.statistik_an': 'KI-Nutzungsstatistik eingeschaltet',
+  'ki.statistik_aus': 'KI-Nutzungsstatistik ausgeschaltet',
   'platz.geloescht': 'Root-Arbeitsplatz gelöscht',
   'terminal.geoeffnet': 'Webterminal geöffnet',
   'terminal.geschlossen': 'Webterminal geschlossen',
@@ -338,10 +344,10 @@ export function Monitor({ onToast, darfTerminal = false }: {
       </header>
 
       <div className="seg" role="radiogroup" aria-label={tr('Ansicht')} style={{ marginBottom: 20 }}>
-        {(['Arbeitsplätze', 'Protokoll', 'Sicherung'] as Tab[]).map((x) => (
+        {(['Arbeitsplätze', 'Protokoll', 'Sicherung', 'KI-Nutzung'] as Tab[]).map((x) => (
           <button key={x} type="button" role="radio" aria-checked={tab === x}
             className={`seg__opt${tab === x ? ' is-on' : ''}`} onClick={() => setTab(x)}>
-            {tr(x)}{x !== 'Sicherung' && (
+            {tr(x)}{x !== 'Sicherung' && x !== 'KI-Nutzung' && (
               <span className="data" style={{ opacity: .6 }}>
                 {' '}{x === 'Arbeitsplätze' ? sessions.length : audit.length}
               </span>
@@ -350,7 +356,9 @@ export function Monitor({ onToast, darfTerminal = false }: {
         ))}
       </div>
 
-      {tab === 'Sicherung' ? (
+      {tab === 'KI-Nutzung' ? (
+        <KiNutzung onToast={onToast} />
+      ) : tab === 'Sicherung' ? (
         <Backups onToast={onToast} />
       ) : tab === 'Arbeitsplätze' ? (
         sessions.length === 0 ? (

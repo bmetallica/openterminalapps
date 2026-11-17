@@ -533,6 +533,45 @@ services:
       timeout: 5s
       retries: 3
 
+  # Der KI-Durchgang (Handbuch Kapitel 28): zählt, welcher Arbeitsplatz die
+  # KI wie oft anspricht, und führt mehrere KI-Server unter einem Namen
+  # (ki.ota) zusammen. **Im Namensraum der Firewall**: Nur dort sieht er jede
+  # Verbindung mit der echten Absenderadresse, und nur dorthin kann die
+  # Firewall Verbindungen an die Adresse eines KI-Servers umleiten. Ohne
+  # Fähigkeiten, ohne Docker-Socket, ohne Datenbank. Läuft er nicht, nimmt
+  # die Firewall die Umleitung heraus — die KI geht dann direkt wie vorher.
+  ki:
+    build:
+      context: ../ki
+      dockerfile: Dockerfile
+      args:
+        http_proxy: "${OTA_HTTP_PROXY:-}"
+        https_proxy: "${OTA_HTTPS_PROXY:-}"
+        no_proxy: "${OTA_NO_PROXY:-}"
+        HTTP_PROXY: "${OTA_HTTP_PROXY:-}"
+        HTTPS_PROXY: "${OTA_HTTPS_PROXY:-}"
+        NO_PROXY: "${OTA_NO_PROXY:-}"
+        OTA_PAKETSTAND: "${OTA_PAKETSTAND:-}"
+    image: ota/ki:${OTA_VERSION:-dev}
+    container_name: ota-ki
+    logging: *protokoll
+    restart: unless-stopped
+    network_mode: "service:firewall"
+    depends_on:
+      - firewall
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      OTA_KI_DIR: "${OTA_RUNTIME_ROOT:-/srv/ota/runtime}/ki"
+      HTTP_PROXY: "${OTA_HTTP_PROXY:-}"
+      HTTPS_PROXY: "${OTA_HTTPS_PROXY:-}"
+      NO_PROXY: "${OTA_NO_PROXY:-}"
+    volumes:
+      - ${OTA_RUNTIME_ROOT:-/srv/ota/runtime}/ki:${OTA_RUNTIME_ROOT:-/srv/ota/runtime}/ki
+      - ota_firewall_state:/var/lib/ota-firewall:ro
+
   registry:
     image: registry:3
     container_name: ota-registry

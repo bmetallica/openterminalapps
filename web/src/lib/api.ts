@@ -287,8 +287,60 @@ export type IdeAiStand = {
   zeitlimit: number
   regeln: string
   ohne_proxy: boolean
+  /** Name und Kürzel des Servers oben. */
+  name: string
+  kuerzel: string
+  /** Weitere KI-Server — wirken nur mit dem Durchgang. */
+  weitere: IdeAiWeiterer[]
+  /** Der KI-Durchgang (ota-ki) und die Nutzungsstatistik. */
+  durchgang: boolean
+  statistik: boolean
+  frist_roh: number
+  frist_stunden: number
   /** Neueste Fassungen in der Paketquelle; leer, wenn sie dort fehlen. */
   fassungen: { vscode?: string; jetbrains?: string }
+  /** Nur zum Lesen. */
+  ki_url: string
+  durchgang_aktiv: boolean
+  modelle_alle: { id: string; titel: string; server: string }[]
+}
+
+/** Ein weiterer KI-Server. Der Schlüssel kommt nie zurück. */
+export type IdeAiWeiterer = {
+  name: string
+  kuerzel: string
+  url: string
+  modelle: IdeAiModell[]
+  api_key_gesetzt?: boolean
+}
+
+/** Verwaltung → KI-Nutzung (api/ota/ki_statistik.py). */
+export type KiVerlauf = { schritt: number; quelle: string; reihen: Record<string, [string, number, number][]> }
+export type KiNutzer = {
+  user_id: string; name: string; anzeigename: string; bekannt: boolean
+  anfragen: number; fehler: number; verbindungen: number; ein: number; aus: number
+  dauer_mittel_ms: number; arbeitsplaetze: number; modell: string; zuletzt: string; funken: number[]
+}
+export type KiUebersicht = {
+  von: string; bis: string; nutzer: KiNutzer[]; verlauf: KiVerlauf
+  summe: { anfragen: number; fehler: number; verbindungen: number; ein: number; aus: number }
+  statistik: boolean; durchgang: boolean; frist_roh: number; frist_stunden: number
+}
+export type KiNutzerDetail = {
+  von: string; bis: string
+  nutzer: { user_id: string; name: string; anzeigename: string }
+  arbeitsplaetze: { template_id: string; name: string; anfragen: number; fehler: number; verbindungen: number
+    ein: number; aus: number; dauer_mittel_ms: number; zuletzt: string }[]
+  modelle: { server: string; modell: string; anfragen: number; ein: number; aus: number }[]
+  werkzeuge: { werkzeug: string; anfragen: number }[]
+  verlauf: KiVerlauf
+  frist_roh: number
+}
+export type KiStatus = {
+  durchgang: boolean; statistik: boolean; aktiv: boolean; fehler?: string
+  /** Was ota-ki über sich meldet (alle zehn Sekunden). */
+  lage?: { zeit?: string; anfragen?: number; verbindungen?: number; abgefangen?: number; fehler?: number }
+  firewall?: { bereit?: boolean; ziele?: { ip: string; port: number }[]; fehler?: string }
 }
 
 /** Was der KI-Server anbietet. `kontext` nur, wenn er es verrät. */
@@ -1402,13 +1454,19 @@ export const api = {
   erweiterungStatistik: (slug: string) => call<Record<string, number>>(`/admin/erweiterungen/${slug}/statistik`),
   erweiterungAnsichten: () => call<ErweiterungAnsicht[]>('/erweiterungen/ansichten'),
   ideAi: () => call<IdeAiStand>('/admin/ide-ai'),
-  ideAiEinstellen: (body: Partial<Omit<IdeAiStand, 'api_key_gesetzt' | 'fassungen'>> & { api_key?: string }) =>
+  ideAiEinstellen: (body: Record<string, unknown>) =>
     call<IdeAiStand>('/admin/ide-ai', { method: 'PUT', body: JSON.stringify(body) }),
-  ideAiModelle: (url: string, api_key?: string) =>
-    call<IdeAiServerModell[]>('/admin/ide-ai/modelle', { method: 'POST', body: JSON.stringify({ url, api_key }) }),
-  ideAiTesten: (modell: string) =>
+  ideAiModelle: (url: string, api_key?: string, kuerzel?: string) =>
+    call<IdeAiServerModell[]>('/admin/ide-ai/modelle', { method: 'POST', body: JSON.stringify({ url, api_key, kuerzel }) }),
+  ideAiTesten: (modell: string, kuerzel?: string) =>
     call<{ ok: boolean; ms: number; antwort: string; denkt: boolean; abbruch: string }>(
-      '/admin/ide-ai/testen', { method: 'POST', body: JSON.stringify({ modell }) }),
+      '/admin/ide-ai/testen', { method: 'POST', body: JSON.stringify({ modell, kuerzel }) }),
+  kiNutzung: (von: string, bis: string, tz: string) =>
+    call<KiUebersicht>(`/admin/ki-nutzung?${new URLSearchParams({ von, bis, tz })}`),
+  kiNutzer: (id: string, von: string, bis: string, tz: string) =>
+    call<KiNutzerDetail>(`/admin/ki-nutzung/nutzer/${encodeURIComponent(id)}?${new URLSearchParams({ von, bis, tz })}`),
+  kiStatus: () => call<KiStatus>('/admin/ki-nutzung/status'),
+  kiNutzungLoeschen: () => call<{ anfragen: number; stunden: number }>('/admin/ki-nutzung', { method: 'DELETE' }),
   gitAbgleich: () => call<Record<string, unknown>>('/admin/git/abgleich', { method: 'POST' }),
   software: () => call<SoftwareStand>('/admin/software'),
   softwareMeldungen: () => call<SoftwareMeldung[]>('/admin/software/meldungen'),

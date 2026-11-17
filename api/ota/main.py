@@ -22,6 +22,7 @@ from .routers import (
     registries as registries_router,
     sessions, shared as shared_router, skeleton as skeleton_router,
     software as software_router, git as git_router, ide_ai as ide_ai_router, opencode as opencode_router,
+    ki_nutzung as ki_nutzung_router,
     erweiterungen as erweiterungen_router, templates,
     news as news_router,
 )
@@ -178,6 +179,29 @@ def _reap_once() -> None:
         db.commit()
 
 
+def _ki_haushalt(runde: int) -> None:
+    """Der KI-Durchgang: Zahlen abholen (jede Minute), die Konfiguration alle
+    zehn Minuten erneut schicken — ein neu angelegter Durchgang oder ein
+    verlorener Aufruf heilt sich damit von selbst."""
+    from . import ide_ai, ki_statistik
+
+    with SessionLocal() as db:
+        e = ide_ai.einstellungen(db)
+        if runde % 10 == 0:
+            ide_ai.durchgang_schieben(db)
+        if e["durchgang"] or e["statistik"]:
+            neu = ki_statistik.abholen(db)
+            if neu:
+                log.info("KI-Nutzung: %d Anfragen übernommen", neu)
+
+
+def _ki_aufraeumen() -> dict[str, int]:
+    from . import ki_statistik
+
+    with SessionLocal() as db:
+        return ki_statistik.aufraeumen(db)
+
+
 def _backup_due() -> bool:
     """Steht ein geplanter Sicherungslauf an?
 
@@ -304,8 +328,14 @@ async def _scheduler() -> None:
     # Dienst, der lange stand, nicht bis zum naechsten Datumswechsel wartet.
     zuletzt_aufgeraeumt: date | None = None
 
+    runde = 0
     while True:
         await asyncio.sleep(60)
+        try:
+            await asyncio.to_thread(_ki_haushalt, runde)
+        except Exception as exc:  # noqa: BLE001 — der Zeitplaner darf nie sterben
+            log.warning("KI-Nutzung nicht abgeholt: %s", exc)
+        runde += 1
         try:
             if await asyncio.to_thread(_backup_due):
                 log.info("Geplante Sicherung startet")
@@ -327,6 +357,13 @@ async def _scheduler() -> None:
                              weg["verhalten"], weg["verwaltung"])
             except Exception as exc:  # noqa: BLE001 — derselbe Grund wie oben
                 log.warning("Protokoll nicht aufgeraeumt: %s", exc)
+            try:
+                weg = await asyncio.to_thread(_ki_aufraeumen)
+                if weg["anfragen"] or weg["stunden"]:
+                    log.info("KI-Nutzung aufgeraeumt: %d Anfragen, %d Stundensummen",
+                             weg["anfragen"], weg["stunden"])
+            except Exception as exc:  # noqa: BLE001 — derselbe Grund wie oben
+                log.warning("KI-Nutzung nicht aufgeraeumt: %s", exc)
             # Speicherabbilder abgestuerzter Programme aus den Zuhausen
             # (agent/otaagent/kerne.py). Beim Messen vor einem Start raeumt
             # der Agent ohnehin das eine Zuhause; das hier haelt die Anzeige
@@ -501,6 +538,7 @@ app.include_router(monitoring.router)
 app.include_router(software_router.router)
 app.include_router(git_router.router)
 app.include_router(ide_ai_router.router)
+app.include_router(ki_nutzung_router.router)
 app.include_router(opencode_router.router)
 app.include_router(erweiterungen_router.router)
 app.include_router(news_router.router)

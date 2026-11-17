@@ -143,8 +143,83 @@ weil sie sich aus dieser Einstellung ergibt; sie verschwindet mit dem Ausschalte
 Die Gruppen unter **Wer darf** bestimmen, wer Continue eingerichtet bekommt, nicht, wer den Server
 erreicht. Wer den Server nur bestimmten Menschen öffnen will, gibt ihm einen API-Schlüssel.
 
-Continue spricht den Server **aus dem Arbeitsplatz** an, nicht über OTA. Deshalb muss der
-OTA-Host den Server erreichen können (die Arbeitsplätze gehen über seinen Router).
+Ohne Durchgang spricht Continue den Server **aus dem Arbeitsplatz** an, nicht über OTA. Deshalb
+muss der OTA-Host den Server erreichen können (die Arbeitsplätze gehen über seinen Router).
+
+## Mehrere KI-Server, KI-Durchgang und Nutzungsstatistik
+
+*Seit dem 2026-11-17. Alles hier ist optional und ab Werk aus.*
+
+### Der KI-Durchgang
+
+Der Durchgang ist ein eigener kleiner Dienst, `ota-ki`. Er läuft im Netzwerk-Namensraum der Firewall
+und lauscht dort auf Port 8790. Eingeschaltet wird er unter **Einstellungen → IDE-AI → KI-Durchgang**.
+Dann gilt:
+
+- **Continue und opencode** sprechen `http://ki.ota:8790/v1` an statt den Server direkt. Der Name
+  löst sich in jedem Arbeitsplatz zur Adresse seines Routers auf. Im Zuhause steht **kein
+  API-Schlüssel** mehr; den setzt der Durchgang ein.
+- **Die Firewall fängt ab**, was aus einem Arbeitsplatz an die Adresse und den Port eines
+  eingetragenen KI-Servers geht, und leitet es zum Durchgang um (nft `redirect`). So laufen auch
+  Skripte, eigene Konfigurationen und alte Instanzen mit der echten Adresse über ihn, und auch
+  Container in Root-Arbeitsplätzen. Die Anfrage geht dann genau an den Server, den sie ansprechen
+  wollte.
+- **Liegt der Durchgang**, nimmt die Firewall die Umleitung nach spätestens zehn Sekunden heraus,
+  und der Verkehr geht wieder direkt zum Server. Was über `ki.ota` geht, braucht ihn allerdings.
+  Startet die Firewall neu, startet der Agent `ota-ki` mit, sonst hinge er im alten Namensraum.
+
+### Mehrere KI-Server
+
+Unter **Weitere KI-Server** lassen sich zum Server oben beliebig viele dazu eintragen, jeder mit
+Name, Kürzel, Adresse, Schlüssel und Modellen. Sie wirken **nur mit dem Durchgang**:
+
+- Continue und opencode sehen ein Modellverzeichnis über alle Server. Der Durchgang leitet jede
+  Anfrage an den Server, zu dem das Modell gehört.
+- Hat ein weiterer Server ein Modell, dessen Name schon vergeben ist, heißt es dort
+  `kürzel/modell`, etwa `gpu2/qwen3-coder`. Der Durchgang setzt den echten Namen wieder ein. Die
+  Modelle des Servers oben behalten ihren Namen, das Standardmodell bleibt gültig.
+- Ein Modell, das in OTA nicht eingetragen ist, beantwortet der Durchgang mit 404 und einer
+  Erklärung.
+
+### Nutzungsstatistik
+
+Mit eingeschaltetem Durchgang lässt sich unter **Einstellungen → IDE-AI → Nutzungsstatistik**
+zählen, wer die KI wie oft anspricht. Zu sehen ist das unter **Betrieb → KI-Nutzung**:
+
+- **Übersicht** für einen wählbaren Zeitraum (24 h, 3, 7, 30 Tage oder frei): je Mensch Anfragen,
+  Tokens hinein und heraus, Arbeitsplätze, meistgenutztes Modell, Verlauf, zuletzt.
+- **Ein Klick auf den Namen** zeigt seine Arbeitsplätze mit einem Graphen, je Arbeitsplatz eine
+  Linie. Standard sind die letzten 24 Stunden. **« 1 Tag mehr** erweitert den Graphen nach hinten,
+  **‹ früher / später ›** verschiebt ihn, und ein im Graphen aufgezogener Bereich vergrößert ihn.
+  Darunter Modelle und Werkzeuge (opencode, Continue, Skript).
+- Gezählt werden **Zeit, Mensch, Arbeitsplatz, Server, Modell, Dauer und Tokens, nie Inhalte**.
+  Den Menschen findet OTA über die Absenderadresse des Arbeitsplatzes.
+- Die Tokens liefert der Server in seiner Antwort. Bei gestreamten Antworten bestellt der
+  Durchgang sie mit (`stream_options.include_usage`) und nimmt den zusätzlichen Block wieder heraus,
+  bevor er beim Werkzeug ankommt.
+
+**Aufbewahrung:** Einzelne Anfragen 30 Tage, Stundensummen 365 Tage. Beides ist einstellbar, bei den
+Stundensummen heißt 0 unbegrenzt. Älteres löscht OTA einmal am Tag. **Alle Nutzungsdaten löschen**
+unter Betrieb → KI-Nutzung leert beides.
+
+**Auf der Platte** kostet das wenig: Der Durchgang schreibt in eine Spool-Datei unter
+`/srv/ota/runtime/ki/spool/`, die API holt sie einmal in der Minute in einem Zug ab.
+
+> **Vor dem Einschalten:** Eine Auswertung je Person kann unter die Leistungs- und
+> Verhaltenskontrolle fallen (§ 87 Abs. 1 Nr. 6 BetrVG). Gibt es einen Betriebsrat, gehört er
+> gefragt, und die Menschen gehören informiert. Ein- und Ausschalten und jedes Öffnen der Zahlen
+> eines Menschen stehen im Protokoll.
+
+### Verschlüsselte Verbindungen
+
+Spricht der KI-Server HTTPS, ändert sich für Continue und opencode nichts: Sie sprechen den
+Durchgang über `ki.ota` an, und der Durchgang spricht HTTPS zum Server, mit Prüfung des Zertifikats.
+Die Strecke vom Arbeitsplatz zum Router ist eine private Verbindung auf demselben Host.
+
+Was ein Skript **direkt per HTTPS** an die Adresse des Servers schickt, kann der Durchgang nicht
+lesen, ohne den Arbeitsplätzen eine eigene CA unterzuschieben. Das tut OTA nicht. Solche
+Verbindungen reicht er unverändert durch und zählt sie nur als Verbindung, mit dem Servernamen aus
+dem TLS-Hello. In der Übersicht stehen sie als „verschlüsselt (nur Verbindungen)“.
 
 ## Pakete und Fassungen
 
@@ -184,6 +259,9 @@ Die Einstellungsseite zeigt, welche Fassungen in der Paketquelle liegen.
 - Verläufe speichert Continue im Zuhause (`~/.continue/sessions/`). Sie kommen damit in die
   Profilsicherung.
 - Ein API-Schlüssel steht in `~/.continue/config.yaml` im Zuhause, also auch in der Sicherung.
+  Mit dem KI-Durchgang nicht: Dann kennt ihn nur der Durchgang.
+- Die Nutzungsstatistik ist aus, solange niemand sie einschaltet. Was sie zählt, steht oben unter
+  [Nutzungsstatistik](#nutzungsstatistik).
 
 ## Wenn etwas nicht geht
 
@@ -202,6 +280,12 @@ Die Einstellungsseite zeigt, welche Fassungen in der Paketquelle liegen.
 | PyCharm zeigt Continue nicht | Gibt es `~/.local/share/JetBrains/<IDE><Fassung>/ota-continue`? Der Name kommt aus `product-info.json` der IDE |
 | Continue verdrängt: Marketplace-Update, abgeschaltet, eigene `config.yaml` | Der Mensch selbst: Dashboard → Kachel → **⋯ → KI-Werkzeuge neu einrichten** ([Kapitel 33](33-entwickeln.md#continue-ist-weg-oder-verhält-sich-anders-)). Räumt die Kopien weg, schaltet Continue ein, legt die eigene `config.yaml` beiseite und installiert die Pakete noch einmal. Im Protokoll: `ide_ai.neu_eingerichtet`, im Agent `IDE-AI in … neu eingerichtet: …` |
 
+| Unter IDE-AI „Der Durchgang antwortet nicht“ | `docker logs ota-ki`. Läuft er, aber die Firewall war neu gestartet: Der Agent startet ihn beim nächsten Abgleich mit, sonst `docker restart ota-ki`. Bis dahin geht der Verkehr direkt |
+| „Das Modell … ist in OTA nicht eingetragen“ | Ein Werkzeug fragt über `ki.ota` nach einem Modell, das unter IDE-AI nicht angeboten wird. Anbieten oder im Werkzeug ein anderes wählen |
+| In der KI-Nutzung „nicht zuzuordnen“ | Anfragen von einer Adresse ohne laufende Sitzung, etwa kurz nach dem Beenden |
+| In der KI-Nutzung keine Zahlen | Statistik an? Durchgang bereit (Einstellungen → IDE-AI)? Die API holt jede Minute ab: `docker logs ota-api 2>&1 \| grep KI-Nutzung` |
+
 Prüfreihe: `scripts/test-ide-ai.sh`. Sie startet jede Vorlage mit einem passenden Editor und fragt
 den KI-Server aus dem Arbeitsplatz. Vorgabe ist der llama.cpp-Server der Testanlage; ein anderer
-über `OTA_TEST_KI_URL` und `OTA_TEST_KI_MODELL`.
+über `OTA_TEST_KI_URL` und `OTA_TEST_KI_MODELL`. Durchgang, mehrere Server, Statistik und Ausfall
+prüft `scripts/test-ki.sh` mit denselben Angaben.

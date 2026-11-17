@@ -392,6 +392,9 @@ HEIMAT_VORGABE = "/home/kasm-user"
 PROXY_HTTP = os.environ.get("HTTP_PROXY") or os.environ.get("http_proxy") or ""
 PROXY_HTTPS = os.environ.get("HTTPS_PROXY") or os.environ.get("https_proxy") or ""
 PROXY_OHNE = os.environ.get("NO_PROXY") or os.environ.get("no_proxy") or ""
+# Der KI-Durchgang (ki.ota) ist der Router selbst — nie über den Firmenproxy.
+if (PROXY_HTTP or PROXY_HTTPS) and "ki.ota" not in PROXY_OHNE.split(","):
+    PROXY_OHNE = ",".join(x for x in (PROXY_OHNE, "ki.ota") if x)
 
 
 def _heimat_aus_env(eintraege: list[str] | None) -> str:
@@ -906,15 +909,18 @@ def _ensure_profile(path: str) -> None:
 VERWALTUNG_DATEI = os.path.join(RUNTIME_ROOT, "firewall-verwaltung.json")
 _globale_freigaben: list[dict] = []
 _weiterleitungen: list[dict] = []
+# KI-Server, deren Verkehr der Durchgang abfängt (ota-ki). Leer: aus.
+_ki_ziele: list[dict] = []
 
 
 def _verwaltung_laden() -> None:
-    global _globale_freigaben, _weiterleitungen
+    global _globale_freigaben, _weiterleitungen, _ki_ziele
     try:
         with open(VERWALTUNG_DATEI, encoding="utf-8") as fh:
             daten = json.load(fh)
         _globale_freigaben = daten.get("freigaben", [])
         _weiterleitungen = daten.get("weiterleitungen", [])
+        _ki_ziele = daten.get("ki_ziele", [])
         log.info("Firewall-Verwaltung gelesen: %d Freigaben, %d Weiterleitungen",
                  len(_globale_freigaben), len(_weiterleitungen))
     except (OSError, ValueError):
@@ -926,7 +932,8 @@ def _verwaltung_speichern() -> None:
         os.makedirs(RUNTIME_ROOT, exist_ok=True)
         with open(VERWALTUNG_DATEI, "w", encoding="utf-8") as fh:
             json.dump({"freigaben": _globale_freigaben,
-                       "weiterleitungen": _weiterleitungen}, fh)
+                       "weiterleitungen": _weiterleitungen,
+                       "ki_ziele": _ki_ziele}, fh)
     except OSError as exc:
         log.warning("Firewall-Verwaltung nicht speicherbar: %s", exc)
 
@@ -934,14 +941,16 @@ def _verwaltung_speichern() -> None:
 class GlobalIn(BaseModel):
     freigaben: list[dict] = []
     weiterleitungen: list[dict] = []
+    ki_ziele: list[dict] = []
 
 
 @app.put("/firewall/global", dependencies=[Depends(require_token)])
 def firewall_global(body: GlobalIn) -> dict:
     """Globale Freigaben und Portweiterleitungen setzen — der ganze Satz."""
-    global _globale_freigaben, _weiterleitungen
+    global _globale_freigaben, _weiterleitungen, _ki_ziele
     _globale_freigaben = body.freigaben
     _weiterleitungen = body.weiterleitungen
+    _ki_ziele = body.ki_ziele
     _verwaltung_speichern()
     return _firewall_abgleich()
 
@@ -1010,6 +1019,11 @@ def _firewall_abgleich(client=None) -> dict:
     # liegen, weil er lag.
     netz_ops.anbindung_sichern(client)
     try:
+        from . import ki as ki_ops
+        ki_ops.durchgang_nachziehen(client)
+    except Exception as exc:  # noqa: BLE001 — der Durchgang darf den Abgleich nicht kippen
+        log.warning("KI-Durchgang nicht nachgezogen: %s", exc)
+    try:
         git_dienst.anmeldeweg(client)
     except (APIError, NotFound) as exc:
         log.warning("OTA-Git: Anmeldeweg nicht nachgezogen: %s", exc)
@@ -1025,6 +1039,7 @@ def _firewall_abgleich(client=None) -> dict:
         "stufe": n["stufe"],
         "freigaben": n["freigaben"],
         "namen": n["namen"],
+        "session_id": n["session_id"],
     } for n in netz_ops.sitzungsnetze(client)]
 
     zustand = {
@@ -1039,12 +1054,46 @@ def _firewall_abgleich(client=None) -> dict:
         # Adressen, die der Router auf dem Weg nach draussen umbiegt —
         # hinter einer NAT die veroeffentlichte des TURN-Dienstes.
         "umleitungen": _umleitungen(),
+        # Der KI-Durchgang (ota-ki): wessen Verkehr er abfängt.
+        "ki_ziele": _ki_ziele,
     }
     try:
         return fwclient.regelwerk_setzen(zustand)
     except (OSError, RuntimeError) as exc:
         log.error("Firewall-Abgleich fehlgeschlagen: %s", exc)
         return {"status": "fehlgeschlagen", "fehler": str(exc)}
+
+
+@app.put("/ki/konfig", dependencies=[Depends(require_token)])
+def ki_konfig(body: dict) -> dict:
+    """Die Konfiguration des KI-Durchgangs (ki.py)."""
+    from . import ki
+    return ki.konfig_setzen(body)
+
+
+@app.get("/ki/spool", dependencies=[Depends(require_token)])
+def ki_spool() -> dict:
+    from . import ki
+    return ki.spool_lesen()
+
+
+@app.delete("/ki/spool/{name}", dependencies=[Depends(require_token)])
+def ki_spool_weg(name: str) -> dict:
+    from . import ki
+    return ki.spool_loeschen(name)
+
+
+@app.get("/ki/status", dependencies=[Depends(require_token)])
+def ki_status() -> dict:
+    """Wie es dem Durchgang geht — aus seiner eigenen Meldung und aus der
+    Firewall (ob die Umleitung steht)."""
+    from . import ki
+    raus: dict = {"durchgang": ki.status()}
+    try:
+        raus["firewall"] = fwclient.zustand().get("ki", {})
+    except (OSError, RuntimeError) as exc:
+        raus["firewall"] = {"fehler": str(exc)}
+    return raus
 
 
 @app.get("/firewall", dependencies=[Depends(require_token)])

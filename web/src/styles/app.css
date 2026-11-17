@@ -1925,3 +1925,46 @@ input[type="color"] {
 .startlauf__fuell { background: var(--key); transition: width .7s linear; }
 .bay__fortschritt { margin-top: 12px; max-width: 420px; display: flex; }
 .boot__fortschritt { width: min(360px, 80vw); display: flex; }
+
+/* IDE-AI: weitere KI-Server und der Abschnitt zum Durchgang */
+.ide-ai__abschnitt { margin: 22px 0 6px; font-size: 15px; color: var(--text); }
+.ide-ai__weiterer {
+  border: 1px solid var(--edge); border-radius: 8px; padding: 12px 14px; margin: 10px 0 12px;
+  background: var(--bay-2);
+}
+
+/* KI-Nutzung: Reihenfarben für Graphen (Kategorie, feste Reihenfolge).
+   Dunkel ist die Vorgabe dieser Oberfläche; hell die Stufen derselben acht
+   Farbtöne für die helle Fläche. */
+:root {
+  --serie-1: #3987e5; --serie-2: #d95926; --serie-3: #199e70; --serie-4: #c98500;
+  --serie-5: #d55181; --serie-6: #0ca30c; --serie-7: #9085e9; --serie-8: #e66767;
+}
+:root[data-theme="hell"] {
+  --serie-1: #2a78d6; --serie-2: #eb6834; --serie-3: #1baf7a; --serie-4: #eda100;
+  --serie-5: #e87ba4; --serie-6: #008300; --serie-7: #6250d6; --serie-8: #e34948;
+}
+.ki-graf { position: relative; width: 100%; user-select: none; }
+.ki-graf svg { display: block; width: 100%; }
+.ki-graf__gitter { stroke: var(--edge); stroke-width: 1; }
+.ki-graf__achse { fill: var(--mute); font-size: 11px; font-family: inherit; }
+.ki-graf__linie { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.ki-graf__fahne { stroke: var(--edge-lit); stroke-width: 1; }
+.ki-graf__auswahl { fill: var(--accent); opacity: .12; }
+.ki-graf__tipp {
+  position: absolute; pointer-events: none; background: var(--bay-2); border: 1px solid var(--edge-lit);
+  border-radius: 6px; padding: 8px 10px; font-size: 12px; color: var(--text); min-width: 150px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .25); z-index: 5;
+}
+.ki-graf__tipp b { display: block; margin-bottom: 4px; font-weight: 600; }
+.ki-graf__zeile { display: flex; align-items: center; gap: 6px; justify-content: space-between; }
+.ki-legende { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 8px 0 0; font-size: 12.5px; color: var(--label); }
+.ki-legende span { display: inline-flex; align-items: center; gap: 6px; }
+.ki-punkt { width: 10px; height: 10px; border-radius: 3px; display: inline-block; flex: none; }
+.ki-kacheln { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.ki-kachel { background: var(--bay); border: 1px solid var(--edge); border-radius: 8px; padding: 12px 14px; }
+.ki-kachel__wert { font-size: 22px; color: var(--text); font-variant-numeric: tabular-nums; }
+.ki-kachel__name { font-size: 12px; color: var(--label); margin-top: 2px; }
+.ki-leiste { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 16px; }
+.ki-funke { display: block; }
+.ki-funke path { fill: none; stroke: var(--serie-1); stroke-width: 1.5; }

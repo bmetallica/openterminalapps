@@ -314,10 +314,12 @@ def _schieben(db: DbSession) -> None:
         agent_client.firewall_global({
             # Dazu der KI-Server von IDE-AI, solange es an ist (Kapitel 28).
             "freigaben": (settings_store.get(db, settings_store.FIREWALL_GLOBAL) or [])
-            + [f for f in [ide_ai.freigabe(db)] if f]
+            + ide_ai.freigaben(db)
             # und die entfernten MCP-Server für opencode (Kapitel 38).
             + opencode.freigaben(db),
             "weiterleitungen": weiter,
+            # Der KI-Durchgang: wessen Verkehr die Firewall zu ota-ki umleitet.
+            "ki_ziele": ide_ai.ki_ziele(db),
         })
     except Exception:  # noqa: BLE001 — die Firewall darf keine Anfrage kippen
         import logging

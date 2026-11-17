@@ -1084,3 +1084,58 @@ class NewsGelesen(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
     )
     am: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class KiAnfrage(Base):
+    """Eine Anfrage an einen KI-Server, gezählt vom Durchgang (ota-ki).
+
+    **Nur Metadaten, nie Inhalte.** Bewusst ohne Fremdschlüssel: Die Zahlen
+    sollen den Arbeitsplatz und das Konto überdauern, bis ihre Frist abläuft
+    (Einstellungen → IDE-AI); Name und Arbeitsplatz stehen deshalb
+    ausgeschrieben darin. `herkunft` (Spool-Datei und Zeile) macht doppeltes
+    Abholen unschädlich.
+    """
+
+    __tablename__ = "ki_anfragen"
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    herkunft: Mapped[str] = mapped_column(String(120), unique=True)
+    ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), index=True)
+    user_name: Mapped[str] = mapped_column(String(128), default="")
+    session_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    template_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    arbeitsplatz: Mapped[str] = mapped_column(String(200), default="")
+    quelle: Mapped[str] = mapped_column(String(64), default="")
+    server: Mapped[str] = mapped_column(String(32), default="")
+    modell: Mapped[str] = mapped_column(String(200), default="")
+    werkzeug: Mapped[str] = mapped_column(String(16), default="")
+    weg: Mapped[str] = mapped_column(String(12), default="")
+    pfad: Mapped[str] = mapped_column(String(120), default="")
+    status: Mapped[int] = mapped_column(Integer, default=0)
+    dauer_ms: Mapped[int] = mapped_column(Integer, default=0)
+    erstes_ms: Mapped[int | None] = mapped_column(Integer)
+    ein: Mapped[int | None] = mapped_column(Integer)
+    aus: Mapped[int | None] = mapped_column(Integer)
+    bytes: Mapped[int | None] = mapped_column(BigInteger)
+
+
+class KiStunde(Base):
+    """Die Summen einer Stunde je Mensch, Arbeitsplatz, Server und Modell —
+    für Graphen über Tage und Wochen und über die Frist der Einzelanfragen
+    hinaus. Unbekannt (keine Sitzung zur Absenderadresse) steht als Null-UUID."""
+
+    __tablename__ = "ki_stunden"
+    stunde: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    template_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    server: Mapped[str] = mapped_column(String(32), primary_key=True)
+    modell: Mapped[str] = mapped_column(String(200), primary_key=True)
+    user_name: Mapped[str] = mapped_column(String(128), default="")
+    arbeitsplatz: Mapped[str] = mapped_column(String(200), default="")
+    anfragen: Mapped[int] = mapped_column(Integer, default=0)
+    fehler: Mapped[int] = mapped_column(Integer, default=0)
+    verbindungen: Mapped[int] = mapped_column(Integer, default=0)
+    ein: Mapped[int] = mapped_column(BigInteger, default=0)
+    aus: Mapped[int] = mapped_column(BigInteger, default=0)
+    dauer_ms: Mapped[int] = mapped_column(BigInteger, default=0)
+    bytes: Mapped[int] = mapped_column(BigInteger, default=0)

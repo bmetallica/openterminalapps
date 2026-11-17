@@ -34,10 +34,19 @@ def einstellen(body: dict, request: Request, actor: User = Depends(current_user)
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
     audit.record(db, "ide_ai.eingestellt", actor=actor, request=request,
                  an=neu["an"], url=neu["url"], modelle=[m["id"] for m in neu["modelle"]],
+                 weitere=[w["kuerzel"] for w in neu["weitere"]],
+                 durchgang=neu["durchgang"], statistik=neu["statistik"],
                  schluessel_geaendert="api_key" in body and body["api_key"] is not None)
+    if vorher["statistik"] != neu["statistik"]:
+        # Eigens, weil es Menschen betrifft: Ab jetzt wird (nicht mehr) gezählt.
+        audit.record(db, "ki.statistik_an" if neu["statistik"] else "ki.statistik_aus",
+                     actor=actor, request=request)
     db.commit()
-    if (vorher["an"], vorher["url"]) != (neu["an"], neu["url"]):
+    ziele = lambda e: (e["an"], e["url"], e["durchgang"],  # noqa: E731
+                       [w["url"] for w in e["weitere"]])
+    if ziele(vorher) != ziele(neu):
         schieben(db)
+    ide_ai.durchgang_schieben(db)
     return ide_ai.stand(db)
 
 
@@ -46,7 +55,10 @@ async def modelle(body: dict, db: DbSession = Depends(get_db)) -> list[dict]:
     """Die Modelle des Servers. Ohne Schlüssel im Aufruf gilt der gespeicherte."""
     schluessel = body.get("api_key")
     if schluessel is None:
-        schluessel = ide_ai.einstellungen(db)["api_key"]
+        e = ide_ai.einstellungen(db)
+        kuerzel = str(body.get("kuerzel") or "")
+        weiterer = next((w for w in e["weitere"] if kuerzel and w["kuerzel"] == kuerzel), None)
+        schluessel = weiterer["api_key"] if weiterer else e["api_key"]
     try:
         return await asyncio.to_thread(ide_ai.modelle_abrufen, str(body.get("url") or ""),
                                        str(schluessel or ""))
@@ -57,6 +69,7 @@ async def modelle(body: dict, db: DbSession = Depends(get_db)) -> list[dict]:
 @router.post("/testen", dependencies=[Depends(verwalten)])
 async def testen(body: dict, db: DbSession = Depends(get_db)) -> dict:
     try:
-        return await asyncio.to_thread(ide_ai.testen, db, str(body.get("modell") or ""))
+        return await asyncio.to_thread(ide_ai.testen, db, str(body.get("modell") or ""),
+                                       str(body.get("kuerzel") or ""))
     except ide_ai.IdeAiFehler as exc:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc

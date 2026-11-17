@@ -126,6 +126,24 @@ def firewall_global(payload: dict[str, Any]) -> dict[str, Any]:
     return _call("PUT", "/firewall/global", json=payload)
 
 
+def ki_konfig(payload: dict[str, Any]) -> dict[str, Any]:
+    """Die Konfiguration des KI-Durchgangs (ota-ki)."""
+    return _call("PUT", "/ki/konfig", json=payload)
+
+
+def ki_spool() -> dict[str, Any]:
+    """Abgeschlossene Spool-Dateien des Durchgangs — die gezählten Anfragen."""
+    return _call("GET", "/ki/spool")
+
+
+def ki_spool_loeschen(name: str) -> dict[str, Any]:
+    return _call("DELETE", f"/ki/spool/{name}")
+
+
+def ki_status() -> dict[str, Any]:
+    return _call("GET", "/ki/status", timeout=15.0)
+
+
 def firewall_grundregeln() -> dict[str, Any]:
     """Was jede Sitzung erreichen darf, damit OTA funktioniert."""
     return _call("GET", "/firewall/grundregeln")
