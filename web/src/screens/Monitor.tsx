@@ -137,6 +137,8 @@ const ACTION_TEXT: Record<string, string> = {
   // KI-Durchgang und Nutzungsstatistik (Kapitel 28)
   'ki.nutzung_angesehen': 'KI-Nutzung eines Menschen angesehen',
   'ki.auskunft': 'Personenbezogene KI-Auskunft geöffnet',
+  'ki.extern_angelegt': 'Externer KI-Dienst angelegt',
+  'ki.extern_geloescht': 'Externer KI-Dienst entfernt',
   'dsgvo.hinweis_geaendert': 'Datenschutzhinweis geändert',
   'ki.nutzung_geloescht': 'Alle KI-Nutzungsdaten gelöscht',
   'ki.statistik_an': 'KI-Nutzungsstatistik eingeschaltet',

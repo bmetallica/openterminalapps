@@ -1,0 +1,10 @@
+# Der Eingang des KI-Durchgangs für externe Dienste (Open WebUI), am Host
+# veröffentlicht. Das Makefile nimmt diese Datei nur dazu, wenn in .env
+# OTA_KI_EXTERN_PORT gesetzt ist — sonst gäbe es beim Update eine
+# Portkollision, die den Router (und damit alle Arbeitsplätze) nicht
+# hochkommen liesse. ota-ki teilt sich den Namensraum der Firewall; deshalb
+# veröffentlicht die Firewall den Port.
+services:
+  firewall:
+    ports:
+      - "${OTA_KI_EXTERN_BIND:-0.0.0.0}:${OTA_KI_EXTERN_PORT}:8791"

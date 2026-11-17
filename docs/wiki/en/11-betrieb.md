@@ -10,7 +10,7 @@
 | `ota-agent` | The **only** service with Docker access; starts containers and displays | ✅ |
 | `ota-db` | PostgreSQL 16 | ✅ |
 | `ota-firewall` | **The router of all workspaces**: nftables, NAT, name service, port forwards. Without it no workspace has network | ✅ |
-| `ota-ki` | The AI gateway, optional: combines several AI servers under `ki.ota` and counts usage. Runs in the namespace of `ota-firewall` ([chapter 28](28-ide-ai.md#several-ai-servers-ai-gateway-and-usage-statistics)) | ✅ |
+| `ota-ki` | The AI gateway, optional: combines several AI servers under `ki.ota` and counts usage; optionally with an entrance for external services such as Open WebUI (`OTA_KI_EXTERN_PORT`). Runs in the namespace of `ota-firewall` ([chapter 28](28-ide-ai.md#several-ai-servers-ai-gateway-and-usage-statistics)) | ✅ |
 | `ota-turn` | Relays the media stream for golden images with Selkies 1.6.2 (WebRTC). Selkies 2.0 does not need it | ✅ |
 | `ota-repo`, `ota-repo-web` | The own package repository, with `ota-selkies`; the mirror in it only with `OTA_REPO_SPIEGEL=1` ([chapter 26](26-paketquellen.md)) | ✅ |
 | `ota-registry` | Own registry for the built images | ✅ |

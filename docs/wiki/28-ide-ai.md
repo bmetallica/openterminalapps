@@ -266,6 +266,51 @@ Statistik lief, und gehört in die Datenbank, wo die Fristen es löschen.
 > Text vorher anpassen. Ein- und Ausschalten, jede Auskunft mit Grund und jedes Öffnen der Zahlen
 > eines Menschen stehen im Protokoll.
 
+### Externe Dienste (Open WebUI)
+
+Ein Dienst außerhalb der Arbeitsplätze, etwa Open WebUI, kann die KI ebenfalls über den Durchgang
+ansprechen. Er sieht dann dasselbe Modellverzeichnis, es gilt dieselbe Gruppenregel, und seine
+Anfragen stehen in derselben Statistik, beim richtigen Menschen. Den Schlüssel des KI-Servers kennt
+er nicht mehr.
+
+**Einrichten**
+
+1. Auf dem Host in `deploy/.env` den Port setzen, z. B. `OTA_KI_EXTERN_PORT=8791`, dann
+   `sudo make update`. Das veröffentlicht den Eingang am Host und **startet den Router neu**: Die
+   Arbeitsplätze sind kurz ohne Netz. Der Port muss frei sein. `OTA_KI_EXTERN_BIND` begrenzt die
+   Adresse, an der er lauscht (Vorgabe: alle). Ohne den Port bleibt alles wie bisher.
+2. Unter **Einstellungen → IDE-AI → Externe Dienste** einen Dienst anlegen, z. B. „Open WebUI“.
+   OTA zeigt den Schlüssel **genau einmal** und speichert danach nur seinen SHA-256. Geht er
+   verloren: Dienst entfernen und neu anlegen.
+3. In Open WebUI unter **Administration → Einstellungen → Verbindungen → OpenAI-API** die
+   Adresse `http://<host>:8791/v1` und diesen Schlüssel eintragen.
+4. Damit OTA weiß, wer fragt, braucht der Container von Open WebUI die Umgebungsvariable
+   `ENABLE_FORWARD_USER_INFO_HEADERS=true`. Dafür wird er mit geänderter Konfiguration neu
+   erstellt; das macht ihr an Open WebUI, OTA fasst den Container nicht an. Ältere Versionen von
+   Open WebUI kennen die Variable nicht.
+
+**Wie es wirkt**
+
+- Am zweiten Eingang (Port 8791 im Namensraum der Firewall) gilt nur der Weg über den Namen und nur
+  mit gültigem Schlüssel. Sonst kommt 401. Die Arbeitsplätze selbst sperrt die Firewall dort aus;
+  sie haben ihren eigenen Eingang.
+- Wer fragt, steht in den Kopfzeilen `X-OpenWebUI-User-Email` und `X-OpenWebUI-User-Name`. Der
+  Durchgang glaubt ihnen nur bei gültigem Schlüssel. **Zum KI-Server gehen weder sie noch der
+  Schlüssel des Dienstes weiter**, nur der Schlüssel des Servers.
+- **Gruppen:** Ein weiterer Server mit Gruppen ist über den Dienst nur für deren Mitglieder (und
+  Administratoren) erreichbar. Zugeordnet wird über E-Mail oder Benutzernamen. Ohne Angabe, wer
+  fragt, gibt es nur die Server für alle. Die Liste der Berechtigten schickt die API mit jeder
+  Konfiguration und spätestens alle zehn Minuten.
+- **Statistik:** Die API ordnet die Anfrage über E-Mail, Benutzernamen oder einen eindeutigen
+  Anzeigenamen dem OTA-Konto zu. Der Dienst steht an der Stelle des Arbeitsplatzes (unter „Meine
+  KI-Nutzung“ also als eigene Zeile) und als Werkzeug „Externer Dienst (kürzel)“. Ist niemand
+  zuzuordnen, zählt die Anfrage als „nicht zuzuordnen“.
+- Open WebUI schickt auch eigene Anfragen, etwa für Chat-Titel, Schlagwörter oder Vorschläge.
+  Die zählen beim jeweiligen Menschen mit.
+- Anlegen und Entfernen stehen im Protokoll (`ki.extern_angelegt`, `ki.extern_geloescht`). Ein
+  entfernter Dienst ist sofort ausgesperrt.
+- Der mitgelieferte DSGVO-Text erwähnt angebundene Dienste. Passt ihn an, wenn ihr einen anbindet.
+
 ### Verschlüsselte Verbindungen
 
 Spricht der KI-Server HTTPS, ändert sich für Continue und opencode nichts: Sie sprechen den
@@ -344,6 +389,9 @@ Die Einstellungsseite zeigt, welche Fassungen in der Paketquelle liegen.
 | „Personenbezogene Zahlen nur mit einer Auskunft“ / „Die Auskunft ist abgelaufen“ | Die halbe Stunde ist um, oder die Seite wurde neu geladen: Begründung erneut eingeben |
 | Kein Ringdiagramm je Mensch, nur „Erst ab 3 Menschen …“ | Gewollt: Bei weniger als drei Menschen bzw. Arbeitsplätzen im Zeitraum wäre erkennbar, wer wer ist. Zeitraum vergrößern |
 | Kein Punkt „DSGVO“ / „Meine KI-Nutzung“ in der Seitenleiste | Beide erscheinen nur, solange die Nutzungsstatistik läuft. Die Verwaltung sieht „DSGVO“ immer. Die Seitenleiste fragt alle fünf Minuten nach, sonst Seite neu laden |
+| Open WebUI: „Unbekannter Schlüssel“ (401) | Schlüssel falsch übernommen oder Dienst entfernt. Dienst neu anlegen, Schlüssel neu eintragen |
+| Open WebUI erreicht `http://<host>:8791` nicht | `OTA_KI_EXTERN_PORT` in `deploy/.env` gesetzt und danach `make update`? `docker port ota-firewall` zeigt den Port. Eine Firewall am Host muss ihn für das Netz von Open WebUI durchlassen |
+| Anfragen über Open WebUI „nicht zuzuordnen“ | `ENABLE_FORWARD_USER_INFO_HEADERS=true` fehlt am Container, oder die E-Mail in Open WebUI passt zu keinem OTA-Konto |
 | In der KI-Nutzung keine Zahlen | Statistik an? Durchgang bereit (Einstellungen → IDE-AI)? Die API holt jede Minute ab: `docker logs ota-api 2>&1 \| grep KI-Nutzung` |
 
 Prüfreihe: `scripts/test-ide-ai.sh`. Sie startet jede Vorlage mit einem passenden Editor und fragt

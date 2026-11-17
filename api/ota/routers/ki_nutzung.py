@@ -39,7 +39,7 @@ from ..models import User
 router = APIRouter(prefix="/api/admin/ki-nutzung", tags=["ki-nutzung"])
 verwalten = require_permission("settings.manage")
 
-_angesehen: dict[tuple[str, str], float] = {}
+_angesehen: dict[tuple[str, str, str], float] = {}
 
 AUSKUNFT_DAUER = 30 * 60
 
@@ -163,7 +163,9 @@ def nutzer(user_id: str, request: Request, von: str | None = Query(None),
             uid = uuid.UUID(user_id)
         except ValueError as exc:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Unbekannt.") from exc
-    schl = (str(actor.id), user_id)
+    # Je Auskunft und Mensch einmal in zehn Minuten — eine neue Auskunft
+    # (neuer Grund) steht immer im Protokoll.
+    schl = (str(actor.id), user_id, vorgang)
     if time.monotonic() - _angesehen.get(schl, -1e9) > 600:
         _angesehen[schl] = time.monotonic()
         audit.record(db, "ki.nutzung_angesehen", actor=actor, request=request,

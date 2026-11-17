@@ -624,6 +624,7 @@ export function MeineKiNutzung({ onToast }: { onToast: (m: string, tone?: 'ok' |
 }
 
 function werkzeugName(w: string): string {
+  if (w.startsWith('x:')) return tr('Externer Dienst ({k})', { k: w.slice(2) })
   switch (w) {
     case 'opencode': return 'opencode'
     case 'continue': return tr('Continue (IDE-AI)')

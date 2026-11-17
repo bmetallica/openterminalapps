@@ -100,6 +100,9 @@ def regelwerk(zustand: dict) -> str:
         "  chain input {",
         "    type filter hook input priority filter; policy accept;",
         f"    tcp dport {ki_port} iifname != \"lo\" ip saddr != {pool} counter drop",
+        # Der Eingang für externe Dienste (Open WebUI): von aussen, mit
+        # Schlüssel. Die Arbeitsplätze haben ihren eigenen und nichts dort.
+        f"    tcp dport {ki_port + 1} ip saddr {pool} counter drop",
         "  }",
     ]
 

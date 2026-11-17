@@ -4,7 +4,7 @@ import {
   ApiError, api, type Group, type IdeAiModell, type IdeAiServerModell, type IdeAiStand,
   type IdeAiWeiterer, type KiStatus,
 } from '../lib/api'
-import { t as tr } from '../lib/i18n'
+import { getLang, t as tr } from '../lib/i18n'
 
 /**
  * Einstellungen → IDE-AI (Handbuch Kapitel 28).
@@ -17,14 +17,15 @@ import { t as tr } from '../lib/i18n'
 
 type WeitererEntwurf = Omit<IdeAiWeiterer, 'api_key_gesetzt'> & { _vorher: string }
 type Entwurf = Omit<IdeAiStand, 'api_key_gesetzt' | 'fassungen' | 'ki_url' | 'durchgang_aktiv' |
-  'modelle_alle' | 'weitere'> & { weitere: WeitererEntwurf[] }
+  'modelle_alle' | 'weitere' | 'extern' | 'extern_port'> & { weitere: WeitererEntwurf[] }
 
 const KONTEXT = 8192
 const ANTWORT = 2048
 
 function entwurfAus(s: IdeAiStand): Entwurf {
   const {
-    api_key_gesetzt: _a, fassungen: _f, ki_url: _k, durchgang_aktiv: _d, modelle_alle: _m, ...rest
+    api_key_gesetzt: _a, fassungen: _f, ki_url: _k, durchgang_aktiv: _d, modelle_alle: _m,
+    extern: _x, extern_port: _p, ...rest
   } = s
   return {
     ...rest, modelle: s.modelle.map((m) => ({ ...m })),
@@ -387,7 +388,95 @@ export function IdeAiEinstellungen({ onToast }: {
       <p className="field__hint" style={{ marginTop: 4 }}>
         {tr('Solange IDE-AI an ist, gibt die Firewall den KI-Server für alle Arbeitsplätze frei. Wer die erste Zeile seiner ~/.continue/config.yaml löscht, pflegt die Datei selbst — Handbuch Kapitel 28.')}
       </p>
+
+      <ExterneDienste stand={stand} busy={busy} tun={tun} onStand={setStand} />
     </div>
+  )
+}
+
+/**
+ * Externe Dienste (Open WebUI …) am zweiten Eingang des Durchgangs. Jeder
+ * bekommt einen eigenen Schlüssel; OTA zeigt ihn genau einmal und speichert
+ * nur seinen Hash. Wer fragt, sagt der Dienst in Kopfzeilen — die gelten nur
+ * mit gültigem Schlüssel und gehen nicht weiter zum KI-Server.
+ */
+function ExterneDienste({ stand, busy, tun, onStand }: {
+  stand: IdeAiStand; busy: string | null
+  tun: (was: string, fn: () => Promise<string | void>) => Promise<void>
+  onStand: (s: IdeAiStand) => void
+}) {
+  const [name, setName] = useState('Open WebUI')
+  const [neu, setNeu] = useState<{ kuerzel: string; schluessel: string } | null>(null)
+  const adresse = stand.extern_port ? `http://${window.location.hostname}:${stand.extern_port}/v1` : ''
+  return (
+    <>
+      <h3 className="ide-ai__abschnitt">{tr('Externe Dienste (z. B. Open WebUI)')}</h3>
+      <p className="field__hint" style={{ marginTop: 0 }}>
+        {tr('Ein Dienst außerhalb der Arbeitsplätze spricht die KI über den Durchgang an: dieselben Modelle, dieselbe Gruppenregel, dieselbe Statistik. Den Schlüssel des KI-Servers kennt er nicht.')}
+      </p>
+      {!stand.durchgang ? (
+        <p className="field__hint">{tr('Braucht den KI-Durchgang.')}</p>
+      ) : (
+        <>
+          {adresse ? (
+            <p className="field__hint">{tr('Adresse für den Dienst')}: <code>{adresse}</code></p>
+          ) : (
+            <p className="note-warn">
+              {tr('Der Eingang ist am Host noch nicht veröffentlicht. In deploy/.env OTA_KI_EXTERN_PORT=8791 setzen und make update ausführen — das startet den Router neu, die Arbeitsplätze sind kurz ohne Netz.')}
+            </p>
+          )}
+          {stand.extern.length > 0 && (
+            <table className="tbl ide-ai__modelle" style={{ marginBottom: 10 }}>
+              <thead><tr><th>{tr('Name')}</th><th>{tr('Kürzel')}</th><th>{tr('Wer fragt')}</th><th>{tr('Angelegt')}</th><th /></tr></thead>
+              <tbody>
+                {stand.extern.map((d) => (
+                  <tr key={d.kuerzel} style={{ cursor: 'default' }}>
+                    <td>{d.name}</td>
+                    <td className="data">{d.kuerzel}</td>
+                    <td className="sub">{d.kopf ? tr('aus den Kopfzeilen') : tr('nicht zugeordnet')}</td>
+                    <td className="sub">{new Date(d.am).toLocaleDateString(getLang() === 'en' ? 'en-GB' : 'de-DE')}</td>
+                    <td style={{ textAlign: 'right' }}>
+                      <button className="btn btn--sm btn--ghost" disabled={busy !== null}
+                        onClick={() => {
+                          if (!confirm(tr('„{n}“ entfernen? Sein Schlüssel gilt dann sofort nicht mehr.', { n: d.name }))) return
+                          void tun('extern', async () => {
+                            onStand(await api.ideAiExternLoeschen(d.kuerzel))
+                            if (neu?.kuerzel === d.kuerzel) setNeu(null)
+                            return tr('Entfernt.')
+                          })
+                        }}>{tr('Entfernen')}</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          {neu && (
+            <div className="note-info">
+              <b>{tr('Der Schlüssel — jetzt kopieren, er wird nicht noch einmal angezeigt:')}</b>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '8px 0' }}>
+                <code style={{ wordBreak: 'break-all' }}>{neu.schluessel}</code>
+                <button className="btn btn--sm" onClick={() => {
+                  void navigator.clipboard?.writeText(neu.schluessel)
+                }}>{tr('Kopieren')}</button>
+              </div>
+              <div style={{ fontSize: 13 }}>
+                {tr('In Open WebUI: Administration → Einstellungen → Verbindungen → OpenAI-API, Adresse {a} und diesen Schlüssel. Damit OTA weiß, wer fragt, braucht der Container von Open WebUI die Umgebungsvariable ENABLE_FORWARD_USER_INFO_HEADERS=true.', { a: adresse || 'http://<host>:<port>/v1' })}
+              </div>
+            </div>
+          )}
+          <div className="row-item" style={{ gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
+            <input className="input" style={{ maxWidth: 260 }} value={name} maxLength={60}
+              aria-label={tr('Name des Dienstes')} onChange={(ev) => setName(ev.target.value)} />
+            <button className="btn" disabled={busy !== null || !name.trim()}
+              onClick={() => void tun('extern', async () => {
+                const r = await api.ideAiExternAnlegen(name.trim(), true)
+                setNeu({ kuerzel: r.kuerzel, schluessel: r.schluessel }); onStand(r.stand)
+              })}>{tr('+ Dienst anlegen')}</button>
+          </div>
+        </>
+      )}
+    </>
   )
 }
 

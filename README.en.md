@@ -345,6 +345,9 @@ that did not exist before is simply there.
     **reason** that is logged with the name, for 30 minutes. Everyone sees their own figures under
     **My AI usage**, and a **GDPR** item in the sidebar informs everyone (text adaptable by
     administrators). Never contents; retention adjustable.
+  - **External services such as Open WebUI** can also talk to the AI through the gateway: with
+    their own key, the same group rule and the same statistics, assigned per person via Open
+    WebUI's headers.
   - If a Marketplace update or an own configuration has displaced Continue, **⋯ → Set up AI tools
     again** on the workspace's tile restores OTA's version. Root workspaces have **Rebuild** in the
     same menu.

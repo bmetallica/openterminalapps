@@ -198,6 +198,8 @@ services:
       agent:
         condition: service_healthy
     environment:
+      # Nur zur Anzeige der Adresse unter IDE-AI → Externe Dienste.
+      OTA_KI_EXTERN_PORT: "${OTA_KI_EXTERN_PORT:-}"
       # Firmenproxy. Leer heisst: kein Proxy — die Vorgabe.
       #
       # `NO_PROXY` ist hier nicht Beiwerk: Ohne die Namen der eigenen Dienste

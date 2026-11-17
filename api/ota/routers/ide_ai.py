@@ -73,3 +73,35 @@ async def testen(body: dict, db: DbSession = Depends(get_db)) -> dict:
                                        str(body.get("kuerzel") or ""))
     except ide_ai.IdeAiFehler as exc:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+
+
+# ------------------------------------------------------ Externe Dienste
+
+@router.post("/extern", dependencies=[Depends(verwalten)])
+def extern_anlegen(body: dict, request: Request, actor: User = Depends(current_user),
+                   db: DbSession = Depends(get_db)) -> dict:
+    """Einen externen Dienst eintragen (Open WebUI …). Der Schlüssel steht nur
+    in dieser Antwort — danach kennt OTA nur seinen Hash."""
+    try:
+        eintrag, schluessel = ide_ai.extern_anlegen(db, str(body.get("name") or ""),
+                                                    bool(body.get("kopf", True)))
+    except ide_ai.IdeAiFehler as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    audit.record(db, "ki.extern_angelegt", actor=actor, request=request,
+                 object_type="ki_extern", object_id=eintrag["kuerzel"], name=eintrag["name"],
+                 kopf=eintrag["kopf"])
+    db.commit()
+    ide_ai.durchgang_schieben(db)
+    return {"kuerzel": eintrag["kuerzel"], "schluessel": schluessel, "stand": ide_ai.stand(db)}
+
+
+@router.delete("/extern/{kuerzel}", dependencies=[Depends(verwalten)])
+def extern_loeschen(kuerzel: str, request: Request, actor: User = Depends(current_user),
+                    db: DbSession = Depends(get_db)) -> dict:
+    if not ide_ai.extern_loeschen(db, kuerzel):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Diesen externen Dienst gibt es nicht.")
+    audit.record(db, "ki.extern_geloescht", actor=actor, request=request,
+                 object_type="ki_extern", object_id=kuerzel)
+    db.commit()
+    ide_ai.durchgang_schieben(db)
+    return ide_ai.stand(db)

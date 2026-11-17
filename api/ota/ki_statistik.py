@@ -29,6 +29,37 @@ from .models import KiAnfrage, KiStunde, Session as SessionModel, Template, User
 log = logging.getLogger("ota.ki")
 
 NULL = uuid.UUID(int=0)
+# Ein externer Dienst steht in der Statistik wie ein Arbeitsplatz: mit einer
+# festen Kennung aus seinem Kürzel, damit seine Stundensummen beisammen bleiben.
+EXTERN_NS = uuid.UUID("6f0b3c5e-2d7a-4e7b-9a51-0c1d2e3f4a5b")
+
+
+def extern_kennung(kuerzel: str) -> uuid.UUID:
+    return uuid.uuid5(EXTERN_NS, "ki-extern:" + kuerzel)
+
+
+def _personen(db: DbSession, zeilen: list[dict[str, Any]]) -> dict[str, tuple[uuid.UUID, str]]:
+    """E-Mail, Benutzername oder (eindeutiger) Anzeigename → Mensch, für
+    Anfragen externer Dienste. Alles klein."""
+    gesucht = {str(z.get(k) or "").strip().lower() for z in zeilen
+               for k in ("person_email", "person_name")} - {""}
+    if not gesucht:
+        return {}
+    raus: dict[str, tuple[uuid.UUID, str]] = {}
+    anzeige: dict[str, list[tuple[uuid.UUID, str]]] = {}
+    for u in db.scalars(select(User).where(
+            func.lower(User.email).in_(gesucht) | func.lower(User.username).in_(gesucht)
+            | func.lower(User.display_name).in_(gesucht))).all():
+        if u.email and u.email.lower() in gesucht:
+            raus[u.email.lower()] = (u.id, u.username)
+        if u.username.lower() in gesucht:
+            raus.setdefault(u.username.lower(), (u.id, u.username))
+        if u.display_name and u.display_name.lower() in gesucht:
+            anzeige.setdefault(u.display_name.lower(), []).append((u.id, u.username))
+    for name, treffer in anzeige.items():
+        if len(treffer) == 1:
+            raus.setdefault(name, treffer[0])
+    return raus
 
 
 def _uuid(roh: Any) -> uuid.UUID | None:
@@ -73,6 +104,7 @@ def _datei_uebernehmen(db: DbSession, name: str, zeilen: list[dict[str, Any]]) -
                 .join(Template, Template.id == SessionModel.template_id)
                 .where(SessionModel.id.in_(sitzungen))).all():
             wer[s] = (u.id, u.username, t.id, t.friendly_name)
+    personen = _personen(db, [z for z in zeilen if z.get("extern")])
 
     werte = []
     for i, z in enumerate(zeilen):
@@ -81,10 +113,19 @@ def _datei_uebernehmen(db: DbSession, name: str, zeilen: list[dict[str, Any]]) -
             continue
         sid = _uuid(z.get("session_id"))
         uid, uname, tid, tname = wer.get(sid, (None, "", None, "")) if sid else (None, "", None, "")
+        if z.get("extern"):
+            # Ein externer Dienst: der Mensch aus seinen Kopfzeilen, der
+            # Dienst an der Stelle des Arbeitsplatzes.
+            sid = None
+            mensch = (personen.get(str(z.get("person_email") or "").strip().lower())
+                      or personen.get(str(z.get("person_name") or "").strip().lower()))
+            uid, uname = mensch if mensch else (None, "")
+            tid = extern_kennung(str(z["extern"]))
+            tname = str(z.get("extern_name") or z["extern"])[:200]
         werte.append({
             "herkunft": f"{name}:{i}"[:120], "ts": ts, "user_id": uid, "user_name": uname,
             "session_id": sid, "template_id": tid, "arbeitsplatz": tname,
-            "quelle": str(z.get("quelle") or "")[:64], "server": str(z.get("server") or "")[:32],
+            "quelle": (f"extern:{z['extern']}" if z.get("extern") else str(z.get("quelle") or ""))[:64], "server": str(z.get("server") or "")[:32],
             "modell": str(z.get("modell") or (z.get("sni") or ""))[:200],
             "werkzeug": str(z.get("werkzeug") or ("tls" if z.get("weg") == "tls" else ""))[:16],
             "weg": str(z.get("weg") or "")[:12], "pfad": str(z.get("pfad") or "")[:120],

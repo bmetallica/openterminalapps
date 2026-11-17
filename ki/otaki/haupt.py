@@ -23,6 +23,13 @@ durchgereicht und nur als Verbindung gezählt (mit dem Namen aus dem
 Client-Hello). Wer volle Zahlen will, nimmt den Weg über `ki.ota` — von dort
 spricht der Durchgang selbst HTTPS zum Server.
 
+**Externe Dienste** wie Open WebUI kommen über einen zweiten Eingang
+(:8791, am Host veröffentlicht nur mit `OTA_KI_EXTERN_PORT`). Dort gilt nur
+der Weg über den Namen, und nur mit einem Schlüssel, den OTA vergeben hat
+(hier liegt nur sein SHA-256). Wer fragt, sagt der Dienst in Kopfzeilen
+(`X-OpenWebUI-User-Email`, `-Name`, …) — geglaubt wird das nur mit gültigem
+Schlüssel, und zum KI-Server gehen diese Kopfzeilen nicht weiter.
+
 **Kein Eingriff, wo er nicht hingehört:** Eine Verbindung an eine Adresse und
 einen Port, die kein eingetragener Server sind (zwei Server auf einer
 Adresse, die Firewall fängt je Port ab), geht Byte für Byte unverändert weiter.
@@ -31,6 +38,8 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hashlib
+import hmac
 import ipaddress
 import json
 import logging
@@ -51,6 +60,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 log = logging.getLogger("otaki")
 
 PORT = int(os.environ.get("OTA_KI_PORT", "8790"))
+EXTERN_PORT = int(os.environ.get("OTA_KI_EXTERN_PORT_INNEN", "8791"))
 KI_DIR = Path(os.environ.get("OTA_KI_DIR", "/srv/ota/runtime/ki"))
 KONFIG = KI_DIR / "konfig.json"
 SPOOL = KI_DIR / "spool"
@@ -69,6 +79,16 @@ TEILSTRECKE = {b"connection", b"keep-alive", b"proxy-connection", b"proxy-author
                b"proxy-authenticate", b"te", b"trailer", b"transfer-encoding", b"upgrade",
                b"host", b"content-length", b"accept-encoding", b"expect"}
 PLATZHALTER = {"", "ota"}
+# Wer fragt, sagt ein externer Dienst hier. Open WebUI mit
+# ENABLE_FORWARD_USER_INFO_HEADERS=true; die Kopfzeilen gehen nie weiter.
+PERSON_KOPF = (b"x-openwebui-user-email", b"x-openwebui-user-name", b"x-openwebui-user-id")
+
+
+def _person(kopf: dict[bytes, bytes]) -> tuple[str, str]:
+    """(E-Mail, Name) aus den Kopfzeilen eines externen Dienstes, klein."""
+    def lesen(k: bytes) -> str:
+        return kopf.get(k, b"").decode("utf-8", "replace").strip().lower()[:200]
+    return lesen(b"x-openwebui-user-email"), lesen(b"x-openwebui-user-name")
 
 
 # --------------------------------------------------------------------- Zustand
@@ -155,12 +175,29 @@ class Lage:
             asyncio.get_running_loop().call_later(
                 zeit + 60, lambda: asyncio.ensure_future(alt.aclose()))
 
-    def erlaubt(self, server: dict[str, Any], sitzung: str) -> bool:
-        """Darf diese Sitzung an diesen Server? Ein Server mit Gruppen nennt
-        die Sitzungen, deren Mensch ihn bekommt (die API rechnet das aus)."""
+    def erlaubt(self, server: dict[str, Any], sitzung: str,
+                person: tuple[str, str] | None = None) -> bool:
+        """Darf diese Sitzung (oder diese Person eines externen Dienstes) an
+        diesen Server? Ein Server mit Gruppen nennt die Sitzungen und die
+        Personen (E-Mail, Name), die ihn bekommen — die API rechnet das aus."""
         if server.get("alle", True):
             return True
+        if person is not None:
+            erlaubt = set(server.get("personen") or [])
+            return any(p and p in erlaubt for p in person)
         return bool(sitzung) and sitzung in set(server.get("sitzungen") or [])
+
+    def extern(self, auth: bytes) -> dict[str, Any] | None:
+        """Der externe Dienst zu diesem Schlüssel, oder None."""
+        roh = auth.decode("latin-1").strip()
+        traeger = roh[7:].strip() if roh.lower().startswith("bearer ") else roh
+        if not traeger:
+            return None
+        h = hashlib.sha256(traeger.encode()).hexdigest()
+        for d in self.konfig.get("extern") or []:
+            if hmac.compare_digest(h, str(d.get("hash") or "")):
+                return d
+        return None
 
     def sitzung(self, ip: str) -> str:
         try:
@@ -351,8 +388,28 @@ async def verbindung(reader: asyncio.StreamReader, writer: asyncio.StreamWriter)
             writer.close()
 
 
+async def verbindung_extern(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+    """Der Eingang für externe Dienste: nur HTTP, nur über den Namen."""
+    LAGE.zaehler["verbindungen"] += 1
+    quelle = (writer.get_extra_info("peername") or ("", 0))[0]
+    try:
+        await LAGE.neu_laden()
+        anfang = await asyncio.wait_for(reader.read(65536), 30)
+        if not anfang or anfang[0] == 0x16:
+            return
+        await _http(anfang, reader, writer, quelle, None, extern=True)
+    except (asyncio.TimeoutError, ConnectionError, OSError):
+        pass
+    except Exception as exc:  # noqa: BLE001
+        LAGE.zaehler["fehler"] += 1
+        log.exception("Externe Verbindung von %s: %s", quelle, exc)
+    finally:
+        with contextlib.suppress(OSError, RuntimeError):
+            writer.close()
+
+
 async def _http(anfang: bytes, reader: asyncio.StreamReader, writer: asyncio.StreamWriter,
-                quelle: str, server: dict[str, Any] | None) -> None:
+                quelle: str, server: dict[str, Any] | None, extern: bool = False) -> None:
     conn = h11.Connection(h11.SERVER)
     conn.receive_data(anfang)
     while True:
@@ -380,7 +437,7 @@ async def _http(anfang: bytes, reader: asyncio.StreamReader, writer: asyncio.Str
                 return
         if anfrage is None:
             return
-        await _beantworten(conn, writer, anfrage, bytes(koerper), quelle, server)
+        await _beantworten(conn, writer, anfrage, bytes(koerper), quelle, server, extern)
         if conn.our_state is h11.MUST_CLOSE or conn.their_state is h11.MUST_CLOSE:
             return
         try:
@@ -398,14 +455,15 @@ async def _senden(conn: h11.Connection, writer: asyncio.StreamWriter, code: int,
     await writer.drain()
 
 
-def _modellliste(sitzung: str) -> bytes:
+def _modellliste(sitzung: str, person: tuple[str, str] | None = None) -> bytes:
     daten = [{"id": aussen, "object": "model", "owned_by": s.get("name") or s.get("kuerzel", "")}
-             for aussen, (s, _echt) in LAGE.modelle.items() if LAGE.erlaubt(s, sitzung)]
+             for aussen, (s, _echt) in LAGE.modelle.items() if LAGE.erlaubt(s, sitzung, person)]
     return json.dumps({"object": "list", "data": daten}, ensure_ascii=False).encode()
 
 
 async def _beantworten(conn: h11.Connection, writer: asyncio.StreamWriter, anfrage: h11.Request,
-                       koerper: bytes, quelle: str, server: dict[str, Any] | None) -> None:
+                       koerper: bytes, quelle: str, server: dict[str, Any] | None,
+                       extern: bool = False) -> None:
     LAGE.zaehler["anfragen"] += 1
     beginn = time.monotonic()
     zeit = _jetzt()
@@ -414,7 +472,18 @@ async def _beantworten(conn: h11.Connection, writer: asyncio.StreamWriter, anfra
     kopf = {k.lower(): v for k, v in anfrage.headers}
     ua = kopf.get(b"user-agent", b"").decode("latin-1")
     ueber_name = server is None
-    sitzung = LAGE.sitzung(quelle)
+    sitzung = LAGE.sitzung(quelle) if not extern else ""
+    # Externer Dienst: Schlüssel prüfen, dann erst der Person glauben.
+    dienst: dict[str, Any] | None = None
+    person: tuple[str, str] | None = None
+    if extern:
+        dienst = LAGE.extern(kopf.get(b"authorization", b""))
+        if dienst is None:
+            await _senden(conn, writer, *_fehler(
+                401, "Unbekannter Schlüssel. Einen Schlüssel für externe Dienste vergibt OTA unter "
+                     "Einstellungen → IDE-AI → Externe Dienste."))
+            return
+        person = _person(kopf) if dienst.get("kopf", True) else ("", "")
 
     # --- Körper lesen: Modell, Strom
     daten: dict[str, Any] | None = None
@@ -428,7 +497,8 @@ async def _beantworten(conn: h11.Connection, writer: asyncio.StreamWriter, anfra
     # --- Ziel bestimmen
     if ueber_name:
         if methode == "GET" and pfad.split("?")[0].rstrip("/") in ("/v1/models", "/models"):
-            await _senden(conn, writer, 200, [(b"content-type", b"application/json")], _modellliste(sitzung))
+            await _senden(conn, writer, 200, [(b"content-type", b"application/json")],
+                          _modellliste(sitzung, person))
             return
         if modell:
             treffer = LAGE.modelle.get(modell)
@@ -449,11 +519,18 @@ async def _beantworten(conn: h11.Connection, writer: asyncio.StreamWriter, anfra
         url = server["basis"] + rest
     else:
         url = server["ursprung"] + pfad
-    if not LAGE.erlaubt(server, sitzung):
+    werkzeug = _werkzeug(ua)
+    herkunft: dict[str, Any] = {}
+    if dienst is not None:
+        werkzeug = "x:" + str(dienst.get("kuerzel") or "")[:14]
+        herkunft = {"extern": dienst.get("kuerzel", ""), "extern_name": dienst.get("name", ""),
+                    "person_email": (person or ("", ""))[0], "person_name": (person or ("", ""))[1]}
+    if not LAGE.erlaubt(server, sitzung, person):
         SPOOL_.schreiben({"zeit": zeit, "quelle": quelle, "session_id": sitzung,
                           "weg": "name" if ueber_name else "abgefangen", "server": server.get("kuerzel", ""),
-                          "modell": modell, "pfad": pfad.split("?")[0][:120], "werkzeug": _werkzeug(ua),
-                          "status": 403, "dauer_ms": 0, "erstes_ms": None, "ein": None, "aus": None})
+                          "modell": modell, "pfad": pfad.split("?")[0][:120], "werkzeug": werkzeug,
+                          "status": 403, "dauer_ms": 0, "erstes_ms": None, "ein": None, "aus": None,
+                          **herkunft})
         await _senden(conn, writer, *_fehler(
             403, f"Der KI-Server {server.get('name') or server.get('kuerzel')} ist für dich nicht "
                  "freigegeben. Freigeben kann ihn die Verwaltung (Einstellungen → IDE-AI)."))
@@ -482,7 +559,14 @@ async def _beantworten(conn: h11.Connection, writer: asyncio.StreamWriter, anfra
     auth = kopf.get(b"authorization", b"").decode("latin-1")
     traeger = auth[7:].strip() if auth.lower().startswith("bearer ") else auth.strip()
     schluessel = server.get("api_key") or ""
-    if schluessel and (ueber_name or traeger in PLATZHALTER):
+    if extern:
+        # Weder der OTA-Schlüssel des Dienstes noch, wer fragt, gehen zum
+        # KI-Server — nur sein eigener Schlüssel, wenn er einen hat.
+        weiter = [(k, v) for k, v in weiter
+                  if k.lower() != b"authorization" and not k.lower().startswith(b"x-openwebui-")]
+        if schluessel:
+            weiter.append((b"authorization", f"Bearer {schluessel}".encode()))
+    elif schluessel and (ueber_name or traeger in PLATZHALTER):
         weiter = [(k, v) for k, v in weiter if k.lower() != b"authorization"]
         weiter.append((b"authorization", f"Bearer {schluessel}".encode()))
     weiter.append((b"accept-encoding", b"identity"))
@@ -490,8 +574,8 @@ async def _beantworten(conn: h11.Connection, writer: asyncio.StreamWriter, anfra
     zeile: dict[str, Any] = {
         "zeit": zeit, "quelle": quelle, "session_id": sitzung,
         "weg": "name" if ueber_name else "abgefangen", "server": server.get("kuerzel", ""),
-        "modell": modell, "pfad": pfad.split("?")[0][:120], "werkzeug": _werkzeug(ua),
-        "status": 0, "dauer_ms": 0, "erstes_ms": None, "ein": None, "aus": None,
+        "modell": modell, "pfad": pfad.split("?")[0][:120], "werkzeug": werkzeug,
+        "status": 0, "dauer_ms": 0, "erstes_ms": None, "ein": None, "aus": None, **herkunft,
     }
     try:
         assert LAGE.client is not None
@@ -581,6 +665,7 @@ async def _haushalt() -> None:
             SPOOL_.abschliessen()
             status = {"zeit": _jetzt(), "fassung": FASSUNG, "statistik": LAGE.statistik,
                       "server": [s.get("kuerzel") for s in LAGE.server],
+                      "extern": [d.get("kuerzel") for d in LAGE.konfig.get("extern") or []],
                       "modelle": len(LAGE.modelle), **LAGE.zaehler}
             tmp = KI_DIR / "status.tmp"
             tmp.write_text(json.dumps(status), encoding="utf-8")
@@ -594,10 +679,11 @@ async def _haupt() -> None:
         LAGE.client = httpx.AsyncClient(timeout=httpx.Timeout(connect=10.0, read=600.0, write=60.0,
                                                               pool=30.0), trust_env=False)
     dienst = await asyncio.start_server(verbindung, host="0.0.0.0", port=PORT, backlog=512)
-    log.info("KI-Durchgang lauscht auf :%d", PORT)
+    extern = await asyncio.start_server(verbindung_extern, host="0.0.0.0", port=EXTERN_PORT, backlog=256)
+    log.info("KI-Durchgang lauscht auf :%d, externe Dienste auf :%d", PORT, EXTERN_PORT)
     asyncio.ensure_future(_haushalt())
-    async with dienst:
-        await dienst.serve_forever()
+    async with dienst, extern:
+        await asyncio.gather(dienst.serve_forever(), extern.serve_forever())
 
 
 def main() -> None:

@@ -351,6 +351,9 @@ dabei **nicht** zurückwandert, ist die Datenbank: Neue Spalten bleiben stehen. 
     sieht unter **Meine KI-Nutzung** seine eigenen Zahlen, und ein Punkt **DSGVO** in der
     Seitenleiste informiert alle (Text durch die Verwaltung anpassbar). Nie Inhalte, Aufbewahrung
     einstellbar.
+  - **Externe Dienste wie Open WebUI** sprechen die KI auf Wunsch ebenfalls über den Durchgang an:
+    mit eigenem Schlüssel, derselben Gruppenregel und derselben Statistik, je Mensch zugeordnet
+    über die Kopfzeilen von Open WebUI.
   - Hat ein Marketplace-Update oder eine eigene Konfiguration Continue verdrängt, stellt
     **⋯ → KI-Werkzeuge neu einrichten** auf der Kachel des Arbeitsplatzes OTAs Fassung wieder her.
     Im selben Menü steht bei Root-Arbeitsplätzen **Neu aufsetzen**.

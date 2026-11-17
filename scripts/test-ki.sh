@@ -56,13 +56,21 @@ starten() {
   done
   echo "$sid"
 }
+netz_bereit() {  # netz_bereit <container>: bis ki.ota antwortet, höchstens 60 s
+  for _ in $(seq 1 30); do
+    [ "$(docker exec -u 1000 "$1" curl -s -m 3 -o /dev/null -w '%{http_code}' http://ki.ota:8790/v1/models 2>/dev/null)" = "200" ] && return 0
+    sleep 2
+  done
+  echo "  (Netz von $1 nach 60 s nicht bereit: $(docker exec "$1" sh -c 'ip route | head -1; getent hosts ki.ota' 2>&1 | tr '\n' ' '))"
+  return 1
+}
 frage() {  # frage <container> <url> <stream:true|false>
   docker exec -u 1000 "$1" curl -s -m 180 "$2/chat/completions" -H 'Content-Type: application/json' \
     -H 'Authorization: Bearer ota' \
     -d "{\"model\":\"$MODELL\",\"stream\":$3,\"max_tokens\":512,\"messages\":[{\"role\":\"user\",\"content\":\"Antworte nur mit: OK\"}]}"
 }
 
-VORHER=""; SID=""; USID=""
+VORHER=""; SID=""; USID=""; EXT_K=""; EXT_S=""; EXT_PORT=""
 BEGINN=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 aufraeumen() {
   echo
@@ -70,8 +78,14 @@ aufraeumen() {
   [ -n "$SID" ] && api -X DELETE "$B/api/sessions/$SID" >/dev/null
   [ -n "$USID" ] && curl -sk -b "$TMP/u.jar" -X DELETE "$B/api/sessions/$USID" >/dev/null
   docker start ota-ki >/dev/null 2>&1
+  if [ -n "${EXT_K:-}" ]; then
+    expect "200" "$(code -X DELETE "$B/api/admin/ide-ai/extern/$EXT_K")" "Externer Dienst entfernt"
+    sleep 3
+    expect "401" "$(curl -s -m 15 -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $EXT_S" "http://127.0.0.1:$EXT_PORT/v1/models")" \
+      "… sein Schlüssel gilt nicht mehr"
+  fi
   if [ -n "$VORHER" ]; then
-    jqp "json.dumps({k: v for k, v in d.items() if k not in ('api_key_gesetzt', 'fassungen', 'ki_url', 'durchgang_aktiv', 'modelle_alle')})" \
+    jqp "json.dumps({k: v for k, v in d.items() if k not in ('api_key_gesetzt', 'fassungen', 'ki_url', 'durchgang_aktiv', 'modelle_alle', 'extern', 'extern_port')})" \
       <<<"$VORHER" > "$TMP/vorher.json"
     expect "200" "$(code -X PUT "$B/api/admin/ide-ai" -d @"$TMP/vorher.json")" "Einstellungen von IDE-AI wie vorher"
   fi
@@ -83,6 +97,11 @@ aufraeumen() {
 trap aufraeumen EXIT
 
 echo "KI-Durchgang gegen $B, KI-Server $KI ($MODELL)"
+# Ein abgebrochener Lauf kann ota-ki gestoppt hinterlassen (Abschnitt
+# „Ausfall"); dann scheiterte hier alles aus dem falschen Grund.
+if [ "$(docker inspect -f '{{.State.Running}}' ota-ki 2>/dev/null)" != "true" ]; then
+  docker start ota-ki >/dev/null && sleep 15
+fi
 curl -sk -c "$TMP/a.jar" -o /dev/null -X POST "$B/api/auth/login" -H 'Content-Type: application/json' \
   -d "{\"username\":\"$ADMIN\",\"password\":\"$ADMIN_PW\"}"
 VORHER=$(api "$B/api/admin/ide-ai")
@@ -119,7 +138,7 @@ T=$(docker exec ota-db psql -U ota -d ota -At -c "select id from templates where
 SID=$(starten "$T"); C=$(container_von "$SID")
 [ -n "$C" ] || { bad "Arbeitsplatz $VORLAGE startet nicht"; exit 1; }
 ok "Arbeitsplatz läuft ($C)"
-sleep 5
+netz_bereit "$C"
 GW=$(docker exec "$C" sh -c "ip route | awk '/default/ {print \$3}'")
 expect "$GW" "$(docker exec "$C" getent hosts ki.ota | awk '{print $1}')" "ki.ota ist der Router dieses Netzes"
 M=$(docker exec -u 1000 "$C" curl -s -m 15 "http://ki.ota:8790/v1/models")
@@ -188,7 +207,7 @@ CU=$(container_von "$USID")
 if [ -z "$CU" ]; then
   bad "Arbeitsplatz für $TEST_USER startet nicht"
 else
-  sleep 5
+  netz_bereit "$CU"
   M=$(docker exec -u 1000 "$CU" curl -s -m 15 "http://ki.ota:8790/v1/models")
   expect "False" "$(jqp "str('zwei/$MODELL' in [m['id'] for m in d['data']])" <<<"$M")" \
     "$TEST_USER sieht den Server der Gruppe admins nicht"
@@ -215,6 +234,45 @@ else
   [ -n "$A" ] && ok "… und bekommt Antwort ($A)" || bad "Keine Antwort für $TEST_USER von zwei/$MODELL"
 fi
 
+# ------------------------------------------------------------------ Externe Dienste
+echo
+echo "Externe Dienste (Open WebUI)"
+EXT_PORT=$(grep -sE '^OTA_KI_EXTERN_PORT=[0-9]+' "$ROOT/deploy/.env" | cut -d= -f2)
+if [ -z "$EXT_PORT" ]; then
+  echo "  (übersprungen: OTA_KI_EXTERN_PORT in deploy/.env nicht gesetzt)"
+else
+  weiter "$ADMINS"   # der zweite Server wieder nur für admins
+  EXT=$(api -X POST "$B/api/admin/ide-ai/extern" -d '{"name":"Test OWUI"}')
+  EXT_K=$(jqp "d['kuerzel']" <<<"$EXT"); EXT_S=$(jqp "d['schluessel']" <<<"$EXT")
+  [ -n "$EXT_S" ] && ok "Dienst angelegt, Schlüssel einmal ausgegeben ($EXT_K)" || bad "Kein Dienst: $EXT"
+  expect "False" "$(api "$B/api/admin/ide-ai" | jqp "str('$EXT_S' in json.dumps(d) or 'hash' in json.dumps(d['extern']))")" \
+    "Der Schlüssel steht danach nirgends in den Einstellungen"
+  sleep 3
+  EU="http://127.0.0.1:$EXT_PORT/v1"
+  ext() { curl -s -m 180 -H "Authorization: Bearer $EXT_S" -H 'Content-Type: application/json' "$@"; }
+  expect "401" "$(curl -s -m 15 -o /dev/null -w '%{http_code}' "$EU/models")" "Ohne Schlüssel: 401"
+  expect "401" "$(curl -s -m 15 -o /dev/null -w '%{http_code}' -H 'Authorization: Bearer otaki_falsch' "$EU/models")" "Falscher Schlüssel: 401"
+  M=$(ext -H "X-OpenWebUI-User-Email: $TEST_USER@ota.invalid" "$EU/models")
+  expect "True" "$(jqp "str('$MODELL' in [m['id'] for m in d['data']] and 'zwei/$MODELL' not in [m['id'] for m in d['data']])" <<<"$M")" \
+    "$TEST_USER über den Dienst: erster Server ja, der Server der Gruppe admins nicht"
+  M=$(ext -H "X-OpenWebUI-User-Name: $ADMIN" "$EU/models")
+  expect "True" "$(jqp "str('zwei/$MODELL' in [m['id'] for m in d['data']])" <<<"$M")" "Administrator über den Dienst: beide"
+  M=$(ext "$EU/models")
+  expect "False" "$(jqp "str('zwei/$MODELL' in [m['id'] for m in d['data']])" <<<"$M")" "Ohne Angabe, wer fragt: nur Server für alle"
+  A=$(ext -H "X-OpenWebUI-User-Email: $TEST_USER@ota.invalid" "$EU/chat/completions" \
+    -d "{\"model\":\"$MODELL\",\"max_tokens\":512,\"messages\":[{\"role\":\"user\",\"content\":\"Antworte nur mit: OK\"}]}" \
+    | jqp "d['choices'][0]['message']['content'].strip()")
+  [ -n "$A" ] && ok "Frage über den Dienst bekommt Antwort ($A)" || bad "Keine Antwort über den Dienst"
+  S=$(ext -H "X-OpenWebUI-User-Email: $TEST_USER@ota.invalid" "$EU/chat/completions" \
+    -d "{\"model\":\"$MODELL\",\"stream\":true,\"max_tokens\":64,\"messages\":[{\"role\":\"user\",\"content\":\"Sag Hallo\"}]}")
+  grep -q '^data: \[DONE\]' <<<"$S" && ok "Strom über den Dienst kommt an" || bad "Strom über den Dienst fehlt"
+  expect "403" "$(ext -o /dev/null -w '%{http_code}' -H "X-OpenWebUI-User-Email: $TEST_USER@ota.invalid" "$EU/chat/completions" \
+    -d "{\"model\":\"zwei/$MODELL\",\"max_tokens\":16,\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}")" \
+    "$TEST_USER über den Dienst an den Server der Gruppe admins: 403"
+  expect "000" "$(docker exec -u 1000 "$C" curl -s -m 5 -o /dev/null -w '%{http_code}' "http://ki.ota:8791/v1/models")" \
+    "Aus dem Arbeitsplatz ist der Eingang für Dienste gesperrt"
+fi
+
 # ------------------------------------------------------------------ Statistik
 echo
 echo "Statistik (bis zu drei Minuten)"
@@ -238,6 +296,16 @@ expect "True" "$Z" "Der zweite Server steht in der Statistik"
 if [ -n "${USID:-}" ]; then
   UM=$(curl -sk -b "$TMP/u.jar" "$B/api/ki-nutzung/meine?von=$VON")
   expect "True" "$(jqp "str(d['nutzer']['name'] == '$TEST_USER')" <<<"$UM")" "$TEST_USER sieht nur sich selbst"
+  if [ -n "${EXT_K:-}" ]; then
+    for _ in $(seq 1 18); do
+      UM=$(curl -sk -b "$TMP/u.jar" "$B/api/ki-nutzung/meine?von=$VON")
+      [ "$(jqp "str(any(p['name'] == 'Test OWUI' for p in d['arbeitsplaetze']))" <<<"$UM")" = "True" ] && break
+      sleep 5
+    done
+    expect "True" "$(jqp "str(any(p['name'] == 'Test OWUI' and p['anfragen'] >= 2 for p in d['arbeitsplaetze']))" <<<"$UM")" \
+      "Anfragen über den Dienst stehen bei $TEST_USER, mit dem Dienst als Arbeitsplatz"
+    expect "True" "$(jqp "str(any(w['werkzeug'] == 'x:$EXT_K' for w in d['werkzeuge']))" <<<"$UM")" "… und als Werkzeug"
+  fi
   expect "403" "$(curl -sk -o /dev/null -w '%{http_code}' -b "$TMP/u.jar" "$B/api/admin/ki-nutzung")" \
     "… aber nicht die Übersicht der Verwaltung"
 fi

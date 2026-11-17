@@ -303,6 +303,10 @@ export type IdeAiStand = {
   ki_url: string
   durchgang_aktiv: boolean
   modelle_alle: { id: string; titel: string; server: string }[]
+  /** Externe Dienste am zweiten Eingang des Durchgangs (ohne Schlüssel). */
+  extern: { kuerzel: string; name: string; kopf: boolean; am: string }[]
+  /** Am Host veröffentlichter Port, leer = nicht veröffentlicht. */
+  extern_port: string
 }
 
 /** Ein weiterer KI-Server. Der Schlüssel kommt nie zurück. */
@@ -1495,6 +1499,11 @@ export const api = {
   dsgvo: () => call<DsgvoHinweis>('/dsgvo'),
   dsgvoSetzen: (text: string) => call<DsgvoHinweis>('/dsgvo', { method: 'PUT', body: JSON.stringify({ text }) }),
   kiStatus: () => call<KiStatus>('/admin/ki-nutzung/status'),
+  ideAiExternAnlegen: (name: string, kopf: boolean) =>
+    call<{ kuerzel: string; schluessel: string; stand: IdeAiStand }>('/admin/ide-ai/extern',
+      { method: 'POST', body: JSON.stringify({ name, kopf }) }),
+  ideAiExternLoeschen: (kuerzel: string) =>
+    call<IdeAiStand>(`/admin/ide-ai/extern/${encodeURIComponent(kuerzel)}`, { method: 'DELETE' }),
   kiNutzungLoeschen: () => call<{ anfragen: number; stunden: number }>('/admin/ki-nutzung', { method: 'DELETE' }),
   gitAbgleich: () => call<Record<string, unknown>>('/admin/git/abgleich', { method: 'POST' }),
   software: () => call<SoftwareStand>('/admin/software'),

@@ -18,9 +18,13 @@ können vLLM, llama.cpp (auch hinter llama-swap), Ollama und LiteLLM.
 
 from __future__ import annotations
 
+import hashlib
 import logging
+import os
 import re
+import secrets
 import time
+from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urlparse
 
@@ -76,6 +80,11 @@ VORGABEN: dict[str, Any] = {
     # Aufbewahrung in Tagen: jede Anfrage einzeln, und Stundensummen (0 = immer).
     "frist_roh": 30,
     "frist_stunden": 365,
+    # Externe Dienste (Open WebUI …) am zweiten Eingang des Durchgangs:
+    # [{kuerzel, name, hash, kopf, am}]. Vom Schlüssel steht hier nur der
+    # SHA-256; ihn selbst sieht die Verwaltung genau einmal, beim Anlegen.
+    # `kopf`: den Kopfzeilen glauben, die sagen, wer fragt.
+    "extern": [],
 }
 KONTEXT_VORGABE = 8192
 ANTWORT_VORGABE = 2048
@@ -349,11 +358,68 @@ def durchgang_konfig(db: DbSession) -> dict[str, Any]:
         "server": [{"name": s["name"], "kuerzel": s["kuerzel"], "url": s["url"],
                     "api_key": s["api_key"], "modelle": nach_server.get(s["kuerzel"], []),
                     # Ein weiterer Server mit Gruppen: nur diese Sitzungen.
-                    # Der Durchgang kennt Sitzungen, keine Menschen.
-                    **({"alle": False, "sitzungen": _sitzungen_fuer(db, s)} if s.get("gruppen")
-                       else {"alle": True})}
+                    # Der Durchgang kennt Sitzungen, keine Menschen — ausser
+                    # bei externen Diensten, die sagen, wer fragt.
+                    **({"alle": False, "sitzungen": _sitzungen_fuer(db, s),
+                        "personen": _personen_fuer(db, s) if e["extern"] else []}
+                       if s.get("gruppen") else {"alle": True})}
                    for s in server_liste(e) if s["url"]] if aktiv else [],
+        "extern": [{k: d[k] for k in ("kuerzel", "name", "hash", "kopf")}
+                   for d in e["extern"]] if aktiv else [],
     }
+
+
+def _personen_fuer(db: DbSession, w: dict[str, Any]) -> list[str]:
+    """E-Mail und Benutzername (klein) aller, die diesen weiteren Server
+    bekommen — für Anfragen externer Dienste, die nur sagen, wer fragt."""
+    from .models import User as UserModel
+
+    raus: set[str] = set()
+    for u in db.query(UserModel).filter(UserModel.is_active.is_(True)).all():
+        if u.is_admin or {str(g.id) for g in u.groups} & set(w["gruppen"]):
+            raus.add(u.username.lower())
+            if u.email:
+                raus.add(u.email.strip().lower())
+    return sorted(raus)
+
+
+# --------------------------------------------------------------------------
+# Externe Dienste
+# --------------------------------------------------------------------------
+
+def extern_port() -> str:
+    return os.environ.get("OTA_KI_EXTERN_PORT", "").strip()
+
+
+def extern_anlegen(db: DbSession, name: str, kopf: bool = True) -> tuple[dict[str, Any], str]:
+    """Einen externen Dienst eintragen. Gibt den Eintrag und den Schlüssel
+    zurück — der steht danach nirgends mehr im Klartext."""
+    e = einstellungen(db)
+    if not e["durchgang"]:
+        raise IdeAiFehler("Externe Dienste brauchen den KI-Durchgang.")
+    name = " ".join(str(name or "").split())[:60]
+    if not name:
+        raise IdeAiFehler("Bitte einen Namen angeben, z. B. Open WebUI.")
+    basis = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")[:12].strip("-") or "dienst"
+    belegt = {d["kuerzel"] for d in e["extern"]}
+    kuerzel, n = basis, 2
+    while kuerzel in belegt:
+        kuerzel, n = f"{basis[:10]}{n}", n + 1
+    schluessel = "otaki_" + secrets.token_urlsafe(32)
+    eintrag = {"kuerzel": kuerzel, "name": name, "kopf": bool(kopf),
+               "hash": hashlib.sha256(schluessel.encode()).hexdigest(),
+               "am": datetime.now(timezone.utc).isoformat()}
+    settings_store.put(db, settings_store.IDE_AI, {**e, "extern": [*e["extern"], eintrag]})
+    return eintrag, schluessel
+
+
+def extern_loeschen(db: DbSession, kuerzel: str) -> bool:
+    e = einstellungen(db)
+    rest = [d for d in e["extern"] if d["kuerzel"] != kuerzel]
+    if len(rest) == len(e["extern"]):
+        return False
+    settings_store.put(db, settings_store.IDE_AI, {**e, "extern": rest})
+    return True
 
 
 def ki_ziele(db: DbSession) -> list[dict[str, Any]]:
@@ -567,8 +633,9 @@ def stand(db: DbSession) -> dict[str, Any]:
         f = {}
     weitere = [{**{k: v for k, v in w.items() if k != "api_key"}, "api_key_gesetzt": bool(w["api_key"])}
                for w in e["weitere"]]
-    return {**{k: v for k, v in e.items() if k not in ("api_key", "weitere")},
-            "weitere": weitere, "api_key_gesetzt": bool(e["api_key"]), "fassungen": f,
+    extern = [{k: v for k, v in d.items() if k != "hash"} for d in e["extern"]]
+    return {**{k: v for k, v in e.items() if k not in ("api_key", "weitere", "extern")},
+            "weitere": weitere, "extern": extern, "extern_port": extern_port(), "api_key_gesetzt": bool(e["api_key"]), "fassungen": f,
             "ki_url": KI_URL, "durchgang_aktiv": durchgang_aktiv(db, e),
             "modelle_alle": [{"id": m["id"], "titel": m["titel"], "server": m["server"]}
                              for m in modelle_aussen(e)]}

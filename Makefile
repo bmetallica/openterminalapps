@@ -4,7 +4,10 @@
 # kein Node, kein Python.
 
 SHELL := /bin/bash
-COMPOSE := docker compose -f deploy/docker-compose.yml --env-file deploy/.env
+# Der Eingang für externe KI-Dienste nur, wenn ein Port dafür gesetzt ist
+# (deploy/docker-compose.ki-extern.yml, Handbuch Kapitel 28).
+KI_EXTERN := $(shell grep -qsE '^OTA_KI_EXTERN_PORT=[0-9]+' deploy/.env && echo -f deploy/docker-compose.ki-extern.yml)
+COMPOSE := docker compose -f deploy/docker-compose.yml $(KI_EXTERN) --env-file deploy/.env
 # Kalenderwoche als Build-Argument: Die Schicht mit den Paket-Upgrades in den
 # eigenen Images wird damit spaetestens woechentlich neu gebaut (siehe
 # api/Dockerfile). Gleich fuer `up` und `update`, sonst baute jeder Wechsel neu.

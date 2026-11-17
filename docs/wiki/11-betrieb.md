@@ -10,7 +10,7 @@
 | `ota-agent` | **Einziger** Dienst mit Docker-Zugriff; startet Container und Displays | ✅ |
 | `ota-db` | PostgreSQL 16 | ✅ |
 | `ota-firewall` | **Der Router aller Arbeitsplätze**: nftables, NAT, Namensdienst, Portfreigaben. Ohne ihn hat kein Arbeitsplatz Netz | ✅ |
-| `ota-ki` | Der KI-Durchgang, optional: führt mehrere KI-Server unter `ki.ota` zusammen und zählt die Nutzung. Läuft im Namensraum von `ota-firewall` ([Kapitel 28](28-ide-ai.md#mehrere-ki-server-ki-durchgang-und-nutzungsstatistik)) | ✅ |
+| `ota-ki` | Der KI-Durchgang, optional: führt mehrere KI-Server unter `ki.ota` zusammen und zählt die Nutzung; optional mit einem Eingang für externe Dienste wie Open WebUI (`OTA_KI_EXTERN_PORT`). Läuft im Namensraum von `ota-firewall` ([Kapitel 28](28-ide-ai.md#mehrere-ki-server-ki-durchgang-und-nutzungsstatistik)) | ✅ |
 | `ota-turn` | Vermittelt den Medienstrom für Golden Images mit Selkies 1.6.2 (WebRTC). Selkies 2.0 braucht ihn nicht | ✅ |
 | `ota-repo`, `ota-repo-web` | Die eigene Paketquelle, mit `ota-selkies`; der Spiegel darin nur mit `OTA_REPO_SPIEGEL=1` ([Kapitel 26](26-paketquellen.md)) | ✅ |
 | `ota-registry` | Eigene Registry für die gebauten Images | ✅ |

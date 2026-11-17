@@ -266,6 +266,50 @@ statistics ran, and it belongs in the database, where the retention periods dele
 > adapt its text first. Switching on and off, every access with its reason and every opening of a
 > person's figures are recorded in the log.
 
+### External services (Open WebUI)
+
+A service outside the workspaces, such as Open WebUI, can also talk to the AI through the gateway.
+It then sees the same model directory, the same group rule applies, and its requests appear in the
+same statistics, with the right person. It no longer knows the AI server's key.
+
+**Setting up**
+
+1. On the host, set the port in `deploy/.env`, e.g. `OTA_KI_EXTERN_PORT=8791`, then run
+   `sudo make update`. This publishes the entrance on the host and **restarts the router**:
+   workspaces are briefly offline. The port must be free. `OTA_KI_EXTERN_BIND` limits the address
+   it listens on (default: all). Without the port, everything stays as before.
+2. Under **Settings → IDE-AI → External services**, add a service, e.g. "Open WebUI". OTA shows
+   the key **exactly once** and afterwards stores only its SHA-256. If it is lost: remove the
+   service and add it again.
+3. In Open WebUI, under **Admin panel → Settings → Connections → OpenAI API**, enter the address
+   `http://<host>:8791/v1` and this key.
+4. For OTA to know who is asking, the Open WebUI container needs the environment variable
+   `ENABLE_FORWARD_USER_INFO_HEADERS=true`. This means recreating it with changed configuration;
+   you do that on Open WebUI, OTA does not touch the container. Older Open WebUI versions do not
+   know the variable.
+
+**How it works**
+
+- At the second entrance (port 8791 in the firewall's namespace) only the route by name applies,
+  and only with a valid key. Otherwise the answer is 401. The firewall keeps the workspaces
+  themselves out; they have their own entrance.
+- Who is asking is in the headers `X-OpenWebUI-User-Email` and `X-OpenWebUI-User-Name`. The
+  gateway trusts them only with a valid key. **Neither they nor the service's key are passed on to
+  the AI server**, only the server's own key.
+- **Groups:** a further server with groups is reachable through the service only for their members
+  (and administrators). Matching is by e-mail or username. Without information on who is asking,
+  only the servers for everyone are available. The API sends the list of entitled people with every
+  configuration and at least every ten minutes.
+- **Statistics:** the API assigns the request to the OTA account by e-mail, username or a unique
+  display name. The service takes the place of the workspace (so under "My AI usage" it is a row of
+  its own) and appears as the tool "External service (short name)". If nobody matches, the request
+  counts as "not attributable".
+- Open WebUI also sends requests of its own, e.g. for chat titles, tags or suggestions. They count
+  for the respective person.
+- Adding and removing are logged (`ki.extern_angelegt`, `ki.extern_geloescht`). A removed service
+  is locked out immediately.
+- The built-in GDPR text mentions connected services. Adapt it when you connect one.
+
 ### Encrypted connections
 
 If the AI server speaks HTTPS, nothing changes for Continue and opencode: they talk to the gateway
@@ -343,6 +387,9 @@ The settings page shows which versions are in the package source.
 | "Personal figures only with access" / "The access has expired" | The half hour is over, or the page was reloaded: enter a reason again |
 | No donut per person, only "Only from 3 people …" | Intended: with fewer than three people or workspaces in the period it would be obvious who is who. Widen the period |
 | No "GDPR" / "My AI usage" item in the sidebar | Both appear only while usage statistics run. Administrators always see "GDPR". The sidebar checks every five minutes; otherwise reload the page |
+| Open WebUI: "Unknown key" (401) | Key copied wrongly or service removed. Add the service again and enter the new key |
+| Open WebUI cannot reach `http://<host>:8791` | `OTA_KI_EXTERN_PORT` set in `deploy/.env` and `make update` run afterwards? `docker port ota-firewall` shows the port. A host firewall must let it through for Open WebUI's network |
+| Requests via Open WebUI "not attributable" | `ENABLE_FORWARD_USER_INFO_HEADERS=true` is missing on the container, or the e-mail in Open WebUI matches no OTA account |
 | No figures in AI usage | Statistics on? Gateway ready (Settings → IDE-AI)? The API collects every minute: `docker logs ota-api 2>&1 \| grep KI-Nutzung` |
 
 Test suite: `scripts/test-ide-ai.sh`. It starts every template with a matching editor and asks the

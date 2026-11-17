@@ -26,6 +26,7 @@ OTA stellt dir Arbeitsplätze (Container) im Browser bereit. Dabei werden person
 Die KI-Nutzungsstatistik ist zurzeit **{statistik}**.
 
 - **Was:** zu jeder Anfrage an einen KI-Server Zeitpunkt, Arbeitsplatz, Modell, Werkzeug, Zahl der Tokens, Dauer und Ergebnis. **Keine Inhalte:** Weder deine Fragen noch die Antworten werden gespeichert.
+- **Angebundene Dienste:** Hat die Verwaltung einen Dienst wie Open WebUI an OTA angebunden, werden auch deine Anfragen dort so gezählt. Der Dienst teilt OTA dazu deine E-Mail-Adresse bzw. deinen Namen mit, damit die Anfrage deinem Konto zugeordnet werden kann; an den KI-Server geht diese Angabe nicht weiter.
 - **Wozu:** Kapazitäts- und Kostenplanung der KI-Server, Erkennen von Fehlern und Fehlkonfigurationen.
 - **Wie lange:** einzelne Anfragen {frist_roh} Tage, stündliche Summen {frist_stunden}. Danach werden sie automatisch gelöscht.
 - **Wer sieht was:** Die Verwaltung sieht im Normalfall nur Summen und Anteile ohne Namen. Personenbezogene Zahlen gibt es nur gegen eine Begründung, die zusammen mit dem Namen der einsehenden Person im Prüfprotokoll steht. Die Einsicht gilt jeweils 30 Minuten.
@@ -53,6 +54,7 @@ OTA provides you with workspaces (containers) in the browser. This involves proc
 The AI usage statistics are currently **{statistik}**.
 
 - **What:** for every request to an AI server the time, workspace, model, tool, number of tokens, duration and result. **No content:** neither your questions nor the answers are stored.
+- **Connected services:** if the administrators have connected a service such as Open WebUI to OTA, your requests there are counted the same way. The service tells OTA your e-mail address or name so that the request can be assigned to your account; this is not passed on to the AI server.
 - **Why:** capacity and cost planning for the AI servers, detecting errors and misconfigurations.
 - **How long:** individual requests {frist_roh} days, hourly totals {frist_stunden}. After that they are deleted automatically.
 - **Who sees what:** administrators normally see only totals and shares without names. Personal figures are only available with a stated reason, which is recorded in the audit log together with the name of the person looking. Each such access is valid for 30 minutes.
