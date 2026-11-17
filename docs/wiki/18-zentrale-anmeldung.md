@@ -475,3 +475,9 @@ statt einen Knopf anzubieten, der in einem 403 endet.
 
 Der Client `ota-manager` und der Realm müssen dort **vorher** angelegt sein; `make identity` fasst
 ein fremdes Keycloak nicht an.
+
+**Ab Keycloak 26.8.2** braucht `ota-manager` zusätzlich den Client-Bereich `kc-admin-api` als
+Standardbereich (Clients → ota-manager → Client scopes → Add client scope → Default). Ohne ihn
+weist die Admin-API jedes Merkmal mit 401 ab, obwohl die Rollen stimmen. In OTA zeigt sich das als
+„Die Kontenliste liess sich nicht lesen (HTTP 401 …)“ beim Anlegen eines Kontos. Beim
+mitgelieferten Keycloak erledigt das `make update` (genauer `make identity`) von selbst.

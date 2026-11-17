@@ -464,3 +464,9 @@ of offering a button that ends in a 403.
 
 The client `ota-manager` and the realm must be created there **beforehand**; `make identity` does not
 touch a foreign Keycloak.
+
+**From Keycloak 26.8.2 on**, `ota-manager` also needs the client scope `kc-admin-api` as a default
+scope (Clients → ota-manager → Client scopes → Add client scope → Default). Without it the Admin API
+rejects every token with 401 even though the roles are right. In OTA this shows up as “The account
+list could not be read (HTTP 401 …)” when creating an account. With the bundled Keycloak,
+`make update` (more precisely `make identity`) takes care of it.

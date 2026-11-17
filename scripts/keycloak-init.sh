@@ -257,6 +257,22 @@ case "$CODE" in
   *)       bad "Rechte setzen: HTTP $CODE $(kc_body)" ;;
 esac
 
+# Seit Keycloak 26.8.2 nimmt die Admin-API nur noch Merkmale an, die für sie
+# ausgestellt sind: Der Client braucht den Bereich `kc-admin-api`. Ohne ihn
+# antwortet jeder Verwaltungsaufruf mit 401, obwohl die Rollen stimmen — in
+# OTA hiess das „Die Kontenliste liess sich nicht lesen". Das Upgrade gibt
+# den Bereich nur admin-cli und der Admin-Konsole, nicht eigenen Clients.
+# Ältere Keycloaks kennen ihn nicht; dann gibt es nichts zu tun.
+kc GET "/admin/realms/$REALM/client-scopes" >/dev/null
+ADMIN_SCOPE=$(kc_body | jq_py "next((s['id'] for s in d if s.get('name')=='kc-admin-api'),'')")
+if [ -n "$ADMIN_SCOPE" ]; then
+  CODE=$(kc PUT "/admin/realms/$REALM/clients/$MGR_ID/default-client-scopes/$ADMIN_SCOPE" "{}")
+  case "$CODE" in
+    204|409) ok "Dienstkonto darf an die Admin-API (Bereich kc-admin-api)" ;;
+    *)       bad "Bereich kc-admin-api zuweisen: HTTP $CODE $(kc_body)" ;;
+  esac
+fi
+
 # --------------------------------------------- Zweite Stufe je Gruppe
 #
 # In OTA war das ein Feld an der Gruppe (`require_totp`). In Keycloak ist es

@@ -118,6 +118,27 @@ def ruf(method: str, pfad: str, **kw: Any) -> httpx.Response:
     return resp
 
 
+def _grund(resp: httpx.Response) -> str:
+    """Warum Keycloak nein gesagt hat — für die Meldung in der Oberfläche.
+
+    Ohne das stand dort nur „liess sich nicht lesen", und ob es an Rechten,
+    an einem kranken Keycloak oder an der Anfrage lag, sah man erst im
+    Protokoll von Keycloak.
+    """
+    code = resp.status_code
+    if code == 401:
+        # Seit Keycloak 26.8.2 meist der fehlende Bereich `kc-admin-api`.
+        return (" (HTTP 401: Keycloak nimmt das Merkmal von OTA nicht an — dem Client "
+                "ota-manager fehlt vermutlich der Bereich kc-admin-api; nachholen mit „make identity“)")
+    if code == 403:
+        return (" (HTTP 403: Dem Dienstkonto von OTA fehlt das Recht dazu "
+                "— Rechte nachholen mit „make identity“)")
+    if code >= 500:
+        return (f" (HTTP {code}: Keycloak hat selbst einen Fehler — "
+                "Protokoll: docker logs --tail 100 ota-keycloak)")
+    return f" (HTTP {code}: {resp.text[:150]})"
+
+
 # --- Nachsehen, was geht ------------------------------------------------
 
 # Was OTA können will, und woran man es erkennt. Geprüft wird mit **lesenden**
@@ -575,7 +596,7 @@ def verzeichnis_lesen() -> dict[str, Any] | None:
     """Die eingerichtete Anbindung, oder nichts."""
     resp = ruf("GET", f"/components?type={LDAP_PROVIDER}")
     if resp.status_code != 200:
-        raise KeycloakFehler("Die Verzeichnisanbindung liess sich nicht lesen.")
+        raise KeycloakFehler("Die Verzeichnisanbindung liess sich nicht lesen" + _grund(resp))
     for teil in resp.json():
         if teil.get("name") == LDAP_NAME:
             werte = teil.get("config", {})
@@ -656,7 +677,7 @@ def verzeichnis_setzen(daten: dict[str, Any], kennwort: str | None) -> dict[str,
     # Ändern: Keycloak will die vollständige Darstellung zurück.
     alt = ruf("GET", f"/components/{vorhanden['id']}")
     if alt.status_code != 200:
-        raise KeycloakFehler("Die vorhandene Anbindung liess sich nicht lesen.")
+        raise KeycloakFehler("Die vorhandene Anbindung liess sich nicht lesen" + _grund(alt))
     darstellung = alt.json()
     darstellung["config"] = {**darstellung.get("config", {}), **config}
     resp = ruf("PUT", f"/components/{vorhanden['id']}", json=darstellung)
@@ -841,7 +862,7 @@ GRUPPEN_WURZEL = "ota"
 def konto_finden(username: str) -> dict[str, Any] | None:
     resp = ruf("GET", "/users", params={"username": username, "exact": "true"})
     if resp.status_code != 200:
-        raise KeycloakFehler("Die Kontenliste liess sich nicht lesen.")
+        raise KeycloakFehler("Die Kontenliste liess sich nicht lesen" + _grund(resp))
     treffer = resp.json()
     return treffer[0] if treffer else None
 
@@ -932,7 +953,7 @@ def gruppen_setzen(sub: str, namen: list[str]) -> None:
     """Setzt die OTA-Gruppen eines Kontos — und lässt fremde in Ruhe."""
     ist = ruf("GET", f"/users/{sub}/groups")
     if ist.status_code != 200:
-        raise KeycloakFehler("Die Gruppen des Kontos liessen sich nicht lesen.")
+        raise KeycloakFehler("Die Gruppen des Kontos liessen sich nicht lesen" + _grund(ist))
 
     # Nur, was unterhalb von /ota liegt. Alles andere gehört jemand anderem.
     unsere = {g["name"]: g["id"] for g in ist.json()
@@ -1019,7 +1040,7 @@ def zweiten_faktor_entfernen(sub: str) -> int:
     Das Passwort bleibt."""
     resp = ruf("GET", f"/users/{sub}/credentials")
     if resp.status_code != 200:
-        raise KeycloakFehler("Die Anmeldemittel des Kontos liessen sich nicht lesen.")
+        raise KeycloakFehler("Die Anmeldemittel des Kontos liessen sich nicht lesen" + _grund(resp))
     weg = 0
     for c in resp.json():
         if c.get("type") in ("otp", "webauthn", "webauthn-passwordless"):
@@ -1079,7 +1100,7 @@ def _verzeichnis_client() -> str:
 def _gruppen_mapper(fid: str) -> dict[str, Any] | None:
     resp = ruf("GET", "/components", params={"parent": fid, "type": MAPPER_TYP})
     if resp.status_code != 200:
-        raise KeycloakFehler("Die Zuordnungen der Anbindung liessen sich nicht lesen.")
+        raise KeycloakFehler("Die Zuordnungen der Anbindung liessen sich nicht lesen" + _grund(resp))
     return next((m for m in resp.json() if m.get("name") == GRUPPEN_MAPPER), None)
 
 
@@ -1210,7 +1231,7 @@ def verzeichnisgruppen_abgleichen() -> int:
 def verzeichnisgruppen_liste() -> list[str]:
     resp = ruf("GET", f"/clients/{_verzeichnis_client()}/roles")
     if resp.status_code != 200:
-        raise KeycloakFehler("Die Verzeichnisgruppen liessen sich nicht lesen.")
+        raise KeycloakFehler("Die Verzeichnisgruppen liessen sich nicht lesen" + _grund(resp))
     return sorted(r["name"] for r in resp.json())
 
 
@@ -1243,7 +1264,7 @@ def verzeichnisgruppen_von(sub: str) -> list[str]:
     if resp.status_code == 404:
         return []
     if resp.status_code != 200:
-        raise KeycloakFehler("Die Verzeichnisgruppen des Kontos liessen sich nicht lesen.")
+        raise KeycloakFehler("Die Verzeichnisgruppen des Kontos liessen sich nicht lesen" + _grund(resp))
     return sorted(r["name"] for r in resp.json())
 
 
