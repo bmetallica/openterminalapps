@@ -88,16 +88,27 @@ up:
 	@# jemand die Zeile mit `make identity` von Hand nachholte. Ein
 	@# Schnellstart, dessen zweiter Schritt stillschweigend nichts tut, ist
 	@# keiner.
+	@#
+	@# Bis zu zehn Minuten: Auf einer ausgelasteten Platte brauchte Keycloak
+	@# nach einem Update (es baut sich mit --optimized=false beim Start neu)
+	@# länger als die drei Minuten, die hier früher reichten. Danach lief die
+	@# Einrichtung ins Leere, und ein neuer Pflichtschritt fehlte still —
+	@# gesehen am 2026-11-17 (kc-admin-api, Keycloak 26.8.2).
 	@printf '  Warte auf Keycloak'
-	@for i in $$(seq 1 60); do \
+	@for i in $$(seq 1 200); do \
 	  if [ "$$(docker inspect -f '{{.State.Health.Status}}' ota-keycloak 2>/dev/null)" = "healthy" ]; then \
 	    printf ' — bereit\n'; break; \
 	  fi; \
+	  if [ $$((i % 20)) = 0 ]; then printf ' %s min ' "$$((i * 3 / 60))"; fi; \
 	  printf '.'; sleep 3; \
-	  if [ $$i = 60 ]; then printf '\n  (kommt nicht hoch — später:  make identity)\n'; fi; \
+	  if [ $$i = 200 ]; then printf '\n  (nach zehn Minuten noch nicht bereit)\n'; fi; \
 	done
-	@./scripts/keycloak-init.sh || \
-	  echo "  (Realm nicht eingerichtet — später:  make identity)"
+	@./scripts/keycloak-init.sh || { \
+	  echo; \
+	  printf '  \033[31m!! Keycloak wurde NICHT eingerichtet.\033[0m Konten anlegen und andere\n'; \
+	  echo '     Verwaltungsschritte können scheitern, bis das nachgeholt ist:'; \
+	  echo '       make identity     (sobald ota-keycloak in docker ps als healthy steht)'; \
+	  echo; }
 	@echo
 	@$(COMPOSE) ps --format '  {{.Name}}\t{{.Status}}'
 	@# **Das Arbeitsplatz-Basisimage gehoert zum Start dazu.**
