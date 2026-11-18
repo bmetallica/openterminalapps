@@ -123,6 +123,34 @@ Verlauf zusammenfasst und wenn du die Sitzung Tage später mit `opencode -c` for
 - Sitzungen, die lange niemand benutzt hat, werden nach einer Frist gelöscht. Die Frist steht in
   der Ansicht.
 
+## Wie ausgelastet ist mein Arbeitsplatz? ✅
+
+`free`, `htop` und `uptime` zeigen im Arbeitsplatz **seine** Grenzen: den Speicher, den er hat,
+die Zahl der Kerne, die er höchstens nutzen darf, und seine eigene Last. Die Prozessliste zeigt
+ohnehin nur deine Prozesse. `htop` ist nicht in jedem Arbeitsplatz installiert; im
+Root-Arbeitsplatz holst du es mit `sudo apt install htop`.
+
+**Eine Ausnahme:** Die CPU-Balken in `top` und `htop` (oben, je Kern) zeigen weiterhin die
+Auslastung des ganzen Servers. Die Prozente je Prozess stimmen. Für die CPU deines Arbeitsplatzes
+gibt es **`ota-top`** im Terminal:
+
+```
+ota-top          laufend, alle 2 Sekunden (q beendet)
+ota-top -n 1     einmal ausgeben
+```
+
+Es zeigt:
+
+- **CPU**: genutzt im Verhältnis zur Obergrenze. Zugeteilt sind die Kerne der Vorlage; darüber
+  hinaus darfst du bis zur Obergrenze, solange der Server frei ist.
+- **Speicher**: belegt, davon Programme und Dateipuffer, die Spitze seit dem Start und die Grenze.
+  Läuft er voll, beendet der Kernel ein Programm. `ota-top` meldet das.
+- **Gebremst**: Die CPU-Grenze hat zugeschlagen. Das spürst du als Ruckeln, auch wenn der Server
+  sonst frei ist. Abhilfe ist eine Vorlage mit mehr Kernen (Verwaltung).
+- **Wartezeit**: wie viel Zeit Programme auf CPU, Speicher oder Platte gewartet haben (die letzten
+  10 Sekunden). Ein hoher Wert bei Speicher heißt meist: zu wenig Arbeitsspeicher.
+- Die Programme mit der meisten CPU.
+
 ## Docker
 
 Docker gibt es nur in **Root-Arbeitsplätzen** ([Kapitel 32](32-root-arbeitsplatz-nutzen.md#docker-)).

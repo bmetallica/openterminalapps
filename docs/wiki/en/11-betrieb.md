@@ -446,6 +446,39 @@ The values refresh every 3 seconds while the tab is open and the browser window 
 Nothing is stored. Below 1050 pixels the table scrolls sideways, the page itself does not. The
 values come from `GET /api/admin/arbeitsplaetze/auslastung` (permission `sessions.view_all`).
 
+### Inside the workspace: LXCFS and `ota-top` ✅
+
+`free`, `htop` and `uptime` read their totals from `/proc`, which belongs to the host's kernel.
+Left alone they showed the server's memory and cores in every workspace. **LXCFS** provides these
+files per container matching its cgroup, and OTA puts them over the real ones: `/proc/meminfo`,
+`cpuinfo`, `stat`, `loadavg`, `uptime`, `diskstats`, `swaps` and `/sys/devices/system/cpu/online`.
+
+- **Setup:** `make up` / `make update` install the `lxcfs` package and start it with
+  `--enable-cfs --enable-loadavg --enable-pidfd` (`scripts/lxcfs-einrichten.sh`, check with
+  `--pruefen`). Without apt or network everything keeps working as before, just without LXCFS.
+- **New workspaces** get the files as Docker mount points.
+- **Existing root workspaces** get them the next time they are resumed, including a start by the
+  administrators. Docker cannot add a mount point to an existing container, so the agent mounts
+  them into the running container after every start (`open_tree` and `move_mount` via a
+  short-lived privileged helper, `agent/otaagent/lxcfs.py`). Running workspaces stay untouched
+  until they restart.
+- **What is correct:** memory, swap, load, uptime, number of cores (the upper limit, i.e. cores ×
+  `OTA_CPU_BURST`, at most the host's). **What is not:** CPU utilisation in `/proc/stat`, i.e.
+  the bars in `top` and `htop`. LXCFS cannot compute it under cgroup v2 (measured with LXCFS
+  6.0.4). For that, **`ota-top`** is placed in every workspace under `/usr/local/bin` (fresh on
+  every start): CPU against limit and allotment, memory, throttling, OOM, waiting times (PSI) and
+  the top processes, all from the workspace's cgroup. `nproc` still shows the host's cores; it
+  asks the kernel directly.
+- **Do not restart LXCFS** while workspaces are running: a new LXCFS is a new file system, and the
+  mounted files in running containers then only return errors until the workspace restarts. The
+  script therefore never restarts it while it is in use; changed options then take effect after
+  the next host reboot. Debian package updates reload it without unmounting (SIGUSR1).
+- **Switching off:** `OTA_LXCFS=aus` in `deploy/.env` (then no setup either), or without a
+  restart the file `/srv/ota/runtime/lxcfs-aus`. Both apply to newly created and resumed
+  workspaces.
+- **Test:** `scripts/test-lxcfs.sh` (also in `make test`): a normal workspace, a root workspace
+  created without LXCFS and then resumed, a new root workspace.
+
 ### `GET /healthz`
 
 Answers **one** question: can the application work right now? Without sign-in, so a load balancer

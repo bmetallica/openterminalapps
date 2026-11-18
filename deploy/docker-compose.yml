@@ -359,6 +359,8 @@ services:
       OTA_PIDS_LIMIT: "${OTA_PIDS_LIMIT:-4096}"
       OTA_ROOT_PIDS_LIMIT: "${OTA_ROOT_PIDS_LIMIT:-32768}"
       OTA_PLATZ_MESSEN_MINUTEN: "${OTA_PLATZ_MESSEN_MINUTEN:-60}"
+      # LXCFS in Arbeitsplätzen (Kapitel 11): `aus` schaltet es für neue ab.
+      OTA_LXCFS: "${OTA_LXCFS:-}"
       OTA_TRAEFIK_CONTAINER: ota-traefik
       OTA_FW_SOCKET: "${OTA_RUNTIME_ROOT:-/srv/ota/runtime}/firewall.sock"
       # Damit der Browser im Arbeitsplatz OTA selbst erreicht — die
@@ -429,6 +431,16 @@ services:
       # Die OTA-CA, nur lesbar: Mit ihr stellt der Agent das Zertifikat der
       # Git-Subdomain aus. Die API bekommt den Schlüssel bewusst nicht.
       - ./certs:/ota/certs:ro
+      # LXCFS des Wirts (scripts/lxcfs-einrichten.sh): Der Agent prüft hier,
+      # ob es läuft, und hängt die Dateien in die Arbeitsplätze. `rslave`,
+      # damit ein später gestartetes LXCFS hier ankommt.
+      - type: bind
+        source: /var/lib/lxcfs
+        target: /var/lib/lxcfs
+        read_only: true
+        bind:
+          propagation: rslave
+          create_host_path: true
     networks:
       # Kein "public": Von aussen ist der Agent nicht erreichbar.
       #

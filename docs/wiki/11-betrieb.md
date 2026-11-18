@@ -453,6 +453,41 @@ Die Werte kommen alle 3 Sekunden, solange der Reiter offen und das Browserfenste
 Gespeichert wird nichts. Unter 1050 Pixel Breite rollt die Tabelle seitwärts, die Seite selbst
 nicht. Die Werte liefert `GET /api/admin/arbeitsplaetze/auslastung` (Recht `sessions.view_all`).
 
+### Im Arbeitsplatz: LXCFS und `ota-top` ✅
+
+`free`, `htop` und `uptime` lesen ihre Summen aus `/proc`, und das gehört dem Kernel des Hosts.
+Ohne Weiteres zeigten sie in jedem Arbeitsplatz den Speicher und die Kerne des Servers.
+**LXCFS** stellt diese Dateien je Container passend zu seiner cgroup bereit, OTA legt sie über die
+echten: `/proc/meminfo`, `cpuinfo`, `stat`, `loadavg`, `uptime`, `diskstats`, `swaps` und
+`/sys/devices/system/cpu/online`.
+
+- **Einrichtung:** `make up` / `make update` installieren das Paket `lxcfs` und starten es mit
+  `--enable-cfs --enable-loadavg --enable-pidfd` (`scripts/lxcfs-einrichten.sh`, Prüfung mit
+  `--pruefen`). Ohne apt oder ohne Netz läuft alles weiter wie bisher, nur ohne LXCFS.
+- **Neue Arbeitsplätze** bekommen die Dateien als Einhängepunkte von Docker.
+- **Bestehende Root-Arbeitsplätze** bekommen sie beim nächsten Fortsetzen, auch beim Starten
+  durch die Verwaltung. Einem bestehenden Container kann Docker keinen Einhängepunkt geben;
+  der Agent hängt sie deshalb nach jedem Start in den laufenden Container (`open_tree` und
+  `move_mount` über einen kurzlebigen privilegierten Helfer, `agent/otaagent/lxcfs.py`).
+  Laufende Arbeitsplätze bleiben unberührt, bis sie neu starten.
+- **Was stimmt:** Speicher, Swap, Load, Uptime, Zahl der Kerne (die Obergrenze, also Kerne ×
+  `OTA_CPU_BURST`, höchstens die des Hosts). **Was nicht:** die CPU-Auslastung in `/proc/stat`,
+  also die Balken in `top` und `htop`. LXCFS kann sie unter cgroup v2 nicht berechnen (gemessen
+  mit LXCFS 6.0.4). Dafür liegt **`ota-top`** in jedem Arbeitsplatz unter `/usr/local/bin`
+  (bei jedem Start frisch): CPU gegen Obergrenze und Zuteilung, Speicher, Drosselung, OOM,
+  Wartezeiten (PSI) und die größten Prozesse, alles aus der cgroup des Arbeitsplatzes. `nproc`
+  zeigt weiter die Kerne des Hosts; es fragt den Kernel direkt.
+- **LXCFS nicht neu starten**, solange Arbeitsplätze laufen: Ein neues LXCFS ist ein neues
+  Dateisystem, die eingehängten Dateien in laufenden Containern liefern dann nur Fehler, bis der
+  Arbeitsplatz neu startet. Das Skript startet es deshalb nie neu, wenn es benutzt wird; geänderte
+  Optionen gelten dann ab dem nächsten Neustart des Hosts. Debians Paket-Updates laden es ohne
+  Aushängen neu (SIGUSR1).
+- **Abschalten:** `OTA_LXCFS=aus` in `deploy/.env` (dann auch keine Einrichtung), oder ohne
+  Neustart die Datei `/srv/ota/runtime/lxcfs-aus`. Beides gilt für neu angelegte und
+  fortgesetzte Arbeitsplätze.
+- **Test:** `scripts/test-lxcfs.sh` (auch in `make test`): normaler Arbeitsplatz, ein
+  Root-Arbeitsplatz ohne LXCFS angelegt und dann fortgesetzt, ein neuer Root-Arbeitsplatz.
+
 ### `GET /healthz`
 
 Beantwortet **eine** Frage: Kann die Anwendung gerade arbeiten? Ohne Anmeldung, damit ein

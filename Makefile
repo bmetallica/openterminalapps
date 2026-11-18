@@ -60,6 +60,9 @@ up:
 	@# dieser Anlage, nicht an geratenen. Beim allerersten Lauf gibt es die
 	@# Netze noch nicht — dann traegt der zweite Durchgang weiter unten nach.
 	@./scripts/turn-config.sh
+	@# LXCFS: Arbeitsplätze sehen in free/htop ihre eigenen Grenzen
+	@# (Kapitel 11). Nur, was fehlt; nie ein Neustart, solange es benutzt wird.
+	@./scripts/lxcfs-einrichten.sh
 	$(COMPOSE) up -d --build
 	@# Zweiter Durchgang: Jetzt stehen die Netze. Aendert sich dabei etwas,
 	@# bekommt der TURN-Dienst seine Datei und wird einmal neu gestartet —
@@ -322,6 +325,10 @@ test:
 	@# Root-Arbeitsplatz: root und Docker unter Sysbox, Anhalten statt Loeschen,
 	@# Webterminal mit Protokoll. Ohne Sysbox wird uebersprungen statt rot.
 	@./scripts/test-root-arbeitsplatz.sh
+	@echo
+	@# LXCFS und ota-top: Grenzen des Arbeitsplatzes in free/htop, auch für
+	@# Root-Arbeitsplätze von vor LXCFS nach dem Fortsetzen (Kapitel 11).
+	@./scripts/test-lxcfs.sh
 	@echo
 	@# Eigene Paketquelle (Kapitel 26); der Spiegel nur mit OTA_REPO_SPIEGEL=1.
 	@./scripts/test-repo.sh

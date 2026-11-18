@@ -45,6 +45,7 @@ from . import ide_ai
 from . import opencode as opencode_ops
 from . import software as software_ops
 from . import kerne
+from . import lxcfs as lxcfs_ops
 from . import clipboard as clip_scripts
 from . import discover
 from . import registry as registry_reader
@@ -1230,7 +1231,9 @@ def start_container(req: StartRequest) -> dict[str, Any]:
     # Wohin das Zuhause gehoert, sagt das Image. Siehe _heimat_aus_env.
     heimat = _heimat_image(client, req.image)
 
-    mounts = []
+    # LXCFS: free, htop und uptime zeigen den Arbeitsplatz, nicht den Wirt
+    # (lxcfs.py). Nur, wenn es auf dem Wirt läuft.
+    mounts = list(lxcfs_ops.docker_mounts())
     if req.mode == "workspace":
         # Siehe WORKSPACE_STARTUP: Das geerbte Startskript wuerde die
         # Anwendung des Basisimages im Drei-Sekunden-Takt neu starten.
@@ -1543,6 +1546,7 @@ def start_container(req: StartRequest) -> dict[str, Any]:
         _tastatur_setzen(container)
 
     _grundausstattung(container, heimat)
+    _werkzeuge(container)
     # Nach der Grundausstattung, vor dem Startskript: Continue findet seine
     # Konfiguration, sobald jemand den Editor oeffnet. Die Pakete kommen im
     # Hintergrund nach.
@@ -2272,6 +2276,28 @@ done
 """
 
 
+_WERKZEUGE = Path(__file__).resolve().parent / "werkzeuge"
+
+
+def _werkzeuge(container) -> None:
+    """Kleine Werkzeuge nach /usr/local/bin, bei jedem Start frisch —
+    zurzeit `ota-top` (die Auslastung des Arbeitsplatzes aus seiner
+    cgroup, Handbuch Kapitel 11). Über `exec`, nicht `put_archive`: Das
+    lehnt Docker bei Root-Arbeitsplätzen ab (siehe ide_ai._hinein).
+    Scheitert es, startet der Arbeitsplatz trotzdem."""
+    for datei in sorted(p for p in _WERKZEUGE.iterdir() if p.is_file()):
+        inhalt = base64.b64encode(datei.read_bytes()).decode()
+        ziel = f"/usr/local/bin/{datei.name}"
+        try:
+            code, aus = _run_as_root(container, [
+                "sh", "-c", 'mkdir -p /usr/local/bin && printf %s "$1" | base64 -d > "$2.neu" '
+                '&& chmod 755 "$2.neu" && mv -f "$2.neu" "$2"', "sh", inhalt, ziel])
+            if code != 0:
+                log.warning("%s nicht in %s: %s", datei.name, container.name, aus.strip()[-200:])
+        except APIError as exc:
+            log.warning("%s nicht in %s: %s", datei.name, container.name, exc)
+
+
 def _grundausstattung(container, heim: str) -> None:
     """Fehlende Dateien aus /etc/skel ins Zuhause. Scheitert es, startet der
     Arbeitsplatz trotzdem."""
@@ -2565,6 +2591,8 @@ def container_action(cid: str, action: str) -> dict[str, str]:
             threading.Thread(target=platz, args=(cid, True), daemon=True).start()
         else:
             getattr(c, action)()
+            if action in ("start", "restart"):
+                lxcfs_ops.einhaengen(dc(), c)
     except NotFound:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Container nicht gefunden")
     except APIError as exc:
@@ -2688,6 +2716,9 @@ def fortsetzen(cid: str, body: "FortsetzenRequest | None" = None) -> dict[str, A
             c.start()
     except APIError as exc:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Docker meldet: {exc}") from exc
+    # Ein Root-Arbeitsplatz von vor LXCFS hat die Dateien nicht von Docker:
+    # nach jedem Start in den neuen Namensraum hängen (lxcfs.py).
+    lxcfs_ops.einhaengen(client, c)
     # Erst der Container, dann die Regeln und die Standardroute: Den
     # Namensraum, in den die Route gehoert, gibt es erst jetzt.
     lauf.schritt("einrichten")
@@ -2707,6 +2738,7 @@ def fortsetzen(cid: str, body: "FortsetzenRequest | None" = None) -> dict[str, A
     # Auch hier: Ein Root-Arbeitsplatz von vor dieser Aenderung bekommt die
     # fehlende `.bashrc` beim naechsten Fortsetzen.
     _grundausstattung(c, _heimat_container(c))
+    _werkzeuge(c)
     # IDE-AI: Konfiguration und, im Hintergrund, die neueste Fassung der Pakete.
     ide_ai.im_container(c, body.ide_ai if body else {}, _heimat_container(c), _run_as_root)
     # opencode: Konfiguration, frische Tokens der Erweiterungen, Paket.
@@ -2722,6 +2754,7 @@ def fortsetzen(cid: str, body: "FortsetzenRequest | None" = None) -> dict[str, A
             c.restart(timeout=30)
         except APIError as exc:
             raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Docker meldet: {exc}") from exc
+        lxcfs_ops.einhaengen(client, c)
         _firewall_abgleich(client)
     lauf.schritt("desktop")
     _wait_for_vnc(c, port=8080)

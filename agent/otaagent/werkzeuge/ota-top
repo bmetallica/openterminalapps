@@ -1,0 +1,230 @@
+#!/usr/bin/env python3
+"""ota-top — die Auslastung **dieses** Arbeitsplatzes (Handbuch Kapitel 11).
+
+top und htop rechnen die CPU-Auslastung aus /proc/stat, und das gehört dem
+Wirt. ota-top liest statt dessen die cgroup des Arbeitsplatzes: wie viel
+der zugeteilten Kerne und des Speichers belegt ist, wie oft gebremst wurde
+und wie lange Programme auf CPU, Speicher oder Platte gewartet haben.
+
+  ota-top            laufend, alle 2 Sekunden (beenden mit q oder Strg+C)
+  ota-top -n 1       einmal ausgeben, z. B. für Skripte
+  ota-top -d 5       alle 5 Sekunden
+
+Von OTA eingerichtet; wird beim nächsten Start überschrieben.
+"""
+import os
+import select
+import shutil
+import sys
+import termios
+import time
+import tty
+
+CG = "/sys/fs/cgroup"
+TICK = os.sysconf("SC_CLK_TCK")
+SEITE = os.sysconf("SC_PAGE_SIZE")
+DE = not os.environ.get("LANG", "de").lower().startswith("en")
+
+
+def t(de, en):
+    return de if DE else en
+
+
+def lies(name, vorgabe=""):
+    try:
+        with open(os.path.join(CG, name)) as f:
+            return f.read().strip()
+    except OSError:
+        return vorgabe
+
+
+def felder(name):
+    raus = {}
+    for zeile in lies(name).splitlines():
+        teile = zeile.split()
+        if len(teile) == 2 and teile[1].isdigit():
+            raus[teile[0]] = int(teile[1])
+    return raus
+
+
+def druck(name):
+    """PSI: Anteil der Zeit, in der Programme warten mussten (letzte 10 s)."""
+    for zeile in lies(name).splitlines():
+        if zeile.startswith("some"):
+            for teil in zeile.split():
+                if teil.startswith("avg10="):
+                    return float(teil[6:])
+    return None
+
+
+def groesse(b):
+    for einheit in ("B", "KiB", "MiB", "GiB", "TiB"):
+        if b < 1024 or einheit == "TiB":
+            return f"{b:.0f} {einheit}" if einheit == "B" else f"{b:.1f} {einheit}"
+        b /= 1024
+    return str(b)
+
+
+def balken(anteil, breite=30):
+    anteil = max(0.0, min(1.0, anteil))
+    voll = int(round(anteil * breite))
+    return "[" + "#" * voll + "." * (breite - voll) + "]"
+
+
+def kerne():
+    roh = lies("cpu.max", "max 100000").split()
+    if roh and roh[0] != "max":
+        return int(roh[0]) / int(roh[1])
+    return float(len(os.sched_getaffinity(0)))
+
+
+def zugeteilt():
+    """Die zugeteilten Kerne: OTA setzt sie als Gewicht (CpuShares = Kerne × 1024),
+    in cgroup v2 als cpu.weight umgerechnet. Hier zurück."""
+    roh = lies("cpu.weight")
+    if not roh.isdigit() or int(roh) == 100:
+        return None
+    anteile = 2 + (int(roh) - 1) * 262142 / 9999
+    return anteile / 1024
+
+
+def prozesse():
+    raus = {}
+    for pid in os.listdir("/proc"):
+        if not pid.isdigit():
+            continue
+        try:
+            with open(f"/proc/{pid}/stat") as f:
+                roh = f.read()
+            name = roh[roh.index("(") + 1:roh.rindex(")")]
+            rest = roh[roh.rindex(")") + 2:].split()
+            raus[int(pid)] = (name, int(rest[11]) + int(rest[12]), int(rest[21]) * SEITE)
+        except (OSError, ValueError, IndexError):
+            continue
+    return raus
+
+
+def nutzer(pid):
+    try:
+        uid = os.stat(f"/proc/{pid}").st_uid
+        import pwd
+        return pwd.getpwuid(uid).pw_name[:10]
+    except (OSError, KeyError):
+        return "?"
+
+
+def bild(vorher, jetzt, dauer, anzahl):
+    zeilen = []
+    k = kerne()
+    cpu_v, cpu_j = vorher["cpu"], jetzt["cpu"]
+    genutzt = (cpu_j.get("usage_usec", 0) - cpu_v.get("usage_usec", 0)) / 1e6 / dauer if dauer else 0
+    gebremst = cpu_j.get("nr_throttled", 0) - cpu_v.get("nr_throttled", 0)
+    zeilen.append(t("Arbeitsplatz-Auslastung (cgroup)", "Workspace usage (cgroup)")
+                  + f"   {time.strftime('%H:%M:%S')}")
+    zeilen.append("")
+    zeilen.append(f"CPU      {balken(genutzt / k if k else 0)} {genutzt * 100:6.0f} % "
+                  + t(f"von {k * 100:.0f} %  (höchstens {k:g} Kerne)",
+                      f"of {k * 100:.0f} %  (at most {k:g} cores)"))
+    z = zugeteilt()
+    if z and abs(z - k) > 0.05:
+        zeilen.append("         " + t(f"zugeteilt {z:.1f} Kerne — darüber nur, solange der Wirt frei ist",
+                                       f"allotted {z:.1f} cores — more only while the host is idle"))
+    mem = int(lies("memory.current", "0") or 0)
+    grenze_roh = lies("memory.max", "max")
+    grenze = int(grenze_roh) if grenze_roh.isdigit() else 0
+    stat = felder("memory.stat")
+    if grenze:
+        zeilen.append(f"{t('Speicher', 'Memory  ')} {balken(mem / grenze)} {groesse(mem):>10} "
+                      + t("von ", "of ") + groesse(grenze))
+    else:
+        zeilen.append(f"{t('Speicher', 'Memory  ')} {groesse(mem)} " + t("(ohne Grenze)", "(no limit)"))
+    zeilen.append("         " + t("Programme", "programs") + f" {groesse(stat.get('anon', 0))}, "
+                  + t("Dateipuffer", "file cache") + f" {groesse(stat.get('file', 0))}"
+                  + (f", {t('Spitze', 'peak')} {groesse(int(lies('memory.peak')))}"
+                     if lies("memory.peak").isdigit() else ""))
+    swap = lies("memory.swap.current")
+    if swap.isdigit() and int(swap):
+        zeilen.append(f"Swap     {groesse(int(swap))}")
+    pids, pids_max = lies("pids.current", "?"), lies("pids.max", "max")
+    zeilen.append(f"{t('Prozesse', 'Tasks   ')} {pids}" + (f" / {pids_max}" if pids_max != "max" else ""))
+    zeilen.append("")
+    hinweise = []
+    if gebremst:
+        hinweise.append(t(f"CPU-Grenze erreicht: {gebremst}x gebremst in {dauer:.0f} s",
+                          f"CPU limit reached: throttled {gebremst}x in {dauer:.0f} s"))
+    ereignisse = felder("memory.events")
+    if ereignisse.get("oom_kill"):
+        hinweise.append(t(f"Speicher voll: {ereignisse['oom_kill']} Programm(e) beendet (seit Start)",
+                          f"Out of memory: {ereignisse['oom_kill']} program(s) killed (since start)"))
+    w = [(t("CPU", "CPU"), druck("cpu.pressure")), (t("Speicher", "memory"), druck("memory.pressure")),
+         (t("Platte", "disk"), druck("io.pressure"))]
+    zeilen.append(t("Wartezeit (10 s)", "Waiting (10 s)") + ":  "
+                  + "   ".join(f"{n} {v:.1f} %" for n, v in w if v is not None))
+    for h in hinweise:
+        zeilen.append("! " + h)
+    zeilen.append("")
+    zeilen.append(f"{'PID':>7}  {t('NUTZER', 'USER'):<10} {'CPU%':>6} {'RSS':>10}  {t('PROGRAMM', 'COMMAND')}")
+    p_v, p_j = vorher["proc"], jetzt["proc"]
+    liste = []
+    for pid, (name, ticks, rss) in p_j.items():
+        alt = p_v.get(pid)
+        d = (ticks - alt[1]) if alt and alt[0] == name else 0
+        liste.append((d / TICK / dauer * 100 if dauer else 0, rss, pid, name))
+    liste.sort(reverse=True)
+    for cpu, rss, pid, name in liste[:anzahl]:
+        zeilen.append(f"{pid:>7}  {nutzer(pid):<10} {cpu:6.1f} {groesse(rss):>10}  {name}")
+    return zeilen
+
+
+def messen():
+    return {"cpu": felder("cpu.stat"), "proc": prozesse(), "zeit": time.monotonic()}
+
+
+def main():
+    args = sys.argv[1:]
+    if "-h" in args or "--help" in args:
+        print(__doc__.strip())
+        return 0
+    takt = 2.0
+    einmal = False
+    if "-d" in args:
+        takt = max(0.5, float(args[args.index("-d") + 1]))
+    if "-n" in args:
+        einmal = True
+    if not os.path.exists(os.path.join(CG, "cpu.stat")):
+        print(t("Keine cgroup v2 unter /sys/fs/cgroup — ota-top braucht sie.",
+                "No cgroup v2 at /sys/fs/cgroup — ota-top needs it."), file=sys.stderr)
+        return 1
+    vorher = messen()
+    if einmal:
+        time.sleep(min(takt, 1.0))
+        jetzt = messen()
+        print("\n".join(bild(vorher, jetzt, jetzt["zeit"] - vorher["zeit"], 15)))
+        return 0
+    tty_ok = sys.stdin.isatty()
+    alt = termios.tcgetattr(sys.stdin) if tty_ok else None
+    try:
+        if tty_ok:
+            tty.setcbreak(sys.stdin.fileno())
+        sys.stdout.write("\033[?25l")
+        while True:
+            bereit = select.select([sys.stdin], [], [], takt)[0] if tty_ok else time.sleep(takt)
+            if bereit and sys.stdin.read(1).lower() == "q":
+                break
+            jetzt = messen()
+            hoehe = shutil.get_terminal_size((80, 24)).lines
+            zeilen = bild(vorher, jetzt, jetzt["zeit"] - vorher["zeit"], max(3, hoehe - 16))
+            sys.stdout.write("\033[H\033[2J" + "\n".join(zeilen[:hoehe - 1]) + "\n")
+            sys.stdout.flush()
+            vorher = jetzt
+    except KeyboardInterrupt:
+        pass
+    finally:
+        sys.stdout.write("\033[?25h")
+        if alt:
+            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, alt)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

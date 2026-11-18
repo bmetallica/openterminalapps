@@ -117,6 +117,34 @@ session days later with `opencode -c`.
 - **Nobody but you** sees your entries, not even the administration.
 - Sessions nobody has used for a long time are deleted after a period. The view shows the period.
 
+## How busy is my workspace? ✅
+
+`free`, `htop` and `uptime` show **the workspace's** limits inside it: the memory it has, the
+number of cores it may use at most, and its own load. The process list only shows your processes
+anyway. `htop` is not installed in every workspace; in a root workspace get it with
+`sudo apt install htop`.
+
+**One exception:** the CPU bars in `top` and `htop` (at the top, per core) still show the load of
+the whole server. The per-process percentages are correct. For your workspace's CPU there is
+**`ota-top`** in the terminal:
+
+```
+ota-top          continuously, every 2 seconds (q quits)
+ota-top -n 1     print once
+```
+
+It shows:
+
+- **CPU**: used relative to the upper limit. The template's cores are allotted; beyond that you
+  may use up to the limit while the server is idle.
+- **Memory**: in use, split into programs and file cache, the peak since start and the limit. If
+  it runs full, the kernel ends a program; `ota-top` reports that.
+- **Throttled**: the CPU limit kicked in. You notice it as stutter even when the server is
+  otherwise idle. The remedy is a template with more cores (administrators).
+- **Waiting**: how much time programs waited for CPU, memory or disk (last 10 seconds). A high
+  memory value usually means too little RAM.
+- The programs using the most CPU.
+
 ## Docker
 
 Docker is only available in **root workspaces** ([chapter 32](32-root-arbeitsplatz-nutzen.md#docker-)).
