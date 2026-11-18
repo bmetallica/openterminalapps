@@ -18,13 +18,25 @@ sowie ganze Registries einbinden — als Zusatz, nicht als Fundament.
 **Jeder Arbeitsplatz hängt in einem eigenen Netz** hinter einem Router: kein Firmennetz, keine
 Nachbarsitzung, kein Wirt — bis jemand es ausdrücklich freigibt ([firewall.md](firewall.md)).
 
-> **Stand:** läuft und wird benutzt. 452 automatische Prüfungen, davon 107 in einem echten Browser.
-> Was noch fehlt, steht offen in [roadmap.md](roadmap.md) — nichts davon ist beschönigt.
+> **Stand:** läuft und wird benutzt. Über zwanzig Prüfreihen mit mehreren hundert automatischen
+> Prüfungen, ein Teil davon in einem echten Browser. Was noch fehlt, steht offen in
+> [roadmap.md](roadmap.md) — nichts davon ist beschönigt.
 
 ![Das Dashboard: eine laufende Sitzung mit neun Anwendungen, darunter die Kacheln der übrigen Arbeitsplätze](docs/bilder/01-dashboard.png)
 
 *Der Start: die eigene laufende Sitzung mit ihren Anwendungen, was sie an Kernen und Speicher
 bekommen hat — und was sie im Netz darf. Darunter, was sich sonst noch starten lässt.*
+
+**Inhalt:** [Schnellstart](#schnellstart) · [Aktualisieren](#aktualisieren) ·
+[Was es kann](#was-es-kann) — [Arbeitsplatz](#für-alle-der-arbeitsplatz-im-browser),
+[Root-Arbeitsplatz](#root-arbeitsplatz-root-und-docker-im-container),
+[Entwickeln](#entwickeln-git-und-ki-im-editor-und-im-terminal),
+[KI-Durchgang und KI-Nutzung](#ki-durchgang-und-ki-nutzung),
+[Workspaces](#workspaces-und-ressourcen), [Software und Images](#software-und-images),
+[Konten](#konten-anmeldung-und-rechte), [Netz](#das-netz-der-arbeitsplätze),
+[Betrieb](#betrieb-und-überwachung), [Streaming](#streaming-und-basisimage) ·
+[Ein Blick in die Verwaltung](#ein-blick-in-die-verwaltung) · [Wie es gebaut ist](#wie-es-gebaut-ist) ·
+[Dokumentation](#dokumentation) · [Prüfungen](#prüfungen) · [Lizenz](#lizenz)
 
 ---
 
@@ -122,7 +134,7 @@ Selkies, ohne KasmVNC. Das dauert einige Minuten und passiert nur, wenn es fehlt
 unter **Workspaces** zur Auswahl. Neu bauen geht jederzeit von Hand:
 
 ```bash
-scripts/build-desktop-image.sh --pruefen      # baut und misst 19 Punkte gegen den Vertrag mit dem Agent
+scripts/build-desktop-image.sh --pruefen      # baut und misst die Punkte des Vertrags mit dem Agent
 ```
 
 Ein Abbild von Kasm braucht es dafür **nicht**. Die bleiben möglich, sind aber die Ausnahme — für
@@ -219,6 +231,21 @@ Dann eine Vorlage der Klasse „Root mit Docker" anlegen und das Recht „Root-A
 die Gruppen vergeben, die es bekommen sollen. Ausführlich in
 [Kapitel 25](docs/wiki/25-root-arbeitsplatz.md).
 
+### Eigene Grenzen im Arbeitsplatz (LXCFS)
+
+Damit `free`, `htop` und `uptime` im Arbeitsplatz dessen Grenzen zeigen statt der des Hosts,
+richtet `make up` (und damit auch `make update`) **LXCFS** auf dem Host ein: Es installiert das
+Debian-Paket, falls es fehlt, und setzt die nötigen Optionen. Ein laufendes LXCFS, das schon
+benutzt wird, startet es dafür nicht neu. Nachsehen geht mit:
+
+```bash
+sudo scripts/lxcfs-einrichten.sh --pruefen
+```
+
+**Laufende Arbeitsplätze bekommen es erst beim nächsten Start**, Root-Arbeitsplätze beim nächsten
+Fortsetzen, ohne Neuaufsetzen. Wer es nicht will, setzt `OTA_LXCFS=aus` in `deploy/.env`. Siehe
+[Kapitel 11](docs/wiki/11-betrieb.md#im-arbeitsplatz-lxcfs-und-ota-top-).
+
 ### Den Spiegel der Paketquelle einschalten
 
 Die eigene Paketquelle läuft immer — über sie kommt `ota-selkies`, der Streaming-Server, in die
@@ -252,165 +279,287 @@ dabei **nicht** zurückwandert, ist die Datenbank: Neue Spalten bleiben stehen. 
 
 ## Was es kann
 
-**Der Arbeitsplatz**
-- Ein Container je Nutzer, jede Anwendung auf ihrem eigenen Bildschirm, gestartet erst bei Bedarf
-- Jede Anwendung in einem eigenen Browsertab, mit eigener Adresse — und als Verknüpfung auf dem
-  Desktop ablegbar (PWA)
-- Der ferne Bildschirm **wächst mit dem Fenster**, kein schwarzer Rand, keine Skalierung
-- Zwischenablage in beide Richtungen, auch zwischen zwei Anwendungen im selben Container
-- Klassischer XFCE-Desktop als zusätzliche Ansicht
-- **Root-Arbeitsplatz für Entwickler**: root, **Docker und `docker compose`** im Container — unter
-  Sysbox, also ohne `--privileged` (root im Container ist auf dem Host unprivilegiert). Beenden
-  **hält an** statt zu löschen: Was installiert wird, bleibt, unter fester Adresse; „Neu aufsetzen"
-  holt ein neues Basisimage. Die inneren Container gehen durch denselben Router und dieselben
-  Netzregeln; ihre Netze kommen aus einem festen Bereich (`OTA_ROOT_DOCKER_NETZE`) und überdecken
-  das LAN nicht ([Kapitel 25](docs/wiki/25-root-arbeitsplatz.md))
-- **Eigene Paketquelle** (immer an): **eigene `.deb`-Pakete** per Drag & Drop, **festgehaltene
-  Stände** mit Zurückdrehen und reproduzierbaren Images, und das Paket **`ota-selkies`**, das den
-  Streaming-Server in Images bringt und Root-Arbeitsplätze beim Fortsetzen anhebt. Ein **Spiegel**
-  von Debian 13 samt Sicherheitsupdates und Dockers Quelle ist ein Zusatz (ab Werk aus):
-  Arbeitsplätze installieren dann auch, wenn draussen etwas fehlt — Betriebsart „Spiegel zuerst"
-  oder „Nur Spiegel". Abgeglichen wird von Hand; das Alter des Spiegels wird gelb und rot
-  ([Kapitel 26](docs/wiki/26-paketquellen.md))
+Die Übersicht folgt den Rollen: zuerst, was jeder Mensch im Arbeitsplatz bekommt, dann Entwicklung
+und KI, dann Verwaltung, Netz und Betrieb. Jeder Punkt verweist auf das Kapitel des Handbuchs, das
+ihn vollständig erklärt.
 
-**Verwaltung**
-- Ressourcen **je Nutzer und Workspace**: Nutzer A bekommt 2 Kerne, Nutzer B einen
-- **News** — Meldungen der Verwaltung an alle, in Markdown mit Zeilenumbrüchen und gefiltertem HTML direkt auf der Seite geschrieben, mit
-  Entwürfen, Anheften und einem Punkt in der Seitenleiste für Ungelesenes ([Kapitel 11](docs/wiki/11-betrieb.md#news-))
-- **Anwenderhandbuch** — eigene Kapitel für Nutzer: erste Schritte, Konto, Dateien,
-  Root-Arbeitsplatz, Git und KI, Bedienung, Hilfe bei Problemen, Begriffe ([Kapitel 29 bis 36](docs/wiki/29-los-gehts.md))
-- **Startbalken und Startprotokoll** — auf der Kachel steht, was beim Start gerade passiert; im
-  Protokoll des Agents je Start eine Zeile mit der Dauer jedes Schritts. Root-Arbeitsplätze setzen
-  fort, ohne auf die Platzmessung über alle Volumes oder auf die inneren Container zu warten
-  ([Kapitel 25](docs/wiki/25-root-arbeitsplatz.md#startzeit))
-- **Live-Auslastung unter Betrieb** — Balken für CPU, RAM und Netz je Arbeitsplatz und für den
-  Host, mit Warnung, sobald die CPU-Grenze einen Container bremst ([Kapitel 11](docs/wiki/11-betrieb.md#live-auslastung-betrieb--arbeitsplätze-))
-- **Eigene Grenzen in `free`, `htop` und `uptime`** — über LXCFS sehen Arbeitsplätze ihren Speicher,
-  ihre Kerne und ihre Last statt der des Hosts, bestehende Root-Arbeitsplätze ab dem nächsten
-  Fortsetzen; dazu `ota-top` für die CPU aus der cgroup ([Kapitel 11](docs/wiki/11-betrieb.md#im-arbeitsplatz-lxcfs-und-ota-top-))
-- **Kerne als Gewicht, nicht als Deckel** — bei freiem Host darf ein Arbeitsplatz bis zum Vierfachen
-  nutzen, bei vollem teilt der Kernel im Verhältnis auf; kein Ruckeln mehr, während der Host halb
-  leer steht ([Kapitel 5](docs/wiki/05-workspaces-verwalten.md#ressourcen))
-- **Workspaces duplizieren** — mit Apps, Einmal-Skripten, Zuteilungen, Gruppen und Skeleton, etwa
-  einen fertig eingerichteten Root-Arbeitsplatz als Vorlage für den nächsten; jeder Mensch kann
-  seine Kacheln **für sich umbenennen** ([Kapitel 5](docs/wiki/05-workspaces-verwalten.md#duplizieren-))
-- **Mehrere Arbeitsplätze gleichzeitig trotz gemeinsamer Daten** — Persistenz *Gemeinsame Daten*:
-  eigene Einstellungen je Workspace, `Desktop`, `Documents` & Co. aus dem gemeinsamen Zuhause. So
-  laufen etwa zwei Root-Arbeitsplätze eines Menschen nebeneinander ([Kapitel 5](docs/wiki/05-workspaces-verwalten.md#ressourcen))
-- **Kontingent je Zuhause** und eine Untergrenze für den freien Plattenplatz — eine verständliche
-  Ablehnung statt eines Containers, der mitten in der Arbeit beim Schreiben stehenbleibt.
-  **Speicherabbilder** abgestürzter Programme (`core.<pid>`) füllen kein Zuhause mehr: Neue
-  Container erzeugen keine, und was in bestehenden noch entsteht, räumt OTA vor jeder Messung und
-  täglich weg ([Kapitel 11](docs/wiki/11-betrieb.md#speicherabbilder-räumt-ota-selbst-))
-- **Sichtbarkeit je Anwendung und Gruppe**, für den Fall, dass eine Lizenz nicht für alle reicht
-- **Zwei-Faktor je Gruppe erzwingbar**, wahlweise mit **Passkey** (Fingerabdruck, Gesicht,
-  Sicherheitsschlüssel) oder Einmalkennwort — angeboten, nicht verlangt; `/healthz` und `/metrics`
-  für die Überwachung
-- Nutzer, Gruppen und Rechte; Administratoren sind in ihrem eigenen Container `root`
-- **Betrieb → Arbeitsplätze**: alle Arbeitsplätze aller Nutzer, laufend und angehalten, mit Platz
-  und „zuletzt aktiv"; Starten, Anhalten, Löschen — und ein **root-Webterminal** im Browser, dessen
-  Eingaben je Arbeitsplatz protokolliert und exportierbar sind
-- **Zentrale Anmeldung über Keycloak**, mitgeliefert im Stack — oder ein vorhandenes anbinden. OTA
-  ist dessen Verwalter: Konten, Gruppen und die **AD-Anbindung** richtet man in OTAs Oberfläche
-  ein, die Keycloak-Konsole bleibt für den Alltag zu — **erreichbar ist sie trotzdem**
-  (`/auth/admin/`), und das mit Absicht: Wer sie zumauert, sperrt sich im Fehlerfall selbst aus.
-  Was der Betrieb dafür schuldet, steht in [Kapitel 18](docs/wiki/18-zentrale-anmeldung.md)
-- **Ein Eingang für alle:** Ein Konto, das in OTA angelegt wird, entsteht in Keycloak — mit dem
-  Passwort, das die Verwaltung vergibt. Passwort und zweiter Faktor ändert jeder unter **Mein
-  Konto**, das dafür zu Keycloak führt (bei Verzeichniskonten: im Verzeichnis). Alte lokale Konten
-  ziehen beim nächsten Anmelden **mit ihrem Passwort** um; lokal bleibt nur das Notfallkonto
-- **Notzugang** unter `/notfall`: ein lokales Konto, das ohne Keycloak funktioniert. Ohne ihn wäre
-  eine Anlage nach einer kaputten Anmeldekonfiguration nicht mehr zu betreten. Davor eine Bremse
-  (zehn Versuche je Minute und Absender), und die Sperre nach Fehlversuchen gilt je **(Konto,
-  Absender)** — sie lässt sich damit nicht gegen einen Kollegen richten
-- Ein Verzeichniseintrag kann **kein bestehendes Konto von selbst übernehmen**, auch nicht mit
-  demselben Namen. Die Verwaltung kann aber ein **Domänenkonto einem bestehenden Konto zuordnen**:
-  Danach meldet sich das alte Konto über das Verzeichnis an und behält Container, Zuhause und
-  Ablagen.
-- **OTA-Git (Forgejo)**, im Menü ein- und ausschaltbar:
+### Für alle: der Arbeitsplatz im Browser
+
+- **Ein Container je Mensch und Vorlage**, darin jede Anwendung auf ihrem eigenen Bildschirm,
+  gestartet erst bei Bedarf. Das Dashboard zeigt die laufende Sitzung mit ihren Anwendungen, mit
+  den Kernen und dem Speicher, die sie bekommen hat, und mit dem, was sie im Netz darf. Darunter
+  stehen die Kacheln aller anderen Vorlagen, die sich starten lassen
+  ([Kapitel 3](docs/wiki/03-arbeitsplatz.md), [29](docs/wiki/29-los-gehts.md))
+- **Jede Anwendung in einem eigenen Browsertab**, mit eigener Adresse, und als Verknüpfung auf dem
+  Desktop ablegbar (PWA). Der klassische XFCE-Desktop steht als zusätzliche Ansicht bereit
+- **Der ferne Bildschirm wächst mit dem Fenster**, ohne schwarzen Rand und ohne Skalierung. Die
+  Kontrollleiste der Sitzung regelt Bildschirm, Tastatur, Ton und die Ablagen. Umlaute, Shift und
+  AltGr einer deutschen Tastatur kommen richtig an, der Ton läuft in den Browser
+  ([Kapitel 34](docs/wiki/34-bedienung.md))
+- **Zwischenablage in beide Richtungen**, auch für Bilder und auch zwischen zwei Anwendungen im
+  selben Container ([Kapitel 4](docs/wiki/04-zwischenablage.md))
+- **Ein Zuhause für alle Anwendungen**: dieselben Projekte, derselbe SSH-Schlüssel, dieselben
+  Einstellungen. Es überdauert jeden Container: Wenn bei OTA etwas „gelöscht" wird, ist es der
+  Container, nicht das Zuhause. Die einzige Ausnahme sind Vorlagen, die ausdrücklich *flüchtig*
+  eingestellt sind ([Kapitel 31](docs/wiki/31-dateien.md))
+- **Drei Ablagen**:
+  - die gemeinsame für Dateien, die in jeden Arbeitsplatz sollen (im Container nur lesbar);
+  - eine **eigene je Mensch** unter `/mnt/austausch`, beschreibbar, der Weg hinein und wieder
+    heraus;
+  - ein **Laufwerk je Gruppe** unter `/mnt/gruppen/<name>` mit denselben Dateien für ein Team.
+
+  Alle drei stehen auch in der Kontrollleiste einer laufenden Sitzung, mit Ziehen und Ablegen. Über
+  ein Gruppenlaufwerk entscheidet allein die Mitgliedschaft; auch ein Administrator kommt nur an die
+  Gruppen, in denen er selbst ist ([Kapitel 17](docs/wiki/17-ablage-und-startskript.md))
+- **Die eigene Auslastung sehen**: `free`, `htop` und `uptime` zeigen über LXCFS den Speicher, die
+  Kerne, die Last und die Laufzeit **des eigenen Arbeitsplatzes**, nicht die des Hosts. Für die CPU
+  gibt es **`ota-top`**. Es liest die cgroup und zeigt:
+  - die Nutzung, die zugeteilten Kerne und die Obergrenze;
+  - ob der Arbeitsplatz gerade gebremst wird und ob der Speicher volllief;
+  - wie lange Programme auf CPU, Speicher oder Platte warteten;
+  - die Programme mit der meisten CPU.
+
+  Siehe [Kapitel 33](docs/wiki/33-entwickeln.md#wie-ausgelastet-ist-mein-arbeitsplatz-).
+- **Kacheln für sich umbenennen**, ohne dass sich für andere etwas ändert. Das Menü **⋯** auf der
+  Kachel richtet die KI-Werkzeuge neu ein, setzt einen Root-Arbeitsplatz neu auf und öffnet die
+  Ansichten von Erweiterungen
+- **Mein Konto**: das Passwort ändern und einen zweiten Faktor einrichten, als Passkey oder als
+  Einmalkennwort, mit Rückfallcodes. Bei Verzeichniskonten geschieht das im Verzeichnis
+  ([Kapitel 30](docs/wiki/30-mein-konto.md))
+- **News** von der Verwaltung, mit einem Punkt in der Seitenleiste für Ungelesenes.
+  **Meine KI-Nutzung** zeigt die eigenen Zahlen, der Punkt **DSGVO** erklärt, was erfasst wird
+- **Das Handbuch im Programm**, auf Deutsch und Englisch und gefiltert nach Rechten. Es hat eigene
+  Kapitel für Anwender: erste Schritte, Konto, Dateien, Root-Arbeitsplatz, Git und KI, Bedienung,
+  Hilfe bei Problemen und Begriffe ([Kapitel 29 bis 36](docs/wiki/29-los-gehts.md))
+- **Deutsch oder Englisch, dunkel oder hell** (oder wie der Rechner eingestellt ist), umschaltbar
+  oben rechts und schon vor der Anmeldung
+- **Wer zusieht, steht im Protokoll.** Auf eine laufende Sitzung schalten kann sich nur ein voller
+  Administrator, ein Supporter nicht. Jedes Aufschalten wird mit beiden Namen protokolliert und ein
+  Jahr aufbewahrt ([Kapitel 3](docs/wiki/03-arbeitsplatz.md#wer-sonst-noch-auf-deinen-bildschirm-sehen-kann))
+- **Abmelden nach Untätigkeit, nicht nach Zeit.** Die Frist ist rollend und zwischen 30 Minuten und
+  48 Stunden einstellbar: Wer arbeitet, wird nicht abgemeldet, und kurze Aussetzer der API werfen
+  niemanden hinaus. Arbeitsplätze ohne Aktivität werden je Vorlage pausiert, gestoppt oder
+  gelöscht; das Zuhause bleibt immer erhalten
+
+### Root-Arbeitsplatz: root und Docker im Container
+
+- **root, Docker und `docker compose` im Container**, unter Sysbox und damit ohne `--privileged`:
+  root im Container ist auf dem Host unprivilegiert ([Kapitel 25](docs/wiki/25-root-arbeitsplatz.md),
+  für Nutzer [Kapitel 32](docs/wiki/32-root-arbeitsplatz-nutzen.md))
+- **Beenden hält an, statt zu löschen.** Was installiert wurde, bleibt, auch Docker-Images und
+  Container, und der Arbeitsplatz behält seine feste Adresse. **Neu aufsetzen** holt ein neues
+  Basisimage
+- **Dieselben Netzregeln für die inneren Container.** Sie gehen durch denselben Router. Ihre Netze
+  kommen aus einem festen Bereich (`OTA_ROOT_DOCKER_NETZE`) und überdecken das LAN nicht
+- **Schnell fortsetzen**: Ein Startbalken auf der Kachel zeigt den aktuellen Schritt. Fortgesetzt
+  wird, ohne auf die Platzmessung oder die inneren Container zu warten. Alte PID-Dateien von dockerd
+  und containerd räumt OTA beim Start weg
+- **Prozessgrenze 32768** statt 4096, einstellbar über `OTA_ROOT_PIDS_LIMIT`, damit Compose-Stapel
+  und Builds nicht an der Grenze scheitern
+- **Mehrere gleichzeitig**: Mit der Persistenz *Gemeinsame Daten* laufen zwei Root-Arbeitsplätze
+  eines Menschen nebeneinander. Jeder hat eigene Einstellungen, `Desktop`, `Documents` und Co.
+  kommen aus dem gemeinsamen Zuhause
+- **Zwei eigene Rechte**: *Root-Arbeitsplatz nutzen* und *Per Webterminal als root in laufende
+  Arbeitsplätze*. Jede Eingabe im Webterminal wird mit Namen protokolliert und ist exportierbar
+  ([Kapitel 8](docs/wiki/08-nutzer-und-gruppen.md#zwei-rechte-für-root-arbeitsplätze-))
+- **Hebt sich beim Fortsetzen an**: neues Selkies, IDE-AI, opencode, Git-Token, Paketquelle,
+  LXCFS, Einmal-Skripte und `ota-top`. Ein Root-Arbeitsplatz muss dafür nicht neu aufgesetzt werden
+
+### Entwickeln: Git und KI im Editor und im Terminal
+
+- **OTA-Git (Forgejo)**, im Menü ein- und ausschaltbar ([Kapitel 27](docs/wiki/27-git.md)):
   - Läuft unter einer eigenen Subdomain hinter demselben Eingang wie OTA.
   - Anmeldung mit den OTA-Zugangsdaten über Keycloak, nur für berechtigte Gruppen.
-  - OTA legt die Konten an, sperrt statt zu löschen. OTA-Admins sind auch dort Admins.
-  - Arbeitsplätze und Root-Arbeitsplätze bekommen Git vorkonfiguriert: Token je Arbeitsplatz,
-    widerrufen bei Ende; SSH nur im Containernetz. Andere Git-Server bleiben unberührt.
-  - Siehe [Kapitel 27](docs/wiki/27-git.md).
+  - OTA legt die Konten an und sperrt sie, statt sie zu löschen. OTA-Admins sind dort ebenfalls
+    Admins.
+  - Arbeitsplätze und Root-Arbeitsplätze bekommen Git vorkonfiguriert: ein Token je Arbeitsplatz,
+    widerrufen beim Ende; SSH nur im Containernetz. Andere Git-Server bleiben unberührt, eine eigene
+    `.gitconfig` hat Vorrang.
 - **IDE-AI**, unter Einstellungen ein- und ausschaltbar: ein KI-Assistent (Continue) in VS Code,
-  VSCodium und PyCharm, verbunden mit dem eigenen KI-Server (vLLM, llama.cpp oder jeder andere mit
-  OpenAI-Schnittstelle):
-  - Modelle als Auswahlliste, je Modell Kontextfenster und Antwortlänge; dazu Werkzeuge
+  VSCodium und PyCharm/IntelliJ, verbunden mit dem eigenen KI-Server. Das kann vLLM, llama.cpp oder
+  jeder andere Server mit OpenAI-Schnittstelle sein ([Kapitel 28](docs/wiki/28-ide-ai.md)):
+  - Modelle als Auswahlliste, je Modell mit Kontextfenster und Antwortlänge; dazu Werkzeuge
     (Agent-Modus), Temperatur, Zeitlimit, Regeln und berechtigte Gruppen.
   - Die Pakete kommen aus der eigenen Paketquelle in jeden Arbeitsplatz mit passendem Editor, auch
-    in Ubuntu- und Kasm-Images; Root-Arbeitsplätze heben sich beim Fortsetzen an.
-  - Die Firewall gibt den KI-Server frei, solange IDE-AI an ist. Telemetrie von Continue aus.
-  - **Mehrere KI-Server** unter einem Namen und **KI-Durchgang** (`ota-ki`, optional): Continue und
-    opencode sehen ein Modellverzeichnis über alle Server, der Schlüssel bleibt aus den Zuhausen
-    heraus. Die Firewall fängt auch Verbindungen von Skripten an die echte Adresse eines Servers ab.
-    Liegt der Durchgang, geht der Verkehr von selbst wieder direkt. Der erste Server gilt für
-    alle, jeder weitere kommt für seine **Gruppen** dazu.
-  - **KI-Nutzung unter Betrieb** (optional, standardmäßig aus): zunächst **ohne Namen**, also
-    Summen, Verlauf, Ringdiagramme je Mensch und Arbeitsplatz (nur nach Rang, erst ab drei),
-    Vorlage, Modell, Server und **Anwendung** (opencode, VS Code, PyCharm, Open WebUI …) sowie
-    eine Verteilung nach Tageszeit, filterbar nach Quelle (nur OTA, nur Open WebUI), Modell und
-    Anwendung (keine Zahlen bei weniger als drei Menschen in der Auswahl). Namen und Einzelverläufe gibt
-    es nur nach einer **Begründung**, die mit Namen im Protokoll steht, für 30 Minuten. Jeder
-    sieht unter **Meine KI-Nutzung** seine eigenen Zahlen, und ein Punkt **DSGVO** in der
-    Seitenleiste informiert alle (Text durch die Verwaltung anpassbar). Nie Inhalte, Aufbewahrung
-    einstellbar.
-  - **Externe Dienste wie Open WebUI** sprechen die KI auf Wunsch ebenfalls über den Durchgang an:
-    mit eigenem Schlüssel, derselben Gruppenregel und derselben Statistik, je Mensch zugeordnet
-    über die Kopfzeilen von Open WebUI.
-  - Hat ein Marketplace-Update oder eine eigene Konfiguration Continue verdrängt, stellt
-    **⋯ → KI-Werkzeuge neu einrichten** auf der Kachel des Arbeitsplatzes OTAs Fassung wieder her.
-    Im selben Menü steht bei Root-Arbeitsplätzen **Neu aufsetzen**.
-  - Siehe [Kapitel 28](docs/wiki/28-ide-ai.md).
+    in Ubuntu- und Kasm-Images.
+  - Continue steht rechts in der Seitenleiste, Copilot ist aus, die Telemetrie von Continue ebenso.
+  - Die Firewall gibt den KI-Server frei, solange IDE-AI an ist.
+  - Hat ein Marketplace-Update oder eine eigene Konfiguration Continue verdrängt, stellt **⋯ →
+    KI-Werkzeuge neu einrichten** OTAs Fassung wieder her.
 - **opencode**, unter Einstellungen ein- und ausschaltbar: der KI-Assistent im Terminal, mit dem
-  KI-Server und den Modellen aus IDE-AI:
-  - Paket aus der eigenen Paketquelle in der festgelegten Fassung; selbst installiertes opencode
-    wird übernommen, das Original bleibt als `*.vor-ota`.
+  KI-Server und den Modellen aus IDE-AI ([Kapitel 38](docs/wiki/38-opencode.md)):
+  - Das Paket kommt aus der eigenen Paketquelle in der festgelegten Fassung. Ein selbst
+    installiertes opencode wird übernommen, das Original bleibt als `*.vor-ota`.
   - OTA schreibt opencodes verwaltete Konfiguration nach `/etc/opencode/`. Eigene Einstellungen in
     `~/.config/opencode` kommen dazu, ein eigenes Standardmodell bleibt.
   - Ein Zusatz zum Systemprompt, global und je Gruppe, mit Vorschau und Audit-Log.
   - Weitere MCP-Server, entfernt oder lokal, mit API-Schlüssel, je Server für Gruppen freigegeben.
-  - Siehe [Kapitel 38](docs/wiki/38-opencode.md).
-- **Erweiterungen:** eigenständige Docker-Anwendungen mit eigenem Compose-Projekt, gekoppelt über
-  einen Vertrag und für Gruppen einschaltbar:
-  - Je Arbeitsplatz ein eigenes Token; MCP-Server und Prompt-Schnipsel für opencode.
-  - Die Ansichten der Erweiterung erscheinen in OTA unter Mein Konto und im ⋯-Menü der Kachel.
-  - Kein Hostport und keine Firewallregel; Kontolöschung, Sperren und Sicherung laufen mit.
-  - Die erste: das **Gedächtnis für opencode**
-    ([plugin_ota-opencode](https://github.com/bmetallica/plugin_ota-opencode)). Jede
-    opencode-Sitzung bekommt ein eigenes Langzeitgedächtnis, mit Embeddings von vLLM oder
-    llama.cpp.
-  - Siehe [Kapitel 39](docs/wiki/39-erweiterungen.md).
-- **Datenorte:** Datenbanken, Registry, OTA-Git und die Docker-Daten der Root-Arbeitsplätze lassen
-  sich über `.env` auf eine eigene Platte legen, etwa eine SSD; die Nutzerdaten bleiben auf der
-  großen. `scripts/daten-umziehen.sh` zieht im laufenden Betrieb um und schaltet in Sekunden um.
-  Laufende Root-Arbeitsplätze werden nie angehalten, sondern beim nächsten Fortsetzen umgeschaltet.
-  Siehe [Kapitel 40](docs/wiki/40-datenorte.md).
-- **Softwaremonitoring:** Stündlich wird erfasst, welche Anwendungen in jedem laufenden
-  Arbeitsplatz installiert sind (apt, Startmenü, Flatpak, Snap), ohne Versionen. Dazu gibt es eine
-  Whitelist, befüllbar aus dem aktuellen Stand. Was nicht darauf steht, sehen Administratoren auf
-  dem Dashboard und geben es per Knopfdruck frei. Wird es deinstalliert, verschwindet die Meldung
-  von selbst
-- **Fremde Web-Anwendungen** im Katalog (Open WebUI, Grafana, …): OTA legt den OIDC-Zugang an und
-  entscheidet, wer die Kachel sieht **und wer sich dort anmelden darf**. Keycloak prüft das selbst,
-  auch beim direkten Aufruf der Adresse; ohne Gruppe kommt niemand hinein. Die OTA-Gruppen stehen
-  im Token, sodass die Anwendung daran etwas hängen kann, etwa einen MCP-Server in Open WebUI.
-  Was jemand darin darf, entscheidet die Anwendung. OTA baut ihr Rechtemodell nicht nach
+- **Erweiterungen**: eigenständige Docker-Anwendungen mit eigenem Compose-Projekt. Sie sind über
+  einen Vertrag an OTA gekoppelt und für Gruppen einschaltbar
+  ([Kapitel 39](docs/wiki/39-erweiterungen.md)):
+  - Jeder Arbeitsplatz bekommt ein eigenes Token; MCP-Server und Prompt-Schnipsel gehen an opencode.
+  - Kein Hostport und keine Firewallregel. Kontolöschung, Sperren und Sicherung laufen mit.
+  - Die erste ist das **Gedächtnis für opencode**
+    ([plugin_ota-opencode](https://github.com/bmetallica/plugin_ota-opencode)): Jede
+    opencode-Sitzung bekommt ein eigenes Langzeitgedächtnis, mit Embeddings von vLLM oder llama.cpp.
+    In der Seitenleiste unter **opencode · Erinnerungen** gibt es:
+    - die Einträge jeder Sitzung zum Lesen, Bearbeiten, Anheften, Kopieren und Verschieben;
+    - Lesezugriff einer Sitzung auf das Gedächtnis einer anderen;
+    - ein **Hauptgedächtnis**, das alle Sitzungen eines Menschen mitlesen;
+    - eine **Dokumentenbibliothek** (PDF, Office, Text), die opencode mit Quellenangabe durchsucht.
+      Zugangsdaten im Text werden beim Auslesen entfernt.
+
+### KI-Durchgang und KI-Nutzung
+
+- **Mehrere KI-Server unter einem Namen.** Der erste Server gilt für alle, jeder weitere kommt für
+  seine **Gruppen** dazu. Continue und opencode sehen ein gemeinsames Modellverzeichnis über alle
+  Server ([Kapitel 28](docs/wiki/28-ide-ai.md#mehrere-ki-server-ki-durchgang-und-nutzungsstatistik))
+- **KI-Durchgang** (`ota-ki`, optional): Die Arbeitsplätze sprechen `ki.ota` an. Der Schlüssel des
+  KI-Servers bleibt draußen aus den Zuhausen, und die Firewall fängt auch Verbindungen ab, die
+  Skripte direkt an die echte Adresse eines Servers schicken. Fällt der Durchgang aus, geht der
+  Verkehr von selbst wieder direkt. HTTPS zum KI-Server wird mit Zertifikatsprüfung gesprochen.
+  Direkte HTTPS-Verbindungen aus einem Skript werden ungelesen durchgereicht und nur als Verbindung
+  gezählt
+- **Externe Dienste wie Open WebUI** sprechen die KI auf Wunsch ebenfalls über den Durchgang an. Sie
+  bekommen einen eigenen Schlüssel und unterliegen derselben Gruppenregel und derselben Statistik.
+  Zugeordnet wird je Mensch über die Kopfzeilen von Open WebUI
+- **KI-Nutzung unter Betrieb** (optional, ab Werk aus). Gezählt werden **nur echte Aufrufe eines
+  Modells**; Abfragen wie `/v1/models`, `/health` oder Anmeldeseiten von Überwachungsdiensten
+  bleiben draußen:
+  - **Ohne Namen**: Summen, Verlauf und eine Verteilung nach Tageszeit. Dazu Ringdiagramme je
+    Vorlage, Modell, Server und **Anwendung**, je Mensch und Arbeitsplatz nur nach Rang und erst
+    ab drei.
+  - **Filter** nach Quelle (gesamt, nur OTA, nur Open WebUI), Modell und Anwendung. Sind weniger
+    als drei Menschen in der Auswahl, zeigt die Seite keine Zahlen.
+  - **Erkannte Anwendungen**: opencode, Continue, Cline, Roo Code, Kilo Code, Aider und Copilot.
+    Dazu VS Code und die JetBrains-IDEs, die OTA aus der Vorlage ableitet, und Open WebUI. Bei
+    Skripten nennt die Statistik die Sprache: Java, Node oder Python.
+  - **Namen und Einzelverläufe** gibt es nur nach einer **Begründung**, die mit Namen im Protokoll
+    steht, und nur für 30 Minuten.
+  - Jeder sieht unter **Meine KI-Nutzung** die eigenen Zahlen. Ein Punkt **DSGVO** in der
+    Seitenleiste informiert alle; den Text kann die Verwaltung anpassen.
+  - Inhalte werden nie erfasst, die Aufbewahrung ist einstellbar.
+
+### Workspaces und Ressourcen
+
+- **Der Editor einer Vorlage**: Image, Betriebsart, Streaming-Weg, Netz, Apps, Ressourcen, Rechte,
+  Umgebung und Zuteilung, alles auf einem Bildschirm. Die **Kapazitätsanzeige** zeigt vorher,
+  ob der Host überbucht wäre, statt es erst am OOM-Kill zu merken
+  ([Kapitel 5](docs/wiki/05-workspaces-verwalten.md))
+- **Ressourcen je Mensch und Workspace**: A bekommt 2 Kerne, B einen
+  ([Kapitel 6](docs/wiki/06-ressourcen-und-zuteilung.md)). Geänderte CPU- und RAM-Werte erreichen
+  auch vorhandene Container, laufend und pausiert
+- **Kerne als Gewicht, nicht als Deckel.** Ist der Host frei, darf ein Arbeitsplatz bis zum
+  Vierfachen nutzen; ist er voll, teilt der Kernel im Verhältnis auf. Dadurch ruckelt nichts mehr,
+  während der Host halb leer steht
+- **Workspaces duplizieren**, mit Apps, Einmal-Skripten, Zuteilungen, Gruppen und Skeleton. So wird
+  etwa ein fertig eingerichteter Root-Arbeitsplatz zur Vorlage für den nächsten
+  ([Kapitel 5](docs/wiki/05-workspaces-verwalten.md#duplizieren-))
+- **Persistenz** je Vorlage: *Pro Nutzer* (ein Zuhause für alle Workspaces, der Normalfall), *Pro
+  Workspace*, *Flüchtig* oder *Gemeinsame Daten*. Mit Gemeinsamen Daten laufen mehrere
+  Arbeitsplätze gleichzeitig, jeder mit eigenen Einstellungen und denselben Datenordnern
+- **Kontingent je Zuhause und eine Untergrenze für den freien Plattenplatz.** Wer an die Grenze
+  kommt, bekommt eine verständliche Ablehnung, statt dass ein Container mitten in der Arbeit beim
+  Schreiben stehenbleibt.
+  - **Speicherabbilder** abgestürzter Programme (`core.<pid>`) füllen kein Zuhause mehr. Neue
+    Container erzeugen keine, und was in bestehenden noch entsteht, räumt OTA vor jeder Messung und
+    täglich weg ([Kapitel 11](docs/wiki/11-betrieb.md#speicherabbilder-räumt-ota-selbst-)).
+  - Die **Platzmessung** läuft einzeln im Hintergrund, je Arbeitsplatz höchstens einmal in der
+    Stunde (`OTA_PLATZ_MESSEN_MINUTEN`), und beim Anhalten eines Root-Arbeitsplatzes.
+- **Zwischenablage je Workspace und Gruppe**: Einfügen, Kopieren, Bilder und die Markieren-Auswahl
+  lassen sich einzeln schalten. Gruppen können strenger sein als der Workspace, nie großzügiger
+  ([Kapitel 37](docs/wiki/37-zwischenablage-verwaltung.md))
+- **Skeleton-Profil** je Workspace: Damit fängt ein Zuhause an, samt `.bashrc`, `.profile` und
+  `.bash_logout`. Einzelne Pfade lassen sich auf Wunsch bei jedem Start durchsetzen; das ist die
+  Ausnahme, nicht die Regel. Dazu gibt es **je Anwendung einen eigenen Teilbaum**, der erst kommt,
+  wenn diese Anwendung zum ersten Mal startet
+  ([Kapitel 17](docs/wiki/17-ablage-und-startskript.md))
+- **Skript beim Sessionstart** je Workspace, für alles, was ins Zuhause gehört, aber nicht ins
+  Image, etwa ein Firmenzertifikat
+- **Einmal-Skripte** je Workspace laufen je Mensch genau einmal, auch beim Fortsetzen von
+  Root-Arbeitsplätzen. Sie sind für Umstellungen im Zuhause gedacht, die das Skeleton nicht mehr
+  erreicht. Unter **Läufe ansehen** stehen Rückgabewert und Ausgabe
+
+### Software und Images
+
+- **Pakete anklicken, Image bauen, Fassung aktivieren**, mit Protokoll und Rückrollen
+  ([Kapitel 7](docs/wiki/07-golden-images.md))
+- **Pakete werden vorher geprüft**: Kennt das Image den Namen, und taugt das Paket überhaupt?
+  Ubuntus `firefox` etwa ist nur ein Verweis auf ein Snap und im Container nutzlos
+- **Rezepte** für alles, was kein einfaches Paket ist, mit einem geführten Bauer für eigene
+- **Session einfrieren**: im eigenen Arbeitsplatz einrichten, die Vorschau ansehen und als neue
+  Fassung übernehmen. Das Zuhause bleibt draußen, Geheimnisse werden markiert, die sudo-Ausnahme
+  wird entfernt
+- **Anwendungen im Image finden**: OTA liest die `.desktop`-Dateien und schlägt Name, Zeichen und
+  Startbefehl vor. Niemand muss wissen, wo eine Binärdatei liegt
+- **Das echte Symbol aus dem Paket**, also der Fuchs statt eines Kreises. OTA sucht es dort, wo die
+  Freedesktop-Spezifikation es hinlegt, rechnet es auf 128 Pixel herunter (VSCodium liefert 428 KB)
+  und liefert es zwischenspeicherbar aus
+- **Sichtbarkeit je Anwendung und Gruppe**, für den Fall, dass eine Lizenz nicht für alle reicht,
+  und eine **Auflösung je Anwendung**
+- **Images verwalten**: Was auf dem Host liegt, woher es kam und wer es benutzt, und was sich
+  gefahrlos entfernen lässt. Dazu gibt es eine eigene Registry im Stack; fehlt ein Image lokal,
+  wird es beim Start von dort geholt ([Kapitel 16](docs/wiki/16-images-verwalten.md))
+- **Kasm-Images und ganze Registries einbinden**, als Zusatz und für den Umstieg. Es gibt einen
+  Katalog mit vorgeschlagenen Fassungen und Prüfungen vor dem Übernehmen
+  ([Kapitel 9](docs/wiki/09-kasm-images-und-registries.md)). Ein **Profil aus Kasm** lässt sich
+  übernehmen (`scripts/migrate-kasm-profile.sh`,
+  [Kapitel 15](docs/wiki/15-migration-aus-kasm.md))
+- **Eigene Paketquelle** (immer an) ([Kapitel 26](docs/wiki/26-paketquellen.md)):
+  - **eigene `.deb`-Pakete** per Drag & Drop;
+  - **festgehaltene Stände** mit Zurückdrehen und reproduzierbaren Images;
+  - die Pakete **`ota-selkies`**, `ota-ide-ai` und `ota-opencode`, die den Streaming-Server und
+    die KI-Werkzeuge in Images bringen und Root-Arbeitsplätze beim Fortsetzen anheben.
+
+  Ein **Spiegel** von Debian 13 samt Sicherheitsupdates und Dockers Quelle ist ein Zusatz, ab Werk
+  aus. Mit ihm installieren Arbeitsplätze auch dann, wenn draußen etwas fehlt: in der Betriebsart
+  „Spiegel zuerst" oder „Nur Spiegel". Abgeglichen wird von Hand; das Alter des Spiegels wird gelb
+  und rot angezeigt.
+- **Softwaremonitoring**: Stündlich erfasst OTA, welche Anwendungen in jedem laufenden Arbeitsplatz
+  installiert sind (apt, Startmenü, Flatpak, Snap), ohne Versionen. Dazu gibt es eine Whitelist,
+  die sich aus dem aktuellen Stand befüllen lässt. Was nicht darauf steht, sehen Administratoren
+  auf dem Dashboard und geben es per Knopfdruck frei. Wird es deinstalliert, verschwindet die
+  Meldung von selbst ([Kapitel 11](docs/wiki/11-betrieb.md#softwaremonitoring-))
+
+### Konten, Anmeldung und Rechte
+
+- **Zentrale Anmeldung über Keycloak**, mitgeliefert im Stack, oder ein vorhandenes Keycloak
+  anbinden. OTA verwaltet es: Konten, Gruppen und die **AD-Anbindung** richtet man in OTAs
+  Oberfläche ein, die Keycloak-Konsole bleibt für den Alltag zu. **Erreichbar ist sie trotzdem**
+  (`/auth/admin/`), und das mit Absicht: Wer sie zumauert, sperrt sich im Fehlerfall selbst aus
+  ([Kapitel 18](docs/wiki/18-zentrale-anmeldung.md))
+- **Ein Eingang für alle.** Ein Konto, das in OTA angelegt wird, entsteht in Keycloak, mit dem
+  Passwort, das die Verwaltung vergibt. Alte lokale Konten ziehen beim nächsten Anmelden **mit
+  ihrem Passwort** um; lokal bleibt nur das Notfallkonto. Die Anmeldemaske folgt Marke, Sprache
+  und Gewand von OTA
+- **Notzugang** unter `/notfall`: ein lokales Konto, das ohne Keycloak funktioniert. Davor sitzt
+  eine Bremse (zehn Versuche je Minute und Absender). Die Sperre nach Fehlversuchen gilt je
+  **(Konto, Absender)** und lässt sich damit nicht gegen einen Kollegen richten
+- **Zwei-Faktor je Gruppe erzwingbar**, mit **Passkey** (Fingerabdruck, Gesicht,
+  Sicherheitsschlüssel) oder Einmalkennwort. Der Passkey wird angeboten, nicht verlangt
 - **Gruppen aus dem Verzeichnis** (OpenLDAP oder AD): Eine OTA-Gruppe bezieht ihre Mitglieder aus
   LDAP-Gruppen, zusätzlich zu den von Hand Aufgenommenen. Das gilt sofort bei der Anmeldung und
-  per Abgleich im einstellbaren Takt (15 Min. bis 1 Tag) oder auf Knopfdruck. Wer im Verzeichnis
-  fehlt, wird deaktiviert, nie gelöscht. Konten ohne Gruppe sehen ein leeres Dashboard mit Hinweis
-- Anmeldefrist einstellbar (30 min bis 48 h), rollend — wer arbeitet, wird nicht abgemeldet
-- Oberfläche auf Deutsch und Englisch, umschaltbar oben rechts; eine **Standardsprache** für alle,
-  die nicht selbst umschalten (Einstellungen → Sprache), die auch für die Anmeldeseite von Keycloak
-  und das Handbuch gilt. **Dunkel oder hell** (oder wie der Rechner) — beides umschaltbar auch vor
-  der Anmeldung
-- Das Handbuch liegt **im Programm**, auf Deutsch und Englisch, gefiltert nach Rechten
-- **Mein Konto** für jeden: Passwort selbst ändern, Zwei-Faktor mit Rückfallcodes einrichten
+  per Abgleich im einstellbaren Takt (15 Minuten bis 1 Tag) oder auf Knopfdruck. Wer im
+  Verzeichnis fehlt, wird deaktiviert, nie gelöscht. Konten ohne Gruppe sehen ein leeres
+  Dashboard mit Hinweis ([Kapitel 8](docs/wiki/08-nutzer-und-gruppen.md#active-directory-und-ldap-))
+- **Ein Verzeichniseintrag übernimmt kein bestehendes Konto von selbst**, auch nicht bei gleichem
+  Namen. Die Verwaltung kann aber ein **Domänenkonto einem bestehenden Konto zuordnen**. Danach
+  meldet sich das alte Konto über das Verzeichnis an und behält Container, Zuhause und Ablagen
+- **Rollen und Rechte** je Gruppe, durchgesetzt in der API. Administratoren sind in ihrem eigenen
+  Container `root`. Konten werden deaktiviert statt gelöscht, und jeder Verwaltungsvorgang steht
+  im Audit-Log
+- **Fremde Web-Anwendungen** im Katalog (Open WebUI, Grafana, …): OTA legt den OIDC-Zugang an und
+  entscheidet, wer die Kachel sieht **und wer sich dort anmelden darf**:
+  - Keycloak prüft das selbst, auch beim direkten Aufruf der Adresse; ohne Gruppe kommt niemand
+    hinein.
+  - Die OTA-Gruppen stehen im Token, sodass die Anwendung daran etwas hängen kann, etwa einen
+    MCP-Server in Open WebUI.
+  - Eine Anmeldung gilt für OTA und die Anwendungen gleich lange.
+  - Was jemand in der Anwendung darf, entscheidet sie selbst; OTA baut ihr Rechtemodell nicht nach.
 
-**Das Netz der Arbeitsplätze**
-- **Ein eigenes Netz je Arbeitsplatz**, alle enden in einem Router. Kein Firmennetz, keine
+### Das Netz der Arbeitsplätze
+
+- **Ein eigenes Netz je Arbeitsplatz** ([Kapitel 23](docs/wiki/23-netz.md)), alle enden in einem Router. Kein Firmennetz, keine
   Nachbarsitzung, kein Wirt — und das nicht, weil eine Regel es verbietet, sondern weil es keinen
   anderen Weg gibt: Die Netze sind `internal`, Docker richtet dort weder NAT noch Standardroute ein
 - **Der Grundregelsatz steht sichtbar in der Oberfläche** — was OTA für sich selbst öffnet (TURN,
@@ -433,7 +582,7 @@ dabei **nicht** zurückwandert, ist die Datenbank: Neue Spalten bleiben stehen. 
 *Was ohne Zutun gilt, steht ausgeklappt da — mit Grund und Herkunft je Zeile. Darunter, wer gerade
 wo arbeitet, mit Durchsatz und verworfenen Paketen, und der Knopf für eine befristete Portfreigabe.*
 
-### Wo ein Paket endet, und warum
+#### Wo ein Paket endet, und warum
 
 ![Ein Paket geht ins Internet durch, eines ins Firmennetz wird im Router verworfen, und zum Nachbarn führt gar keine Leitung](docs/wiki/bilder/netzfluss-internet.svg)
 
@@ -449,63 +598,87 @@ einen benannten Port, und nur solange die Frist läuft. Die übrigen drei Diagra
 [`scripts/netzfluss.py`](scripts/netzfluss.py); wer Bewegung abgestellt hat, sieht dasselbe Bild
 mit stehenden Paketen.
 
-**Software in die Arbeitsplätze bringen**
-- Pakete anklicken, Image bauen, Fassung aktivieren — mit Protokoll und Rückrollen
-- **Pakete werden vorher geprüft**: kennt das Image den Namen, und taugt er überhaupt?
-  (Ubuntus `firefox` ist nur ein Verweis auf ein Snap und im Container nutzlos)
-- **Rezepte** für alles, was kein einfaches Paket ist — mit geführtem Bauer für eigene
-- **Anwendungen im Image finden**: OTA liest die `.desktop`-Dateien und schlägt Name, Zeichen und
-  Startbefehl vor. Niemand muss wissen, wo eine Binärdatei liegt
-- **Das echte Symbol aus dem Paket** — den Fuchs, nicht einen Kreis. OTA sucht es dort, wo die
-  Freedesktop-Spezifikation es hinlegt, rechnet es auf 128 Pixel herunter (VSCodium liefert 428 KB)
-  und liefert es zwischenspeicherbar aus
-- **Drei Ablagen**: die gemeinsame für Dateien, die in jeden Arbeitsplatz sollen (im Container nur
-  lesbar), eine **eigene je Nutzer** unter `/mnt/austausch` — beschreibbar, der Weg hinein und
-  wieder heraus —, und ein **Laufwerk je Gruppe** unter `/mnt/gruppen/<name>`: dieselben Dateien
-  für ein Team. Alle drei auch in der Kontrollleiste einer laufenden Session, mit Ziehen und
-  Ablegen. Über ein Gruppenlaufwerk entscheidet die Mitgliedschaft und sonst nichts — auch ein
-  Administrator kommt nur an die Gruppen, in denen er selbst ist
-- **Skeleton-Profil** je Workspace: womit ein Zuhause anfängt. Einzelne Pfade auf Wunsch bei jedem
-  Start durchgesetzt — die Ausnahme, nicht die Regel. Dazu **je Anwendung ein eigener Teilbaum**,
-  der erst kommt, wenn diese Anwendung zum ersten Mal startet: Wer nur das Terminal benutzt,
-  braucht die Einstellungen der Entwicklungsumgebung nicht in seinem Zuhause
-- **Session einfrieren**: im eigenen Arbeitsplatz einrichten, Vorschau ansehen, als neue Fassung
-  übernehmen. Das Home bleibt draussen, Geheimnisse werden markiert, die sudo-Ausnahme entfernt
-- **Skript beim Sessionstart** je Workspace, für alles, was ins Home gehört, aber nicht ins Image
-- **Einmal-Skripte** je Workspace: laufen je Nutzer genau einmal — für eine Umstellung im Zuhause,
-  die das Skeleton nicht mehr erreicht und die das Startskript sonst bei jedem Start wiederholte
+### Betrieb und Überwachung
 
-**Betrieb**
-- **Eigenes Basisimage** `ota/base-desktop`: Debian 13 + XFCE + **Selkies**, ohne Anwendung und
-  **ohne fremde Streaming-Software** — H.264 über WebSockets statt rechteckiger Ausschnitte über RFB.
-  Selkies 2.0 liegt **als Fork in OTAs Repository** (`third_party/selkies/`), damit ein Wechsel oben
-  — wie das Verschwinden von 1.6.2 am 2026-10-07 — den Bau nicht mehr bricht.
-  Das Konto heisst `ota` und wohnt unter `/home/ota`; kein Bestandteil trägt „Kasm" im Namen.
-  `scripts/build-desktop-image.sh --pruefen` misst 18 Punkte gegen den Vertrag mit dem Agent
-- **Der ältere Weg bleibt** — `ota/base-xfce` (Ubuntu + KasmVNC) für Images von Kasm, die kein
-  Selkies mitbringen. Umschaltbar je Arbeitsplatz unter **Streaming**;
-  `scripts/build-base-image.sh --pruefen` prüft ihn weiterhin
-- **Firmenproxy** durchgängig: beim Bauen der Dienste, beim Bauen der Images, in jeder Sitzung und
-  in API und Agent. Auch dort, wo keine Umgebungsvariable hinreicht — `apt` bekommt seine eigene
-  Konfiguration. Umschaltbar im laufenden Betrieb, ohne Neuaufsetzen; ohne Proxy ist nichts zu tun
-- **Stückliste je Image** (`make sbom`) in SPDX und CycloneDX — gebraucht, sobald ein Image das
-  Haus verlässt
-- **Sicherheitsupdates mit jedem `make update`** (frische Basis- und Dienst-Images, Paket-Updates
-  der Woche, auch für das nginx der Paketquelle; eine neue Forgejo-Fassung übernimmt OTA-Git danach
-  von selbst) und **`make cve`**: behebbare Lücken je Image, gescannt mit grype
-  ([Kapitel 11](docs/wiki/11-betrieb.md#sicherheitslücken-cves-))
-- Eigene Registry im Stack; fehlt ein Image lokal, wird es beim Start von dort geholt
-- Sicherung und Wiederherstellung von Profil, Container und Datenbank, manuell und nach Plan
-- HTTPS ab Werk, eigene kleine CA, austauschbar oder hinter einem Reverse Proxy
-- **Kein Nachladen von fremden Hosts.** Schriften liegen bei, die Oberfläche fordert nichts aus
-  dem Internet an — sie sieht offline und hinter einem Firmenproxy gleich aus, und die IP-Adresse
-  keines Nutzers verlässt das Haus
-- **Nichts wächst ohne Grenze.** Container-Protokolle sind auf 10 MB × 3 gedeckelt — für die
-  Dienste **und** für jeden Arbeitsplatz. Im Protokoll der Datenbank verfallen Verhaltensdaten
-  (Anmeldungen, Sitzungen, App-Starts) nach 90 Tagen, Verwaltungsvorgänge nach 365; aufgeräumt wird
-  täglich, und das Aufräumen steht selbst im Protokoll
+- **Live-Auslastung** unter **Betrieb → Arbeitsplätze**: Balken für CPU, RAM und Netz je
+  Arbeitsplatz und für den Host. Eine Warnung erscheint, sobald die CPU-Grenze einen Container
+  bremst. Dieselbe Liste zeigt alle Arbeitsplätze aller Nutzer, laufend und angehalten, mit Platz
+  und „zuletzt aktiv". Von dort lassen sie sich starten, anhalten und löschen, oder man öffnet das
+  **root-Webterminal** ([Kapitel 11](docs/wiki/11-betrieb.md#live-auslastung-betrieb--arbeitsplätze-))
+- **LXCFS** richtet `make up` auf dem Host selbst ein. Neue Arbeitsplätze bekommen es über Docker,
+  bestehende beim nächsten Start oder Fortsetzen; das gilt auch für Root-Arbeitsplätze unter
+  Sysbox. Mit `OTA_LXCFS=aus` bleibt es weg
+  ([Kapitel 11](docs/wiki/11-betrieb.md#im-arbeitsplatz-lxcfs-und-ota-top-))
+- **Startbalken und Startprotokoll**: Auf der Kachel steht, was beim Start gerade passiert. Im
+  Protokoll des Agents steht je Start eine Zeile mit der Dauer jedes Schritts
+  ([Kapitel 25](docs/wiki/25-root-arbeitsplatz.md#startzeit))
+- **`/healthz` und `/metrics`** für die Überwachung von außen
+- **Protokolle**: Unter **Betrieb → Protokoll** stehen Anmeldungen, Sitzungen, App-Starts,
+  Verwaltungsvorgänge, Aufschalten und Auskünfte. Verhaltensdaten verfallen nach 90 Tagen,
+  Verwaltungsvorgänge nach 365. Aufgeräumt wird täglich, und das Aufräumen steht selbst im
+  Protokoll
+- **Nichts wächst ohne Grenze.** Container-Protokolle sind auf 10 MB × 3 gedeckelt, für die
+  Dienste **und** für jeden Arbeitsplatz
+- **Sicherung und Wiederherstellung** von Profil, Container und Datenbank, auch für
+  Root-Arbeitsplätze und OTA-Git, manuell und nach Plan, mit Aufbewahrungsregel
+  ([Kapitel 14](docs/wiki/14-sicherung.md))
+- **Updates in einem Schritt** (`make update`), siehe [Aktualisieren](#aktualisieren). Während des
+  Updates zeigt jede OTA-Seite ein Banner. Dazu kommen die **Sicherheitsupdates** bei jedem
+  `make update`: frische Basis- und Dienst-Images, die Paket-Updates der Woche, und eine neue
+  Forgejo-Fassung übernimmt OTA-Git von selbst. **`make cve`** listet die behebbaren Lücken je
+  Image, gescannt mit grype ([Kapitel 11](docs/wiki/11-betrieb.md#sicherheitslücken-cves-))
+- **Stückliste je Image** (`make sbom`) in SPDX und CycloneDX. Sie wird gebraucht, sobald ein Image
+  das Haus verlässt
+- **Firmenproxy** durchgängig: beim Bauen der Dienste und der Images, in jeder Sitzung, in API,
+  Agent und Paketquelle. Auch dort, wo keine Umgebungsvariable hinreicht, bekommt etwa `apt` eine
+  eigene Konfiguration. Umschaltbar im laufenden Betrieb, ohne Neuaufsetzen
+  ([Kapitel 21](docs/wiki/21-firmenproxy.md))
+- **HTTPS ab Werk** mit eigener kleiner CA, austauschbar, oder hinter einem weiteren Reverse Proxy
+  (nginx, Caddy …). Auch **hinter einer Firewall mit NAT** läuft OTA, ohne Hairpin-NAT
+  ([Kapitel 10](docs/wiki/10-zertifikate-und-https.md), [24](docs/wiki/24-hinter-nat.md))
+- **Datenorte**: Datenbanken, Registry, OTA-Git und die Docker-Daten der Root-Arbeitsplätze lassen
+  sich über `.env` auf eine eigene Platte legen, etwa eine SSD; die Nutzerdaten bleiben auf der
+  großen. `scripts/daten-umziehen.sh` zieht im laufenden Betrieb um und schaltet in Sekunden um.
+  Laufende Root-Arbeitsplätze werden nie angehalten, sondern beim nächsten Fortsetzen umgeschaltet
+  ([Kapitel 40](docs/wiki/40-datenorte.md))
+- **Die eigene Marke**: Name der Anlage, Akzentfarbe und Zeichen. Sie erscheinen im Browserreiter,
+  auf der Anmeldemaske (auch der von Keycloak), auf dem Startbildschirm und in der PWA
+  ([Kapitel 22](docs/wiki/22-marke.md))
+- **News schreiben**: Meldungen der Verwaltung an alle, in Markdown mit Zeilenumbrüchen und
+  gefiltertem HTML direkt auf der Seite geschrieben. Es gibt Entwürfe, Anheften und einen Punkt in
+  der Seitenleiste für Ungelesenes ([Kapitel 11](docs/wiki/11-betrieb.md#news-))
+- **Standardsprache** für alle, die nicht selbst umschalten. Sie gilt auch für die Anmeldeseite von
+  Keycloak und das Handbuch
+- **Diagnose-Skripte** für die Fälle, die nach etwas anderem aussehen, als sie sind:
+  - `docker-diagnose.sh` klärt, warum Docker auf dem Host langsam ist;
+  - `platten-last.sh` zeigt, wer die Platte belastet;
+  - `platz-diagnose.sh` findet heraus, warum ein Arbeitsplatz kein Netz hat.
+
+  [Kapitel 12](docs/wiki/12-fehlersuche.md) beschreibt echte Fehler mit Symptom, Ursache und
+  Reparatur.
+- **Kein Nachladen von fremden Hosts.** Die Schriften liegen bei, und die Oberfläche fordert nichts
+  aus dem Internet an. Sie sieht offline und hinter einem Firmenproxy gleich aus, und die
+  IP-Adresse keines Nutzers verlässt das Haus
 - **Läuft neben einer bestehenden Kasm-Installation** auf demselben Host, ohne dort etwas
   umzustellen
+
+### Streaming und Basisimage
+
+- **Eigenes Basisimage** `ota/base-desktop`: Debian 13 + XFCE + **Selkies**, ohne Anwendung und
+  **ohne fremde Streaming-Software**. Es überträgt H.264 über WebSockets durch denselben HTTPS-Port
+  wie die Oberfläche, statt rechteckiger Ausschnitte über RFB. Das Konto heißt `ota` und wohnt
+  unter `/home/ota`; kein Bestandteil trägt „Kasm" im Namen.
+  `scripts/build-desktop-image.sh --pruefen` misst die Punkte des Vertrags mit dem Agent
+  ([Kapitel 19](docs/wiki/19-eigenes-basisimage.md))
+- **Selkies 2.0 als Fork in OTAs Repository** (`third_party/selkies/`). So bricht ein Wechsel beim
+  Original den Bau nicht mehr, wie es beim Verschwinden von 1.6.2 am 2026-10-07 geschah. Als Paket
+  `ota-selkies` hebt es auch ältere Golden Images an ([Kapitel 20](docs/wiki/20-selkies-versuch.md))
+- **`ota/base-desktop-root`** für Root-Arbeitsplätze (`make root-image`)
+- **Der ältere Weg bleibt**: `ota/base-xfce` (Ubuntu + KasmVNC) für Images von Kasm, die kein
+  Selkies mitbringen. Umschaltbar je Arbeitsplatz unter **Streaming**;
+  `scripts/build-base-image.sh --pruefen` prüft ihn weiterhin
+- **`make messung`** vergleicht die beiden Streaming-Wege unter derselben Last: CPU, Bandbreite
+  und Reaktionszeit je Sitzung
 
 ## Ein Blick in die Verwaltung
 
@@ -535,18 +708,22 @@ nicht — dieselbe Trennung gilt für das Dateisystem des Hosts.
 |---|---|
 | `web/` | Oberfläche (React, TypeScript, handgeschriebenes CSS, keine UI-Bibliothek) |
 | `api/` | REST-API, Anmeldung, Rechte, Sessions (FastAPI, PostgreSQL) |
-| `agent/` | **Einziger** Dienst mit Docker-Zugriff; Container, Displays, Images, Ablage |
+| `agent/` | **Einziger** Dienst mit Docker-Zugriff; Container, Displays, Images, Ablage, LXCFS, `ota-top` |
 | `deploy/` | Compose-Stack, Traefik, Registry, Zertifikate |
 | `firewall/` | Der Router aller Arbeitsplätze: nftables, NAT, Namensdienst, Portfreigaben |
 | `extension/` | Firefox-Erweiterung für die Zwischenablage |
 | `docs/wiki/` | Handbuch — wird im Programm als Hilfe ausgeliefert; Englisch in `docs/wiki/en/` |
-| `images/` | Eigene Basisimages: `base-desktop` (Debian + XFCE + Selkies, Vorgabe) und `base-xfce` (Ubuntu + KasmVNC) |
-| `tests/`, `scripts/` | Prüfungen, Zertifikat, Migration aus Kasm, Stückliste |
+| `ki/` | Der KI-Durchgang `ota-ki`: ein Eingang für alle KI-Server, Modellverzeichnis, Nutzungszahlen |
+| `repo/` | Die eigene Paketquelle samt Spiegel und Verwaltung |
+| `packaging/` | Die Pakete `ota-selkies`, `ota-ide-ai` und `ota-opencode` |
+| `images/` | Eigene Basisimages: `base-desktop` (Debian + XFCE + Selkies, Vorgabe), `base-desktop-root` (für Root-Arbeitsplätze), `base-xfce` (Ubuntu + KasmVNC) und `turn` |
+| `third_party/selkies/` | Der Fork von Selkies 2.0 mit OTAs Anpassungen |
+| `tests/`, `scripts/` | Prüfungen, Einrichtung (Sysbox, LXCFS), Zertifikat, Migration aus Kasm, Datenumzug, Diagnose, Stückliste |
 
 ## Dokumentation
 
-- **[Handbuch](docs/wiki/README.md)** — Bedienung, Verwaltung, Betrieb, Fehlersuche (28 Kapitel;
-  [English](docs/wiki/en/README.md))
+- **[Handbuch](docs/wiki/README.md)** — Bedienung, Verwaltung, Betrieb, Fehlersuche (40 Kapitel,
+  davon acht eigens für Anwender; [English](docs/wiki/en/README.md))
 - **[plan.md](plan.md)** — Architektur **und die Begründungen dahinter**, samt der Sackgassen
 - **[docs/adr/](docs/adr/README.md)** — Entscheidungen, die teuer rückgängig zu machen sind, mit den
   Alternativen, die nicht getragen hätten
@@ -567,7 +744,7 @@ aussahen, als sie waren.
 make test
 ```
 
-**452 Prüfungen in sieben Suiten**, jede stellt ihren Vorzustand selbst her:
+**Über zwanzig Prüfreihen**, jede stellt ihren Vorzustand selbst her:
 
 | Suite | Prüft |
 |---|---|
@@ -594,6 +771,7 @@ make test
 | `test-root-arbeitsplatz.sh` | Der Root-Arbeitsplatz: root auf dem Host unprivilegiert (Sysbox), Docker und Compose im Container, Netzregeln auch für die **inneren** Container, Anhalten und Fortsetzen mit erhaltenem Stand, Neu aufsetzen, Webterminal samt Protokoll und Export, kein Terminal in Dienste des Stacks, Golden Images mit `USER 1000`, Startbalken und Startprotokoll bei Start und Fortsetzen. Ohne Sysbox übersprungen |
 | `test-repo.sh` | Die eigene Paketquelle: Signatur, Hochladen (doppelt 409, kaputt 422), Snapshots samt Schutz vor dem Löschen, ein Debian-13-Arbeitsplatz installiert ein eigenes Paket **von hier**, „Nur Spiegel" ruft `deb.debian.org` nicht mehr, der Bildbauer trägt ein und wieder aus, ein Ubuntu-Image bleibt unberührt, ein Root-Arbeitsplatz übernimmt beim Fortsetzen die aktuelle Einstellung. Die Spiegelteile nur mit Spiegel |
 | `test-selkies-paket.sh` | Das Paket `ota-selkies`: liegt in der Paketquelle, hebt einen Arbeitsplatz auf einem alten Golden Image mit Selkies 1.6.2 an, der Bildbauer hebt ein Golden Image an, ein Root-Arbeitsplatz hebt sich beim Fortsetzen an und behält, was darin installiert war |
+| `test-ki.sh` (einzeln, braucht einen echten KI-Server) | KI-Durchgang und Nutzungsstatistik: `ki.ota` im Arbeitsplatz, Modellverzeichnis über den Durchgang, Antwort über `ki.ota` und über die abgefangene echte Adresse, Continue und opencode ohne Schlüssel; Anfragen stehen mit Tokens beim Menschen, Anwendungen werden erkannt, Prüfabrufe ohne Modell zählen nicht; Filter nach Quelle, Modell und Anwendung, keine Zahlen bei weniger als drei Menschen; Auskunft nur mit Begründung; fällt `ota-ki` aus, geht der Verkehr direkt |
 | `test-backup.sh` | Sicherung und Wiederherstellung von Profil, Container und Datenbank. Beendet dafür Sitzungen — **nur die eigenen**, und prüft das ausdrücklich nach |
 
 Die Zugangsdaten der Prüfung stehen in `deploy/.env` und nicht im Quelltext; die Reihen lesen sie

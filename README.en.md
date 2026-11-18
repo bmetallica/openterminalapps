@@ -18,13 +18,25 @@ well as whole registries can be connected — as an add-on, not as the foundatio
 **Every workspace sits in its own network** behind a router: no company network, no neighbouring
 session, no host — until someone explicitly allows it ([firewall.md](firewall.md)).
 
-> **Status:** running and in use. 452 automated checks, 107 of them in a real browser.
-> What is still missing is listed openly in [roadmap.md](roadmap.md) — none of it is glossed over.
+> **Status:** running and in use. More than twenty check suites with several hundred automated
+> checks, some of them in a real browser. What is still missing is listed openly in
+> [roadmap.md](roadmap.md) — none of it is glossed over.
 
 ![The dashboard: a running session with nine applications, below it the tiles of the other workspaces](docs/bilder/01-dashboard.png)
 
 *The start page: your own running session with its applications, the cores and memory it got — and
 what it may do on the network. Below, what else can be started.*
+
+**Contents:** [Quick start](#quick-start) · [Updating](#updating) ·
+[What it does](#what-it-does) — [workspace](#for-everyone-the-workspace-in-the-browser),
+[root workspace](#root-workspace-root-and-docker-in-the-container),
+[development](#development-git-and-ai-in-the-editor-and-the-terminal),
+[AI gateway and AI usage](#ai-gateway-and-ai-usage),
+[workspaces](#workspaces-and-resources), [software and images](#software-and-images),
+[accounts](#accounts-sign-in-and-permissions), [network](#the-workspaces-network),
+[operations](#operations-and-monitoring), [streaming](#streaming-and-base-image) ·
+[A look at administration](#a-look-at-administration) · [How it is built](#how-it-is-built) ·
+[Documentation](#documentation) · [Checks](#checks) · [Licence](#licence)
 
 ---
 
@@ -121,7 +133,7 @@ Selkies, without KasmVNC. That takes a few minutes and only happens if it is mis
 is available under **Workspaces**. Rebuilding by hand works at any time:
 
 ```bash
-scripts/build-desktop-image.sh --pruefen      # builds and checks 19 points against the contract with the agent
+scripts/build-desktop-image.sh --pruefen      # builds and checks the points of the contract with the agent
 ```
 
 A Kasm image is **not** needed for this. Those remain possible, but they are the exception — for
@@ -216,6 +228,21 @@ Then create a template of the class "Root with Docker" and grant the permission 
 workspace" to the groups that should get it. In detail in
 [chapter 25](docs/wiki/en/25-root-arbeitsplatz.md).
 
+### Own limits inside the workspace (LXCFS)
+
+So that `free`, `htop` and `uptime` inside a workspace show its limits instead of the host's,
+`make up` (and therefore `make update` too) sets up **LXCFS** on the host: it installs the Debian
+package if it is missing and sets the required options. An LXCFS that is already running and in use
+is not restarted for this. To check:
+
+```bash
+sudo scripts/lxcfs-einrichten.sh --pruefen
+```
+
+**Running workspaces only get it at their next start**, root workspaces at their next resume,
+without a rebuild. Whoever does not want it sets `OTA_LXCFS=aus` in `deploy/.env`. See
+[chapter 11](docs/wiki/en/11-betrieb.md#inside-the-workspace-lxcfs-and-ota-top-).
+
 ### Turning on the package mirror
 
 The own package repository always runs — it is how `ota-selkies`, the streaming server, gets into
@@ -249,159 +276,277 @@ that did not exist before is simply there.
 
 ## What it does
 
-**The workspace**
-- One container per user, every application on its own display, started only when needed
-- Every application in its own browser tab, with its own address — and can be pinned to the desktop
-  as a shortcut (PWA)
-- The remote screen **grows with the window**, no black border, no scaling
-- Clipboard in both directions, also between two applications in the same container
-- Classic XFCE desktop as an additional view
-- **Root workspace for developers**: root, **Docker and `docker compose`** inside the container —
-  under Sysbox, so without `--privileged` (root in the container is unprivileged on the host).
-  Ending it **stops** instead of deleting: what gets installed stays, at a fixed address; "Rebuild"
-  brings in a new base image. The inner containers go through the same router and the same network
-  rules; their networks come from a fixed range (`OTA_ROOT_DOCKER_NETZE`) and do not cover the LAN
-  ([chapter 25](docs/wiki/en/25-root-arbeitsplatz.md))
-- **Own package repository** (always on): **your own `.deb` packages** via drag & drop, **pinned
-  snapshots** with rollback and reproducible images, and the package **`ota-selkies`**, which
-  brings the streaming server into images and upgrades root workspaces when they resume. A
-  **mirror** of Debian 13 including security updates and Docker's repository is an add-on (off by
-  default): workspaces then install even when something is missing outside — mode "mirror first"
-  or "mirror only". Syncing is manual; the mirror's age turns yellow and red
-  ([chapter 26](docs/wiki/en/26-paketquellen.md))
+The overview follows the roles: first what every person gets in their workspace, then development
+and AI, then administration, network and operations. Each point links to the manual chapter that
+explains it in full.
 
-**Administration**
-- Resources **per user and workspace**: user A gets 2 cores, user B one
-- **News** — announcements from the administrators to everyone, written in Markdown with line breaks and filtered HTML right on the
-  page, with drafts, pinning and a sidebar badge for unread posts ([chapter 11](docs/wiki/en/11-betrieb.md#news-))
-- **User handbook** — chapters of their own for users: getting started, account, files, root
-  workspace, Git and AI, using a session, help with problems, terms ([chapters 29 to 36](docs/wiki/en/29-los-gehts.md))
-- **Start progress bar and start log** — the tile shows what is happening during a start; the
-  agent's log has one line per start with the duration of each step. Root workspaces resume without
-  waiting for the space measurement over all volumes or for the inner containers
-  ([chapter 25](docs/wiki/en/25-root-arbeitsplatz.md#start-time))
-- **Live utilisation under Operations** — bars for CPU, RAM and network per workspace and for the
-  host, with a warning as soon as the CPU limit throttles a container ([chapter 11](docs/wiki/en/11-betrieb.md#live-utilisation-operations--workspaces-))
-- **Own limits in `free`, `htop` and `uptime`** — via LXCFS workspaces see their memory, cores and
-  load instead of the host's, existing root workspaces from their next resume; plus `ota-top` for
-  CPU from the cgroup ([chapter 11](docs/wiki/en/11-betrieb.md#inside-the-workspace-lxcfs-and-ota-top-))
-- **Cores as a weight, not a cap** — on an idle host a workspace may use up to four times as much,
-  on a busy one the kernel shares proportionally; no more stutter while the host is half idle
-  ([chapter 5](docs/wiki/en/05-workspaces-verwalten.md#resources))
-- **Duplicate workspaces** — with apps, run-once scripts, allocations, groups and skeleton, e.g. a
-  fully set-up root workspace as the template for the next one; everyone can **rename their tiles
-  for themselves** ([chapter 5](docs/wiki/en/05-workspaces-verwalten.md#duplicating-))
-- **Several workspaces at once despite shared data** — the *Shared data* persistence: own settings
-  per workspace, `Desktop`, `Documents` and the like from the shared home. Two root workspaces of
-  one person can run side by side ([chapter 5](docs/wiki/en/05-workspaces-verwalten.md#resources))
-- **Quota per home** and a lower limit for free disk space — an understandable refusal instead of
-  a container that stalls mid-work while writing. **Core dumps** of crashed programs (`core.<pid>`)
-  no longer fill any home: new containers do not create them, and whatever still appears in
-  existing ones OTA cleans up before every measurement and daily
-  ([chapter 11](docs/wiki/en/11-betrieb.md#ota-cleans-up-core-dumps-itself-))
-- **Visibility per application and group**, for when a licence does not cover everyone
-- **Two-factor enforceable per group**, either with a **passkey** (fingerprint, face, security
-  key) or a one-time password — offered, not required; `/healthz` and `/metrics` for monitoring
-- Users, groups and permissions; administrators are `root` in their own container
-- **Operations → Workspaces**: all workspaces of all users, running and stopped, with storage and
-  "last active"; start, stop, delete — and a **root web terminal** in the browser whose input is
-  logged per workspace and can be exported
-- **Central sign-in through Keycloak**, shipped in the stack — or connect an existing one. OTA is
-  its administrator: accounts, groups and the **AD connection** are set up in OTA's interface, the
-  Keycloak console stays closed for everyday use — **but it is still reachable** (`/auth/admin/`),
-  and deliberately so: whoever walls it off locks themselves out when something breaks. What
-  operations owe it is in [chapter 18](docs/wiki/en/18-zentrale-anmeldung.md)
-- **One way in for everyone:** an account created in OTA is created in Keycloak — with the
-  password administration assigns. Everyone changes password and second factor under **My
-  account**, which leads to Keycloak (for directory accounts: in the directory). Old local accounts
-  move over **with their password** on their next sign-in; only the emergency account stays local
-- **Emergency access** at `/notfall`: a local account that works without Keycloak. Without it, an
-  installation with a broken sign-in configuration could no longer be entered. In front of it a
-  brake (ten attempts per minute and sender), and the lockout after failed attempts applies per
-  **(account, sender)** — so it cannot be turned against a colleague
-- A directory entry **cannot take over an existing account by itself**, not even with the same
-  name. Administration can, however, **link a domain account to an existing account**: afterwards
-  the old account signs in through the directory and keeps its containers, home and shelves.
-- **OTA Git (Forgejo)**, switchable on and off in the menu:
+### For everyone: the workspace in the browser
+
+- **One container per person and template**, with every application on its own screen, started
+  only when needed. The dashboard shows the running session with its applications, the cores and
+  memory it got, and what it may do on the network. Below it are the tiles of all other templates
+  that can be started ([chapter 3](docs/wiki/en/03-arbeitsplatz.md), [29](docs/wiki/en/29-los-gehts.md))
+- **Every application in its own browser tab**, with its own address, and installable as a desktop
+  shortcut (PWA). The classic XFCE desktop is available as an additional view
+- **The remote screen grows with the window**, with no black border and no scaling. The session's
+  control bar handles screen, keyboard, sound and the shelves. Umlauts, Shift and AltGr of a German
+  keyboard arrive correctly, and sound plays in the browser
+  ([chapter 34](docs/wiki/en/34-bedienung.md))
+- **Clipboard in both directions**, images included, and also between two applications in the same
+  container ([chapter 4](docs/wiki/en/04-zwischenablage.md))
+- **One home for all applications**: the same projects, the same SSH key, the same settings. It
+  outlives every container: when OTA "deletes" something, it is the container, not the home. The
+  only exception is templates that are explicitly set to *ephemeral*
+  ([chapter 31](docs/wiki/en/31-dateien.md))
+- **Three shelves**:
+  - the shared one for files that should go into every workspace (read-only in the container);
+  - **one per person** under `/mnt/austausch`, writable, the way in and back out;
+  - **a drive per group** under `/mnt/gruppen/<name>` with the same files for a team.
+
+  All three are also in the control bar of a running session, with drag and drop. Group membership
+  alone decides access to a group drive; an administrator too only reaches the groups they are in
+  themselves ([chapter 17](docs/wiki/en/17-ablage-und-startskript.md))
+- **Seeing your own load**: through LXCFS, `free`, `htop` and `uptime` show the memory, cores, load
+  and uptime **of your own workspace**, not those of the host. For the CPU there is **`ota-top`**.
+  It reads the cgroup and shows:
+  - usage, allotted cores and the upper limit;
+  - whether the workspace is being throttled right now and whether memory ran full;
+  - how long programs waited for CPU, memory or disk;
+  - the programs using the most CPU.
+
+  See [chapter 33](docs/wiki/en/33-entwickeln.md#how-busy-is-my-workspace-).
+- **Rename tiles for yourself**, without changing anything for anyone else. The **⋯** menu on the
+  tile sets up the AI tools again, rebuilds a root workspace and opens the views of extensions
+- **My account**: change the password and set up a second factor, as a passkey or as a one-time
+  password, with recovery codes. For directory accounts this happens in the directory
+  ([chapter 30](docs/wiki/en/30-mein-konto.md))
+- **News** from administration, with a dot in the sidebar for unread posts. **My AI usage** shows
+  your own figures, and the **GDPR** item explains what is recorded
+- **The manual inside the program**, in German and English and filtered by permissions. It has its
+  own chapters for users: first steps, account, files, root workspace, Git and AI, operation, help
+  with problems, and terms ([chapters 29 to 36](docs/wiki/en/29-los-gehts.md))
+- **German or English, dark or light** (or whatever the computer is set to), switchable at the top
+  right, even before signing in
+- **Whoever watches is in the log.** Only a full administrator can connect to a running session, a
+  supporter cannot. Every connection is logged with both names and kept for a year
+  ([chapter 3](docs/wiki/en/03-arbeitsplatz.md#who-else-can-see-your-screen))
+- **Signed out after inactivity, not after time.** The rolling limit can be set from 30 minutes to
+  48 hours: whoever is working is not signed out, and brief API outages no longer throw anyone out.
+  Idle workspaces are paused, stopped or deleted per template; the home is always kept
+
+### Root workspace: root and Docker in the container
+
+- **root, Docker and `docker compose` in the container**, under Sysbox and therefore without
+  `--privileged`: root in the container is unprivileged on the host
+  ([chapter 25](docs/wiki/en/25-root-arbeitsplatz.md), for users
+  [chapter 32](docs/wiki/en/32-root-arbeitsplatz-nutzen.md))
+- **Ending pauses instead of deleting.** Whatever was installed stays, Docker images and containers
+  included, and the workspace keeps its fixed address. **Rebuild** fetches a new base image
+- **The same network rules for the inner containers.** They go through the same router. Their
+  networks come from a fixed range (`OTA_ROOT_DOCKER_NETZE`) and do not cover the LAN
+- **Fast resume**: a progress bar on the tile shows the current step. Resuming does not wait for the
+  disk measurement or the inner containers. OTA removes stale PID files of dockerd and containerd at
+  start
+- **Process limit 32768** instead of 4096, adjustable via `OTA_ROOT_PIDS_LIMIT`, so Compose stacks
+  and builds do not hit the limit
+- **Several at once**: with the persistence *Shared data*, two root workspaces of one person run
+  side by side. Each has its own settings, while `Desktop`, `Documents` and the like come from the
+  shared home
+- **Two dedicated permissions**: *Use root workspace* and *Web terminal as root into running
+  workspaces*. Every input in the web terminal is logged with a name and can be exported
+  ([chapter 8](docs/wiki/en/08-nutzer-und-gruppen.md#two-permissions-for-root-workspaces-))
+- **Upgrades itself on resume**: new Selkies, IDE AI, opencode, Git token, package source, LXCFS,
+  one-time scripts and `ota-top`. A root workspace does not need a rebuild for this
+
+### Development: Git and AI in the editor and the terminal
+
+- **OTA Git (Forgejo)**, switchable on and off in the menu ([chapter 27](docs/wiki/en/27-git.md)):
   - Runs under its own subdomain behind the same entrance as OTA.
-  - Sign-in with the OTA credentials through Keycloak, only for entitled groups.
-  - OTA creates the accounts and locks instead of deleting. OTA admins are admins there too.
-  - Workspaces and root workspaces get Git preconfigured: a token per workspace, revoked when it
-    ends; SSH only inside the container network. Other Git servers stay untouched.
-  - See [chapter 27](docs/wiki/en/27-git.md).
-- **IDE-AI**, can be turned on and off under Settings: an AI assistant (Continue) in VS Code,
-  VSCodium and PyCharm, connected to your own AI server (vLLM, llama.cpp or any other with an
-  OpenAI interface):
-  - Models as a drop-down, context window and response length per model; plus tools
-    (agent mode), temperature, timeout, rules and entitled groups.
+  - Sign-in with the OTA credentials through Keycloak, only for authorised groups.
+  - OTA creates the accounts and disables them instead of deleting them. OTA admins are admins
+    there too.
+  - Workspaces and root workspaces get Git preconfigured: a token per workspace, revoked at the
+    end; SSH only inside the container network. Other Git servers stay untouched, and a personal
+    `.gitconfig` takes precedence.
+- **IDE AI**, switchable on and off under Settings: an AI assistant (Continue) in VS Code, VSCodium
+  and PyCharm/IntelliJ, connected to your own AI server. That can be vLLM, llama.cpp or any other
+  server with an OpenAI interface ([chapter 28](docs/wiki/en/28-ide-ai.md)):
+  - Models as a selection list, each with context window and answer length; plus tools (agent
+    mode), temperature, timeout, rules and authorised groups.
   - The packages come from the own package source into every workspace with a matching editor,
-    also into Ubuntu and Kasm images; root workspaces move up when resuming.
-  - The firewall allows the AI server while IDE-AI is on. Continue's telemetry off.
-  - **Several AI servers** under one name and an **AI gateway** (`ota-ki`, optional): Continue and
-    opencode see one model list across all servers, the key stays out of the homes. The firewall
-    also intercepts connections from scripts to a server's real address. If the gateway is down,
-    traffic goes direct again by itself. The first server applies to everyone, each further one
-    is added for its **groups**.
-  - **AI usage under Operations** (optional, off by default): at first **without names**, i.e.
-    totals, trend, donuts per person and workspace (by rank only, from three upwards), template,
-    model, server and **application** (opencode, VS Code, PyCharm, Open WebUI …), and a
-    distribution by time of day, filterable by source (OTA only, Open WebUI only), model and
-    application (no figures with fewer than three people in the selection). Names and individual trends only after a
-    **reason** that is logged with the name, for 30 minutes. Everyone sees their own figures under
-    **My AI usage**, and a **GDPR** item in the sidebar informs everyone (text adaptable by
-    administrators). Never contents; retention adjustable.
-  - **External services such as Open WebUI** can also talk to the AI through the gateway: with
-    their own key, the same group rule and the same statistics, assigned per person via Open
-    WebUI's headers.
-  - If a Marketplace update or an own configuration has displaced Continue, **⋯ → Set up AI tools
-    again** on the workspace's tile restores OTA's version. Root workspaces have **Rebuild** in the
-    same menu.
-  - See [chapter 28](docs/wiki/en/28-ide-ai.md).
-- **opencode**, can be turned on and off under Settings: the AI assistant in the terminal, with the
-  AI server and the models from IDE-AI:
-  - Package from the own package source in the pinned version; a self-installed opencode is taken
-    over, the original stays as `*.vor-ota`.
-  - OTA writes opencode's managed configuration to `/etc/opencode/`. Own settings in
-    `~/.config/opencode` are added, an own default model stays.
-  - An addition to the system prompt, globally and per group, with preview and audit log.
-  - Additional MCP servers, remote or local, with an API key, released per server for groups.
-  - See [chapter 38](docs/wiki/en/38-opencode.md).
-- **Extensions:** standalone Docker applications with their own Compose project, paired through a
-  contract and switchable per group:
-  - An own token per workspace; MCP server and prompt snippet for opencode.
-  - The extension's views appear in OTA under My account and in the tile's ⋯ menu.
-  - No host port and no firewall rule; account deletion, locking and backup come along.
-  - The first: the **memory for opencode**
-    ([plugin_ota-opencode](https://github.com/bmetallica/plugin_ota-opencode)). Every opencode
-    session gets its own long-term memory, with embeddings from vLLM or llama.cpp.
-  - See [chapter 39](docs/wiki/en/39-erweiterungen.md).
-- **Data locations:** databases, registry, OTA-Git and the Docker data of root workspaces can be
-  placed on a disk of their own via `.env`, e.g. an SSD; user data stays on the big one.
-  `scripts/daten-umziehen.sh` copies while running and switches in seconds. Running root workspaces
-  are never stopped but switched at their next resume. See [chapter 40](docs/wiki/en/40-datenorte.md).
-- **Software monitoring:** every hour OTA records which applications are installed in each running
-  workspace (apt, start menu, Flatpak, Snap), without versions. There is a whitelist that can be
-  filled from the current state. Whatever is not on it, administrators see on the dashboard and
-  approve with one click. If it gets uninstalled, the alert disappears by itself
-- **External web applications** in the catalog (Open WebUI, Grafana, …): OTA creates the OIDC
-  access and decides who sees the tile **and who may sign in there**. Keycloak checks this itself,
-  even when the address is opened directly; without a group nobody gets in. The OTA groups are in
-  the token, so the application can hang something on them, such as an MCP server in Open WebUI.
-  What someone may do inside is up to the application. OTA does not rebuild its permission model
-- **Groups from the directory** (OpenLDAP or AD): an OTA group gets its members from LDAP groups,
-  in addition to those added by hand. That applies immediately at sign-in and via sync at an
-  adjustable interval (15 min to 1 day) or at the push of a button. Whoever is missing from the
-  directory is disabled, never deleted. Accounts without a group see an empty dashboard with a note
-- Sign-in timeout adjustable (30 min to 48 h), rolling — whoever is working is not signed out
-- Interface in German and English, switchable at the top right; a **default language** for
-  everyone who does not switch themselves (Settings → Language), which also applies to the
-  Keycloak sign-in page and the manual. **Dark or light** (or match the system) — both switchable
-  even before signing in
-- The manual lives **inside the program**, in German and English, filtered by permissions
-- **My account** for everyone: change your own password, set up two-factor with recovery codes
+    also in Ubuntu and Kasm images.
+  - Continue sits on the right in the sidebar, Copilot is off, and so is Continue's telemetry.
+  - The firewall lets the AI server through while IDE AI is on.
+  - If a marketplace update or a personal configuration has pushed Continue aside, **⋯ → Set up AI
+    tools again** restores OTA's version.
+- **opencode**, switchable on and off under Settings: the AI assistant in the terminal, with the AI
+  server and the models from IDE AI ([chapter 38](docs/wiki/en/38-opencode.md)):
+  - The package comes from the own package source in the pinned version. A self-installed opencode
+    is taken over; the original stays as `*.vor-ota`.
+  - OTA writes opencode's managed configuration to `/etc/opencode/`. Personal settings in
+    `~/.config/opencode` are added, and a personal default model stays.
+  - An addition to the system prompt, global and per group, with preview and audit log.
+  - Further MCP servers, remote or local, with API key, each released for groups.
+- **Extensions**: standalone Docker applications with their own Compose project. They are coupled
+  to OTA through a contract and can be switched on for groups
+  ([chapter 39](docs/wiki/en/39-erweiterungen.md)):
+  - Every workspace gets its own token; MCP servers and prompt snippets go to opencode.
+  - No host port and no firewall rule. Account deletion, disabling and backup are handled too.
+  - The first one is the **memory for opencode**
+    ([plugin_ota-opencode](https://github.com/bmetallica/plugin_ota-opencode)): every opencode
+    session gets its own long-term memory, with embeddings from vLLM or llama.cpp. The sidebar item
+    **opencode · Memories** offers:
+    - each session's entries for reading, editing, pinning, copying and moving;
+    - read access for one session to another session's memory;
+    - a **main memory** that all sessions of a person read along;
+    - a **document library** (PDF, Office, text) that opencode searches with source references.
+      Credentials in the text are removed during extraction.
 
-**The workspaces' network**
-- **Its own network per workspace**, all ending in one router. No company network, no
+### AI gateway and AI usage
+
+- **Several AI servers under one name.** The first server applies to everyone, every further one
+  is added for its **groups**. Continue and opencode see one shared model directory across all
+  servers ([chapter 28](docs/wiki/en/28-ide-ai.md#several-ai-servers-ai-gateway-and-usage-statistics))
+- **AI gateway** (`ota-ki`, optional): workspaces talk to `ki.ota`. The AI server's key stays out
+  of the homes, and the firewall also intercepts connections that scripts send directly to a
+  server's real address. If the gateway goes down, traffic goes direct again by itself. HTTPS to
+  the AI server is spoken with certificate verification. Direct HTTPS connections from a script are
+  passed through unread and only counted as a connection
+- **External services such as Open WebUI** can also talk to the AI through the gateway if wanted.
+  They get their own key and are subject to the same group rule and the same statistics. Requests
+  are attributed per person through Open WebUI's headers
+- **AI usage under Operations** (optional, off by default). **Only real model calls** are counted;
+  requests such as `/v1/models`, `/health` or monitoring services' login pages stay out:
+  - **Without names**: totals, history and a distribution by time of day. Plus ring charts per
+    template, model, server and **application**, and per person and workspace only by rank and
+    only from three upwards.
+  - **Filters** by source (all, OTA only, Open WebUI only), model and application. If fewer than
+    three people are in the selection, the page shows no figures.
+  - **Recognised applications**: opencode, Continue, Cline, Roo Code, Kilo Code, Aider and
+    Copilot. Plus VS Code and the JetBrains IDEs, which OTA derives from the template, and Open
+    WebUI. For scripts the statistics name the language: Java, Node or Python.
+  - **Names and individual histories** only after a **justification** that is logged with a name,
+    and only for 30 minutes.
+  - Everyone sees their own figures under **My AI usage**. A **GDPR** item in the sidebar informs
+    everyone; administration can adjust its text.
+  - Contents are never recorded, and retention is adjustable.
+
+### Workspaces and resources
+
+- **A template's editor**: image, mode, streaming path, network, apps, resources, permissions,
+  environment and allocation, all on one screen. The **capacity display** shows in advance whether
+  the host would be overbooked, instead of finding out from an OOM kill
+  ([chapter 5](docs/wiki/en/05-workspaces-verwalten.md))
+- **Resources per person and workspace**: A gets 2 cores, B one
+  ([chapter 6](docs/wiki/en/06-ressourcen-und-zuteilung.md)). Changed CPU and RAM values also reach
+  existing containers, running and paused
+- **Cores as a weight, not a cap.** When the host is free, a workspace may use up to four times
+  its share; when it is full, the kernel divides proportionally. So nothing stutters any more while
+  the host is half empty
+- **Duplicate workspaces**, with apps, one-time scripts, allocations, groups and skeleton. A fully
+  set-up root workspace, for example, becomes the template for the next one
+  ([chapter 5](docs/wiki/en/05-workspaces-verwalten.md#duplicating-))
+- **Persistence** per template: *Per user* (one home for all workspaces, the normal case), *Per
+  workspace*, *Ephemeral* or *Shared data*. With shared data several workspaces run at the same
+  time, each with its own settings and the same data folders
+- **A quota per home and a lower limit for free disk space.** Whoever reaches the limit gets an
+  understandable refusal, instead of a container that freezes mid-work while writing.
+  - **Core dumps** of crashed programs (`core.<pid>`) no longer fill any home. New containers do
+    not create them, and whatever still appears in existing ones OTA removes before every
+    measurement and daily ([chapter 11](docs/wiki/en/11-betrieb.md#ota-cleans-up-core-dumps-itself-)).
+  - The **disk measurement** runs one at a time in the background, at most once an hour per
+    workspace (`OTA_PLATZ_MESSEN_MINUTEN`), and when a root workspace is paused.
+- **Clipboard per workspace and group**: paste, copy, images and the selection clipboard can be
+  switched individually. Groups can be stricter than the workspace, never more generous
+  ([chapter 37](docs/wiki/en/37-zwischenablage-verwaltung.md))
+- **Skeleton profile** per workspace: what a home starts with, including `.bashrc`, `.profile` and
+  `.bash_logout`. Individual paths can be enforced at every start if wanted; that is the exception,
+  not the rule. Plus **a subtree per application** that only arrives when that application starts
+  for the first time ([chapter 17](docs/wiki/en/17-ablage-und-startskript.md))
+- **Script at session start** per workspace, for everything that belongs in the home but not in
+  the image, such as a company certificate
+- **One-time scripts** per workspace run exactly once per person, also when root workspaces are
+  resumed. They are meant for changes in the home that the skeleton no longer reaches. **Show
+  runs** shows return code and output
+
+### Software and images
+
+- **Click packages, build the image, activate the version**, with log and rollback
+  ([chapter 7](docs/wiki/en/07-golden-images.md))
+- **Packages are checked beforehand**: does the image know the name, and is the package any use at
+  all? Ubuntu's `firefox`, for example, is only a pointer to a snap and useless in a container
+- **Recipes** for everything that is not a simple package, with a guided builder for your own
+- **Freeze a session**: set things up in your own workspace, look at the preview and take it over
+  as a new version. The home stays out, secrets are flagged, the sudo exception is removed
+- **Find applications in the image**: OTA reads the `.desktop` files and suggests name, icon and
+  start command. Nobody needs to know where a binary lives
+- **The real icon from the package**, the fox rather than a circle. OTA looks for it where the
+  freedesktop specification puts it, scales it down to 128 pixels (VSCodium ships 428 KB) and
+  serves it cacheable
+- **Visibility per application and group**, for when a licence does not cover everyone, and a
+  **resolution per application**
+- **Manage images**: what is on the host, where it came from and who uses it, and what can be
+  removed safely. There is also a registry of its own in the stack; if an image is missing
+  locally, it is fetched from there at start ([chapter 16](docs/wiki/en/16-images-verwalten.md))
+- **Include Kasm images and whole registries**, as an addition and for switching over. There is a
+  catalogue with suggested versions and checks before taking anything over
+  ([chapter 9](docs/wiki/en/09-kasm-images-und-registries.md)). A **profile from Kasm** can be
+  taken over (`scripts/migrate-kasm-profile.sh`, [chapter 15](docs/wiki/en/15-migration-aus-kasm.md))
+- **Own package source** (always on) ([chapter 26](docs/wiki/en/26-paketquellen.md)):
+  - **your own `.deb` packages** by drag and drop;
+  - **pinned snapshots** with rollback and reproducible images;
+  - the packages **`ota-selkies`**, `ota-ide-ai` and `ota-opencode`, which bring the streaming
+    server and the AI tools into images and upgrade root workspaces on resume.
+
+  A **mirror** of Debian 13 including security updates and Docker's repository is an add-on, off
+  by default. With it, workspaces install even when something outside is missing: in the mode
+  "mirror first" or "mirror only". Syncing is manual; the mirror's age turns yellow and red.
+- **Software monitoring**: every hour OTA records which applications are installed in each
+  running workspace (apt, start menu, Flatpak, Snap), without versions. There is a whitelist that
+  can be filled from the current state. Whatever is not on it, administrators see on the dashboard
+  and approve with one click. Once it is uninstalled, the alert disappears by itself
+  ([chapter 11](docs/wiki/en/11-betrieb.md#software-monitoring-))
+
+### Accounts, sign-in and permissions
+
+- **Central sign-in through Keycloak**, shipped in the stack, or connect an existing Keycloak. OTA
+  manages it: accounts, groups and the **AD connection** are set up in OTA's interface, and the
+  Keycloak console stays closed for everyday use. **It is still reachable** (`/auth/admin/`), on
+  purpose: whoever walls it up locks themselves out when something breaks
+  ([chapter 18](docs/wiki/en/18-zentrale-anmeldung.md))
+- **One entrance for everyone.** An account created in OTA comes into being in Keycloak, with the
+  password administration assigns. Old local accounts move over **with their password** at the
+  next sign-in; only the emergency account stays local. The sign-in page follows OTA's brand,
+  language and theme
+- **Emergency access** under `/notfall`: a local account that works without Keycloak. In front of
+  it sits a brake (ten attempts per minute and sender). The lockout after failed attempts applies
+  per **(account, sender)**, so it cannot be turned against a colleague
+- **Two-factor enforceable per group**, with a **passkey** (fingerprint, face, security key) or a
+  one-time password. The passkey is offered, not required
+- **Groups from the directory** (OpenLDAP or AD): an OTA group takes its members from LDAP groups,
+  in addition to those added by hand. This applies immediately at sign-in and through a sync at an
+  adjustable interval (15 minutes to 1 day) or at the push of a button. Whoever is missing from
+  the directory is disabled, never deleted. Accounts without a group see an empty dashboard with a
+  note ([chapter 8](docs/wiki/en/08-nutzer-und-gruppen.md#active-directory-and-ldap-))
+- **A directory entry never takes over an existing account by itself**, not even with the same
+  name. Administration can, however, **assign a domain account to an existing account**. After
+  that the old account signs in through the directory and keeps its container, home and shelves
+- **Roles and permissions** per group, enforced in the API. Administrators are `root` in their own
+  container. Accounts are disabled instead of deleted, and every administrative action is in the
+  audit log
+- **Third-party web applications** in the catalogue (Open WebUI, Grafana, …): OTA creates the OIDC
+  access and decides who sees the tile **and who may sign in there**:
+  - Keycloak checks this itself, even when the address is called directly; without a group nobody
+    gets in.
+  - The OTA groups are in the token, so the application can hang something on them, such as an
+    MCP server in Open WebUI.
+  - A sign-in lasts equally long for OTA and the applications.
+  - What someone may do inside the application is up to the application; OTA does not rebuild its
+    permission model.
+
+### The workspaces' network
+
+- **Its own network per workspace** ([chapter 23](docs/wiki/en/23-netz.md)), all ending in one router. No company network, no
   neighbouring session, no host — and not because a rule forbids it, but because there is no other
   path: the networks are `internal`, Docker sets up neither NAT nor a default route there
 - **The base rule set is visible in the interface** — what OTA opens for itself (TURN, its own
@@ -426,7 +571,7 @@ that did not exist before is simply there.
 working where right now, with throughput and dropped packets, and the button for a time-limited port
 forward.*
 
-### Where a packet ends, and why
+#### Where a packet ends, and why
 
 ![One packet goes through to the internet, one to the company network is dropped in the router, and to the neighbour there is no line at all](docs/wiki/en/bilder/netzfluss-internet.svg)
 
@@ -441,63 +586,84 @@ and a rule by name — are in [manual, chapter 23](docs/wiki/en/23-netz.md). The
 [`scripts/netzfluss.py`](scripts/netzfluss.py); whoever has turned off motion sees the same picture
 with packets standing still.
 
-**Getting software into the workspaces**
-- Click packages, build the image, activate the version — with log and rollback
-- **Packages are checked beforehand**: does the image know the name, and is it any use at all?
-  (Ubuntu's `firefox` is just a pointer to a snap and useless in the container)
-- **Recipes** for everything that is not a plain package — with a guided builder for your own
-- **Find applications in the image**: OTA reads the `.desktop` files and suggests name, icon and
-  start command. Nobody needs to know where a binary lives
-- **The real icon from the package** — the fox, not a circle. OTA looks for it where the
-  freedesktop specification puts it, scales it down to 128 pixels (VSCodium ships 428 KB) and
-  serves it cacheable
-- **Three shelves**: the shared one for files that should go into every workspace (read-only in
-  the container), **one per user** under `/mnt/austausch` — writable, the way in and back out —,
-  and **a drive per group** under `/mnt/gruppen/<name>`: the same files for a team. All three also
-  in the control bar of a running session, with drag and drop. Membership decides about a group
-  drive and nothing else — even an administrator only gets to the groups they belong to
-- **Skeleton profile** per workspace: what a home starts with. Individual paths can be enforced on
-  every start if wanted — the exception, not the rule. Plus **a subtree per application** that only
-  arrives when that application starts for the first time: whoever only uses the terminal does not
-  need the IDE's settings in their home
-- **Freeze a session**: set things up in your own workspace, look at the preview, take it over as
-  a new version. The home stays outside, secrets are flagged, the sudo exception is removed
-- **Script at session start** per workspace, for everything that belongs in the home but not in
-  the image
-- **One-time scripts** per workspace: run exactly once per user — for a change in the home that the
-  skeleton no longer reaches and that the start script would otherwise repeat on every start
+### Operations and monitoring
 
-**Operations**
+- **Live utilisation** under **Operations → Workspaces**: bars for CPU, RAM and network per
+  workspace and for the host. A warning appears as soon as the CPU limit throttles a container.
+  The same list shows every workspace of every user, running and paused, with disk space and "last
+  active". From there they can be started, paused and deleted, or the **root web terminal** opened
+  ([chapter 11](docs/wiki/en/11-betrieb.md#live-utilisation-operations--workspaces-))
+- **LXCFS** is set up on the host by `make up` itself. New workspaces get it through Docker,
+  existing ones at their next start or resume; this applies to root workspaces under Sysbox too.
+  With `OTA_LXCFS=aus` it stays off
+  ([chapter 11](docs/wiki/en/11-betrieb.md#inside-the-workspace-lxcfs-and-ota-top-))
+- **Progress bar and start log**: the tile shows what is happening during start right now. The
+  agent's log has one line per start with the duration of each step
+  ([chapter 25](docs/wiki/en/25-root-arbeitsplatz.md#start-time))
+- **`/healthz` and `/metrics`** for external monitoring
+- **Logs**: **Operations → Log** has sign-ins, sessions, app starts, administrative actions,
+  screen connections and disclosures. Behavioural data expires after 90 days, administrative
+  actions after 365. Cleanup runs daily, and the cleanup itself is logged
+- **Nothing grows without a limit.** Container logs are capped at 10 MB × 3, for the services
+  **and** for every workspace
+- **Backup and restore** of profile, container and database, root workspaces and OTA Git
+  included, by hand and on a schedule, with a retention rule
+  ([chapter 14](docs/wiki/en/14-sicherung.md))
+- **Updates in one step** (`make update`), see [Updating](#updating). During the update every OTA
+  page shows a banner. On top of that come the **security updates** with every `make update`: fresh
+  base and service images, the week's package updates, and a new Forgejo version is picked up by
+  OTA Git by itself. **`make cve`** lists the fixable vulnerabilities per image, scanned with grype
+  ([chapter 11](docs/wiki/en/11-betrieb.md#security-vulnerabilities-cves-))
+- **A bill of materials per image** (`make sbom`) in SPDX and CycloneDX. It is needed as soon as an
+  image leaves the house
+- **Corporate proxy** throughout: when building the services and the images, in every session, in
+  API, agent and package source. Even where no environment variable suffices, `apt` for example
+  gets its own configuration. Switchable during operation, without reinstalling
+  ([chapter 21](docs/wiki/en/21-firmenproxy.md))
+- **HTTPS out of the box** with its own small CA, replaceable, or behind a further reverse proxy
+  (nginx, Caddy …). OTA also runs **behind a firewall with NAT**, without hairpin NAT
+  ([chapter 10](docs/wiki/en/10-zertifikate-und-https.md), [24](docs/wiki/en/24-hinter-nat.md))
+- **Data locations**: databases, registry, OTA Git and the Docker data of the root workspaces can
+  be put on a disk of their own via `.env`, such as an SSD; the user data stays on the large one.
+  `scripts/daten-umziehen.sh` moves the data during operation and switches over in seconds. Running
+  root workspaces are never paused but switched over at their next resume
+  ([chapter 40](docs/wiki/en/40-datenorte.md))
+- **Your own brand**: installation name, accent colour and logo. They appear in the browser tab, on
+  the sign-in page (Keycloak's too), on the start screen and in the PWA
+  ([chapter 22](docs/wiki/en/22-marke.md))
+- **Writing news**: posts from administration to everyone, written directly on the page in
+  Markdown with line breaks and filtered HTML. There are drafts, pinning and a dot in the sidebar
+  for unread posts ([chapter 11](docs/wiki/en/11-betrieb.md#news-))
+- **Default language** for everyone who does not switch themselves. It also applies to Keycloak's
+  sign-in page and the manual
+- **Diagnostic scripts** for the cases that look like something other than what they are:
+  - `docker-diagnose.sh` explains why Docker is slow on the host;
+  - `platten-last.sh` shows who is loading the disk;
+  - `platz-diagnose.sh` finds out why a workspace has no network.
+
+  [Chapter 12](docs/wiki/en/12-fehlersuche.md) describes real failures with symptom, cause and fix.
+- **No loading from third-party hosts.** The fonts are bundled, and the interface requests nothing
+  from the internet. It looks the same offline and behind a corporate proxy, and no user's IP
+  address leaves the house
+- **Runs next to an existing Kasm installation** on the same host, without changing anything there
+
+### Streaming and base image
+
 - **Own base image** `ota/base-desktop`: Debian 13 + XFCE + **Selkies**, without applications and
-  **without third-party streaming software** — H.264 over WebSockets instead of rectangular
-  regions over RFB. Selkies 2.0 lives **as a fork in OTA's repository** (`third_party/selkies/`),
-  so that a change upstream — like 1.6.2 disappearing on 2026-10-07 — no longer breaks the build.
-  The account is called `ota` and lives under `/home/ota`; no component carries "Kasm" in its name.
-  `scripts/build-desktop-image.sh --pruefen` checks 18 points against the contract with the agent
-- **The older path remains** — `ota/base-xfce` (Ubuntu + KasmVNC) for Kasm images that do not bring
+  **without third-party streaming software**. It transmits H.264 over WebSockets through the same
+  HTTPS port as the interface, instead of rectangular tiles over RFB. The account is called `ota`
+  and lives under `/home/ota`; no component carries "Kasm" in its name.
+  `scripts/build-desktop-image.sh --pruefen` checks the points of the contract with the agent
+  ([chapter 19](docs/wiki/en/19-eigenes-basisimage.md))
+- **Selkies 2.0 as a fork in OTA's repository** (`third_party/selkies/`). So a change upstream no
+  longer breaks the build, as happened when 1.6.2 disappeared on 2026-10-07. As the package
+  `ota-selkies` it also upgrades older golden images ([chapter 20](docs/wiki/en/20-selkies-versuch.md))
+- **`ota/base-desktop-root`** for root workspaces (`make root-image`)
+- **The older path remains**: `ota/base-xfce` (Ubuntu + KasmVNC) for Kasm images that do not bring
   Selkies. Switchable per workspace under **Streaming**; `scripts/build-base-image.sh --pruefen`
   still checks it
-- **Corporate proxy** throughout: when building the services, when building the images, in every
-  session and in API and agent. Even where no environment variable reaches — `apt` gets its own
-  configuration. Switchable while running, without reinstalling; without a proxy there is nothing
-  to do
-- **Bill of materials per image** (`make sbom`) in SPDX and CycloneDX — needed as soon as an image
-  leaves the building
-- **Security updates with every `make update`** (fresh base and service images, the week's
-  package updates, also for the package repository's nginx; OTA Git picks up a new Forgejo version
-  by itself afterwards) and **`make cve`**: fixable vulnerabilities per image, scanned with grype
-  ([chapter 11](docs/wiki/en/11-betrieb.md#security-vulnerabilities-cves-))
-- Own registry in the stack; if an image is missing locally, it is fetched from there on start
-- Backup and restore of profile, container and database, manually and on a schedule
-- HTTPS out of the box, own small CA, replaceable or behind a reverse proxy
-- **Nothing loaded from foreign hosts.** Fonts are bundled, the interface requests nothing from the
-  internet — it looks the same offline and behind a corporate proxy, and no user's IP address
-  leaves the building
-- **Nothing grows without limit.** Container logs are capped at 10 MB × 3 — for the services
-  **and** for every workspace. In the database's audit log, behavioural data (sign-ins, sessions,
-  app starts) expires after 90 days, administrative actions after 365; cleanup runs daily, and the
-  cleanup itself is in the log
-- **Runs next to an existing Kasm installation** on the same host, without changing anything there
+- **`make messung`** compares the two streaming paths under the same load: CPU, bandwidth and
+  response time per session
 
 ## A look at administration
 
@@ -527,18 +693,22 @@ socket — the same separation applies to the host's file system.
 |---|---|
 | `web/` | Interface (React, TypeScript, hand-written CSS, no UI library) |
 | `api/` | REST API, sign-in, permissions, sessions (FastAPI, PostgreSQL) |
-| `agent/` | The **only** service with Docker access; containers, displays, images, shelves |
+| `agent/` | The **only** service with Docker access; containers, displays, images, shelves, LXCFS, `ota-top` |
 | `deploy/` | Compose stack, Traefik, registry, certificates |
 | `firewall/` | The router of all workspaces: nftables, NAT, name service, port forwards |
 | `extension/` | Firefox extension for the clipboard |
 | `docs/wiki/` | Manual — delivered inside the program as help; English in `docs/wiki/en/` |
-| `images/` | Own base images: `base-desktop` (Debian + XFCE + Selkies, default) and `base-xfce` (Ubuntu + KasmVNC) |
-| `tests/`, `scripts/` | Checks, certificate, migration from Kasm, bill of materials |
+| `ki/` | The AI gateway `ota-ki`: one entrance for all AI servers, model directory, usage figures |
+| `repo/` | The own package source including mirror and management |
+| `packaging/` | The packages `ota-selkies`, `ota-ide-ai` and `ota-opencode` |
+| `images/` | Own base images: `base-desktop` (Debian + XFCE + Selkies, default), `base-desktop-root` (for root workspaces), `base-xfce` (Ubuntu + KasmVNC) and `turn` |
+| `third_party/selkies/` | The fork of Selkies 2.0 with OTA's changes |
+| `tests/`, `scripts/` | Checks, setup (Sysbox, LXCFS), certificate, migration from Kasm, data move, diagnostics, bill of materials |
 
 ## Documentation
 
 - **[Manual](docs/wiki/en/README.md)** — usage, administration, operations, troubleshooting
-  (28 chapters; [German](docs/wiki/README.md))
+  (40 chapters, eight of them for users; [German](docs/wiki/README.md))
 - **[plan.md](plan.md)** — architecture **and the reasoning behind it**, including the dead ends
   (German)
 - **[docs/adr/](docs/adr/README.md)** — decisions that are expensive to undo, with the alternatives
@@ -560,7 +730,7 @@ for days.
 make test
 ```
 
-**452 checks in seven suites**, each one establishes its own starting state:
+**More than twenty check suites**, each one establishes its own starting state:
 
 | Suite | Checks |
 |---|---|
@@ -587,6 +757,7 @@ make test
 | `test-root-arbeitsplatz.sh` | The root workspace: root unprivileged on the host (Sysbox), Docker and Compose in the container, network rules for the **inner** containers too, stop and resume with preserved state, rebuild, web terminal with log and export, no terminal into the stack's services, golden images with `USER 1000`, progress bar and start log on start and resume. Skipped without Sysbox |
 | `test-repo.sh` | The own package repository: signature, upload (duplicate 409, broken 422), snapshots including protection against deletion, a Debian 13 workspace installs its own package **from here**, "mirror only" no longer calls `deb.debian.org`, the image builder adds and removes the source, an Ubuntu image stays untouched, a root workspace picks up the current setting when resuming. The mirror parts only with a mirror |
 | `test-selkies-paket.sh` | The package `ota-selkies`: it is in the package repository, upgrades a workspace on an old golden image with Selkies 1.6.2, the image builder upgrades a golden image, a root workspace upgrades itself when resuming and keeps what was installed in it |
+| `test-ki.sh` (run on its own, needs a real AI server) | AI gateway and usage statistics: `ki.ota` inside the workspace, model directory through the gateway, an answer through `ki.ota` and through the intercepted real address, Continue and opencode without a key; requests show up with tokens per person, applications are recognised, probe requests without a model do not count; filters by source, model and application, no figures for fewer than three people; disclosure only with a justification; if `ota-ki` goes down, traffic goes direct |
 | `test-backup.sh` | Backup and restore of profile, container and database. Ends sessions for it — **only its own**, and checks that explicitly |
 
 The checks' credentials are in `deploy/.env` and not in the source; the suites read them from
