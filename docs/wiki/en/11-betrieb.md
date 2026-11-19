@@ -130,8 +130,16 @@ The `audit_log` has its own retention, actually two — because it contains two 
 
 | Class | Retention | Configurable |
 |---|---|---|
-| **Behaviour** — sign-ins, sessions, app starts | 90 days | `OTA_PROTOKOLL_VERHALTEN_TAGE` |
+| **Behaviour** — sign-ins and sessions. Which application someone opens has not been logged since 2026-11-19 | 90 days | `OTA_PROTOKOLL_VERHALTEN_TAGE` |
 | **Administration** — who changed what, and who connected to a screen | 365 days | `OTA_PROTOKOLL_VERWALTUNG_TAGE` |
+
+**The IP address** has only been stored where it serves a purpose since 2026-11-19: for failed and
+suspicious sign-ins (where is someone trying passwords from?), for actions of accounts with
+administrative permissions (where was such an account used from?) and for actions without an
+account. For successful sign-ins, sessions and everything normal users do, the field stays empty;
+`arbeitsplatz.root` does not count as an administrative permission. The lockout after failed
+attempts does not need the log. The rule is in `audit.mit_ip`; migration `b7c3e9f1a425` cleaned up
+older entries.
 
 `0` means "never delete". Cleanup runs once a day, in chunks of 5,000 rows — a `DELETE` over
 hundreds of thousands would lock the table, and every sign-in writes to it. The cleanup itself is in

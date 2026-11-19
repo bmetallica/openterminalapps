@@ -613,7 +613,7 @@ mit stehenden Paketen.
   Protokoll des Agents steht je Start eine Zeile mit der Dauer jedes Schritts
   ([Kapitel 25](docs/wiki/25-root-arbeitsplatz.md#startzeit))
 - **`/healthz` und `/metrics`** für die Überwachung von außen
-- **Protokolle**: Unter **Betrieb → Protokoll** stehen Anmeldungen, Sitzungen, App-Starts,
+- **Protokolle**: Unter **Betrieb → Protokoll** stehen Anmeldungen, Sitzungen,
   Verwaltungsvorgänge, Aufschalten und Auskünfte. Verhaltensdaten verfallen nach 90 Tagen,
   Verwaltungsvorgänge nach 365. Aufgeräumt wird täglich, und das Aufräumen steht selbst im
   Protokoll

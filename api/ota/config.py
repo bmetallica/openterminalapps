@@ -64,8 +64,8 @@ class Settings(BaseSettings):
     #
     # Zwei Fristen, weil im `audit_log` zwei verschiedene Dinge stehen.
     #
-    #   **Verhalten** — Anmeldungen, Sitzungen, App-Starts. Daraus laesst sich
-    #   lueckenlos ablesen, wann jemand gearbeitet hat, wie lange und woran.
+    #   **Verhalten** — Anmeldungen und Sitzungen. Daraus laesst sich
+    #   ablesen, wann jemand gearbeitet hat und wie lange.
     #   Genau darauf zielt Art. 5 Abs. 1 lit. e; hier ist die kuerzere Frist
     #   nicht Sparsamkeit, sondern der Zweck.
     #

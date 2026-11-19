@@ -1,230 +1,286 @@
 # Datenschutz — Betrachtung nach DSGVO und BDSG
 
-**Stand: 2026-09-04**, Commit `99e9400`, betrachtet an der laufenden Anlage.
+**Stand: 2026-11-19**, am Quelltext geprüft. Die erste Fassung entstand am 2026-09-04 (Commit
+`99e9400`); seitdem dazugekommen sind die KI-Nutzungsstatistik, das Gedächtnis für opencode, das
+Softwaremonitoring, das Terminal-Protokoll, OTA-Git und der Hinweis „DSGVO“ in der Seitenleiste.
 
-Diese Betrachtung ist **keine Rechtsberatung.** Sie ist eine technische Bestandsaufnahme durch den,
-der die Software gebaut hat: Sie sagt, **welche personenbezogenen Daten wo liegen, wie lange, wer
-sie sieht und was davon fehlt.** Die Bewertung, ob das im konkreten Unternehmen genügt, gehört zum
-Datenschutzbeauftragten — und die Punkte, bei denen ich mir sicher bin, dass sie ihn interessieren,
-sind ausdrücklich als solche gekennzeichnet.
+Diese Betrachtung ist **keine Rechtsberatung.** Sie ist eine technische Bestandsaufnahme: **welche
+personenbezogenen Daten wo liegen, wie lange, wer sie sieht und was davon fehlt.** Die Bewertung,
+ob das im konkreten Unternehmen genügt, gehört zum Datenschutzbeauftragten. Die Punkte, die ihn
+sicher interessieren, sind mit 👉 gekennzeichnet.
 
-Die technische Seite steht in `security.md`. Dieses Dokument verweist an mehreren Stellen auf
-deren Befunde (H1, M2, N3 …); **`security.md` liegt bewusst nicht im Repository** — es beschreibt
-die noch offenen Schwachstellen samt Weg dorthin und wird beim Betreiber geführt.
+Die technische Seite steht in `security.md`. Dieses Dokument verweist an einigen Stellen auf deren
+Befunde (H4, M2, N3 …); **`security.md` liegt bewusst nicht im Repository** — es beschreibt offene
+Schwachstellen samt Weg dorthin und wird beim Betreiber geführt.
+
+---
+
+## 0 · Worum es geht — in drei Sätzen
+
+OTA gibt jedem Beschäftigten einen eigenen Linux-Arbeitsplatz im Browser, mit Programmen wie
+VS Code, PyCharm, Firefox und einem Terminal, und einem persönlichen Zuhause für Dateien und
+Einstellungen. Es läuft vollständig auf eigener Hardware, mit zentraler Anmeldung (Keycloak, AD),
+eigenem Git-Server und optional KI-Assistenten, die nur den eigenen KI-Server ansprechen. Die
+Verwaltung steuert Software, Ressourcen und Netzzugriffe zentral; kein Arbeitsplatz erreicht
+ungefragt das Firmennetz oder einen anderen Arbeitsplatz.
 
 ---
 
 ## 1 · Wer ist wofür verantwortlich
 
 OTA ist **selbst gehostete Software**. Es gibt keinen Anbieter, der Daten verarbeitet, und damit
-für OTA selbst **keinen Auftragsverarbeitungsvertrag** (Art. 28) — es gibt niemanden, mit dem man
-ihn schliessen könnte. **Verantwortlicher im Sinne von Art. 4 Nr. 7 ist das Unternehmen, das die
-Anlage betreibt.**
+für OTA selbst **keinen Auftragsverarbeitungsvertrag** (Art. 28). **Verantwortlicher im Sinne von
+Art. 4 Nr. 7 ist das Unternehmen, das die Anlage betreibt.**
 
-Zwei Einschränkungen dazu:
-
-* ~~**Der Zeichensatz kommt von Google**~~ — am 2026-09-04 behoben (siehe Abschnitt 7). Damit
-  gibt es beim Aufruf der Oberfläche **keinen** Datenfluss aus der Anlage heraus mehr.
-* **Container-Images werden aus fremden Registries geholt** (Docker Hub, Kasm). Dabei fliessen
-  keine personenbezogenen Daten heraus; es fliesst nur die Information, dass diese Anlage ein
-  bestimmtes Image lädt. Kein Auftragsverarbeitungsverhältnis, aber ein Punkt für das
-  Verzeichnis.
+* **Kein Datenfluss nach aussen beim Benutzen.** Die Oberfläche lädt nichts von fremden Hosts
+  (Schriften liegen bei, seit 2026-09-04; Abschnitt 7). Keine Telemetrie. Die Telemetrie von
+  Continue (KI-Erweiterung im Editor) ist abgeschaltet.
+* **KI-Anfragen gehen nur an den eigenen KI-Server.** 👉 Ob **der KI-Server selbst** Anfragen
+  oder Inhalte protokolliert, entscheidet seine Konfiguration (vLLM, llama.cpp …), nicht OTA. Das
+  gehört gesondert geprüft.
+* **Container-Images werden aus fremden Registries geholt** (Docker Hub u. a.). Dabei fliessen
+  keine personenbezogenen Daten, nur die Information, dass diese Anlage ein bestimmtes Image lädt.
+* **Angebundene Web-Anwendungen** (z. B. Open WebUI) sind eigene Verarbeitungen mit eigenen Daten.
+  OTA regelt nur, wer sich dort anmelden darf.
 
 ---
 
 ## 2 · Welche personenbezogenen Daten anfallen
 
-Das ist der Kern. Erhoben an der laufenden Anlage — die Zahlen sind der Stand von heute.
-
 ### 2.1 Stammdaten der Konten
 
 | Feld | Wo | Bemerkung |
 |---|---|---|
-| Anmeldename, Anzeigename, E-Mail | `users` (PostgreSQL) **und** Keycloak | E-Mail ist Pflicht, seit sie an angebundene Anwendungen weitergereicht wird |
-| Passwort-Hash (Argon2) | `users.password_hash` | nur für lokale Konten; der Regelweg läuft über Keycloak |
-| TOTP-Startwert, Rückfallcodes | `users.totp_secret` (**Klartext**), `users.totp_recovery` (gehasht) | siehe `security.md`, Befund M2 |
-| Sprache, Gewand | `users.locale`, `users.theme` | keine besondere Kategorie |
-| Gruppenzugehörigkeit | `group_members` | daraus folgen die Rechte |
-| Fehlversuche, Sperre bis, letzte Anmeldung | `users.failed_logins`, `locked_until`, `last_login_at` | |
+| Anmeldename, Anzeigename, E-Mail | `users` (PostgreSQL) **und** Keycloak | E-Mail wird an angebundene Anwendungen weitergereicht |
+| Passwort, zweiter Faktor (Passkey, Einmalkennwort) | **Keycloak**, bei Verzeichniskonten das AD | Der Regelweg. OTA selbst sieht keine Passwörter |
+| Passwort-Hash (Argon2), TOTP-Startwert, Rückfallcodes | `users.password_hash`, `users.totp_secret` (**Klartext**), `users.totp_recovery` (gehasht) | nur noch für das lokale **Notfallkonto**; siehe `security.md`, M2 |
+| Sprache, Gewand | `users.locale`, `users.theme` | |
+| Gruppenzugehörigkeit | `group_members`, ggf. aus LDAP-Gruppen abgeglichen | daraus folgen die Rechte |
+| Fehlversuche, Sperre, letzte Anmeldung | `users.failed_logins`, `locked_until`, `failed_from`, `last_login_at` | |
+| Eigene Namen für Kacheln | `eigene_namen` | |
+| Gelesen-Stand der News | `news_gelesen` (ein Zeitpunkt je Konto) | |
 
-**Stand heute:** 5 Konten, davon 3 Prüfkonten (`notfall`, `kc-pruef`, `ota-testnutzer`).
+### 2.2 Protokoll und Sitzungen
 
-### 2.2 Nutzungs- und Verhaltensdaten
-
-Das ist der datenschutzrechtlich empfindliche Teil, und er ist grösser, als es auf den ersten
-Blick aussieht.
-
-| Datum | Wo | Umfang heute |
+| Datum | Wo | Frist |
 |---|---|---|
-| Jede Anmeldung, auch jede fehlgeschlagene, **mit IP-Adresse** | `audit_log` | Am 2026-09-05: 11.174 Einträge, davon 1.715 `login.ok` und 505 `login.failed`. **Jeder Eintrag trägt eine IP.** Seither mit Frist — siehe Abschnitt 4 |
-| Jeder Sitzungsstart und -stopp, mit Zeitpunkt und Vorlage | `audit_log`, `sessions` | 518 Sitzungen |
-| **Welche Anwendung wann gestartet wurde** | `audit_log` (`app.started`), `app_streams` | 449 Einträge, 275 Ströme |
-| Verwaltungsvorgänge (wer hat was geändert) | `audit_log` | |
-| Fehlerantworten des Reverse Proxy, mit IP | Traefik-Zugriffsprotokoll (nur 4xx/5xx) | unbegrenzt, siehe `N3` |
+| Jede Anmeldung, auch fehlgeschlagene — **IP-Adresse nur bei gescheiterten Anmeldungen** | `audit_log` | **90 Tage** |
+| Start und Ende von Sitzungen (Arbeitsplätzen) | `audit_log`, `sessions` | `audit_log` 90 Tage; `sessions` mit dem Konto |
+| Welche Anwendung gerade auf welchem Bildschirm läuft | `app_streams` | nur solange sie offen ist |
+| Verwaltungsvorgänge (wer hat was geändert, Rechte, Freigaben; **mit IP-Adresse**, wenn das Konto Verwaltungsrechte hat), **Aufschalten auf fremde Bildschirme**, KI-Auskünfte, Änderungen am DSGVO-Hinweis | `audit_log` | **365 Tage** |
+| Feste Netzadresse je Mensch und Vorlage | `net_leases` | mit dem Konto |
+| Fehlerantworten des Reverse Proxy (4xx/5xx) mit IP | Traefik-Protokoll (Container-Ausgabe) | rotiert, 10 MB × 3 |
 
-**Dazu seit dem 2026-09-04 die Netzzahlen.** Der Router zählt je Arbeitsplatz mit, wie viel durch
-die Leitung geht und wie viele Pakete verworfen werden (`firewall.md`). Diese Zahlen werden
-**nirgends gespeichert** — sie stehen live in der Netzübersicht und unter `/metrics`, und mit dem
-Ende der Sitzung sind sie weg. Damit gibt es nichts aufzubewahren und nichts zu löschen.
+Fristen über `OTA_PROTOKOLL_VERHALTEN_TAGE` und `OTA_PROTOKOLL_VERWALTUNG_TAGE` einstellbar;
+aufgeräumt wird täglich, und das Aufräumen steht selbst im Protokoll. Welche Einträge zur kurzen
+Klasse gehören, ist eine ausdrückliche Liste (`audit.py`, `VERHALTEN`); alles andere bleibt 365
+Tage. So kann `session.attached` (Aufschalten) nicht versehentlich mit den Sitzungsdaten
+verschwinden.
 
-👉 **Das ändert sich, sobald jemand sie abholt.** Ein Prometheus, der `/metrics` im Minutentakt
-fragt, legt genau die Zeitreihe an, die es hier nicht gibt: wer wann wie viel Verkehr hatte. Das
-sind personenbezogene Daten. Wer das einrichtet, braucht eine Frist — mein Vorschlag: **Rohwerte 7
-Tage, Tagessummen 90 Tage** — und einen Punkt in der Betriebsvereinbarung. Die Sicherheitssignale
-(verworfene Pakete) sind dabei der leichtere Teil: Sie sagen etwas über eine Maschine. Die
-Durchsatzzahlen sind der schwerere.
+**IP-Adressen** (seit 2026-11-19, `audit.mit_ip`): nur noch bei gescheiterten und auffälligen
+Anmeldungen, bei Vorgängen von Konten mit Verwaltungsrechten und bei Vorgängen ohne Konto. Bei
+erfolgreichen Anmeldungen, Sitzungen und allem, was normale Nutzer tun, wird keine gespeichert;
+die Migration `b7c3e9f1a425` hat sie aus älteren Einträgen entfernt. Die Sperre nach
+Fehlversuchen braucht das Protokoll nicht (`users.failed_from`, nach erfolgreicher Anmeldung
+geleert).
 
-**Was ausdrücklich nicht entsteht:** kein Mitschneiden von Inhalten, kein Aufbrechen von TLS, keine
-Liste besuchter Adressen. Der eigene Resolver beantwortet Anfragen und schreibt sie nicht mit.
+**Welche Anwendung jemand öffnet** (`app.started`/`app.stopped`), stand bis 2026-11-19 ebenfalls im
+Protokoll. Für die Funktion war das nie nötig; die API schreibt es nicht mehr, und die Migration
+`a1d9e4b7c362` hat alle vorhandenen Einträge gelöscht (Datenminimierung, Art. 5 Abs. 1 lit. c).
 
-**Aus diesen Daten lässt sich ein Arbeitszeitprofil ablesen** — wann jemand anfängt, wann er
-aufhört, wie lange er womit arbeitet. Dass es nicht dafür gedacht ist, ändert daran nichts.
-👉 **Das ist der Punkt für den Datenschutzbeauftragten und den Betriebsrat** (Abschnitt 6).
+👉 **Aus diesen Daten lässt sich ein Arbeitszeitprofil ablesen** — wann jemand anfängt, aufhört,
+wie lange er arbeitet. Dass es nicht dafür gedacht ist, ändert daran nichts (Abschnitt 6).
 
-### 2.3 Inhaltsdaten — das Zuhause
+### 2.3 Terminal-Protokoll der Administratoren
 
-Jeder Mensch hat ein persistentes Zuhause unter `/srv/ota/profiles/<konto-id>/user`. Darin liegt
-**alles, was er in seinem Arbeitsplatz tut**: Dokumente, Downloads, Browser-Profile samt Verlauf
-und Anmeldedaten, SSH- und GPG-Schlüssel, Konfigurationen, E-Mail-Postfächer, Zwischenstände.
+Seit 2026-10-06: Jede **Eingabezeile**, die ein Administrator per Webterminal als root in einem
+Arbeitsplatz tippt, mit Zeit, Namen des Administrators, Namen des Nutzers und Vorlage
+(`terminal_eintraege`). **Nicht** die Ausgabe — sie enthielte den Inhalt jeder gelesenen Datei.
+Für Administratoren lesbar und exportierbar, nicht änderbar; Frist wie die Verwaltungsklasse
+(**365 Tage**). Ein Kennwort, das ein Administrator auf der Kommandozeile tippt, steht darin.
 
-**Gemessen:** vier Zuhause, zusammen rund 1,3 GB, das grösste 776 MB.
+### 2.4 Inhaltsdaten — das Zuhause und die Ablagen
 
-Dazu die Ablagen:
+Jeder Mensch hat ein persistentes Zuhause unter `/srv/ota/profiles/<konto-id>/…`. Darin liegt
+**alles, was er im Arbeitsplatz tut**: Dokumente, Projekte, Browser-Profile samt Verlauf und
+gespeicherten Passwörtern, SSH- und GPG-Schlüssel, Konfigurationen, **Gesprächsverläufe der
+KI-Assistenten** (`~/.continue/sessions/`, opencode).
+
+Dazu:
 
 * `/srv/ota/userfiles/<konto-id>` — die eigene Ablage
-* `/srv/ota/groupfiles/<gruppen-id>` — Gruppenlaufwerke, sichtbar für alle Mitglieder
+* `/srv/ota/groupfiles/<gruppen-id>` — Gruppenlaufwerke, nur für Mitglieder (auch Administratoren
+  nur bei eigener Mitgliedschaft)
 * `/srv/ota/shared` — die gemeinsame Ablage, für alle lesbar
+* Root-Arbeitsplätze: zusätzlich der angehaltene Container samt Docker-Daten
 
-**Die Zwischenablage** wird zwischen den Bildschirmen eines Arbeitsplatzes gespiegelt, liegt dabei
-aber ausschliesslich **im Container** (`/tmp/ota-clipboard-state`) und wird nirgends zentral
-gespeichert. Das ist gut gelöst und bleibt so.
+**Die Zwischenablage** liegt ausschliesslich im Container und wird nirgends zentral gespeichert.
 
-### 2.4 Sicherungen
+### 2.5 KI-Nutzungsstatistik (optional — in dieser Anlage **eingeschaltet**)
 
-`/srv/ota/backups`, heute **1,8 GB**: Datenbankabzüge, Zuhause-Archive, Container-Sicherungen. Eine
-Sicherung enthält damit **eine vollständige Kopie von allem oben** — einschliesslich Passwort-Hashes,
-TOTP-Startwerten und dem AD-Kennwort des Dienstkontos.
+Läuft über den KI-Durchgang `ota-ki`. Gezählt werden **nur Aufrufe eines Modells** (Chat,
+Completions, Embeddings …), nie Inhalte.
 
-Aufbewahrung: `keep_daily` und `keep_weekly` je Nutzer und Art, einstellbar. **Das ist die einzige
-Stelle in der ganzen Anlage, an der Daten automatisch verschwinden.**
+| Datum | Wo | Frist |
+|---|---|---|
+| Je Anfrage: Zeit, Konto (Kennung **und Name**), Arbeitsplatz, Vorlage, Quelle, Server, Modell, Anwendung (opencode, PyCharm, Open WebUI …), Pfad, Status, Dauer, Tokens, Bytes | `ki_anfragen` | **30 Tage** (einstellbar) |
+| Stundensummen je Konto, Vorlage, Server, Modell, Anwendung | `ki_stunden` | **365 Tage** (einstellbar, 0 = unbegrenzt) |
+| Zwischenspeicher bis zur Übernahme | `/srv/ota/runtime/ki/spool/` | Minuten |
 
-### 2.5 Golden Images
+Die Person wird über die Absenderadresse des Arbeitsplatzes zugeordnet. **Externe Dienste** wie
+Open WebUI melden Name und E-Mail der fragenden Person in Kopfzeilen; geglaubt wird das nur mit
+einem gültigen Dienstschlüssel, und an den KI-Server gehen diese Kopfzeilen nicht weiter.
 
-Wer einen Container einfriert, erzeugt ein Image. Das Zuhause ist dabei ausgenommen, aber alles
-ausserhalb wandert mit. Der Vorgang zeigt vorher an, was nach einem Geheimnis aussieht
-(`N5`) — **er verlässt sich darauf, dass jemand die Liste liest.** Ein Image, das
-später weitergegeben wird, kann personenbezogene Daten enthalten.
+Schutz vor Auswertung einzelner Personen:
 
-### 2.6 Was **nicht** anfällt
+* Die Verwaltung sieht zunächst **nur Summen ohne Namen**; Verteilungen je Mensch nur nach Rang
+  („Person 1“) und erst ab **drei** Menschen. Gefilterte Ansichten mit weniger als drei Menschen
+  zeigen keine Zahlen.
+* **Namen und Einzelverläufe** nur nach einer **Begründung** (mind. zehn Zeichen, z. B.
+  Ticketnummer), protokolliert als `ki.auskunft` mit dem Namen der fragenden Person, gültig 30
+  Minuten. Jeder Blick auf einen einzelnen Menschen steht zusätzlich als `ki.nutzung_angesehen`
+  im Protokoll.
+* Jeder sieht unter **Meine KI-Nutzung** die eigenen Zahlen (Selbstauskunft).
+* **Alle Nutzungsdaten löschen** leert beide Tabellen auf einmal.
 
-Ehrlichkeitshalber, denn es spricht für die Anlage:
+👉 Die Zeilen in `ki_anfragen` und `ki_stunden` hängen **nicht** am Konto: Wird ein Konto
+gelöscht, bleiben sie mit Namen bis zum Ablauf ihrer Frist stehen.
 
-* **Keine Inhaltsprotokollierung.** Das Protokoll hält Vorgänge fest, nie Inhalte
-  (`audit.py`: „Inhalte werden nie erfasst, nur Vorgänge").
-* **Keine Bildschirmaufzeichnung.** Nichts im Code nimmt einen Bildschirm auf.
-* **Tastatureingaben nur an einer Stelle, und nur von Administratoren:** Seit dem 2026-10-06
-  protokolliert das Webterminal (Betrieb → Arbeitsplätze) jede Eingabezeile, die ein
-  **Administrator** in einem fremden Arbeitsplatz tippt — nicht die Ausgabe, und nie die Eingaben
-  der Nutzer selbst. Siehe Abschnitt 6, Punkt 4.
-* **Keine Telemetrie nach aussen**, mit der einen Ausnahme aus Abschnitt 7.
-* **Keine Namen in den Kennzahlen.** `/metrics` liefert Summen, keine Personen.
-* **Keycloaks Ereignisprotokoll ist aus** (`eventsEnabled: false`) — dort wächst also keine zweite
-  Protokollspur.
-* Im Browser liegen nur `ota.theme`, `ota.lang` und `ota.marke` — Gewand, Sprache, Marke. Keine
-  personenbezogenen Daten.
+### 2.6 Gedächtnis für opencode (Erweiterung — in dieser Anlage nur für die Gruppe der opencode-Entwickler)
+
+Eigenständige Anwendung mit eigener Datenbank
+([plugin_ota-opencode](https://github.com/bmetallica/plugin_ota-opencode)).
+
+* **Inhalt:** Notizen, die sich der KI-Assistent je Sitzung merkt, ein persönliches
+  Hauptgedächtnis und hochgeladene **Dokumente** (PDF, Office, Text). Das sind Inhaltsdaten.
+* **Trennung:** Jeder sieht nur Eigenes; die Datenbank erzwingt das selbst (Row Level Security).
+  Administratoren sehen nur Mengen (Menschen, Sitzungen, Einträge, Speicherbedarf).
+* **Zugangsdaten** werden beim Speichern zurückgewiesen bzw. beim Auslesen von Dokumenten durch
+  `[entfernt]` ersetzt (das Original-Dokument bleibt unverändert gespeichert).
+* **Frist:** Sitzungen ohne Aktivität werden nach 180 Tagen gelöscht (einstellbar).
+* **Kontolöschung** in OTA löscht alle Daten in der Erweiterung; ist sie nicht erreichbar,
+  wiederholt OTA den Auftrag alle 15 Minuten. Sperren oder Gruppenentzug sperren, die Daten
+  bleiben.
+
+### 2.7 OTA-Git (Forgejo)
+
+Repositories, Issues, Commits — darin **Name und E-Mail** der Autoren. Eigene Datenbank und eigenes
+Datenverzeichnis, in der Sicherung enthalten. Konten werden beim Löschen in OTA **gesperrt, nie
+gelöscht** (die Repositories gehören womöglich noch jemandem); Zugangstoken je Arbeitsplatz werden
+beim Ende widerrufen.
+
+### 2.8 Softwaremonitoring
+
+Stündlich, welche Programme in jedem **laufenden** Arbeitsplatz installiert sind (apt, Startmenü,
+Flatpak, Snap), ohne Versionen (`software_funde`, über die Sitzung einer Person zugeordnet). Zweck:
+Lizenz- und Sicherheitskontrolle. **Gelöscht, sobald der Arbeitsplatz beendet ist**; Meldungen
+verschwinden, wenn das Programm deinstalliert oder freigegeben wird.
+
+### 2.9 Live-Werte
+
+CPU, RAM und Netzdurchsatz je Arbeitsplatz (Betrieb → Arbeitsplätze), verworfene Pakete im Router,
+Platzbedarf je Zuhause. **Nirgends als Verlauf gespeichert** — sie stehen live in der Oberfläche
+und unter `/metrics` (dort ohne Namen).
+
+👉 **Das ändert sich, sobald jemand sie abholt.** Ein Prometheus, der `/metrics` im Minutentakt
+fragt, legt genau die Zeitreihe an, die es hier nicht gibt. Wer das einrichtet, braucht eine
+Frist — Vorschlag: Rohwerte 7 Tage, Tagessummen 90 Tage.
+
+### 2.10 Sicherungen
+
+`/srv/ota/backups`: Datenbankabzüge, Zuhause-Archive, Container-Sicherungen, OTA-Git. Eine
+Sicherung enthält **eine vollständige Kopie von allem oben**. Aufbewahrung über `keep_daily` und
+`keep_weekly`, einstellbar. Dateirechte `0600`/`0700`.
+
+### 2.11 Golden Images
+
+Wer einen Arbeitsplatz einfriert, erzeugt ein Image. Das Zuhause ist ausgenommen, alles ausserhalb
+wandert mit. Der Vorgang zeigt vorher an, was nach einem Geheimnis aussieht (`N5`), **verlässt sich
+aber darauf, dass jemand die Liste liest.**
+
+### 2.12 Was **nicht** anfällt
+
+* **Keine Inhaltsprotokollierung.** Das Protokoll hält Vorgänge fest, nie Inhalte; die
+  KI-Statistik zählt, liest aber keine Fragen und Antworten.
+* **Keine Bildschirmaufzeichnung.**
+* **Keine Tastatureingaben der Nutzer.** Mitgeschrieben werden nur die Eingaben von
+  Administratoren im Webterminal (2.3).
+* **Kein Mitschneiden des Netzverkehrs**, kein Aufbrechen von TLS, keine Liste besuchter Adressen.
+  Der eigene Namensdienst schreibt Anfragen nicht mit. Direkte HTTPS-Verbindungen an den KI-Server
+  reicht der Durchgang ungelesen durch.
+* **Keine Telemetrie nach aussen.**
+* **Keycloaks Ereignisprotokoll ist aus** — keine zweite Protokollspur.
+* Im Browser liegen nur Gewand, Sprache und Marke.
 
 ---
 
 ## 3 · Rechtsgrundlagen
 
-Für den Betrieb in einem Unternehmen mit Beschäftigten:
-
 | Verarbeitung | Grundlage |
 |---|---|
-| Konten, Gruppen, Arbeitsplätze, Zuhause | **§ 26 Abs. 1 BDSG** / Art. 6 Abs. 1 lit. b — Durchführung des Beschäftigungsverhältnisses. Ohne Konto kein Arbeitsplatz. |
-| Protokoll über Anmeldungen und Sitzungen | Art. 6 Abs. 1 lit. f — berechtigtes Interesse an Nachvollziehbarkeit und IT-Sicherheit. **Die Interessenabwägung gehört dokumentiert**, gerade weil sich daraus ein Arbeitszeitprofil ergibt. |
-| Sicherungen | Art. 6 Abs. 1 lit. f, mittelbar auch Art. 32 Abs. 1 lit. c — Wiederherstellbarkeit ist selbst eine Pflicht. |
-| Verzeichnisanbindung (AD/LDAP) | § 26 BDSG — dieselbe Grundlage wie die Kontoführung. |
+| Konten, Gruppen, Arbeitsplätze, Zuhause, Git | **§ 26 Abs. 1 BDSG** / Art. 6 Abs. 1 lit. b — Durchführung des Beschäftigungsverhältnisses |
+| Protokoll über Anmeldungen und Sitzungen, Terminal-Protokoll | Art. 6 Abs. 1 lit. f — Nachvollziehbarkeit und IT-Sicherheit. **Interessenabwägung dokumentieren.** |
+| KI-Nutzungsstatistik | Art. 6 Abs. 1 lit. f — Kapazität, Kosten, Fehlersuche. **Interessenabwägung dokumentieren**, Zweckbindung (keine Leistungsbewertung) festhalten |
+| Softwaremonitoring | Art. 6 Abs. 1 lit. f — Lizenz- und Sicherheitskontrolle |
+| Gedächtnis für opencode | § 26 BDSG — Arbeitsmittel für die, die es nutzen |
+| Sicherungen | Art. 6 Abs. 1 lit. f, mittelbar Art. 32 Abs. 1 lit. c |
+| Verzeichnisanbindung (AD/LDAP) | § 26 BDSG |
 
-**Einwilligung ist hier der falsche Weg.** Im Beschäftigungsverhältnis gilt sie wegen des
-Abhängigkeitsverhältnisses als selten freiwillig (§ 26 Abs. 2 BDSG). Wer die Protokollierung auf
-eine Einwilligung stützt, hat sie beim ersten Widerruf nicht mehr.
+**Einwilligung ist hier der falsche Weg.** Im Beschäftigungsverhältnis gilt sie selten als
+freiwillig (§ 26 Abs. 2 BDSG), und beim ersten Widerruf wäre die Grundlage weg.
 
 ---
 
-## 4 · Aufbewahrung und Löschung — die grösste Lücke
+## 4 · Aufbewahrung und Löschung
 
-**Art. 5 Abs. 1 lit. e verlangt, dass Daten nicht länger als nötig aufbewahrt werden.** OTA hat
-dafür drei Mechanismen: die Aufbewahrungsregel der Sicherungen, die Grenze für die
-Container-Protokolle (2026-09-04) und die Fristen im `audit_log` (2026-09-05).
-
-### Die zwei Fristen im Protokoll ✅
-
-Gemessen am 2026-09-05: **11.174 Einträge in zehn Tagen, jeder einzelne mit IP-Adresse.** Das ist
-kein Platzproblem — 270 Byte je Eintrag, hochgerechnet gut 350 MB im Jahr bei zwanzig
-Arbeitsplätzen. Es ist ein Datenschutzproblem: Aus `login.ok`, `session.started` und `app.started`
-eines Menschen lässt sich lückenlos ablesen, wann er gearbeitet hat, wie lange und woran.
-
-| Klasse | Frist | Was darin steht |
+| Datum | Löscht sich | Frist |
 |---|---|---|
-| **Verhalten** | 90 Tage | Anmeldungen, Sitzungen, App-Starts — das tägliche Bewegungsprofil |
-| **Verwaltung** | 365 Tage | Wer wen angelegt, welche Rechte vergeben, welche Freigabe eingetragen hat — **und wer sich auf einen fremden Bildschirm geschaltet hat** |
+| `audit_log` Verhalten | ✅ täglich | 90 Tage |
+| `audit_log` Verwaltung, Terminal-Protokoll | ✅ täglich | 365 Tage |
+| KI-Anfragen / KI-Stundensummen | ✅ täglich | 30 / 365 Tage |
+| Gedächtnis (Erweiterung) | ✅ | 180 Tage ohne Aktivität; mit dem Konto |
+| Softwaremonitoring | ✅ | mit dem Ende des Arbeitsplatzes |
+| Container-Protokolle (auch Traefik) | ✅ rotiert | 10 MB × 3 je Container |
+| Sicherungen | ✅ | `keep_daily` / `keep_weekly` |
+| `sessions`, `net_leases` | mit dem Konto | keine eigene Frist |
+| `app_streams` (laufende Anwendungen) | beim Schliessen | — |
+| Zuhause, Ablagen auf der Platte | ❌ **nie automatisch** | — |
+| Konto in Keycloak | wird **gesperrt**, nicht gelöscht | — |
+| Konto in OTA-Git, Repositories | wird **gesperrt**, nicht gelöscht | — |
 
-Aufgeräumt wird einmal täglich, in Häppchen, und der Vorgang steht selbst im Protokoll
-(`protokoll.aufgeraeumt`) — sonst sähe eine Lücke in den Daten später aus wie ein Ausfall.
-Einstellbar über `OTA_PROTOKOLL_VERHALTEN_TAGE` und `OTA_PROTOKOLL_VERWALTUNG_TAGE`; `0` heisst
-„nie löschen" und ist dann eine Entscheidung.
+### 4.1 Was beim Löschen eines Kontos passiert
 
-**Die kurze Klasse ist eine ausdrückliche Liste, keine Regel über Namen.** `session.attached`
-beginnt mit `session.`, gehört aber in die lange Klasse — es ist der Eintrag, den ein Betroffener
-oder ein Betriebsrat später nachlesen können muss. Eine Regel über Präfixe hätte ihn stillschweigend
-mitgelöscht; die Prüfreihe misst genau das nach.
+Im Quelltext (`api/ota/routers/admin.py`, `delete_user`):
 
-| Datum | Löscht sich heute | Was fehlt |
-|---|---|---|
-| `audit_log` | ✅ **seit 2026-09-05**: 90 Tage für Verhaltensdaten, 365 für Verwaltungsvorgänge | — |
-| `sessions`, `app_streams` | mit dem Konto (Kaskade) | eine Frist unabhängig vom Konto. |
-| Zuhause auf der Platte | **nie**, auch nicht beim Löschen des Kontos | siehe unten. |
-| Sicherungen | ✅ `keep_daily` / `keep_weekly` | — |
-| Container-Protokolle (Docker) | ✅ **seit 2026-09-04**: 10 MB × 3 je Container, dann überschrieben | — |
-| Konto in Keycloak | wird beim Löschen in OTA **nicht** entfernt | siehe unten. |
+**Verschwindet:** der Datensatz in `users`, Gruppenmitgliedschaften, Sitzungshistorie, feste
+Netzadressen, eigene Kachelnamen (Kaskade); **Root-Arbeitsplätze samt Docker-Daten**; alle Daten im
+**Gedächtnis**; Git-Tokens.
 
-### 4.1 Was beim Löschen eines Kontos wirklich passiert
+**Bleibt:**
 
-Gemessen im Quelltext (`api/ota/routers/admin.py`) — die API sagt es selbst:
-
-> `{"status": "… gelöscht. Das Profil auf der Platte bleibt bestehen."}`
-
-Es verschwinden: der Datensatz in `users`, die Gruppenmitgliedschaften, die Sitzungshistorie
-(Kaskade). Es bleiben:
-
-1. **Das Zuhause** unter `/srv/ota/profiles/<konto-id>/user` — mit allem darin.
+1. **Das Zuhause** unter `/srv/ota/profiles/<konto-id>/` — mit allem darin. Die API sagt es
+   selbst: „Das Profil auf der Platte bleibt bestehen.“
 2. **Die Ablagen** unter `userfiles/` und was in `groupfiles/` und `shared/` liegt.
-3. **Die Sicherungen** — bis die Aufbewahrungsregel greift.
-4. **Das Protokoll**: `actor_user_id` wird auf `NULL` gesetzt, **`actor_name` bleibt stehen**.
-   Der Name steht damit weiter im Protokoll.
-5. **Das Konto in Keycloak**, samt Anmeldedaten.
+3. **Das Konto in Keycloak**, gesperrt (sonst legte die nächste Anmeldung es neu an).
+4. **Das Konto in OTA-Git** samt Repositories, gesperrt.
+5. **Das Protokoll**: `actor_name` bleibt bis zum Ablauf der Frist stehen.
+6. **Die KI-Statistik** mit Namen bis zum Ablauf ihrer Frist (2.5).
+7. **Die Sicherungen**, bis die Aufbewahrungsregel greift.
 
-👉 **Ein Löschersuchen nach Art. 17 lässt sich heute nicht mit einem Knopf erfüllen.** Es braucht
-fünf Schritte an fünf Stellen, und es gibt keine Anleitung dafür. Das ist die dringendste Lücke
-dieses Dokuments.
-
-Dass `actor_name` im Protokoll stehen bleibt, ist **verteidigbar** (Art. 17 Abs. 3 lit. b/e:
-Nachweispflichten, Rechtsansprüche) — aber nur mit einer dokumentierten Frist. Ohne Frist ist es
-keine Aufbewahrung, sondern ein Versäumnis.
+👉 **Ein Löschersuchen nach Art. 17 lässt sich nicht mit einem Knopf erfüllen.** Punkte 1–4 sind
+Handarbeit. Der Betreiber hat „Konto endgültig entfernen“ am 2026-09-04 bewusst abgewählt; damit
+braucht es ein **Löschkonzept mit Fristen** und eine kurze Anleitung. Dass Namen in Protokoll und
+Statistik bis zum Fristablauf stehen bleiben, ist mit Art. 17 Abs. 3 lit. b/e verteidigbar — weil
+es eine dokumentierte Frist gibt.
 
 ### 4.2 Vorschlag für ein Löschkonzept
 
-Zahlen als Ausgangspunkt für die Abstimmung, nicht als Vorgabe:
-
 | Datum | Frist | Umsetzung |
 |---|---|---|
-| `audit_log`: Anmeldungen, Sitzungen | **90 Tage** | nächtlicher Auftrag; die Sicherungsroutine gibt es schon, das Muster ist da |
-| `audit_log`: Verwaltungsvorgänge | **1 Jahr** | Nachvollziehbarkeit von Rechteänderungen |
-| Traefik-Zugriffsprotokoll, Container-Protokolle | **14 Tage** | `max-size`/`max-file` je Dienst |
-| Zuhause nach Ausscheiden | **30 Tage archiviert, dann gelöscht** | heute Handarbeit; gehört als „Konto endgültig entfernen" in die Oberfläche |
-| Sicherungen | wie eingestellt | ✅ vorhanden |
-| Keycloak-Konto | mit dem OTA-Konto | Aufruf beim Löschen ergänzen |
+| Zuhause und Ablagen nach Ausscheiden | **30 Tage archiviert, dann gelöscht** | von Hand nach Anleitung |
+| Keycloak-Konto | nach derselben Frist löschen | Keycloak-Konsole |
+| Git-Konto | Repositories übergeben, dann Konto löschen | Forgejo-Verwaltung |
+| alles andere | wie in der Tabelle oben | ✅ vorhanden |
 
 ---
 
@@ -232,48 +288,51 @@ Zahlen als Ausgangspunkt für die Abstimmung, nicht als Vorgabe:
 
 | Recht | Heute machbar? |
 |---|---|
-| **Auskunft** (Art. 15) | Nur von Hand: Datenbankabfrage über fünf Tabellen plus das Zuhause. Es gibt keine Auskunftsfunktion. |
-| **Berichtigung** (Art. 16) | ✅ Name und E-Mail über die Verwaltung; bei Keycloak-Konten dort. |
-| **Löschung** (Art. 17) | ⚠️ Nur teilweise, siehe 4.1. |
-| **Einschränkung** (Art. 18) | Teilweise: Ein Konto lässt sich deaktivieren (`is_active`), die Daten bleiben unberührt. |
-| **Datenübertragbarkeit** (Art. 20) | ✅ Faktisch: `make backup` erzeugt ein Archiv des Zuhause. Als bewusste Funktion für den Betroffenen gedacht ist es nicht. |
-| **Widerspruch** (Art. 21) | Gegen die Protokollierung praktisch nicht durchsetzbar, solange sie auf lit. f gestützt ist — hier hilft nur eine saubere Abwägung und eine kurze Frist. |
-| **Information** (Art. 13) | ❌ **Es gibt keinen Datenschutzhinweis in der Anwendung.** Niemand erfährt beim Anmelden, was protokolliert wird. |
-
-👉 Zwei konkrete, kleine Schritte mit grosser Wirkung: ein **Datenschutzhinweis** als eigenes
-Kapitel im Handbuch (es wird in der Anwendung ausgeliefert, der Weg ist also schon da), und eine
-**Auskunftsfunktion**, die zu einem Konto alles zusammenstellt, was OTA über ihn hat.
+| **Information** (Art. 13) | ⚠️ Teilweise: Der Punkt **DSGVO** in der Seitenleiste erklärt, was über Arbeitsplätze und KI-Nutzung erfasst wird, wie lange und wer es sieht — **aber nur, solange die KI-Statistik läuft** (in dieser Anlage: ja). Der Text ist anpassbar (Markdown, Fristen werden eingesetzt); **verantwortliche Stelle und Datenschutzbeauftragte müssen eingetragen werden.** |
+| **Auskunft** (Art. 15) | ⚠️ Für die KI-Nutzung ✅ (**Meine KI-Nutzung**, ohne Begründung, ohne Protokoll). Für alles andere von Hand: Datenbankabfrage plus Zuhause. Das Gedächtnis exportiert jeder selbst (JSON, Markdown). |
+| **Berichtigung** (Art. 16) | ✅ Name und E-Mail über die Verwaltung bzw. Keycloak/AD. |
+| **Löschung** (Art. 17) | ⚠️ Teilweise, siehe 4.1. |
+| **Einschränkung** (Art. 18) | Teilweise: Konto deaktivieren; die Daten bleiben unberührt. |
+| **Datenübertragbarkeit** (Art. 20) | ✅ Faktisch: Archiv des Zuhause über die Sicherung, Git-Repositories klonen, Gedächtnis-Export. |
+| **Widerspruch** (Art. 21) | Gegen Protokoll und Statistik nur über die Interessenabwägung; hier helfen kurze Fristen und die Pseudonymisierung der Statistik. |
 
 ---
 
 ## 6 · Beschäftigtendatenschutz — was mitbestimmungspflichtig ist
 
-Vier Dinge in dieser Anlage sind geeignet, Verhalten und Leistung von Beschäftigten zu überwachen.
-Damit sind sie nach **§ 87 Abs. 1 Nr. 6 BetrVG mitbestimmungspflichtig** — unabhängig davon, ob
-jemand sie dafür benutzen will:
+Fünf Dinge sind geeignet, Verhalten und Leistung von Beschäftigten zu überwachen, und damit nach
+**§ 87 Abs. 1 Nr. 6 BetrVG mitbestimmungspflichtig** — unabhängig davon, ob jemand sie dafür
+benutzen will:
 
-1. **Das Protokoll.** Anmeldezeiten, Sitzungsdauer, gestartete Anwendungen, IP-Adressen. Daraus
-   lässt sich ablesen, wer wann wie lange gearbeitet hat.
-2. **Das Aufschalten auf einen laufenden Bildschirm.** Ein Administrator kann jede Sitzung öffnen.
-   Seit dem 2026-09-04 **hinterlässt das eine Spur** (`session.attached`, mit dem Namen des
-   Eigentümers); **dass jemand zusieht, merkt der Mensch davor weiterhin nicht**
-   (`H4`).
-3. **Die Kennzahlen.** `/metrics` nennt keine Namen, zeigt aber, wie viele Menschen wann arbeiten.
-4. **Das Terminal-Protokoll** (seit 2026-10-06, Handbuch Kapitel 25). Jede Eingabezeile, die ein
-   Administrator per Webterminal in einem Arbeitsplatz tippt, mit Namen und Zeit — je Arbeitsplatz,
-   für jeden Administrator lesbar und exportierbar, **nicht** änderbar oder löschbar; Frist wie die
-   Verwaltungsklasse (365 Tage). Es betrifft zwei Gruppen: die **Administratoren** (ihre Tätigkeit
-   wird lückenlos festgehalten — Leistungs- und Verhaltenskontrolle) und mittelbar die **Nutzer**,
-   deren Arbeitsplatz betreten wird (der Mensch davor merkt es nicht; Entscheidung des Betreibers).
-   Die Ausgaben werden bewusst nicht mitgeschnitten; sie enthielten den Inhalt jeder gelesenen
-   Datei. Ein Kennwort, das ein Administrator auf der Kommandozeile tippt, steht allerdings darin.
+1. **Das Protokoll.** Anmeldezeiten und Sitzungsdauer; IP-Adressen nur bei gescheiterten Anmeldungen
+   und bei Verwaltungsvorgängen. Welche Anwendung jemand öffnet,
+   wird seit 2026-11-19 **nicht** mehr protokolliert (Migration `a1d9e4b7c362` hat die alten
+   Einträge gelöscht).
+2. **Das Aufschalten auf einen laufenden Bildschirm.** Nur volle Administratoren; jedes Aufschalten
+   steht seit 2026-09-04 mit beiden Namen im Protokoll (`session.attached`, 365 Tage). **Der
+   Mensch davor merkt es weiterhin nicht** (`H4`).
+3. **Das Webterminal und sein Protokoll** (2.3). Eigenes Recht `arbeitsplatz.terminal`. Betrifft
+   die Administratoren (ihre Tätigkeit wird lückenlos festgehalten) und mittelbar die Nutzer, deren
+   Arbeitsplatz betreten wird, ohne dass sie es merken. Wer es hat, kann jede Datei im Zuhause
+   lesen.
+4. **Die KI-Nutzungsstatistik** (2.5). Auch ohne Namen auf der ersten Seite eine technische
+   Einrichtung, die sich zur Kontrolle eignet. Die Auskunft mit Begründung macht jeden Zugriff auf
+   Einzelne nachprüfbar.
+5. **Das Softwaremonitoring** (2.8) — zeigt, wer was installiert hat. Kurzlebig, aber einer Person
+   zugeordnet.
 
-👉 **Empfehlung:** Eine Betriebsvereinbarung, die vier Dinge festhält — welche Daten protokolliert
-werden, wie lange sie bleiben, unter welchen Bedingungen sich jemand aufschalten darf, und **wer das
-Webterminal benutzen und wer das Terminal-Protokoll auswerten darf**. Für das Aufschalten ist die
-technische Lösung in drei Stufen beschrieben: protokollieren, sichtbar machen, Zustimmung einholen
-(`H4`). Die erste Stufe steht seit dem 2026-09-04 —
-**damit ist eine Vereinbarung über das Aufschalten überhaupt erst überprüfbar.**
+Dazu die Kennzahlen (`/metrics`): ohne Namen, aber sie zeigen, wie viele Menschen wann arbeiten.
+
+👉 **Empfehlung: eine Betriebsvereinbarung**, die festhält:
+
+* welche Daten erfasst werden und wie lange (Abschnitt 4);
+* unter welchen Bedingungen sich jemand aufschalten oder das Webterminal benutzen darf, und wer
+  das Terminal-Protokoll auswertet;
+* **wofür die KI-Statistik da ist** (Kapazität, Kosten, Fehler — keine Leistungsbewertung) und
+  welche Gründe eine personenbezogene Auskunft rechtfertigen.
+
+Alle drei Zugriffe hinterlassen eine Spur im Protokoll; damit ist eine solche Vereinbarung
+überprüfbar.
 
 ---
 
@@ -283,123 +342,98 @@ technische Lösung in drei Stufen beschrieben: protokollieren, sichtbar machen, 
 > Drittlandübermittlung dokumentiert, die es in dieser Anlage je gab.
 
 `web/index.html` lud **bis** zum 2026-09-04 bei jedem Aufruf der Oberfläche zwei Schriften von
-Google:
+Google. Dabei übermittelte der Browser jedes Nutzers **IP-Adresse, User-Agent und Referer an
+Google LLC in den USA** — ohne Einwilligung und ohne Notwendigkeit (vgl. LG München I,
+20.01.2022, 3 O 17493/20).
 
-```html
-<link href="https://fonts.googleapis.com/css2?family=Archivo…" rel="stylesheet" />
-```
-
-Dabei übermittelt der Browser jedes Nutzers **IP-Adresse, User-Agent und Referer an Google LLC in
-den USA** — ohne Einwilligung und ohne dass es für die Funktion nötig wäre.
-
-Das ist der bekannteste vermeidbare Datenschutzfehler im Web. Das **LG München I** hat am
-20.01.2022 (3 O 17493/20) genau dafür Schadensersatz zugesprochen; seither ist es Gegenstand
-serienmässiger Abmahnungen. Dass OTA intern läuft, verkleinert den Kreis der Betroffenen — es macht
-die Übermittlung nicht rechtmässig.
-
-✅ **Behoben am 2026-09-04.** Beide Schriften liegen jetzt unter `web/public/fonts/` (Archivo als
-variable Schrift, IBM Plex Mono, je latin und latin-ext, zusammen 256 KB), die `@font-face`-Regeln
-stehen in `app.css`, und die beiden Google-Herkünfte sind aus `index.html` **und** aus der CSP
-verschwunden. Im Browser nachgemessen: beide Schriften laden echt, und im Netzwerkmitschnitt steht
-keine einzige Anfrage an einen fremden Host.
-
-Damit gibt es beim Aufruf der Oberfläche **keinen** Datenfluss aus dieser Anlage heraus, und sie
-funktioniert offline und hinter einem Firmenproxy unverändert. Die Lizenzen der beiden Schriften
-(OFL 1.1, Weitergabe ausdrücklich erlaubt) stehen in
+✅ **Behoben am 2026-09-04.** Beide Schriften liegen unter `web/public/fonts/`, die
+Google-Herkünfte sind aus `index.html` **und** aus der CSP verschwunden. Im Browser nachgemessen:
+keine einzige Anfrage an einen fremden Host. Lizenzen (OFL 1.1) in
 [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).
 
 ---
 
 ## 8 · Technische und organisatorische Massnahmen (Art. 32)
 
-Was vorhanden ist — die Nachweise stehen in `security.md`:
-
 | Anforderung | Stand |
 |---|---|
-| **Verschlüsselung der Übertragung** | ✅ TLS 1.2 als Untergrenze, gemessen; TLS 1.1 wird abgelehnt |
-| **Verschlüsselung im Ruhezustand** | ❌ **Bewusst nicht** (2026-09-05). Weder Datenbank noch Zuhause noch Sicherungen sind verschlüsselt; bei einer gestohlenen Platte ist alles lesbar. Ersatzweise Dateirechte 0600/0700, und ein Abzug, der ausser Haus geht, wird von Hand verschlüsselt |
-| **Zugangskontrolle** | ✅ Keycloak, zweiter Faktor möglich, Kontosperre nach 8 Fehlversuchen, Argon2 |
-| **Zugriffskontrolle** | ✅ Rechte je Gruppe, serverseitig an jedem Endpunkt geprüft; 244 automatische Prüfungen genau dazu |
-| **Trennungskontrolle** | ⚠️ Im Netz seit dem 2026-09-04 vollständig: jeder Arbeitsplatz in einem eigenen Netz, untereinander nicht erreichbar (`H2`). Im Dateisystem durch getrennte Einhängungen und `0700` — aber **alle Container laufen als dieselbe UID 1000** |
-| **Eingabekontrolle** | ✅ Protokoll über Verwaltungsvorgänge, seit dem 2026-09-04 **einschliesslich des Aufschaltens** |
-| **Verfügbarkeit und Wiederherstellbarkeit** | ✅ Sicherung und Rückspielung sind gebaut **und geprüft** (39 automatische Prüfungen) |
-| **Belastbarkeit** | ✅ Kontingente je Nutzer, Untergrenze für freien Plattenplatz, Leerlauf-Aufräumer |
-| **Regelmässige Überprüfung** | ⚠️ 452 automatische Prüfungen bei jeder Änderung — aber kein Abgleich gegen Schwachstellenlisten |
+| **Verschlüsselung der Übertragung** | ✅ TLS 1.2 als Untergrenze, gemessen |
+| **Verschlüsselung im Ruhezustand** | ❌ **Bewusst nicht** (2026-09-05). Weder Datenbank noch Zuhause noch Sicherungen sind verschlüsselt; bei einer gestohlenen Platte ist alles lesbar. Ersatzweise Dateirechte 0600/0700; ein Abzug, der ausser Haus geht, wird von Hand verschlüsselt |
+| **Zugangskontrolle** | ✅ Keycloak, zweiter Faktor (Passkey oder Einmalkennwort) je Gruppe erzwingbar, Kontosperre nach Fehlversuchen je (Konto, Absender), Bremse vor dem Notzugang |
+| **Zugriffskontrolle** | ✅ Rechte je Gruppe, serverseitig an jedem Endpunkt geprüft und automatisch getestet; Gruppenlaufwerke nur für Mitglieder; Gedächtnis mit Row Level Security |
+| **Trennungskontrolle** | ⚠️ Im Netz vollständig: jeder Arbeitsplatz in einem eigenen Netz, untereinander nicht erreichbar. Im Dateisystem durch getrennte Einhängungen und `0700` — aber **alle normalen Container laufen als dieselbe UID 1000**. Root-Arbeitsplätze laufen unter Sysbox, root im Container ist auf dem Host unprivilegiert |
+| **Eingabekontrolle** | ✅ Protokoll über Verwaltungsvorgänge, Aufschalten, Webterminal-Eingaben und KI-Auskünfte |
+| **Pseudonymisierung** | ✅ KI-Statistik: Auswertung ohne Namen, Mindestzahl drei, Namen nur mit Begründung |
+| **Verfügbarkeit und Wiederherstellbarkeit** | ✅ Sicherung und Rückspielung gebaut und automatisch geprüft |
+| **Belastbarkeit** | ✅ Kontingente je Zuhause, Untergrenze für freien Platz, Grenzen für CPU, RAM und Prozesse |
+| **Regelmässige Überprüfung** | ✅ über zwanzig automatische Prüfreihen; `make cve` gleicht alle Images gegen Schwachstellenlisten ab; Sicherheitsupdates mit jedem `make update` |
 
-**Die zweite Zeile ist die verbliebene Lücke — und sie ist eine bewusste.** Ein Datenbankabzug
-enthält weiterhin Passwort-Hashes und TOTP-Startwerte im Klartext (das AD-Kennwort ist mit dem
-alten Verzeichnisweg entfallen). Seit dem 2026-09-04 liegt er wenigstens nicht mehr offen: `0600`
-für die Archive, `0700` für die Verzeichnisse (`M2`).
-
-Gegen eine **gestohlene Platte** hilft das nicht, und dafür bräuchte es Verschlüsselung im
-Ruhezustand. Der Betreiber hat sie am 2026-09-05 ausdrücklich abgewählt: Die Anlage steht im
-eigenen Haus, gegen einen kompromittierten Wirt hilft sie ohnehin nicht, und ein Abzug, der ausser
-Haus geht, wird von Hand verschlüsselt. **Das gehört damit in die Risikobetrachtung und nicht in
-die Mängelliste** — dokumentiert gehört es trotzdem, und deshalb steht es hier.
+**Die zweite Zeile ist die verbliebene Lücke — und sie ist eine bewusste.** Die Anlage steht im
+eigenen Haus, gegen einen kompromittierten Wirt hilft Verschlüsselung im Ruhezustand ohnehin nicht.
+**Das gehört in die Risikobetrachtung, nicht in die Mängelliste** — dokumentiert gehört es
+trotzdem.
 
 ---
 
 ## 9 · Braucht es eine Datenschutz-Folgenabschätzung?
 
-Art. 35 Abs. 1 verlangt sie bei „voraussichtlich hohem Risiko". Zwei Merkmale der Liste der
-deutschen Aufsichtsbehörden treffen zu:
+Art. 35 Abs. 1 verlangt sie bei „voraussichtlich hohem Risiko“. Dafür sprechen:
 
-* **Systematische Überwachung** ist technisch möglich (Abschnitt 6),
-* verarbeitet werden **Daten von Beschäftigten**, also in einem Abhängigkeitsverhältnis.
+* **Systematische Überwachung** ist technisch möglich (Abschnitt 6), mit der KI-Statistik in
+  einem Umfang mehr als bei der ersten Fassung;
+* verarbeitet werden **Daten von Beschäftigten**.
 
-Gegen ein hohes Risiko spricht: kleine Zahl Betroffener, keine besonderen Kategorien nach Art. 9,
-keine automatisierte Entscheidung, keine Übermittlung an Dritte (nach Behebung von Abschnitt 7).
+Dagegen: überschaubare Zahl Betroffener, keine besonderen Kategorien nach Art. 9, keine
+automatisierte Entscheidung, keine Übermittlung an Dritte, Pseudonymisierung und Zugriffsspur bei
+der Statistik.
 
-👉 **Meine Einschätzung: Eine vollständige Folgenabschätzung ist wahrscheinlich nicht zwingend, eine
-dokumentierte Schwellwertanalyse aber schon** — und die kostet eine Seite. Diese Entscheidung
-gehört zum Datenschutzbeauftragten, nicht in dieses Dokument.
+👉 **Einschätzung: Eine vollständige Folgenabschätzung ist wahrscheinlich nicht zwingend, eine
+dokumentierte Schwellwertanalyse aber schon** — mit der KI-Statistik als eigenem Punkt. Die
+Entscheidung gehört zum Datenschutzbeauftragten.
 
 ---
 
 ## 10 · Wenn etwas passiert (Art. 33/34)
 
-Bei einer Verletzung des Schutzes personenbezogener Daten bleiben **72 Stunden** für die Meldung an
-die Aufsichtsbehörde.
+Bei einer Verletzung des Schutzes personenbezogener Daten bleiben **72 Stunden** für die Meldung.
 
-Was dabei hilft: Das `audit_log` sagt, wer wann was getan hat, und `sessions` sagt, welche
-Arbeitsplätze liefen. Was fehlt: **Es steht nirgends, wer sich auf welchen Bildschirm geschaltet
-hat** — ausgerechnet der Vorgang mit dem grössten Schadenspotenzial hinterlässt keine Spur
-(`H4`). Und die Container-Protokolle rotieren nicht, sind also nach langer Laufzeit
-unbrauchbar gross.
+Was hilft: Das `audit_log` sagt, wer wann was getan hat — einschliesslich Aufschalten und
+KI-Auskünften; `sessions` sagt, welche Arbeitsplätze liefen; das Terminal-Protokoll, was ein
+Administrator in einem Arbeitsplatz eingegeben hat. Die Container-Protokolle rotieren und bleiben
+handhabbar.
+
+Was fehlt: Die Protokolle liegen auf demselben Host. Wer root auf dem Wirt hat, kann sie ändern;
+eine Kopie an einen getrennten Ort (Syslog-Server) gibt es nicht.
 
 ---
 
 ## 11 · Was zu tun ist
 
-Nach Wirkung geordnet, nicht nach Aufwand.
+| # | Aufgabe | Stand |
+|---|---|---|
+| ~~1~~ | ~~Zeichensatz mitliefern~~ | ✅ 2026-09-04 |
+| ~~2~~ | ~~Aufschalten protokollieren~~ | ✅ 2026-09-04 |
+| ~~3~~ | ~~Dateirechte auf Sicherungen und Profile~~ | ✅ 2026-09-04 |
+| ~~4~~ | ~~Aufbewahrungsfristen für `audit_log` und Container-Protokolle~~ | ✅ 2026-09-04/05 |
+| 5 | **Datenschutzhinweis** | ⚠️ teilweise: Punkt „DSGVO“ existiert (sichtbar, solange die KI-Statistik läuft). **Offen: Text prüfen, verantwortliche Stelle und Datenschutzbeauftragte eintragen**; ggf. dauerhaft sichtbar machen |
+| ~~6~~ | „Konto endgültig entfernen“ | **abgewählt 2026-09-04** — stattdessen Löschkonzept und Anleitung (4.2) |
+| 7 | **Auskunftsfunktion** je Konto | ⚠️ für die KI-Nutzung vorhanden, sonst offen |
+| 8 | **Betriebsvereinbarung** | offen — jetzt mit KI-Statistik und Webterminal (Abschnitt 6) |
+| 9 | **Schwellwertanalyse** dokumentieren | offen |
+| ~~10~~ | Verschlüsselung im Ruhezustand | **abgewählt 2026-09-05** |
+| 11 | **Verzeichnis von Verarbeitungstätigkeiten**: Einträge für OTA, KI-Statistik, Gedächtnis | offen |
+| 12 | **Protokollierung des KI-Servers** prüfen (vLLM/llama.cpp) | offen |
+| 13 | **Interessenabwägung** für Protokoll, KI-Statistik und Softwaremonitoring dokumentieren | offen |
 
-| # | Aufgabe | Aufwand | Warum |
-|---|---|---|---|
-| ~~1~~ | ~~**Zeichensatz mitliefern**, Google aus der CSP streichen~~ | ✅ 2026-09-04 | Die einzige Drittlandübermittlung ist beseitigt (Abschnitt 7) |
-| ~~2~~ | ~~**Aufschalten protokollieren**~~ | ✅ 2026-09-04 | `session.attached`, gedrosselt auf einen Eintrag je Viertelstunde und Paar (Abschnitt 6) |
-| ~~3~~ | ~~**Dateirechte** auf Sicherungen und Profile (`0700`/`0600`)~~ | ✅ 2026-09-04 | Datenbankabzüge stehen jetzt auf `0600`, die Verzeichnisse auf `0700` (Abschnitt 8) |
-| ~~4~~ | ~~**Aufbewahrungsfristen** für `audit_log` und Container-Protokolle~~ | ✅ 2026-09-04/05 | Art. 5 Abs. 1 lit. e (Abschnitt 4) |
-| 5 | **Datenschutzhinweis** als Kapitel im Handbuch | 1 Stunde | Art. 13 (Abschnitt 5) |
-| ~~6~~ | **„Konto endgültig entfernen"** — Zuhause, Ablagen, Keycloak, Protokollnamen | **abgewählt 2026-09-04** | Art. 17 (Abschnitt 4.1). Der Betreiber räumt im Zweifel von Hand ab; die Lücke bleibt bestehen und ist damit eine bewusste. Wer eine Löschung bearbeitet, findet die Pfade in Abschnitt 4.1 |
-| 7 | **Auskunftsfunktion** je Konto | 1 Tag | Art. 15 (Abschnitt 5) |
-| 8 | **Betriebsvereinbarung** anstossen | organisatorisch | § 87 Abs. 1 Nr. 6 BetrVG (Abschnitt 6) |
-| 9 | **Schwellwertanalyse** dokumentieren | 1 Seite | Art. 35 (Abschnitt 9) |
-| ~~10~~ | **Verschlüsselung im Ruhezustand** — samt der TOTP-Startwerte in der Datenbank | **abgewählt 2026-09-05** | Abschnitt 8, zweite Zeile. Die Anlage steht im eigenen Haus; gegen einen kompromittierten Wirt hilft es nicht, und wer einen Abzug ausser Haus gibt, verschlüsselt ihn selbst. Die Dateirechte (0600/0700) tragen den Alltag |
-
-Die Punkte 1 bis 4 sind erledigt. **Damit wächst in dieser Anlage nichts mehr ohne Frist** — weder
-die Container-Protokolle noch das `audit_log`, und die Sicherungen hatten von Anfang an eine.
-
-Offen und unverändert wichtig sind die organisatorischen Punkte: der **Datenschutzhinweis** (5), die
-**Auskunftsfunktion** (7) und die **Betriebsvereinbarung** (8). Für die letzte ist die Grundlage
-seit dem 2026-09-04 da — ohne den Protokolleintrag über das Aufschalten wäre eine Regel dazu nicht
-überprüfbar gewesen.
+Technisch wächst in dieser Anlage **nichts mehr ohne Frist** — ausser dem Zuhause, das als
+Arbeitsmittel bewusst keine hat. Offen sind vor allem die organisatorischen Punkte: Hinweistext,
+Betriebsvereinbarung, Schwellwertanalyse, Verarbeitungsverzeichnis und das Löschkonzept für
+ausgeschiedene Beschäftigte.
 
 ---
 
 ## Nachbemerkung zur Hygiene
 
-Beim Durchsehen aufgefallen und hier festgehalten, weil es zur Datensparsamkeit gehört: Im Zuhause
-des Notfallkontos liegen **38 Rückstände aus Prüfläufen** (`ota-pruef-skeleton-*`). Kein
-personenbezogener Schaden — das Konto ist ein Prüfkonto —, aber ein Hinweis darauf, dass die
-Prüfreihen aufräumen sollten, was sie anlegen. Ebenso stehen in der Anlage neben dem einen echten
-Konto drei Prüfkonten. **Vor dem Produktivgang gehören sie weg** oder zumindest abgeschaltet.
+Prüfkonten (`kc-pruef`, `ota-testnutzer`, `ki-pruef` u. a.) gehören in einer produktiven Anlage
+abgeschaltet, und die Prüfreihen sollten aufräumen, was sie anlegen. Die Zahlen, die `test-ki.sh`
+erzeugt, stehen unter dem Testkonto in der KI-Statistik und verfallen mit deren Frist.

@@ -29,6 +29,46 @@ def absender(request: Request | None) -> str | None:
     )
 
 
+# --------------------------------------------------------------------------
+# Wann die IP-Adresse mitkommt
+# --------------------------------------------------------------------------
+#
+# Seit 2026-11-19 nur noch dort, wo sie einen Zweck hat (Art. 5 Abs. 1 lit. c):
+#
+#   * **Gescheiterte und auffaellige Anmeldungen** — sie ist der einzige
+#     Hinweis darauf, von wo jemand Passwoerter durchprobiert.
+#   * **Vorgaenge von Konten mit Verwaltungsrechten** — wird ein solches Konto
+#     missbraucht, ist sie der wichtigste Beleg, von wo aus.
+#   * Vorgaenge ohne angemeldetes Konto.
+#
+# Nicht bei erfolgreichen Anmeldungen, Sitzungen und allem, was normale Nutzer
+# tun: Bei einem internen System steht eine Adresse meist fuer einen Rechner
+# oder Ort, und sie schaerfte nur das Arbeitszeitprofil. Die Sperre nach
+# Fehlversuchen braucht das Protokoll nicht (`users.failed_from`).
+# Migration `b7c3e9f1a425` hat die Adressen aus aelteren Eintraegen genommen.
+IMMER_MIT_IP = (
+    "login.failed",
+    "login.totp_failed",
+    "login.recovery_failed",
+    "login.recovery_used",
+    "login.oidc_refused",
+    "login.oidc_rejected",
+    "login.oidc_state_mismatch",
+)
+# Rechte, die kein Verwaltungsrecht sind: ein Werkzeug fuer Entwickler.
+NUTZER_RECHTE = frozenset({"arbeitsplatz.root"})
+
+
+def mit_ip(action: str, actor: User | None) -> bool:
+    if action in IMMER_MIT_IP:
+        return True
+    if action in VERHALTEN:
+        return False
+    if actor is None:
+        return True
+    return bool(actor.permissions - NUTZER_RECHTE)
+
+
 def record(
     db: DbSession,
     action: str,
@@ -40,7 +80,7 @@ def record(
     **detail,
 ) -> None:
     """Schreibt einen Audit-Eintrag. Inhalte werden nie erfasst, nur Vorgaenge."""
-    ip = absender(request)
+    ip = absender(request) if mit_ip(action, actor) else None
     db.add(AuditLog(
         actor_user_id=actor.id if actor else None,
         actor_name=actor.username if actor else None,
@@ -60,8 +100,8 @@ def record(
 # Eintraege in zehn Tagen, und **jeder einzelne** mit einer IP-Adresse. Das ist
 # kein Platzproblem — 270 Byte je Eintrag, gut 350 MB im Jahr bei zwanzig
 # Arbeitsplaetzen. Es ist ein Datenschutzproblem: Aus `login.ok`,
-# `session.started` und `app.started` eines Menschen laesst sich lueckenlos
-# ablesen, wann er gearbeitet hat, wie lange und woran.
+# `session.started` (und damals `app.started`) eines Menschen liess sich
+# lueckenlos ablesen, wann er gearbeitet hat, wie lange und woran.
 #
 # Deshalb zwei Fristen (`config.py`), und die kurze ist eine **ausdrueckliche
 # Liste**, keine Regel ueber Praefixe. Das ist Absicht: `session.attached` faengt
@@ -82,8 +122,9 @@ VERHALTEN = (
     "session.started",
     "session.stopped",
     "session.deleted",
-    "app.started",
-    "app.stopped",
+    # `app.started` / `app.stopped` gibt es seit 2026-11-19 nicht mehr
+    # (Migration a1d9e4b7c362); welche Anwendung jemand öffnet, wird nicht
+    # protokolliert.
 )
 
 # In Haeppchen loeschen statt in einem Rutsch: Ein `DELETE` ueber Hunderttausende

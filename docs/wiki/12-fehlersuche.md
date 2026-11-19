@@ -864,7 +864,7 @@ sperrt, sperrt den Bildstrom aus, den er gerade aufbauen will.
 ist weg.
 
 Das ist kein Verlust, sondern die Aufbewahrungsfrist: **90 Tage für Verhaltensdaten**
-(Anmeldungen, Sitzungen, App-Starts), **365 Tage für Verwaltungsvorgänge**. Nachsehen, ob und wann
+(Anmeldungen, Sitzungen), **365 Tage für Verwaltungsvorgänge**. Nachsehen, ob und wann
 aufgeräumt wurde:
 
 ```sql

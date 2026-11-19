@@ -1309,8 +1309,11 @@ def start_app(
             port=result["port"], status="running",
         ))
 
-    audit.record(db, "app.started", actor=user, object_type="session",
-                 object_id=str(sess.id), request=request, app=slug, display=display)
+    # Bewusst kein Protokolleintrag: Welche Anwendung jemand wann öffnet,
+    # braucht OTA nicht — welcher Bildschirm läuft, steht in `app_streams` und
+    # verschwindet mit dem Schliessen. Ein Eintrag im `audit_log` ergäbe nur
+    # das Profil, wer wann wie lange womit gearbeitet hat (Datenminimierung,
+    # Art. 5 Abs. 1 lit. c; dsgvo.md, Abschnitt 2.2).
     db.commit()
     db.refresh(sess)
     return _out(sess)
@@ -1335,8 +1338,6 @@ def stop_app(
         agent_client.stop_app(sess.container_id, stream.display_num,
                               sess.template.stream_engine)
     db.delete(stream)
-    audit.record(db, "app.stopped", actor=user, object_type="session",
-                 object_id=str(sess.id), request=request, app=slug)
     db.commit()
     db.refresh(sess)
     return _out(sess)

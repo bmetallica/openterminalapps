@@ -377,8 +377,6 @@ export const EN: Record<string, string> = {
   'Session pausiert': 'Session paused',
   'Session fortgesetzt': 'Session resumed',
   'Session beendet': 'Session ended',
-  'Anwendung geöffnet': 'Application opened',
-  'Anwendung geschlossen': 'Application closed',
   'Workspace geändert': 'Workspace changed',
   'Workspace gelöscht': 'Workspace deleted',
   'App-Katalog gesetzt': 'App catalogue set',

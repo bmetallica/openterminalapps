@@ -45,8 +45,6 @@ const ACTION_TEXT: Record<string, string> = {
   'session.deleted': 'Session beendet',
   // Der wichtigste Eintrag in dieser Liste.
   'session.attached': 'Auf fremden Bildschirm geschaltet',
-  'app.started': 'Anwendung geöffnet',
-  'app.stopped': 'Anwendung geschlossen',
 
   // Workspaces und Zuteilung
   'template.created': 'Workspace angelegt',

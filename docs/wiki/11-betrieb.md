@@ -133,8 +133,16 @@ Das `audit_log` hat eine eigene Frist, und zwar zwei — weil darin zwei verschi
 
 | Klasse | Frist | Einstellbar |
 |---|---|---|
-| **Verhalten** — Anmeldungen, Sitzungen, App-Starts | 90 Tage | `OTA_PROTOKOLL_VERHALTEN_TAGE` |
+| **Verhalten** — Anmeldungen und Sitzungen. Welche Anwendung jemand öffnet, wird seit 2026-11-19 nicht protokolliert | 90 Tage | `OTA_PROTOKOLL_VERHALTEN_TAGE` |
 | **Verwaltung** — wer was geändert hat, und wer sich aufgeschaltet hat | 365 Tage | `OTA_PROTOKOLL_VERWALTUNG_TAGE` |
+
+**Die IP-Adresse** steht seit 2026-11-19 nur noch dort, wo sie einen Zweck hat: bei gescheiterten
+und auffälligen Anmeldungen (von wo probiert jemand Passwörter?), bei Vorgängen von Konten mit
+Verwaltungsrechten (von wo aus wurde ein solches Konto benutzt?) und bei Vorgängen ohne Konto. Bei
+erfolgreichen Anmeldungen, Sitzungen und allem, was normale Nutzer tun, bleibt das Feld leer;
+`arbeitsplatz.root` zählt dabei nicht als Verwaltungsrecht. Die Sperre nach Fehlversuchen braucht
+das Protokoll nicht. Die Regel steht in `audit.mit_ip`, ältere Einträge hat die Migration
+`b7c3e9f1a425` bereinigt.
 
 `0` heisst „nie löschen". Aufgeräumt wird einmal täglich, in Häppchen von 5.000 Zeilen — ein
 `DELETE` über Hunderttausende hielte die Tabelle fest, und in die schreibt jede Anmeldung. Der

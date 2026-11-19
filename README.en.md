@@ -601,7 +601,7 @@ with packets standing still.
   agent's log has one line per start with the duration of each step
   ([chapter 25](docs/wiki/en/25-root-arbeitsplatz.md#start-time))
 - **`/healthz` and `/metrics`** for external monitoring
-- **Logs**: **Operations → Log** has sign-ins, sessions, app starts, administrative actions,
+- **Logs**: **Operations → Log** has sign-ins, sessions, administrative actions,
   screen connections and disclosures. Behavioural data expires after 90 days, administrative
   actions after 365. Cleanup runs daily, and the cleanup itself is logged
 - **Nothing grows without a limit.** Container logs are capped at 10 MB × 3, for the services
