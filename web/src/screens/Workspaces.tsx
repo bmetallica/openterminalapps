@@ -432,7 +432,7 @@ function Editor({ tpl, host, groups, images, netzprofile, onSaved, onClose, onTo
                    { total: gb(host.memory_total, 0), free: gb(freeBytes) })
               : tr('Host-Auslastung nicht verfügbar.')}>
             <CapacityFader aria-label={tr('Arbeitsspeicher')}
-              value={draft.memory_bytes / GB} min={0.5} max={16} step={0.1} limit={freeGb}
+              value={draft.memory_bytes / GB} min={0.5} max={32} step={0.1} limit={freeGb}
               format={(v) => gb(v * GB)} unit="GB"
               ticks={[0.5, 4, 8, 12, 16]} tickLabel={(t) => String(t)}
               overMessage={tr('Mehr als {free} GB sind gerade nicht frei. Der Start würde abgelehnt.',
@@ -694,7 +694,7 @@ function Editor({ tpl, host, groups, images, netzprofile, onSaved, onClose, onTo
                             ? () => void setOverride(a.user_id, { memory_bytes: null })
                             : undefined}>
                           <CapacityFader aria-label={tr('Arbeitsspeicher für {name}', { name: a.username })}
-                            value={a.memory_bytes / GB} min={0.5} max={16} step={0.1} limit={freeGb}
+                            value={a.memory_bytes / GB} min={0.5} max={32} step={0.1} limit={freeGb}
                             format={(v) => gb(v * GB)} unit="GB"
                             ticks={[0.5, 4, 8, 12, 16]} tickLabel={(x) => String(x)}
                             overMessage={tr('Mehr als {free} GB sind gerade nicht frei.',
