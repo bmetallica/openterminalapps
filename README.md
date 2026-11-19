@@ -639,7 +639,9 @@ mit stehenden Paketen.
 - **Datenorte**: Datenbanken, Registry, OTA-Git und die Docker-Daten der Root-Arbeitsplätze lassen
   sich über `.env` auf eine eigene Platte legen, etwa eine SSD; die Nutzerdaten bleiben auf der
   großen. `scripts/daten-umziehen.sh` zieht im laufenden Betrieb um und schaltet in Sekunden um.
-  Laufende Root-Arbeitsplätze werden nie angehalten, sondern beim nächsten Fortsetzen umgeschaltet
+  Laufende Root-Arbeitsplätze werden nie angehalten, sondern beim nächsten Fortsetzen umgeschaltet.
+  Liegt `/srv/ota` mit den Nutzerdaten auf der Systemplatte, zieht `scripts/srv-umziehen.sh` es als
+  Ganzes auf die große Platte, der Pfad bleibt per Bind-Mount derselbe
   ([Kapitel 40](docs/wiki/40-datenorte.md))
 - **Die eigene Marke**: Name der Anlage, Akzentfarbe und Zeichen. Sie erscheinen im Browserreiter,
   auf der Anmeldemaske (auch der von Keycloak), auf dem Startbildschirm und in der PWA

@@ -626,7 +626,9 @@ with packets standing still.
 - **Data locations**: databases, registry, OTA Git and the Docker data of the root workspaces can
   be put on a disk of their own via `.env`, such as an SSD; the user data stays on the large one.
   `scripts/daten-umziehen.sh` moves the data during operation and switches over in seconds. Running
-  root workspaces are never paused but switched over at their next resume
+  root workspaces are never paused but switched over at their next resume. If `/srv/ota` with the
+  user data sits on the system disk, `scripts/srv-umziehen.sh` moves it to the big disk as a whole;
+  a bind mount keeps the path the same
   ([chapter 40](docs/wiki/en/40-datenorte.md))
 - **Your own brand**: installation name, accent colour and logo. They appear in the browser tab, on
   the sign-in page (Keycloak's too), on the start screen and in the PWA

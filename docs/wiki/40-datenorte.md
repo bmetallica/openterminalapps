@@ -7,7 +7,7 @@ OTA hat zwei Arten von Daten, und sie wollen verschiedene Platten:
 | Art | Was | Braucht |
 |---|---|---|
 | **Viele kleine, synchrone Schreibvorgänge** | Postgres von OTA und Keycloak, Registry, OTA-Git, Datenbank der Gedächtnis-Erweiterung, Docker-Daten der Root-Arbeitsplätze | SSD |
-| **Viel Platz** | Zuhause, Benutzer- und Gruppenlaufwerke, gemeinsame Ablage, Sicherungen (`OTA_PROFILES_ROOT`, `OTA_USERFILES_ROOT` …) | große Platte |
+| **Viel Platz** | Zuhause, Benutzer- und Gruppenlaufwerke, gemeinsame Ablage, Sicherungen (`OTA_PROFILES_ROOT`, `OTA_USERFILES_ROOT` …) | große Platte (`scripts/srv-umziehen.sh`, siehe unten) |
 
 Ohne Einstellung liegt die erste Art in Docker-Volumes, also im Docker-Verzeichnis des Wirts. Liegt
 das auf einer langsamen Platte, wartet jeder Start, jedes Image und jede Anmeldung darauf.
@@ -102,6 +102,38 @@ sudo scripts/daten-umziehen.sh --aufraeumen
 
 Fragt bei jeder alten Kopie, ob sie weg soll: alte Volumes, alte Verzeichnisse und die alten Daten
 umgezogener Root-Arbeitsplätze (`….vor-umzug`). Erst danach ist der Platz auf der alten Platte frei.
+
+## Die Nutzerdaten (`/srv/ota`) auf die große Platte
+
+Zuhause, Laufwerke, Ablage, Sicherungen und Laufzeitdaten liegen alle unter `/srv/ota`. Liegt das
+auf der Systemplatte, zieht es **als Ganzes** um:
+
+```
+sudo scripts/srv-umziehen.sh --nur-kopieren /storage/srv   # Vorkopie im laufenden Betrieb (optional, beliebig oft)
+sudo scripts/srv-umziehen.sh /storage/srv                  # umschalten
+sudo scripts/srv-umziehen.sh --aufraeumen                  # alte Kopie löschen, erst dann ist Platz frei
+sudo scripts/srv-umziehen.sh --zurueck                     # wieder zurück, solange nicht aufgeräumt
+```
+
+Die Daten liegen danach unter `/storage/srv/ota`. Ein Bind-Mount in `/etc/fstab` hängt sie wieder
+unter `/srv/ota` ein. **Der Pfad bleibt also derselbe, an `deploy/.env` ändert sich nichts.** Das
+muss so sein: Angehaltene Root-Arbeitsplätze behalten ihren Container, und der kennt sein Zuhause
+fest unter `/srv/ota/…`. Mit neuen Pfaden fände er es beim Fortsetzen nicht mehr. `make backup`
+nennt `/srv/ota` ebenfalls fest.
+
+**Vorher alle laufenden Arbeitsplätze anhalten.** Ein laufender Container schreibt sonst bis zu
+seinem Neustart auf die alte Platte weiter. Das Skript prüft das und bricht ab, wenn noch einer
+läuft. Angehaltene Root-Arbeitsplätze dürfen bleiben.
+
+Ablauf: Vorkopie mit `rsync` im laufenden Betrieb, dann OTA anhalten (nur die Dienste von OTA,
+keine fremden Container), letzter Abgleich, `/srv/ota` wird zu `/srv/ota.vor-umzug`, Bind-Mount
+einhängen und eintragen, OTA starten. Weicht danach noch etwas ab oder kommen Datenbank, API und
+Agent nicht hoch, dreht das Skript zurück.
+
+Das leere Verzeichnis `/srv/ota` unter dem Bind-Mount ist unveränderlich (`chattr +i`). Fehlt beim
+Booten die große Platte, scheitern die Starts deshalb sichtbar, statt auf der Systemplatte frische,
+leere Zuhause anzulegen. Der Eintrag in `/etc/fstab` wartet mit `x-systemd.requires-mounts-for` auf
+die Platte.
 
 ## Wie es gebaut ist
 

@@ -7,7 +7,7 @@ OTA has two kinds of data, and they want different disks:
 | Kind | What | Needs |
 |---|---|---|
 | **Many small, synchronous writes** | Postgres of OTA and Keycloak, registry, OTA-Git, database of the memory extension, Docker data of root workspaces | SSD |
-| **Lots of space** | Homes, user and group drives, shared storage, backups (`OTA_PROFILES_ROOT`, `OTA_USERFILES_ROOT` …) | big disk |
+| **Lots of space** | Homes, user and group drives, shared storage, backups (`OTA_PROFILES_ROOT`, `OTA_USERFILES_ROOT` …) | big disk (`scripts/srv-umziehen.sh`, see below) |
 
 Without configuration the first kind lives in Docker volumes, i.e. in the host's Docker directory.
 If that is on a slow disk, every start, every image and every login waits for it.
@@ -101,6 +101,37 @@ sudo scripts/daten-umziehen.sh --aufraeumen
 
 Asks for every old copy whether it should go: old volumes, old directories and the old data of
 moved root workspaces (`….vor-umzug`). Only then is the space on the old disk free.
+
+## User data (`/srv/ota`) on the big disk
+
+Homes, drives, shared storage, backups and runtime data all live under `/srv/ota`. If that is on
+the system disk, it moves **as a whole**:
+
+```
+sudo scripts/srv-umziehen.sh --nur-kopieren /storage/srv   # pre-copy during operation (optional, as often as you like)
+sudo scripts/srv-umziehen.sh /storage/srv                  # switch over
+sudo scripts/srv-umziehen.sh --aufraeumen                  # delete the old copy; only then is space freed
+sudo scripts/srv-umziehen.sh --zurueck                     # back again, as long as it has not been cleaned up
+```
+
+Afterwards the data lives under `/storage/srv/ota`. A bind mount in `/etc/fstab` mounts it at
+`/srv/ota` again. **So the path stays the same, and nothing changes in `deploy/.env`.** It has to be
+this way: paused root workspaces keep their container, and that container knows its home under
+`/srv/ota/…` for good. With new paths it would not find it on resume. `make backup` names
+`/srv/ota` directly too.
+
+**Pause all running workspaces first.** Otherwise a running container keeps writing to the old disk
+until it restarts. The script checks this and stops if one is still running. Paused root workspaces
+may stay.
+
+Sequence: pre-copy with `rsync` during operation, then stop OTA (only OTA's services, no other
+containers), a last sync, `/srv/ota` becomes `/srv/ota.vor-umzug`, mount and register the bind
+mount, start OTA. If anything still differs afterwards, or database, API and agent do not come up,
+the script rolls back.
+
+The empty directory `/srv/ota` beneath the bind mount is immutable (`chattr +i`). If the big disk
+is missing at boot, starts therefore fail visibly instead of creating fresh, empty homes on the
+system disk. The `/etc/fstab` entry waits for the disk with `x-systemd.requires-mounts-for`.
 
 ## How it is built
 
