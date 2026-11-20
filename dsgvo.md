@@ -1,6 +1,6 @@
 # Datenschutz — Betrachtung nach DSGVO und BDSG
 
-**Stand: 2026-11-19**, am Quelltext geprüft. Die erste Fassung entstand am 2026-09-04 (Commit
+**Stand: 2026-11-20**, am Quelltext geprüft. Die erste Fassung entstand am 2026-09-04 (Commit
 `99e9400`); seitdem dazugekommen sind die KI-Nutzungsstatistik, das Gedächtnis für opencode, das
 Softwaremonitoring, das Terminal-Protokoll, OTA-Git und der Hinweis „DSGVO“ in der Seitenleiste.
 
@@ -41,7 +41,7 @@ Art. 4 Nr. 7 ist das Unternehmen, das die Anlage betreibt.**
 * **Container-Images werden aus fremden Registries geholt** (Docker Hub u. a.). Dabei fliessen
   keine personenbezogenen Daten, nur die Information, dass diese Anlage ein bestimmtes Image lädt.
 * **Angebundene Web-Anwendungen** (z. B. Open WebUI) sind eigene Verarbeitungen mit eigenen Daten.
-  OTA regelt nur, wer sich dort anmelden darf.
+  OTA regelt nur, wer sich dort anmelden darf. Open WebUI ist in **Abschnitt 12** beschrieben.
 
 ---
 
@@ -424,11 +424,97 @@ eine Kopie an einen getrennten Ort (Syslog-Server) gibt es nicht.
 | 11 | **Verzeichnis von Verarbeitungstätigkeiten**: Einträge für OTA, KI-Statistik, Gedächtnis | offen |
 | 12 | **Protokollierung des KI-Servers** prüfen (vLLM/llama.cpp) | offen |
 | 13 | **Interessenabwägung** für Protokoll, KI-Statistik und Softwaremonitoring dokumentieren | offen |
+| 14 | **Open WebUI**: eigene Liste in Abschnitt 12.5 | offen |
 
 Technisch wächst in dieser Anlage **nichts mehr ohne Frist** — ausser dem Zuhause, das als
 Arbeitsmittel bewusst keine hat. Offen sind vor allem die organisatorischen Punkte: Hinweistext,
 Betriebsvereinbarung, Schwellwertanalyse, Verarbeitungsverzeichnis und das Löschkonzept für
 ausgeschiedene Beschäftigte.
+
+## 12 · Open WebUI — eine eigene Verarbeitung neben OTA
+
+*Stand 2026-11-20, beschrieben nach Open WebUI 0.12. Die Einstellungen der eingesetzten Instanz
+sind noch nicht geprüft, siehe 12.5.*
+
+Open WebUI ist die Chat-Oberfläche für den KI-Server. Es läuft in dieser Anlage als **eigener
+Container neben OTA**. OTA richtet es nicht ein und hat keinen Zugriff auf seine Daten. Es ist
+deshalb **eine eigene Verarbeitungstätigkeit** mit eigenem Eintrag im Verzeichnis. Und es ist
+datenschutzrechtlich **gewichtiger als OTA**: OTA speichert über die KI-Nutzung nur Zahlen. Open
+WebUI speichert die **Inhalte**, also jede Frage und jede Antwort.
+
+### 12.1 Wo OTA und Open WebUI sich berühren
+
+| Weg | Was fliesst | Wo es bleibt |
+|---|---|---|
+| **Anmeldung** über Keycloak (OIDC) | Name, E-Mail, Kennung, Gruppen; bei jeder Anmeldung neu | in Open WebUI als Konto |
+| **Zugang**: Wer die Kachel sieht und sich anmelden darf | Gruppen aus OTA | Keycloak |
+| **KI-Anfragen** über den KI-Durchgang `ota-ki` (Eingang `OTA_KI_EXTERN_PORT`) | Chat-Inhalt (geht durch, **wird von OTA nicht gespeichert**), dazu Name und E-Mail in Kopfzeilen (`ENABLE_FORWARD_USER_INFO_HEADERS`) | Die Kopfzeilen dienen nur der Zuordnung zum OTA-Konto in der KI-Statistik (2.5) und gehen **nicht** an den KI-Server weiter. Gibt es kein passendes Konto, bleibt die Zeile ohne Person; die E-Mail wird nicht gespeichert |
+| **Websuche** über SearXNG (eigener Container) | Suchbegriffe, die das Modell aus dem Chat bildet | SearXNG fragt externe Suchmaschinen, siehe 12.3 |
+
+### 12.2 Was Open WebUI selbst speichert
+
+In seiner Datenbank (Vorgabe: SQLite unter `/app/backend/data`) und seinem Datenverzeichnis:
+
+| Daten | Personenbezug | Frist von Haus aus |
+|---|---|---|
+| **Konten**: Name, E-Mail, Rolle, Profilbild, letzte Aktivität, OIDC-Kennung, persönliche Einstellungen, API-Schlüssel | direkt | **keine**: bleibt, bis ein Admin das Konto löscht |
+| **Chats**: vollständiger Verlauf mit Fragen, Antworten, Modell und Zeitstempeln; Ordner, Schlagworte, archivierte Chats | direkt, **Inhalt kann alles enthalten**, auch Daten Dritter oder Art.-9-Daten | **keine**: bleibt, bis die Person ihn löscht. Ausnahme: der „temporäre Chat“ wird nicht gespeichert |
+| **Geteilte Chats** (Link) | direkt | bis zum Widerruf |
+| **Hochgeladene Dateien** und daraus erzeugte **Vektoren** (RAG, Wissenssammlungen) | Inhalt der Dateien | **keine** |
+| **Erinnerungen** („Memory“), die das Modell sich über die Person merkt | direkt | **keine** |
+| **Bewertungen** (Daumen hoch/runter) mit einer Kopie des Chats | direkt | **keine** |
+| **Notizen, Kanäle** (Chat zwischen Nutzern), falls eingeschaltet | direkt | **keine** |
+| **Prüfprotokoll** (`AUDIT_LOG_LEVEL`), Vorgabe aus | je nach Stufe bis zum vollständigen Anfrage- und Antworttext | nach Einstellung |
+| **Container-Protokoll** (stdout) | Anfragepfade, je nach Stufe E-Mail | nach Docker-Einstellung des Containers |
+
+Das ist der Kern: **Open WebUI löscht von sich aus nichts.** Ohne Regel wächst dort ein
+vollständiges Archiv aller KI-Gespräche aller Beschäftigten.
+
+### 12.3 Wohin Daten das Haus verlassen können
+
+* **Websuche:** SearXNG reicht die Suchbegriffe an Google, Bing, DuckDuckGo usw. weiter, je nach
+  Einstellung, also teils in Drittländer. Die IP-Adresse der Person geht nicht mit, die des
+  Servers schon. Suchbegriffe können aus dem Chat stammen und Personenbezug haben.
+  👉 Suchmaschinen in SearXNG bewusst wählen; prüfen, ob SearXNG Suchen protokolliert.
+* **„Mit der Community teilen“** (`ENABLE_COMMUNITY_SHARING`, Vorgabe an) lädt einen Chat auf
+  openwebui.com hoch. 👉 Abschalten.
+* **Versionsprüfung, Telemetrie und Modell-Downloads** (`ENABLE_VERSION_UPDATE_CHECK`,
+  `SCARF_NO_ANALYTICS`, `DO_NOT_TRACK`, `ANONYMIZED_TELEMETRY`, `OFFLINE_MODE`): ohne Personenbezug,
+  verraten aber die Anlage. 👉 Abschalten bzw. `OFFLINE_MODE=true`, wenn die Modelle für die
+  Einbettung schon da sind.
+* **Externe Engines** für Sprache, Bilder oder Websuche-Loader, falls eingerichtet: Dann gehen
+  Audio, Texte oder Seitenadressen an diesen Anbieter. 👉 Nur lokale Engines.
+* **Webhooks** (`WEBHOOK_URL`, Nutzer-Webhooks): Benachrichtigungen an fremde Dienste. 👉 Prüfen.
+* **Werkzeuge und Funktionen** (Tools/Functions/Pipelines) sind Python-Code, den Admins
+  installieren. Sie sehen alles, was durch sie läuft, und können überall hin senden.
+  👉 Nur geprüfte Werkzeuge; wer sie installieren darf, ist eine organisatorische Frage.
+
+### 12.4 Wer was sehen kann — Mitbestimmung
+
+* **Admins von Open WebUI können alle Chats aller Nutzer lesen** (`ENABLE_ADMIN_CHAT_ACCESS`,
+  Vorgabe an) und die ganze Datenbank exportieren (`ENABLE_ADMIN_EXPORT`, Vorgabe an). Das ist
+  eine technische Einrichtung, die Verhalten und Leistung überwachen **kann**, also
+  **mitbestimmungspflichtig** (§ 87 Abs. 1 Nr. 6 BetrVG, wie Abschnitt 6). 👉 Abschalten oder in
+  der Betriebsvereinbarung regeln; der Kreis der Admins klein halten.
+* Die Rechte **in** Open WebUI (Modelle, Werkzeuge, Wissenssammlungen je Gruppe) kommen aus den
+  OTA-Gruppen (Wiki, Kapitel 18). Wer in OTA aus einer Gruppe fällt, verliert sie bei der nächsten
+  Anmeldung, aber nur, solange das Token noch mindestens eine Gruppe nennt.
+* **Viele Einstellungen stehen nach dem ersten Start in der Datenbank** („PersistentConfig“), und
+  die Umgebungsvariable gilt dann nicht mehr. Massgeblich ist die Admin-Oberfläche.
+
+### 12.5 Was zu tun ist (Open WebUI)
+
+| # | Aufgabe | Stand |
+|---|---|---|
+| W1 | **Einstellungen der eingesetzten Instanz prüfen und dokumentieren** (12.3, 12.4), in der Admin-Oberfläche, nicht nur in der Umgebung | offen |
+| W2 | **Löschfrist für Chats** festlegen (z. B. 90 Tage ohne Änderung) und umsetzen. Open WebUI kann das nicht selbst; nötig ist eine Aufgabe auf dessen Datenbank oder eine Regel „Nutzer löschen selbst“ | offen |
+| W3 | **Ausgeschiedene Beschäftigte:** OTA sperrt das Konto in Keycloak, **das Konto in Open WebUI mit allen Chats, Dateien und Erinnerungen bleibt**. Gehört ins Löschkonzept (4.2): in Open WebUI unter *Administration → Benutzer* löschen | offen |
+| W4 | **Admin-Zugriff auf Chats** abschalten oder in der Betriebsvereinbarung regeln | offen |
+| W5 | **Community-Teilen, Versionsprüfung, Telemetrie** abschalten | offen |
+| W6 | **SearXNG:** Suchmaschinen und eigene Protokollierung prüfen | offen |
+| W7 | **Datenschutzhinweis in Open WebUI** (Banner oder Hinweis beim ersten Aufruf): Inhalte werden gespeichert, keine Personendaten Dritter und keine besonderen Kategorien eingeben, temporären Chat nutzen | offen |
+| W8 | **Sicherungen** von Open WebUI: Wo liegen sie, wie lange? Gelöschte Chats leben dort weiter | offen |
+| W9 | **Eintrag im Verzeichnis von Verarbeitungstätigkeiten** und Teil der **DSFA** (Abschnitt 9): KI mit frei eingegebenen Inhalten ist der wahrscheinlichste Grund, dass eine DSFA nötig wird | offen |
 
 ---
 
