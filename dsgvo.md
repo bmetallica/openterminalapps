@@ -433,8 +433,14 @@ ausgeschiedene Beschäftigte.
 
 ## 12 · Open WebUI — eine eigene Verarbeitung neben OTA
 
-*Stand 2026-11-20, beschrieben nach Open WebUI 0.12. Die Einstellungen der eingesetzten Instanz
-sind noch nicht geprüft, siehe 12.5.*
+*Stand 2026-11-20, beschrieben nach Open WebUI 0.12.*
+
+**Geprüft am 2026-11-20 (Umgebung des Containers `open-webui`):** gesetzt sind nur
+`ENABLE_FORWARD_USER_INFO_HEADERS=true` sowie `SCARF_NO_ANALYTICS=true`, `DO_NOT_TRACK=true` und
+`ANONYMIZED_TELEMETRY=false`. **Telemetrie ist damit aus.** Alles andere steht auf der Vorgabe
+oder in der Datenbank (Admin-Oberfläche, noch zu prüfen): Admin-Zugriff auf Chats, Export,
+Community-Teilen, Versionsprüfung, Prüfprotokoll, Websuche. Das **Container-Protokoll** läuft als
+`json-file` **ohne Größengrenze und ohne Rotation**.
 
 Open WebUI ist die Chat-Oberfläche für den KI-Server. Es läuft in dieser Anlage als **eigener
 Container neben OTA**. OTA richtet es nicht ein und hat keinen Zugriff auf seine Daten. Es ist
@@ -506,11 +512,12 @@ vollständiges Archiv aller KI-Gespräche aller Beschäftigten.
 
 | # | Aufgabe | Stand |
 |---|---|---|
-| W1 | **Einstellungen der eingesetzten Instanz prüfen und dokumentieren** (12.3, 12.4), in der Admin-Oberfläche, nicht nur in der Umgebung | offen |
+| W1 | **Einstellungen der eingesetzten Instanz prüfen und dokumentieren** (12.3, 12.4), in der Admin-Oberfläche, nicht nur in der Umgebung | ⚠️ Umgebung geprüft 2026-11-20, Admin-Oberfläche offen |
 | W2 | **Löschfrist für Chats** festlegen (z. B. 90 Tage ohne Änderung) und umsetzen. Open WebUI kann das nicht selbst; nötig ist eine Aufgabe auf dessen Datenbank oder eine Regel „Nutzer löschen selbst“ | offen |
 | W3 | **Ausgeschiedene Beschäftigte:** OTA sperrt das Konto in Keycloak, **das Konto in Open WebUI mit allen Chats, Dateien und Erinnerungen bleibt**. Gehört ins Löschkonzept (4.2): in Open WebUI unter *Administration → Benutzer* löschen | offen |
 | W4 | **Admin-Zugriff auf Chats** abschalten oder in der Betriebsvereinbarung regeln | offen |
-| W5 | **Community-Teilen, Versionsprüfung, Telemetrie** abschalten | offen |
+| W5 | **Community-Teilen, Versionsprüfung** abschalten (Telemetrie ist aus, geprüft 2026-11-20) | ⚠️ teilweise |
+| W10 | **Container-Protokoll begrenzen** (`--log-opt max-size=10m --log-opt max-file=3` beim nächsten Neuanlegen von Open WebUI) — läuft heute ohne Grenze | offen |
 | W6 | **SearXNG:** Suchmaschinen und eigene Protokollierung prüfen | offen |
 | W7 | **Datenschutzhinweis in Open WebUI** (Banner oder Hinweis beim ersten Aufruf): Inhalte werden gespeichert, keine Personendaten Dritter und keine besonderen Kategorien eingeben, temporären Chat nutzen | offen |
 | W8 | **Sicherungen** von Open WebUI: Wo liegen sie, wie lange? Gelöschte Chats leben dort weiter | offen |
