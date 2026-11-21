@@ -57,6 +57,17 @@ message now reads "did not answer in time — Docker is overloaded right now" in
 "unreachable". Then `sudo scripts/docker-diagnose.sh` shows why Docker is slow, and
 `sudo scripts/platten-last.sh` who loads the disk.
 
+*2026-11-20, once more.* After a restart of the agent (for instance when moving `/srv/ota`), a new
+root workspace failed eight times in a row. The agent's log said `ReadTimeout … read timeout=60` in
+`_docker_volume`, and the workspace did not appear under **Operations** because it never got a
+container. After a restart the agent re-measures all root workspaces, and every measurement made
+`docker system df` recompute **all** volumes of the host. While that runs, Docker locks the volumes,
+and the start waited behind it.
+
+Since then `df` runs at most once per measuring period (`OTA_PLATZ_MESSEN_MINUTEN`, default 60) for
+all workspaces together, and start and resume wait up to 240 s for Docker instead of 60 s
+(`OTA_DOCKER_START_TIMEOUT`).
+
 ## "This session is no longer running", although it was just started
 
 This page comes from the guard in `deploy/traefik/dynamic/session-guard.yml`. It answers when **no**

@@ -376,6 +376,27 @@ def dc() -> docker.DockerClient:
     return _client
 
 
+_start_client: docker.DockerClient | None = None
+# Wie lange ein Start auf eine einzelne Antwort von Docker wartet. Die API
+# gibt dem ganzen Start 300 s; hier knapp darunter.
+DOCKER_START_TIMEOUT = int(os.environ.get("OTA_DOCKER_START_TIMEOUT", "") or 240)
+
+
+def dc_start() -> docker.DockerClient:
+    """Der Docker-Zugang für Start und Fortsetzen — mit längerer Geduld.
+
+    Gemessen am 2026-11-20: Rechnet Docker gerade `system df` über alle
+    Volumes (die Platzmessung), sperrt es die Volumes. Ein Start, der nur
+    nachsieht, ob das Volume seines Platzes schon da ist, wartete dahinter und
+    brach mit der Vorgabe des SDK nach 60 s ab — acht Starts hintereinander.
+    Warten ist hier richtig: Der Start kommt, sobald Docker wieder antwortet.
+    """
+    global _start_client
+    if _start_client is None:
+        _start_client = docker.from_env(timeout=DOCKER_START_TIMEOUT)
+    return _start_client
+
+
 def require_token(x_agent_token: str = Header(default="")) -> None:
     # secrets.compare_digest verhindert, dass die Laufzeit etwas ueber den
     # Token verraet.
@@ -1170,7 +1191,7 @@ def fortschritt(sid: str) -> dict[str, Any]:
 
 @app.post("/containers", dependencies=[Depends(require_token)])
 def start_container(req: StartRequest) -> dict[str, Any]:
-    client = dc()
+    client = dc_start()
     lauf = _Startlauf(req.session_id, "Start", f"ota-s-{req.session_id[:12]}")
     lauf.schritt("image")
 
@@ -2689,7 +2710,7 @@ def fortsetzen(cid: str, body: "FortsetzenRequest | None" = None) -> dict[str, A
     eines Containers ist dabei nicht garantiert dasselbe wie vorher: Router
     und Traefik werden nachgezogen, die Regeln danach gesetzt.
     """
-    client = dc()
+    client = dc_start()
     _sysbox_pruefen(client)
     c = _root_container(client, cid)
     sid = (c.labels or {}).get("ota.session_id", "")
@@ -2775,12 +2796,18 @@ _df_zwischen: dict[str, Any] = {"zeit": 0.0, "volumes": {}}
 
 
 def _volume_groessen(client) -> dict[str, int]:
-    """Groesse aller Volumes — `docker system df`, eine Minute zwischengespeichert.
+    """Groesse aller Volumes — `docker system df`, so lange zwischengespeichert
+    wie ein Messwert frisch bleibt (`OTA_PLATZ_MESSEN_MINUTEN`, Vorgabe 60).
 
-    Die Abfrage rechnet ueber alle Volumes des Wirts und dauert entsprechend.
-    Fuer eine Liste in der Oberflaeche genuegt der Stand von vor einer Minute.
+    Die Abfrage rechnet ueber **alle** Volumes des Wirts, auch fremde, und
+    sperrt solange die Volumes: Jeder Start, der sein Volume nachsieht, wartet.
+    Bis zum 2026-11-20 galt das Ergebnis eine Minute. Nach einem Neustart des
+    Agents misst er alle Root-Plaetze nacheinander nach, und jede Messung
+    rechnete `df` neu — auf der Produktion mit 36 Plaetzen lief es damit
+    praktisch ununterbrochen, und Starts scheiterten. Eine Rechnung liefert
+    die Groessen aller Volumes; sie reicht fuer alle Messungen der Stunde.
     """
-    if time.time() - _df_zwischen["zeit"] > 60:
+    if time.time() - _df_zwischen["zeit"] > _PLATZ_FRISCH:
         try:
             daten = client.api.df()
             _df_zwischen["volumes"] = {

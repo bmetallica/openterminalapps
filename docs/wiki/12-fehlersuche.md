@@ -57,6 +57,17 @@ trotzdem ab, heißt die Meldung jetzt „antwortet nicht rechtzeitig — Docker 
 nicht mehr „nicht erreichbar“. Dann zeigt `sudo scripts/docker-diagnose.sh`, warum Docker langsam
 ist, und `sudo scripts/platten-last.sh`, wer die Platte belastet.
 
+*2026-11-20, noch einmal.* Nach einem Neustart des Agents (etwa beim Umzug von `/srv/ota`)
+scheiterte ein neuer Root-Arbeitsplatz achtmal hintereinander. Im Protokoll des Agents stand
+`ReadTimeout … read timeout=60` in `_docker_volume`, und der Platz stand nicht unter **Betrieb**,
+weil er nie einen Container bekam. Der Agent misst nach einem Neustart alle Root-Plätze nach, und
+jede Messung ließ `docker system df` über **alle** Volumes des Wirts neu rechnen. Solange das
+läuft, sperrt Docker die Volumes, und der Start wartete dahinter.
+
+Seitdem rechnet `df` höchstens einmal je Messzeitraum (`OTA_PLATZ_MESSEN_MINUTEN`, Vorgabe 60) für
+alle Plätze zusammen, und Start und Fortsetzen warten bis zu 240 s auf Docker statt 60 s
+(`OTA_DOCKER_START_TIMEOUT`).
+
 ## „Diese Sitzung läuft nicht mehr", obwohl sie gerade gestartet wurde
 
 Diese Seite kommt vom Schutzwall aus `deploy/traefik/dynamic/session-guard.yml`. Er antwortet, wenn
