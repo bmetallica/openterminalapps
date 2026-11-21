@@ -1360,6 +1360,8 @@ export const EN: Record<string, string> = {
   '{n} laufen und belegen zusammen': '{n} running, occupying together',
   '{n} Root-Arbeitsplätze sind angehalten.': '{n} root workspaces are stopped.',
   'neu aufgesetzt': 'rebuilt',
+  'Start gescheitert': 'Start failed',
+  'Baut den Container neu auf, mit Zuhause und Docker-Daten des Nutzers': 'Rebuilds the container, with the user\'s home and Docker data',
   'Samt Docker-Daten löschen?': 'Delete including Docker data?',
   'Container beenden?': 'End the container?',
   'root-Shell im Browser — jede Eingabe wird protokolliert': 'root shell in the browser — every input is logged',

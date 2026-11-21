@@ -831,6 +831,7 @@ export type Arbeitsplatz = {
   last_seen_at: string
   ended_at: string | null
   end_reason: string | null
+  fehler?: string | null
   cores: number
   memory_bytes: number
   app_count: number

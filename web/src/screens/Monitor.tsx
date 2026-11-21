@@ -432,6 +432,9 @@ export function Monitor({ onToast, darfTerminal = false }: {
                         <td>
                           {root && s.hat_container
                             ? <GrenzeLabel platz={plaetze[s.id]} grenzeGb={s.platz_grenze_gb} />
+                            : root && s.fehler
+                              ? <span className="silk" style={{ color: 'var(--halt)' }} title={s.fehler}>
+                                  {tr('Start gescheitert')}</span>
                             : root ? <span className="silk">{tr('neu aufgesetzt')}</span>
                               : <span className="silk">—</span>}
                         </td>
@@ -463,8 +466,10 @@ export function Monitor({ onToast, darfTerminal = false }: {
                                   {tr('Terminal')}
                                 </button>
                               )}{' '}
-                              {root && angehalten && s.hat_container && (
+                              {root && angehalten && (
                                 <button className="btn btn--sm" disabled={busy === s.id}
+                                  title={s.hat_container ? undefined
+                                    : tr('Baut den Container neu auf, mit Zuhause und Docker-Daten des Nutzers')}
                                   onClick={() => void aktion(s, 'starten')}>{tr('Starten')}</button>
                               )}
                               {root && laeuft && (

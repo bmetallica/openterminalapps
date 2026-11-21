@@ -195,10 +195,16 @@ RAM und Netz mit Balken ([Kapitel 11](11-betrieb.md#live-auslastung-betrieb--arb
 | Knopf | Wirkung | Recht |
 |---|---|---|
 | **Terminal** | root-Shell im Browser, im laufenden Arbeitsplatz | `arbeitsplatz.terminal` |
-| **Starten** | angehaltenen Root-Arbeitsplatz starten, ohne dass der Nutzer eine Sitzung öffnet | `sessions.view_all` |
+| **Starten** | angehaltenen Root-Arbeitsplatz starten, ohne dass der Nutzer eine Sitzung öffnet. Auch ohne Container (neu aufgesetzt oder Start gescheitert): Dann baut OTA ihn im Namen des Nutzers auf, mit dessen Zuhause und Docker-Daten, auch bei abgeschaltetem Konto | `sessions.view_all` |
 | **Anhalten** | laufenden Root-Arbeitsplatz anhalten | `sessions.view_all` |
 | **Terminal-Protokoll** / **CSV** | Protokoll der Terminal-Eingaben dieses Arbeitsplatzes herunterladen | `sessions.view_all` |
 | **Löschen** (Root) / **Beenden** (Standard) | Container weg — bei Root samt Docker-Daten. Das Zuhause bleibt immer | `sessions.view_all` |
+
+**Scheitert ein Start,** bleibt ein Root-Arbeitsplatz angehalten. In der Spalte für den Platz
+steht dann **Start gescheitert**, der Grund erscheint beim Darüberfahren. Bis zum 2026-11-21 fiel
+er auf „failed“ und verschwand aus der Liste. Jeder weitere Versuch legte dann einen neuen Platz
+mit neuer Kennung an, ohne die alten Docker-Daten. Die Migration `c5e8a2d7f316` holt solche Plätze
+zurück: je Nutzer und Vorlage den, der zuletzt nachweislich lief.
 
 Automatisch gelöscht wird nichts, auch kein Root-Arbeitsplatz, der lange nicht benutzt wurde
 („zuletzt aktiv" zeigt es).

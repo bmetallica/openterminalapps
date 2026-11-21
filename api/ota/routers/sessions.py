@@ -526,8 +526,15 @@ def start_session(
 
 
 def _starten(body: SessionStartIn, request: Request, user: User,
-             db: DbSession) -> SessionOut:
-    if needs_totp(user):
+             db: DbSession, verwaltung: User | None = None) -> SessionOut:
+    """Einen Arbeitsplatz für `user` starten.
+
+    `verwaltung`: Ein Administrator startet ihn im Namen des Nutzers
+    (Betrieb → Arbeitsplätze). Dann entfällt nur die Pflicht zum zweiten
+    Faktor — sie gilt der Anmeldung des Nutzers, nicht diesem Start. Alles
+    andere (Zuhause, Rechte, Grenzen) ist das des Nutzers.
+    """
+    if verwaltung is None and needs_totp(user):
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
             "Für deine Gruppe ist der zweite Faktor Pflicht. Richte ihn unter "
@@ -535,13 +542,16 @@ def _starten(body: SessionStartIn, request: Request, user: User,
         )
 
     tpl = db.get(Template, body.template_id)
-    if not tpl or not user_can_see_template(tpl, user):
+    # Startet die Verwaltung einen vorhandenen Platz, zählt nicht, ob der
+    # Nutzer ihn heute noch sehen dürfte: Einem abgeschalteten Konto nimmt der
+    # Verzeichnisabgleich die Gruppen, und gerade dessen Platz will man öffnen.
+    if not tpl or (verwaltung is None and not user_can_see_template(tpl, user)):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Workspace nicht gefunden")
     if not tpl.is_enabled:
         raise HTTPException(status.HTTP_409_CONFLICT,
                             "Dieser Workspace ist derzeit abgeschaltet.")
     ist_root = tpl.klasse == "root"
-    if ist_root and not darf_root(user):
+    if ist_root and verwaltung is None and not darf_root(user):
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
             "Das ist ein Root-Arbeitsplatz. Dafür braucht es das Recht "
@@ -800,9 +810,25 @@ def _starten(body: SessionStartIn, request: Request, user: User,
             # Leer: nichts, bzw. weg.
             "opencode": opencode.fuer_sitzung(db, sess, user, tpl),
         })
-    except HTTPException:
-        sess.status = "failed"
-        sess.error = "Der Container konnte nicht gestartet werden."
+    except HTTPException as exc:
+        grund = str(exc.detail or "")[:500]
+        sess.error = "Der Container konnte nicht gestartet werden." + (f" ({grund})" if grund else "")
+        if ist_root:
+            # **Ein Root-Arbeitsplatz bleibt angehalten, nicht „failed".**
+            # Bis zum 2026-11-21 stand hier für alle `failed`. Ein angehaltener
+            # Platz ohne Container, der beim Start scheiterte, verschwand damit
+            # aus Betrieb → Arbeitsplätze, und jeder weitere Versuch legte einen
+            # **neuen** Platz an, mit neuer Kennung und neuem, leerem Volume
+            # für die Docker-Daten. Die alten lagen unerreichbar daneben.
+            # Gemessen auf der Produktion: acht Versuche, acht neue Plätze.
+            # So behält er Kennung und Docker-Daten, der nächste Start nimmt
+            # ihn wieder, und die Verwaltung sieht ihn.
+            sess.status = ANGEHALTEN
+            sess.container_id = None
+            sess.ended_at = datetime.now(timezone.utc)
+            sess.end_reason = "start_gescheitert"
+        else:
+            sess.status = "failed"
         db.commit()
         raise
 
@@ -812,9 +838,10 @@ def _starten(body: SessionStartIn, request: Request, user: User,
     # Erst wenn die Route steht, ist die Session fuer den Browser da.
     _phase(user.id, tpl.id, "route")
     sess.status = "running" if _wait_for_route(sess.id) else "starting"
-    audit.record(db, "session.started", actor=user, object_type="session",
+    audit.record(db, "session.started", actor=verwaltung or user, object_type="session",
                  object_id=str(sess.id), request=request,
-                 template=tpl.slug, cores=cores, memory_bytes=memory)
+                 template=tpl.slug, cores=cores, memory_bytes=memory,
+                 **({"nutzer": user.username} if verwaltung else {}))
     db.commit()
     # Der Router kennt die Sitzung jetzt; was ihm fehlt, sind die globalen
     # Freigaben und die Portfreigaben dieses Menschen für diesen Arbeitsplatz.

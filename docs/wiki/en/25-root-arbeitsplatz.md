@@ -193,10 +193,16 @@ template's limit), plus live CPU, RAM and network usage as bars
 | Button | Effect | Permission |
 |---|---|---|
 | **Terminal** | root shell in the browser, in the running workspace | `arbeitsplatz.terminal` |
-| **Start** | start a stopped root workspace without the user opening a session | `sessions.view_all` |
+| **Start** | start a stopped root workspace without the user opening a session. Also without a container (rebuilt, or a start failed): OTA then builds it on the user's behalf, with their home and Docker data, even if the account is disabled | `sessions.view_all` |
 | **Stop** | stop a running root workspace | `sessions.view_all` |
 | **Terminal log** / **CSV** | download the log of this workspace's terminal input | `sessions.view_all` |
 | **Delete** (root) / **End** (standard) | container gone — for root including Docker data. The home always stays | `sessions.view_all` |
+
+**If a start fails,** a root workspace stays paused. The space column then reads **Start
+failed**, with the reason on hover. Until 2026-11-21 it fell to "failed" and vanished from the
+list. Every further attempt then created a new workspace with a new ID, without the old Docker
+data. Migration `c5e8a2d7f316` brings such workspaces back: per user and template the one that
+last ran demonstrably.
 
 Nothing is deleted automatically, not even a root workspace that was not used for a long time
 ("last active" shows it).

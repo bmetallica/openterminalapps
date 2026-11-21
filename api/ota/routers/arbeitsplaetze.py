@@ -39,8 +39,9 @@ from ..db import SessionLocal, get_db
 from ..deps import current_user, require_permission
 from ..models import EigenerName, Session as SessionModel, TerminalEintrag, User
 from ..security import darf_terminal, read_token
+from ..schemas import SessionStartIn
 from .sessions import (
-    ANGEHALTEN, LIVE, platz_anhalten, platz_fortsetzen,
+    ANGEHALTEN, LIVE, _startlauf, _starten, platz_anhalten, platz_fortsetzen,
 )
 
 router = APIRouter(prefix="/api/admin/arbeitsplaetze", tags=["arbeitsplaetze"])
@@ -81,6 +82,8 @@ def liste(db: DbSession = Depends(get_db)) -> list[dict]:
         "last_seen_at": s.last_seen_at.isoformat(),
         "ended_at": s.ended_at.isoformat() if s.ended_at else None,
         "end_reason": s.end_reason,
+        # Warum der letzte Start scheiterte — steht in der Liste als Hinweis.
+        "fehler": s.error if s.end_reason == "start_gescheitert" else None,
         "cores": s.cores,
         "memory_bytes": s.memory_bytes,
         "app_count": sum(1 for x in s.streams if x.status == "running"),
@@ -126,18 +129,24 @@ def starten(session_id: uuid.UUID, request: Request,
     """Einen angehaltenen Root-Arbeitsplatz starten — ohne dass der Nutzer
     dafür eine Sitzung öffnet. Er läuft, bis der Nutzer sich verbindet oder
     jemand ihn wieder anhält. Die Platzgrenze gilt hier nicht: Wer verwaltet,
-    soll einen übervollen Platz starten können, um darin aufzuräumen."""
+    soll einen übervollen Platz starten können, um darin aufzuräumen.
+
+    **Auch ohne Container** (neu aufgesetzt, oder der letzte Start scheiterte):
+    Dann baut der Start ihn auf, im Namen des Nutzers — mit dessen Zuhause,
+    Ablagen und Rechten, die die API ohnehin kennt. Bis zum 2026-11-21 lehnte
+    das ab, und ein Platz, dessen Start gescheitert war, ließ sich von der
+    Verwaltung nicht mehr anfassen. Das Konto darf dabei abgeschaltet sein:
+    Wer verwaltet, soll auch den Platz eines Ausgeschiedenen öffnen können."""
     sess = _load(db, session_id)
     if sess.template.klasse != "root" or sess.status != ANGEHALTEN:
         raise HTTPException(status.HTTP_409_CONFLICT,
                             "Nur angehaltene Root-Arbeitsplätze lassen sich hier starten.")
     if not sess.container_id:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            "Dieser Arbeitsplatz wurde neu aufgesetzt und hat noch keinen Container. "
-            "Er entsteht beim nächsten Start durch den Nutzer — erst dann sind "
-            "Zuhause, Ablagen und Rechte des Nutzers bekannt.",
-        )
+        nutzer, vorlage = sess.user, sess.template
+        with _startlauf(nutzer.id, vorlage.id, "neu"):
+            out = _starten(SessionStartIn(template_id=vorlage.id), request, nutzer, db,
+                           verwaltung=actor)
+        return {"status": out.status}
     platz_fortsetzen(db, sess, request, actor, platzgrenze=False)
     return {"status": sess.status}
 

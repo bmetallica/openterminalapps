@@ -312,6 +312,42 @@ api -H 'Content-Type: application/json' -X POST "$BASE_URL/api/sessions" -d "{\"
 [ -z "$(drin 'cat /opt/ota-pruefmarke 2>/dev/null')" ] && ok "Aus dem Image neu — Installiertes ist weg" \
   || bad "Alter Stand nach Neu aufsetzen"
 
+# ------------------------------------------- Gescheiterter Start
+#
+# Gemessen auf der Produktion am 2026-11-20: Ein angehaltener Platz ohne
+# Container scheiterte beim Aufbau und stand danach auf „failed" — weg aus
+# Betrieb → Arbeitsplätze, und jeder weitere Versuch legte einen neuen Platz
+# mit neuer Kennung an. Jetzt bleibt er angehalten, und die Verwaltung kann
+# ihn auch ohne Container starten.
+echo
+echo "Gescheiterter Start"
+vorlage() { # <Image>
+  api -H 'Content-Type: application/json' -X PUT "$BASE_URL/api/templates/$TID" -d "{
+    \"friendly_name\": \"Prüfung Root-Arbeitsplatz\", \"image_ref\": \"$1\",
+    \"cores\": 2, \"memory_bytes\": 4294967296, \"klasse\": \"root\",
+    \"platz_grenze_gb\": 20, \"stream_engine\": \"selkies\", \"mode\": \"workspace\",
+    \"persistence_scope\": \"template\"}" -o /dev/null -w '%{http_code}'
+}
+api -X POST "$BASE_URL/api/sessions/$SID/neu-aufsetzen" >/dev/null
+[ "$(vorlage ota-pruef/gibt-es-nicht:1)" = 200 ] || bad "Vorlage ließ sich nicht umstellen"
+code=$(api -H 'Content-Type: application/json' -X POST "$BASE_URL/api/sessions" \
+  -d "{\"template_id\":\"$TID\"}" -o /dev/null -w '%{http_code}')
+[ "$code" != 201 ] && ok "Start mit fehlendem Image scheitert ($code)" || bad "Start mit fehlendem Image gelang?"
+ZEILE=$(api "$BASE_URL/api/admin/arbeitsplaetze" | python3 -c "
+import sys, json
+z = [x for x in json.load(sys.stdin) if x['id'] == '$SID']
+print(z[0]['status'] if z else 'fehlt', bool(z and z[0].get('fehler')), z[0]['hat_container'] if z else '')")
+[ "$ZEILE" = "angehalten True False" ] \
+  && ok "Danach angehalten, mit Fehlergrund, in Betrieb → Arbeitsplätze sichtbar" \
+  || bad "Nach gescheitertem Start: $ZEILE (erwartet: angehalten True False)"
+vorlage "$IMAGE" >/dev/null
+STATUS=$(api -X POST "$BASE_URL/api/admin/arbeitsplaetze/$SID/starten" | jqp "d.get('status')")
+[ "$STATUS" = running ] || [ "$STATUS" = starting ] \
+  && ok "Verwaltung startet den Platz ohne Container ($STATUS)" || bad "Start durch die Verwaltung: $STATUS"
+docker inspect "$CN" >/dev/null 2>&1 && ok "… mit derselben Kennung" || bad "Container $CN fehlt"
+docker volume inspect "ota-platz-docker-$SID" >/dev/null 2>&1 \
+  && ok "… und denselben Docker-Daten" || bad "Docker-Daten weg"
+
 # ------------------------------------------------------- Golden Images
 #
 # Gemessen auf der Produktivanlage am 2026-10-07: Ein Golden Image auf dem
