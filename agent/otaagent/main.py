@@ -3175,6 +3175,21 @@ def git_einrichten(req: GitEinrichtenRequest) -> dict[str, Any]:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
 
 
+class GitGeheimnisseRequest(BaseModel):
+    an: bool = False
+    modus: str = "warnen"
+    uebergehen: bool = True
+
+
+@app.post("/git/geheimnisse", dependencies=[Depends(require_token)])
+def git_geheimnisse(req: GitGeheimnisseRequest) -> dict[str, Any]:
+    """Prüfung auf Geheimnisse beim Push abgleichen, Zähler abholen."""
+    try:
+        return git_dienst.geheimnisse(dc(), req.an, req.modus, req.uebergehen)
+    except (RuntimeError, APIError) as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+
+
 @app.get("/software", dependencies=[Depends(require_token)])
 def software() -> list[dict[str, Any]]:
     """Die Anwendungen in jedem **laufenden** Arbeitsplatz (software.py).
@@ -3804,6 +3819,15 @@ def konten_papierkorb_leeren(tage: int) -> dict[str, Any]:
 @app.get("/konten/papierkorb", dependencies=[Depends(require_token)])
 def konten_papierkorb() -> list[dict[str, Any]]:
     return konto_daten.inhalt()
+
+
+@app.get("/konten/{kennung}/verzeichnis", dependencies=[Depends(require_token)])
+def konto_verzeichnis(kennung: str) -> dict[str, Any]:
+    """Dateiliste von Zuhause und Ablage, für die Auskunft nach Art. 15."""
+    try:
+        return konto_daten.verzeichnis(kennung)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Keine gültige Kennung") from exc
 
 
 @app.get("/profiles/{username}/usage", dependencies=[Depends(require_token)])

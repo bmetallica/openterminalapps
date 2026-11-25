@@ -285,12 +285,15 @@ test:
 	@echo
 	@# Daten gelöschter Konten: behalten, Papierkorb mit Frist, sofort.
 	@./scripts/test-konto-daten.sh
+	@./scripts/test-auskunft.sh
+	@./scripts/test-syslog.sh
 	@echo
 	@# Geaenderte CPU/RAM erreichen vorhandene Container (docker update).
 	@./scripts/test-ressourcen.sh
 	@./scripts/test-software.sh
 	@./scripts/test-git.sh
 	@./scripts/test-git-branchschutz.sh
+	@./scripts/test-git-geheimnisse.sh
 	@./scripts/test-duplizieren.sh
 	@# News: Rechte, Entwürfe, Zähler für die Seitenleiste.
 	@./scripts/test-news.sh

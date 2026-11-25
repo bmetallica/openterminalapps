@@ -165,6 +165,77 @@ organisation's owners can. Code that goes into production therefore belongs in a
 **In the audit log:** `git.branchschutz_eingestellt` (who set which values) and
 `git.branchschutz_gesetzt` (how many and which repositories received a rule).
 
+## Secrets on push ✅
+
+*Since 2026-11-25.* Under **Settings → Git → Detect secrets on push**. A key that is in a commit
+once stays in the history, even if a later commit deletes it. With AI assistants that commit
+themselves this happens more easily: the assistant writes the API key into the configuration, and
+a `git add -A` takes it along.
+
+**What is checked:** the **new** commits of every push, their added lines and file names. What was
+already in the repository is not checked again.
+
+| Kind | Recognised by |
+|---|---|
+| Private key | `-----BEGIN … PRIVATE KEY-----` (SSH, TLS, PGP) |
+| Cloud access key | `AKIA…`/`ASIA…` (AWS), `AIza…` (Google) |
+| Git token | `ghp_…`, `github_pat_…`, `glpat-…` |
+| API key of an AI provider | `sk-…`, `sk-ant-…`, `sk-proj-…` |
+| Chat token | `xox…` (Slack) |
+| JSON Web Token | `eyJ….eyJ….…` |
+| Password in code | `password = "…"`, `api_key: '…'` and similar, with a quoted value of 8 characters or more |
+| Credentials in an address | `https://name:password@server` |
+| `.env` file | `.env`, `.env.local` …, not `.env.example`/`.sample`/`.template` |
+| Key file | `id_rsa`, `id_ed25519`, `*.key`, `*.p12`, `*.pfx`, `*.jks`, `*.kdbx`, `*.ppk`, `.netrc`, `.git-credentials`, `.pgpass` |
+
+Placeholders are **not** a finding: `changeme`, `example`, `beispiel`, `your-…`, `<token>`, `xxxx`,
+`${VAR}`, `{{ var }}`. `password = os.environ["PW"]` does not match because the value is not quoted.
+
+| On a finding | Effect |
+|---|---|
+| **Observe** | only counted |
+| **Warn** *(default)* | the push arrives; whoever pushes sees file, commit and kind with instructions |
+| **Block** | the push is rejected, with the same message |
+
+This is what the person pushing sees (the secret itself is not in it):
+
+```text
+remote: OTA: Push abgewiesen — er enthält wahrscheinlich ein Geheimnis.
+remote:   privater Schlüssel: deploy/key.txt (Commit 53232710ff)
+remote:   Passwort im Code: config/settings.py (Commit 53232710ff)
+remote: …
+remote: Ist es ein Fehlalarm (Beispielwert, Testschlüssel), so pushen:
+remote:   git push -o ota.geheimnis=falscher-alarm
+```
+
+The message is in German; it comes from Forgejo's hook, which does not know the person's language.
+
+**Allow overriding a false alarm** (with Block, default on): with
+`git push -o ota.geheimnis=falscher-alarm` the push goes through anyway and is counted as
+"overridden". Off: then only rewriting the commit helps, or the administration switches to Warn
+for a moment.
+
+**What is counted:** per hour, how many pushes were checked, what happened to the suspicious ones
+and how many hits there were per kind (table `git_geheimnisse`). **No** secret, **no** file name,
+**no** repository, **no** person. Only whoever pushes sees the location. The numbers are under
+**Security → OTA Git**; retention 365 days, "Delete all counters" empties them at once.
+
+**How it is hooked in:** Forgejo has no hook for all repositories. OTA therefore puts
+`/data/ota/geheimnisse/pruefen` in Forgejo's data area and the link
+`hooks/pre-receive.d/ota-geheimnisse` into every repository. New repositories, forks and
+migrations get it immediately through `init.templateDir` in Forgejo's Git configuration; the
+reconciliation every minute catches what slipped past and collects the counters. If the script is
+missing, the link ends without error: a push never fails because something of OTA is missing.
+Switching off removes links and template again.
+
+**Limits:** more than 1,000 new commits or 30 MB of changes in one push are only checked at the
+beginning ("only partly checked"). Patterns do not recognise every secret; a password without a
+recognisable name in front of it passes. Whoever has already pushed a secret has to **change** it,
+not just delete it.
+
+**In the audit log:** `git.geheimnisse_eingestellt` (who set which values) and
+`git.geheimnisse_geloescht` (counters deleted).
+
 ## Changing settings
 
 - **Another subdomain:**

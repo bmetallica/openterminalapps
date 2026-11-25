@@ -5,10 +5,10 @@ from __future__ import annotations
 import asyncio
 import re
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session as DbSession
 
-from .. import audit, git, keycloak, settings_store
+from .. import audit, git, git_geheimnisse, keycloak, settings_store
 from ..db import SessionLocal, get_db
 from ..deps import current_user, require_permission
 from ..models import User
@@ -128,3 +128,58 @@ def abgleichen(db: DbSession = Depends(get_db)) -> dict:
     if not git.an(db):
         raise HTTPException(status.HTTP_409_CONFLICT, "OTA-Git ist aus.")
     return git.konten_abgleichen(db)
+
+
+# --------------------------------------------------------------------------
+# Geheimnisse beim Push (git_geheimnisse.py)
+# --------------------------------------------------------------------------
+
+def _geheimnisse_stand(db: DbSession) -> dict:
+    return {**git_geheimnisse.einstellungen(db), "git_an": git.an(db),
+            "frist_tage": git_geheimnisse.FRIST_TAGE}
+
+
+@router.get("/geheimnisse", dependencies=[Depends(verwalten)])
+def geheimnisse_stand(db: DbSession = Depends(get_db)) -> dict:
+    return _geheimnisse_stand(db)
+
+
+@router.put("/geheimnisse", dependencies=[Depends(verwalten)])
+async def geheimnisse_einstellen(body: dict, request: Request,
+                                 actor: User = Depends(current_user),
+                                 db: DbSession = Depends(get_db)) -> dict:
+    try:
+        e = git_geheimnisse.speichern(db, body)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    audit.record(db, "git.geheimnisse_eingestellt", actor=actor, request=request,
+                 object_type="settings", object_id="git_geheimnisse", **e)
+    db.commit()
+    stand = _geheimnisse_stand(db)
+    if git.an(db):
+        # Gleich in Forgejo, nicht erst im nächsten Takt.
+        try:
+            stand["abgleich"] = await asyncio.to_thread(_geheimnisse_abgleichen)
+        except HTTPException as exc:
+            stand["abgleich"] = {"fehler": str(exc.detail)}
+    return stand
+
+
+def _geheimnisse_abgleichen() -> dict:
+    with SessionLocal() as db:
+        return git_geheimnisse.abgleichen(db)
+
+
+@router.get("/geheimnisse/statistik", dependencies=[Depends(verwalten)])
+def geheimnisse_statistik(tage: int = Query(30, ge=1, le=365),
+                          db: DbSession = Depends(get_db)) -> dict:
+    return {**git_geheimnisse.uebersicht(db, tage), **_geheimnisse_stand(db)}
+
+
+@router.delete("/geheimnisse/statistik", dependencies=[Depends(verwalten)])
+def geheimnisse_loeschen(request: Request, actor: User = Depends(current_user),
+                         db: DbSession = Depends(get_db)) -> dict:
+    weg = git_geheimnisse.alles_loeschen(db)
+    audit.record(db, "git.geheimnisse_geloescht", actor=actor, request=request, zeilen=weg)
+    db.commit()
+    return {"zeilen": weg}

@@ -378,6 +378,10 @@ ihn vollständig erklärt.
   - **Branch-Schutz als Vorgabe**: OTA schützt den Hauptzweig jedes Repositorys (kein direkter
     Push, Pflicht-Freigaben durch eine andere Person), einmal je Repository
     ([Kapitel 27](docs/wiki/27-git.md#branch-schutz-als-vorgabe-)).
+  - **Geheimnisse beim Push erkennen**: private Schlüssel, Tokens, API-Schlüssel, Passwörter im
+    Code und Dateien wie `.env` in neuen Commits. Beobachten, Warnen (mit Fundort für den, der
+    pusht) oder Sperren, mit Ausweg für Fehlalarme. Gezählt wird nur die Art, kein Fundort, kein
+    Repository, keine Person ([Kapitel 27](docs/wiki/27-git.md#geheimnisse-beim-push-)).
 - **IDE-AI**, unter Einstellungen ein- und ausschaltbar: ein KI-Assistent (Continue) in VS Code,
   VSCodium und PyCharm/IntelliJ, verbunden mit dem eigenen KI-Server. Das kann vLLM, llama.cpp oder
   jeder andere Server mit OpenAI-Schnittstelle sein ([Kapitel 28](docs/wiki/28-ide-ai.md)):
@@ -449,8 +453,8 @@ ihn vollständig erklärt.
   - Drei Stufen: unsichtbare Zeichen entfernen, bekannte Muster (Deutsch und Englisch) und auf
     Wunsch ein Prüfmodell auf einem eigenen KI-Server, frei wählbar und testbar.
   - Betriebsarten Beobachten, Warnen (Hinweis an das Modell) und Sperren.
-  - Eigene Seite **KI-Sicherheit** mit Fällen je Tag, Typ, Anwendung und Herkunft. Gespeichert
-    werden nur Zähler, kein Inhalt, keine Person.
+  - Eigene Seite **Sicherheit** mit Fällen je Tag, Typ, Anwendung und Herkunft, daneben die
+    Geheimnisse aus OTA-Git. Gespeichert werden nur Zähler, kein Inhalt, keine Person.
 
 ### Workspaces und Ressourcen
 
@@ -563,6 +567,9 @@ ihn vollständig erklärt.
 - **Daten gelöschter Konten** nach Wahl der Verwaltung behalten oder löschen: Zuhause, Ablage und
   Sicherungen gehen in einen Papierkorb und werden nach einer Frist (0–365 Tage) endgültig
   gelöscht ([Kapitel 8](docs/wiki/08-nutzer-und-gruppen.md#was-mit-den-daten-eines-gelöschten-kontos-geschieht-))
+- **Auskunft nach Art. 15 DSGVO auf Knopfdruck**: ein ZIP mit allem, was OTA über ein Konto
+  gespeichert hat, ohne Passwörter, Schlüssel und Dateiinhalte, im Protokoll vermerkt
+  ([Kapitel 8](docs/wiki/08-nutzer-und-gruppen.md#auskunft-nach-art-15-))
 - **Fremde Web-Anwendungen** im Katalog (Open WebUI, Grafana, …): OTA legt den OIDC-Zugang an und
   entscheidet, wer die Kachel sieht **und wer sich dort anmelden darf**:
   - Keycloak prüft das selbst, auch beim direkten Aufruf der Adresse; ohne Gruppe kommt niemand
@@ -632,6 +639,9 @@ mit stehenden Paketen.
   Verwaltungsvorgänge, Aufschalten und Auskünfte. Verhaltensdaten verfallen nach 90 Tagen,
   Verwaltungsvorgänge nach 365. Aufgeräumt wird täglich, und das Aufräumen steht selbst im
   Protokoll
+- **Protokoll an Syslog**: auf Wunsch jeder Eintrag zusätzlich an einen Syslog-Server (RFC 5424
+  über TCP, TLS oder UDP), mit Nachlieferung nach einem Ausfall
+  ([Kapitel 11](docs/wiki/11-betrieb.md#eine-kopie-an-einen-syslog-server-))
 - **Nichts wächst ohne Grenze.** Container-Protokolle sind auf 10 MB × 3 gedeckelt, für die
   Dienste **und** für jeden Arbeitsplatz
 - **Sicherung und Wiederherstellung** von Profil, Container und Datenbank, auch für
@@ -777,6 +787,9 @@ make test
 | `test-opencode.sh` | opencode und Erweiterungen: Einstellungen und Vorschau, Unsinn abgewiesen; Gedächtnis koppeln (falscher Schlüssel abgewiesen), konfigurieren, Embeddings testen, Traefik-Wege; im normalen Arbeitsplatz mit Editor installiert sich opencode neben IDE-AI; im Root-Arbeitsplatz verwaltete Konfiguration, Prompt-Zusatz, Token, Paket; MCP aus dem Arbeitsplatz, der Vertrag nicht; opencode mit Fake-Modell: echte Sitzung statt gefälschter, Unteragent schreibt in die Wurzelsitzung, neue Sitzung sieht nichts, Felder `ota_*` für das Modell unsichtbar; Ansicht nur angemeldet und nur eigene Arbeitsplätze, gefälschte Kopfzeilen wirkungslos; Übernahme einer eigenen Installation, eigenes Standardmodell bleibt; Anhalten widerruft, Fortsetzen gibt neues Token, Gedächtnis ist wieder da |
 | `test-git-branchschutz.sh` | Branch-Schutz als Vorgabe in OTA-Git: beim Einschalten sofort für Repositories mit Inhalt, leere erst mit Inhalt; kein direkter Commit auf main, auch nicht als Admin; Pflicht-Freigaben wie eingestellt, mehr als 5 abgelehnt; eine entfernte Regel setzt OTA nicht neu; fremde Repositories unberührt; im Protokoll |
 | `test-ki-sicherheit.sh` | KI-Sicherheit: Muster treffen Angriffe auf Deutsch und Englisch, aber keine harmlosen Anleitungen; unsichtbare Zeichen entfernt; Warnen setzt den Hinweis, die Frage des Menschen bleibt ungeprüft; über :8791 wird ein präpariertes Werkzeug-Ergebnis gesperrt, ein harmloses geht durch; Zähler kommen an, die Tabelle hat keine Spalte für Inhalt oder Person; ungültige Einstellungen abgelehnt; Modelltest antwortet |
+| `test-git-geheimnisse.sh` | Geheimnisse beim Push: Verweis in vorhandenen Repositories, neue bekommen ihn sofort über die Vorlage; harmloser Push und Platzhalter gehen durch; Sperren weist einen privaten Schlüssel ab und nennt Datei und Commit, aber nicht das Geheimnis; Fehlalarm mit Push-Option übergangen, ausgeschaltet nicht; Warnen und Beobachten nehmen an; Zählung stimmt, die Tabelle hat nur Zeit, Art, Typ und Anzahl; ausgeschaltet sind Verweise und Vorlage weg |
+| `test-syslog.sh` | Protokoll an Syslog: falsche Eingaben abgelehnt; Testnachricht mit Grund bei Fehler; TCP mit Länge und mit Zeilenumbruch, UDP und TLS mit eigener CA kommen an, RFC 5424 mit Facility, Absender und MSGID; „ohne Alltag“ hält erfolgreiche Anmeldungen zurück; nach einem Ausfall wird nachgeliefert, genau einmal, auch ein Eintrag mit älterer Zeit; falsche CA erkannt |
+| `test-auskunft.sh` | Auskunft nach Art. 15: nur mit Verwaltungsrecht, auch nicht für das eigene Konto; ZIP mit allen elf Dateien; kein Passwort-Hash, kein TOTP-Startwert, kein Dateiinhalt; Protokoll, Dateiliste von Zuhause und Ablage, Verweis nicht verfolgt, Sicherungen, KI-Nutzung; im Protokoll |
 | `test-konto-daten.sh` | Daten gelöschter Konten: „Behalten“ lässt Zuhause und Ablage liegen; „Löschen“ legt sie in den Papierkorb, entfernt die Verweise unter dem Namen und löscht nach der Frist samt Sicherungen, fremde Sicherungen bleiben; Frist 0 löscht sofort; ungültige Fristen abgelehnt, Regel im Protokoll |
 | `test-konten.sh` | Konten der zentralen Anmeldung: Anlegen in OTA legt in Keycloak an (samt Pflicht zum Passwortwechsel), lokal kommt es nicht herein; Ändern, Passwort, zweiter Faktor, Sperren und Löschen wirken in Keycloak; Mein Konto führt über Keycloak; ein lokales Bestandskonto zieht mit seinem Passwort um, das Notfallkonto nicht |
 | `test-clipboard-bridge.sh` | Kopieren zwischen zwei Anwendungen im selben Arbeitsplatz: beide Richtungen, Umlaute, ein Bild, ein Megabyte, nach Pause, und abgeschaltet |

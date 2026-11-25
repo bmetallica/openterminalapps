@@ -1134,6 +1134,21 @@ class KiSicherheit(Base):
     anzahl: Mapped[int] = mapped_column(BigInteger, default=0)
 
 
+class GitGeheimnis(Base):
+    """Geheimnisse beim Push (git_geheimnisse.py): Zahlen je Stunde. **Kein
+    Geheimnis, kein Dateiname, kein Repository, keine Person.**
+
+    `art` ist „push“ (typ = was mit dem Push geschah: geprueft, gezaehlt,
+    gewarnt, gesperrt, uebergangen, gekuerzt) oder „treffer“ (typ = die Art
+    des Geheimnisses)."""
+
+    __tablename__ = "git_geheimnisse"
+    stunde: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
+    art: Mapped[str] = mapped_column(String(16), primary_key=True)
+    typ: Mapped[str] = mapped_column(String(32), primary_key=True)
+    anzahl: Mapped[int] = mapped_column(BigInteger, default=0)
+
+
 class KiSicherheitDatei(Base):
     """Welche Spool-Dateien schon gezählt sind: Eine zweimal abgeholte Datei
     zählte sonst doppelt."""

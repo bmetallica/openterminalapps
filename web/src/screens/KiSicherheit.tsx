@@ -2,10 +2,15 @@ import { useCallback, useEffect, useState } from 'react'
 import { Segmented } from '../components/controls'
 import { ApiError, api, type KiSicherheitStand, type KiSicherheitStatistik } from '../lib/api'
 import { getLang, t as tr, useLang } from '../lib/i18n'
+import { GitGeheimnisseSicht } from './GitGeheimnisse'
 
 /**
- * Betrieb der KI-Sicherheit (Handbuch Kapitel 41): Was der KI-Durchgang an
- * Prompt Injection erkannt hat.
+ * Sicherheit: zwei Bereiche auf einer Seite.
+ *
+ * * **KI-Durchgang** (Handbuch Kapitel 41): Was der KI-Durchgang an Prompt
+ *   Injection erkannt hat.
+ * * **OTA-Git** (Kapitel 27): Geheimnisse, die beim Push erkannt wurden
+ *   (GitGeheimnisse.tsx).
  *
  * Gezeigt wird nur, was gezählt wird: Fälle je Tag, Typ, Stufe, Aktion,
  * Anwendung und Herkunft. Kein Inhalt, keine Person, kein Arbeitsplatz —
@@ -13,7 +18,6 @@ import { getLang, t as tr, useLang } from '../lib/i18n'
  */
 
 const SPANNEN: [string, number][] = [['24 h', 1], ['7 Tage', 7], ['30 Tage', 30], ['90 Tage', 90], ['1 Jahr', 365]]
-const zahl = (n: number) => n.toLocaleString(getLang() === 'en' ? 'en-US' : 'de-DE')
 
 /** Was ein Falltyp bedeutet — die Erklärung für Verwaltung und Datenschutz. */
 const TYPEN: Record<string, { name: string; text: string }> = {
@@ -48,12 +52,21 @@ const HINWEISE: Record<string, string> = {
   uebersprungen: 'Prüfungen übersprungen, weil zu viele warteten',
 }
 
+export const zahl = (n: number) => n.toLocaleString(getLang() === 'en' ? 'en-US' : 'de-DE')
+
 export function KiSicherheit({ onToast, onEinstellungen }: {
   onToast: (m: string, tone?: 'ok' | 'bad') => void
-  onEinstellungen: () => void
+  onEinstellungen: (abschnitt: string) => void
 }) {
   useLang()
   const [tage, setTage] = useState(30)
+  const [bereich, setBereich] = useState<'ki' | 'git'>(() => {
+    try { return localStorage.getItem('ota.sicherheit.bereich') === 'git' ? 'git' : 'ki' } catch { return 'ki' }
+  })
+  const bereichSetzen = (b: 'ki' | 'git') => {
+    setBereich(b)
+    try { localStorage.setItem('ota.sicherheit.bereich', b) } catch { /* egal */ }
+  }
   const [stat, setStat] = useState<KiSicherheitStatistik | null>(null)
   const [stand, setStand] = useState<KiSicherheitStand | null>(null)
   const [fehler, setFehler] = useState('')
@@ -91,12 +104,21 @@ export function KiSicherheit({ onToast, onEinstellungen }: {
       <header className="topbar">
         <div>
           <p className="silk" style={{ marginBottom: 6 }}>{tr('Verwaltung')}</p>
-          <h1 className="h-page">{tr('KI-Sicherheit')}</h1>
+          <h1 className="h-page">{tr('Sicherheit')}</h1>
         </div>
-        <button className="btn" onClick={onEinstellungen}>{tr('Einstellungen')}</button>
+        <button className="btn" onClick={() => onEinstellungen(bereich === 'git' ? 'git' : 'ki-sicherheit')}>{tr('Einstellungen')}</button>
       </header>
 
-      {stand && <Lage stand={stand} />}
+      <div className="ki-leiste">
+        <Segmented label={tr('Bereich')} value={bereich}
+          options={[
+            { value: 'ki', label: tr('KI-Durchgang: Prompt Injection') },
+            { value: 'git', label: tr('OTA-Git: Geheimnisse beim Push') },
+          ]}
+          onChange={bereichSetzen} />
+      </div>
+
+      {bereich === 'ki' && stand && <Lage stand={stand} />}
 
       <div className="ki-leiste">
         <Segmented label={tr('Zeitraum')} value={String(tage)}
@@ -104,6 +126,7 @@ export function KiSicherheit({ onToast, onEinstellungen }: {
           onChange={(v) => setTage(Number(v))} />
       </div>
 
+      {bereich === 'git' ? <GitGeheimnisseSicht tage={tage} onToast={onToast} /> : <>
       {fehler && <p className="note-warn">{fehler}</p>}
       {!stat ? <p className="sub">{tr('Wird geladen…')}</p> : (
         <>
@@ -173,6 +196,7 @@ export function KiSicherheit({ onToast, onEinstellungen }: {
           </section>
         </>
       )}
+      </>}
     </div>
   )
 }
@@ -194,7 +218,7 @@ function Lage({ stand }: { stand: KiSicherheitStand }) {
   )
 }
 
-function Kachel({ wert, name, hint, ton }: { wert: string; name: string; hint?: string; ton?: 'warn' | 'halt' }) {
+export function Kachel({ wert, name, hint, ton }: { wert: string; name: string; hint?: string; ton?: 'warn' | 'halt' }) {
   return (
     <div className={`ki-kachel${ton ? ` ki-kachel--${ton}` : ''}`} title={hint}>
       <div className="ki-kachel__wert">{wert}</div>
@@ -204,7 +228,7 @@ function Kachel({ wert, name, hint, ton }: { wert: string; name: string; hint?: 
 }
 
 /** Fälle je Tag als Säulen; geprüfte Inhalte und Sperren im Tooltip und in der Tabelle darunter. */
-function Verlauf({ verlauf, tage }: { verlauf: KiSicherheitStatistik['verlauf']; tage: number }) {
+export function Verlauf({ verlauf, tage, geprueftName = 'Inhalte geprüft' }: { verlauf: KiSicherheitStatistik['verlauf']; tage: number; geprueftName?: string }) {
   const [tabelle, setTabelle] = useState(false)
   // Lückenlos: auch Tage ohne Zahlen bekommen ihren Platz.
   const heute = new Date()
@@ -226,7 +250,7 @@ function Verlauf({ verlauf, tage }: { verlauf: KiSicherheitStatistik['verlauf'];
       {tabelle ? (
         <div className="ki-sicher__tabelle">
           <table className="tbl">
-            <thead><tr><th>{tr('Tag')}</th><th style={{ textAlign: 'right' }}>{tr('Inhalte geprüft')}</th>
+            <thead><tr><th>{tr('Tag')}</th><th style={{ textAlign: 'right' }}>{tr(geprueftName)}</th>
               <th style={{ textAlign: 'right' }}>{tr('Fälle')}</th><th style={{ textAlign: 'right' }}>{tr('gesperrt')}</th></tr></thead>
             <tbody>{[...reihe].reverse().filter((r) => r.geprueft || r.faelle).map((r) => (
               <tr key={r.tag}><td>{datum(r.tag)}</td><td className="data" style={{ textAlign: 'right' }}>{zahl(r.geprueft)}</td>
@@ -239,7 +263,7 @@ function Verlauf({ verlauf, tage }: { verlauf: KiSicherheitStatistik['verlauf'];
           <div className="ki-saeulen" role="img" aria-label={tr('Fälle je Tag')}>
             {reihe.map((r) => (
               <div key={r.tag} className="ki-saeulen__spalte"
-                title={tr('{d}: {f} Fälle, {g} Inhalte geprüft, {s} gesperrt', { d: datum(r.tag), f: zahl(r.faelle), g: zahl(r.geprueft), s: zahl(r.gesperrt) })}>
+                title={tr('{d}: {f} Fälle, {g} geprüft, {s} gesperrt', { d: datum(r.tag), f: zahl(r.faelle), g: zahl(r.geprueft), s: zahl(r.gesperrt) })}>
                 <div className={`ki-saeulen__balken${r.gesperrt ? ' ki-saeulen__balken--halt' : ''}`}
                   style={{ height: r.faelle ? `${Math.max(3, (r.faelle / max) * 100)}%` : 0 }} />
               </div>

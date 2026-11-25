@@ -487,6 +487,37 @@ Verweis) stammt von vor der Umstellung auf Kennungen und wird nie angefasst.
 Frist endgültig) und `user.daten_nicht_entfernt`, wenn der Agent nicht erreichbar war. Dann
 liegen die Daten weiter an ihrem Platz und müssen von Hand gelöscht werden.
 
+## Auskunft nach Art. 15 ✅
+
+*Seit dem 2026-11-25.* Unter **Personen → Konto öffnen → Auskunft erstellen** (Recht *Nutzer
+anlegen und ändern*). Das Ergebnis ist ein ZIP mit allem, was OTA über das Konto gespeichert hat:
+
+| Datei | Inhalt |
+|---|---|
+| `liesmich.txt` | was in den Dateien steht, was fehlt und warum, wer die Auskunft wann erstellt hat |
+| `konto.json` | Stammdaten, Gruppen, Rechte, eigene Kachelnamen, News gelesen bis, feste Netzadressen, Portfreigaben, Einmal-Skripte; aus Keycloak: aktiv, aus dem Verzeichnis, Anmeldemittel (Art und Datum) |
+| `protokoll.csv` | Einträge, die das Konto ausgelöst hat oder die es betreffen |
+| `terminal.csv` | was Administratoren per Webterminal in seinen Arbeitsplätzen getippt haben |
+| `sitzungen.csv` | Arbeitsplätze: Vorlage, Beginn, Ende, Grund |
+| `ki_anfragen.csv`, `ki_stunden.csv` | KI-Nutzung, je Anfrage und je Stunde |
+| `software.csv` | Programme in laufenden Arbeitsplätzen |
+| `sicherungen.csv` | Sicherungen von Zuhause und Arbeitsplätzen |
+| `git.json` | das Konto in OTA-Git und die Namen seiner Repositories |
+| `dateien.csv` | die **Liste** der Dateien in Zuhause und eigener Ablage: Pfad, Größe, Änderungszeit |
+
+CSV mit Semikolon und BOM, damit Excel es ohne Rückfrage richtig öffnet.
+
+**Nicht enthalten:** Passwort-Hash, Startwert des zweiten Faktors, Zugangsdaten der Sitzungen
+(sie würden die Anmeldung gefährden), der **Inhalt** der Dateien (den hat die Person selbst im
+Arbeitsplatz), das Gedächtnis von opencode (dort selbst exportierbar) und Open WebUI (eigene
+Verarbeitung). Ein symbolischer Verweis im Zuhause wird als Verweis gelistet, nicht verfolgt.
+
+**Vor dem Herausgeben lesen.** `protokoll.csv` nennt die Administratoren, die etwas mit dem Konto
+getan haben, und `terminal.csv` enthält, was sie getippt haben. Ob das so hinausgeht, ist eine
+Abwägung nach Art. 15 Abs. 4 DSGVO; im Zweifel mit dem Datenschutz abstimmen.
+
+**Im Protokoll:** `user.auskunft`, mit der Zahl der Einträge je Datei.
+
 ## Audit-Log
 
 Erfasst Anmeldungen, Session-Start und -Ende sowie alle administrativen Änderungen — **keine

@@ -5,8 +5,9 @@ import logging
 import httpx
 
 import uuid
+from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session as DbSession
 
@@ -436,6 +437,29 @@ def user_usage(username: str, db: DbSession = Depends(get_db)) -> dict:
         # Ohne Kontingent gibt es keinen Anteil. Null waere gelogen.
         "percent": round(used / quota * 100, 1) if quota else None,
     }
+
+
+@router.get("/users/{user_id}/auskunft", dependencies=[Depends(manage_users)])
+def auskunft(
+    user_id: uuid.UUID,
+    request: Request,
+    actor: User = Depends(current_user),
+    db: DbSession = Depends(get_db),
+) -> Response:
+    """Auskunft nach Art. 15 DSGVO als ZIP (auskunft.py, Handbuch Kapitel 08)."""
+    from .. import auskunft as auskunft_mod
+
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Nutzer nicht gefunden")
+    inhalt, zaehler = auskunft_mod.erstellen(db, user, actor)
+    audit.record(db, "user.auskunft", actor=actor, object_type="user", object_id=str(user.id),
+                 request=request, name=user.username, dateien=zaehler)
+    db.commit()
+    datei = f"auskunft-{re.sub(r'[^A-Za-z0-9._-]', '_', user.username)}-{datetime.now(timezone.utc):%Y%m%d-%H%M}.zip"
+    return Response(content=inhalt, media_type="application/zip",
+                    headers={"Content-Disposition": f'attachment; filename="{datei}"',
+                             "Cache-Control": "no-store"})
 
 
 @router.delete("/users/{user_id}", dependencies=[Depends(manage_users)])

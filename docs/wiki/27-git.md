@@ -172,6 +172,76 @@ Produktion geht, gehört deshalb in eine Organisation.
 **Im Protokoll:** `git.branchschutz_eingestellt` (wer welche Werte gesetzt hat) und
 `git.branchschutz_gesetzt` (wie viele und welche Repositories eine Regel bekommen haben).
 
+## Geheimnisse beim Push ✅
+
+*Seit dem 2026-11-25.* Unter **Einstellungen → Git → Geheimnisse beim Push erkennen**. Ein
+Schlüssel, der einmal in einem Commit steht, bleibt in der Historie, auch wenn ein späterer Commit
+ihn löscht. Mit KI-Assistenten, die selbst committen, passiert das leichter: Der Assistent schreibt
+den API-Schlüssel in die Konfiguration, und ein `git add -A` nimmt ihn mit.
+
+**Was geprüft wird:** die **neuen** Commits jedes Pushes, davon die hinzugefügten Zeilen und die
+Dateinamen. Was schon im Repository war, nicht noch einmal.
+
+| Art | Erkannt an |
+|---|---|
+| Privater Schlüssel | `-----BEGIN … PRIVATE KEY-----` (SSH, TLS, PGP) |
+| Cloud-Zugangsschlüssel | `AKIA…`/`ASIA…` (AWS), `AIza…` (Google) |
+| Git-Token | `ghp_…`, `github_pat_…`, `glpat-…` |
+| API-Schlüssel eines KI-Anbieters | `sk-…`, `sk-ant-…`, `sk-proj-…` |
+| Chat-Token | `xox…` (Slack) |
+| JSON Web Token | `eyJ….eyJ….…` |
+| Passwort im Code | `password = "…"`, `api_key: '…'` und ähnlich, mit einem Wert ab 8 Zeichen in Anführungszeichen |
+| Zugangsdaten in einer Adresse | `https://name:passwort@server` |
+| `.env`-Datei | `.env`, `.env.local` …, nicht `.env.example`/`.sample`/`.template` |
+| Schlüsseldatei | `id_rsa`, `id_ed25519`, `*.key`, `*.p12`, `*.pfx`, `*.jks`, `*.kdbx`, `*.ppk`, `.netrc`, `.git-credentials`, `.pgpass` |
+
+**Kein Fehlalarm** sind Platzhalter: `changeme`, `example`, `beispiel`, `your-…`, `<token>`,
+`xxxx`, `${VAR}`, `{{ var }}`. `password = os.environ["PW"]` trifft nicht, weil der Wert nicht in
+Anführungszeichen steht.
+
+| Bei einem Fund | Wirkung |
+|---|---|
+| **Beobachten** | wird nur gezählt |
+| **Warnen** *(Vorgabe)* | der Push kommt an; wer pusht, sieht Datei, Commit und Art samt Anleitung |
+| **Sperren** | der Push wird abgewiesen, mit derselben Meldung |
+
+So sieht es aus, wer pusht (das Geheimnis selbst steht nicht darin):
+
+```text
+remote: OTA: Push abgewiesen — er enthält wahrscheinlich ein Geheimnis.
+remote:   privater Schlüssel: deploy/key.txt (Commit 53232710ff)
+remote:   Passwort im Code: config/settings.py (Commit 53232710ff)
+remote: Ein Geheimnis in der Historie bleibt dort, auch wenn ein späterer Commit es
+remote: löscht. Deshalb: den Schlüssel oder das Passwort ändern lassen (ungültig machen),
+remote: dann den Commit umschreiben (git commit --amend oder git rebase -i) und neu pushen.
+remote: Ist es ein Fehlalarm (Beispielwert, Testschlüssel), so pushen:
+remote:   git push -o ota.geheimnis=falscher-alarm
+```
+
+**Fehlalarm übergehen** (beim Sperren, Vorgabe an): Mit `git push -o ota.geheimnis=falscher-alarm`
+geht der Push trotzdem durch und wird als „übergangen“ gezählt. Aus: Dann hilft nur, den Commit
+umzuschreiben, oder die Verwaltung stellt kurz auf Warnen.
+
+**Was gezählt wird:** je Stunde, wie viele Pushes geprüft wurden, was mit den auffälligen geschah
+und wie viele Treffer es je Art gab (Tabelle `git_geheimnisse`). **Kein** Geheimnis, **kein**
+Dateiname, **kein** Repository, **keine** Person. Den Fundort sieht nur, wer pusht. Die Zahlen
+stehen unter **Sicherheit → OTA-Git**; Frist 365 Tage, „Alle Zähler löschen“ leert sie sofort.
+
+**Wie es eingehängt ist:** Forgejo kennt keinen Hook für alle Repositories. OTA legt deshalb
+`/data/ota/geheimnisse/pruefen` in Forgejos Datenbereich und in jedes Repository den Verweis
+`hooks/pre-receive.d/ota-geheimnisse`. Neue Repositories, Forks und Migrationen bekommen ihn über
+`init.templateDir` in Forgejos Git-Konfiguration sofort; der Abgleich jede Minute holt nach, was
+daran vorbeikam, und holt die Zähler ab. Fehlt das Skript, endet der Verweis ohne Fehler: Ein Push
+scheitert nie daran, dass OTA etwas fehlt. Ausschalten entfernt Verweise und Vorlage wieder.
+
+**Grenzen:** Mehr als 1.000 neue Commits oder 30 MB Änderungen in einem Push werden nur am Anfang
+geprüft („nur teilweise geprüft“). Muster erkennen nicht jedes Geheimnis; ein Passwort ohne
+erkennbaren Namen davor geht durch. Wer schon ein Geheimnis gepusht hat, muss es **ändern**, nicht
+nur löschen.
+
+**Im Protokoll:** `git.geheimnisse_eingestellt` (wer welche Werte gesetzt hat) und
+`git.geheimnisse_geloescht` (Zähler gelöscht).
+
 ## Einstellungen ändern
 
 - **Andere Subdomain:**

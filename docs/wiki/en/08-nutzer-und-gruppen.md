@@ -479,6 +479,37 @@ before the switch to ids and is never touched.
 (deleted for good after the grace period) and `user.daten_nicht_entfernt` if the agent was not
 reachable. The data then stays where it is and has to be deleted by hand.
 
+## Access report under Art. 15 ✅
+
+*Since 2026-11-25.* Under **People → open the account → Create access report** (permission
+*create and change users*). The result is a ZIP with everything OTA has stored about the account:
+
+| File | Content |
+|---|---|
+| `liesmich.txt` | what the files contain, what is missing and why, who created the report when (German) |
+| `konto.json` | master data, groups, permissions, own tile names, news read up to, fixed network addresses, port forwards, run-once scripts; from Keycloak: enabled, from the directory, sign-in methods (type and date) |
+| `protokoll.csv` | audit log entries the account triggered or that concern it |
+| `terminal.csv` | what administrators typed via web terminal in its workspaces |
+| `sitzungen.csv` | workspaces: template, start, end, reason |
+| `ki_anfragen.csv`, `ki_stunden.csv` | AI usage, per request and per hour |
+| `software.csv` | programs in running workspaces |
+| `sicherungen.csv` | backups of home and workspaces |
+| `git.json` | the account in OTA Git and the names of its repositories |
+| `dateien.csv` | the **list** of files in home and own storage: path, size, modification time |
+
+CSV with semicolon and BOM, so Excel opens it correctly without asking.
+
+**Not included:** password hash, second-factor seed, session credentials (they would endanger the
+sign-in), the **content** of the files (the person has it in the workspace), the opencode memory
+(exportable there by the person) and Open WebUI (a separate processing). A symbolic link in the
+home is listed as a link, not followed.
+
+**Read before handing it out.** `protokoll.csv` names the administrators who did something with the
+account, and `terminal.csv` contains what they typed. Whether that goes out as it is, is a weighing
+under Art. 15(4) GDPR; if in doubt, agree it with data protection.
+
+**In the audit log:** `user.auskunft`, with the number of entries per file.
+
 ## Audit log
 
 Records sign-ins, session start and end, and all administrative changes — **no content**. Retention

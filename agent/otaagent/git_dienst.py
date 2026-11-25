@@ -24,6 +24,7 @@ import logging
 import os
 import re
 import time
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
@@ -508,3 +509,117 @@ def im_container(container, git: dict[str, Any], traefik_ip: str, run_as_root) -
                         ausgabe.decode("utf-8", "replace")[-300:])
     except (APIError, OSError, KeyError) as exc:
         log.warning("OTA-Git in %s nicht eingerichtet: %s", container.name, exc)
+
+
+# --------------------------------------------------------------------------
+# Geheimnisse beim Push erkennen (Kapitel 27, Abschnitt „Geheimnisse beim Push“)
+# --------------------------------------------------------------------------
+#
+# Forgejo kennt keinen Hook für alle Repositories. Jedes Repository führt aber
+# alles aus, was in hooks/pre-receive.d/ liegt — und neue Repositories (auch
+# Forks und Migrationen) übernehmen den Inhalt von `init.templateDir` aus der
+# Git-Konfiguration, die Forgejo selbst benutzt. Gemessen am 2026-11-25 mit
+# Forgejo 15.0.11.
+#
+# Also drei Teile, alle im Datenbereich (`/data/ota/geheimnisse`), damit sie
+# einen neuen Container überleben:
+#
+#   * `pruefen`  — das Skript (git_geheimnisse.sh), sh und busybox-awk;
+#   * `konfig`   — AN, MODUS, UEBERGEHEN, von der API vorgegeben;
+#   * `vorlage/` — die Vorlage für neue Repositories, mit dem Verweis.
+#
+# Dazu je bestehendem Repository der Verweis `ota-geheimnisse`. Fehlt das
+# Skript, endet der Verweis mit 0 — ein Push scheitert nie daran, dass OTA
+# etwas fehlt. Das Skript schreibt je Push eine Zeile mit Zahlen in
+# `spool/`; der Abgleich holt sie ab.
+
+_GEHEIMNIS_SKRIPT = Path(__file__).resolve().parent / "git_geheimnisse.sh"
+_GEHEIMNIS_ORDNER = "/data/ota/geheimnisse"
+_GEHEIMNIS_HOME = "/data/gitea/home"   # HOME der Git-Aufrufe von Forgejo
+_MODI = ("beobachten", "warnen", "sperren")
+
+_VERWEIS = ("#!/bin/sh\n# OTA: Geheimnisse beim Push erkennen (Handbuch Kapitel 27).\n"
+            f"[ -x {_GEHEIMNIS_ORDNER}/pruefen ] || exit 0\n"
+            f"exec {_GEHEIMNIS_ORDNER}/pruefen\n")
+
+_ABGLEICH = r"""
+set -u
+D="$1"; AN="$2"; SKRIPT="$3"; KONFIG="$4"; VERWEIS="$5"; H="$6"
+mkdir -p "$D/spool" "$D/vorlage/hooks/pre-receive.d" || exit 3
+neu() {  # neu ZIEL INHALT MODUS — nur schreiben, wenn anders; atomar
+  if [ "$(cat "$1" 2>/dev/null)" != "$2" ]; then
+    printf '%s\n' "$2" > "$1.neu" && chmod "$3" "$1.neu" && mv -f "$1.neu" "$1"
+  fi
+}
+neu "$D/pruefen" "$SKRIPT" 755
+neu "$D/konfig" "$KONFIG" 644
+neu "$D/vorlage/hooks/pre-receive.d/ota-geheimnisse" "$VERWEIS" 755
+n=0
+if [ "$AN" = 1 ]; then
+  HOME="$H" git config --global init.templateDir "$D/vorlage"
+  for r in /data/git/repositories/*/*.git; do
+    [ -d "$r/hooks/pre-receive.d" ] || continue
+    if [ ! -e "$r/hooks/pre-receive.d/ota-geheimnisse" ]; then
+      cp "$D/vorlage/hooks/pre-receive.d/ota-geheimnisse" "$r/hooks/pre-receive.d/" && n=$((n + 1))
+    fi
+  done
+else
+  if [ "$(HOME="$H" git config --global --get init.templateDir)" = "$D/vorlage" ]; then
+    HOME="$H" git config --global --unset init.templateDir
+  fi
+  for v in /data/git/repositories/*/*.git/hooks/pre-receive.d/ota-geheimnisse; do
+    [ -f "$v" ] && rm -f "$v" && n=$((n + 1))
+  done
+fi
+echo "VERWEISE $n"
+echo "REPOS $(ls -d /data/git/repositories/*/*.git 2>/dev/null | wc -l)"
+for f in "$D"/spool/*.jsonl; do
+  [ -f "$f" ] || continue
+  cat "$f" && rm -f "$f"
+done
+"""
+
+
+def geheimnisse(client, an: bool, modus: str, uebergehen: bool) -> dict[str, Any]:
+    """Hook, Einstellung und Verweise abgleichen und den Spool abholen.
+
+    Auch ausgeschaltet aufrufen: Dann verschwinden die Verweise, und was im
+    Spool liegt, kommt noch in die Datenbank. Läuft Forgejo nicht, gibt es
+    nichts zu tun.
+    """
+    try:
+        c = client.containers.get(NAME)
+    except NotFound:
+        return {"laeuft": False, "zeilen": []}
+    if c.status != "running":
+        return {"laeuft": False, "zeilen": []}
+    modus = modus if modus in _MODI else "warnen"
+    konfig = (f"# ERZEUGT von OTA (Einstellungen → Git)\nAN={1 if an else 0}\n"
+              f"MODUS={modus}\nUEBERGEHEN={1 if uebergehen else 0}")
+    # /data gehört root; den eigenen Ordner legt root an und übergibt ihn.
+    c.exec_run(["sh", "-c", f"mkdir -p {_GEHEIMNIS_ORDNER} && chown -R git:git /data/ota"],
+               user="root")
+    res = c.exec_run(["sh", "-c", _ABGLEICH, "sh", _GEHEIMNIS_ORDNER, "1" if an else "0",
+                      _GEHEIMNIS_SKRIPT.read_text(encoding="utf-8").rstrip("\n"), konfig,
+                      _VERWEIS.rstrip("\n"), _GEHEIMNIS_HOME], user="git", demux=False)
+    ausgabe = (res.output or b"").decode("utf-8", "replace")
+    if res.exit_code != 0:
+        raise RuntimeError(f"Abgleich der Geheimnisprüfung: {ausgabe.strip()[-300:]}")
+    zeilen: list[dict[str, Any]] = []
+    verweise = repos = 0
+    for zeile in ausgabe.splitlines():
+        if zeile.startswith("VERWEISE "):
+            verweise = int(zeile.split()[1])
+        elif zeile.startswith("REPOS "):
+            repos = int(zeile.split()[1])
+        elif zeile.startswith("{"):
+            try:
+                eintrag = json.loads(zeile)
+            except ValueError:
+                continue
+            if isinstance(eintrag, dict) and eintrag.get("art") == "git-geheimnis":
+                zeilen.append(eintrag)
+    if verweise:
+        log.info("OTA-Git: Geheimnisprüfung %s in %d Repositories",
+                 "eingehängt" if an else "entfernt", verweise)
+    return {"laeuft": True, "zeilen": zeilen, "verweise": verweise, "repos": repos}

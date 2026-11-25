@@ -98,6 +98,11 @@ GIT_OTA_URL = "git.ota_url"
 # Wer ihn danach für sein Repository abschaltet, behält das.
 GIT_BRANCHSCHUTZ = "git.branchschutz"
 GIT_BRANCHSCHUTZ_ERLEDIGT = "git.branchschutz_erledigt"
+# Geheimnisse beim Push erkennen (git_geheimnisse.py)
+GIT_GEHEIMNISSE = "git.geheimnisse"
+# Protokoll zusätzlich an einen Syslog-Server (syslog.py)
+SYSLOG = "syslog.ziel"
+SYSLOG_STAND = "syslog.stand"
 
 # IDE-AI (Kapitel 28): alles in einem Eintrag — Server, Schlüssel, Modelle
 # samt Kontextfenster, Gruppen. Vorgaben und Prüfung in ide_ai.py.
@@ -147,6 +152,9 @@ DEFAULTS: dict[str, Any] = {
     GIT_OTA_URL: "",
     GIT_BRANCHSCHUTZ: {"an": False, "freigaben": 1, "fuer_admins": False},
     GIT_BRANCHSCHUTZ_ERLEDIGT: [],
+    GIT_GEHEIMNISSE: {"an": False, "betriebsart": "warnen", "uebergehen": True},
+    SYSLOG: {},
+    SYSLOG_STAND: {},
     IDE_AI: {},
     OPENCODE: {},
     REPO_MODUS: "zuerst",

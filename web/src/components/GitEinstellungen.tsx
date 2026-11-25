@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { ChipSelect, Field, Toggle } from './controls'
 import { ApiError, api, type GitStand, type Group } from '../lib/api'
 import { t as tr } from '../lib/i18n'
+import { GitGeheimnisseEinstellungen } from './GitGeheimnisseEinstellungen'
 
 /**
  * Einstellungen → Git (Handbuch Kapitel 27).
@@ -170,6 +171,8 @@ export function GitEinstellungen({ onToast }: {
           </Field>
         </>
       )}
+
+      <GitGeheimnisseEinstellungen onToast={onToast} />
 
       {stand.an && (
         <div className="viewer__row" style={{ gap: 10, flexWrap: 'wrap', marginTop: 4 }}>

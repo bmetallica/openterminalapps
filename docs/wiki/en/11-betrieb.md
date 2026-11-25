@@ -159,6 +159,52 @@ with SessionLocal() as db: print(audit.aufraeumen(db))"
 > prefixes. Whoever introduces a new, frequent action enters it there — what is not on the list is
 > kept when in doubt.
 
+### A copy to a syslog server ✅
+
+*Since 2026-11-25.* Under **Settings → Log to syslog**. Every entry in the audit log is then
+**also** sent to a syslog server. Why: whoever has access to the database can change or delete
+entries, including about themselves. A copy in a place the OTA administrators do not manage makes
+that visible (accountability, Art. 5(2) GDPR).
+
+| Setting | Values |
+|---|---|
+| Server, port | name or address without scheme; port usually 514 (UDP, TCP) or 6514 (TLS) |
+| Transport | **TCP** *(default)*, **TLS** (RFC 5425, TLS 1.2 or later, certificate and name are verified) or **UDP** (no acknowledgement) |
+| Framing (TCP) | **with length** *(default, RFC 6587 octet counting, rsyslog and syslog-ng)* or line break. TLS always with length |
+| CA certificate (TLS) | the CA of the syslog server in PEM format; empty: the public CAs |
+| Scope | **without routine** *(default)*: successful sign-ins and session start and end stay in OTA, failed sign-ins and everything else are sent; or **everything** |
+| Facility, sender | default `authpriv` and `ota` |
+
+**Send test message** checks the values in the form, even unsaved, and says what is missing: name
+not resolvable, connection refused, no answer, certificate rejected. With UDP "sent" only means the
+packet went out.
+
+**The format** is RFC 5424, the message is the entry as JSON:
+
+```text
+<85>1 2026-11-25T17:58:03.120Z ota ota - user.deleted - {"id":"…","ts":"…","action":"user.deleted","actor":"anna","object_type":"user","object_id":"…","ip":"10.0.0.5","detail":{…}}
+```
+
+Severity 4 (warning) for failed and rejected actions (`login.failed`, `…refused`, `…rejected`),
+otherwise 5 (notice). The action is the MSGID in the header; filtering on it needs no JSON.
+
+**Nothing is lost.** Sending happens every five seconds from the table, not at the moment of
+writing. If the server is gone, the position stays; what entered the log meanwhile follows as soon
+as it answers again, even after a restart of the API. An entry whose transaction ran longer and
+therefore carries an older time than one already sent also arrives: OTA looks back two minutes and
+remembers what it has already sent there. An entry can only arrive twice if the connection breaks
+in the middle of sending. Switching on starts at that moment, not with the existing log.
+
+The section itself shows the state: sent since the API started, last, not yet sent, and an error
+while the server is unreachable. The API log shows an error once, not every five seconds.
+
+**Data protection:** the syslog server receives the same entries as the audit log, with names and,
+where OTA stores them, addresses. A retention of its own applies there; it belongs in the deletion
+concept (`dsgvo.md`, section 4). "Without routine" keeps the working-hours profile in OTA.
+
+**In the audit log:** `syslog.eingestellt`, with all values; of the CA certificate only whether
+there is one.
+
 ## What is under "Settings" ✅
 
 Five things apply to the whole installation and not to a session: the **language** for everyone who

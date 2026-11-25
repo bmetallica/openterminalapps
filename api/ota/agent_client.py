@@ -237,6 +237,15 @@ def git_einrichten(oauth: dict[str, str]) -> dict[str, Any]:
     return _call("POST", "/git/einrichten", json={"oauth": oauth}, timeout=120.0)
 
 
+def konto_verzeichnis(kennung: str) -> dict[str, Any]:
+    return _call("GET", f"/konten/{kennung}/verzeichnis", timeout=600.0)
+
+
+def git_geheimnisse(an: bool, modus: str, uebergehen: bool) -> dict[str, Any]:
+    return _call("POST", "/git/geheimnisse", timeout=60.0,
+                 json={"an": an, "modus": modus, "uebergehen": uebergehen})
+
+
 def platz(cid: str, schnell: bool = False) -> dict[str, Any]:
     """Was ein Root-Arbeitsplatz belegt (Schicht + Docker-Daten), in Bytes.
     `schnell`: der letzte Messwert, neu gemessen wird im Hintergrund."""

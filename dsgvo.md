@@ -298,7 +298,7 @@ es eine dokumentierte Frist gibt.
 | Recht | Heute machbar? |
 |---|---|
 | **Information** (Art. 13) | ⚠️ Teilweise: Der Punkt **DSGVO** in der Seitenleiste erklärt, was über Arbeitsplätze und KI-Nutzung erfasst wird, wie lange und wer es sieht — **aber nur, solange die KI-Statistik läuft** (in dieser Anlage: ja). Der Text ist anpassbar (Markdown, Fristen werden eingesetzt); **verantwortliche Stelle und Datenschutzbeauftragte müssen eingetragen werden.** |
-| **Auskunft** (Art. 15) | ⚠️ Für die KI-Nutzung ✅ (**Meine KI-Nutzung**, ohne Begründung, ohne Protokoll). Für alles andere von Hand: Datenbankabfrage plus Zuhause. Das Gedächtnis exportiert jeder selbst (JSON, Markdown). |
+| **Auskunft** (Art. 15) | ✅ Seit 2026-11-25 auf Knopfdruck: **Personen → Konto → Auskunft erstellen** ergibt ein ZIP mit Stammdaten, Protokoll, Terminal-Protokoll, Sitzungen, KI-Nutzung, Softwarefunden, Sicherungen, OTA-Git und der Liste der Dateien (Wiki Kapitel 08), protokolliert als `user.auskunft`. Vor dem Herausgeben Art. 15 Abs. 4 abwägen: Protokoll und Terminal-Protokoll nennen Administratoren. Die KI-Nutzung sieht jeder zusätzlich selbst (**Meine KI-Nutzung**); das Gedächtnis exportiert jeder selbst (JSON, Markdown). Open WebUI ist nicht enthalten (Abschnitt 12). |
 | **Berichtigung** (Art. 16) | ✅ Name und E-Mail über die Verwaltung bzw. Keycloak/AD. |
 | **Löschung** (Art. 17) | ⚠️ Teilweise, siehe 4.1. |
 | **Einschränkung** (Art. 18) | Teilweise: Konto deaktivieren; die Daten bleiben unberührt. |
@@ -371,7 +371,8 @@ keine einzige Anfrage an einen fremden Host. Lizenzen (OFL 1.1) in
 | **Zugangskontrolle** | ✅ Keycloak, zweiter Faktor (Passkey oder Einmalkennwort) je Gruppe erzwingbar, Kontosperre nach Fehlversuchen je (Konto, Absender), Bremse vor dem Notzugang |
 | **Zugriffskontrolle** | ✅ Rechte je Gruppe, serverseitig an jedem Endpunkt geprüft und automatisch getestet; Gruppenlaufwerke nur für Mitglieder; Gedächtnis mit Row Level Security |
 | **Trennungskontrolle** | ⚠️ Im Netz vollständig: jeder Arbeitsplatz in einem eigenen Netz, untereinander nicht erreichbar. Im Dateisystem durch getrennte Einhängungen und `0700` — aber **alle normalen Container laufen als dieselbe UID 1000**. Root-Arbeitsplätze laufen unter Sysbox, root im Container ist auf dem Host unprivilegiert |
-| **Eingabekontrolle** | ✅ Protokoll über Verwaltungsvorgänge, Aufschalten, Webterminal-Eingaben und KI-Auskünfte |
+| **Eingabekontrolle** | ✅ Protokoll über Verwaltungsvorgänge, Aufschalten, Webterminal-Eingaben und KI-Auskünfte; auf Wunsch zusätzlich als Kopie an einen Syslog-Server (seit 2026-11-25, Abschnitt 10) |
+| **Schutz vor Abfluss von Zugangsdaten** | ✅ OTA-Git erkennt Schlüssel, Tokens und Passwörter beim Push und warnt oder weist ab (seit 2026-11-25, Abschnitt 14); der KI-Durchgang prüft auf Prompt Injection (Abschnitt 13) |
 | **Pseudonymisierung** | ✅ KI-Statistik: Auswertung ohne Namen, Mindestzahl drei, Namen nur mit Begründung |
 | **Verfügbarkeit und Wiederherstellbarkeit** | ✅ Sicherung und Rückspielung gebaut und automatisch geprüft |
 | **Belastbarkeit** | ✅ Kontingente je Zuhause, Untergrenze für freien Platz, Grenzen für CPU, RAM und Prozesse |
@@ -411,8 +412,17 @@ KI-Auskünften; `sessions` sagt, welche Arbeitsplätze liefen; das Terminal-Prot
 Administrator in einem Arbeitsplatz eingegeben hat. Die Container-Protokolle rotieren und bleiben
 handhabbar.
 
-Was fehlt: Die Protokolle liegen auf demselben Host. Wer root auf dem Wirt hat, kann sie ändern;
-eine Kopie an einen getrennten Ort (Syslog-Server) gibt es nicht.
+**Eine Kopie an einem getrennten Ort** gibt es seit 2026-11-25 auf Wunsch: Einstellungen →
+Protokoll an Syslog (Wiki Kapitel 11). Jeder Protokolleintrag geht zusätzlich an einen
+Syslog-Server (RFC 5424, TCP, TLS oder UDP); was während eines Ausfalls anfällt, wird nachgeliefert.
+Ohne diese Kopie liegen die Protokolle nur auf demselben Host, und wer root auf dem Wirt hat, kann
+sie ändern. **In dieser Anlage ist noch kein Syslog-Server angebunden** (Abschnitt 11, Punkt 15).
+
+👉 **Was der Syslog-Server dann hat:** dieselben Einträge wie das Protokoll, mit Namen und, wo OTA
+sie speichert, Adressen. Mit dem Umfang „ohne Alltag“ (Vorgabe) bleiben erfolgreiche Anmeldungen
+und Sitzungsbeginn und -ende in OTA, also das Arbeitszeitprofil. Für den Syslog-Server gilt eine
+eigene Frist, die ins Löschkonzept gehört (Abschnitt 4.2); sinnvoll ist dieselbe wie für die
+Verwaltungsklasse (365 Tage), und Zugriff sollte dort nur haben, wer OTA **nicht** verwaltet.
 
 ---
 
@@ -426,7 +436,7 @@ eine Kopie an einen getrennten Ort (Syslog-Server) gibt es nicht.
 | ~~4~~ | ~~Aufbewahrungsfristen für `audit_log` und Container-Protokolle~~ | ✅ 2026-09-04/05 |
 | 5 | **Datenschutzhinweis** | ⚠️ teilweise: Punkt „DSGVO“ existiert (sichtbar, solange die KI-Statistik läuft). **Offen: Text prüfen, verantwortliche Stelle und Datenschutzbeauftragte eintragen**; ggf. dauerhaft sichtbar machen |
 | ~~6~~ | „Konto endgültig entfernen“ | **abgewählt 2026-09-04**; dafür seit 2026-11-25 die Einstellung, Zuhause, Ablage und Sicherungen gelöschter Konten nach einer Frist zu löschen (4.1). Keycloak und OTA-Git sperren weiterhin nur |
-| 7 | **Auskunftsfunktion** je Konto | ⚠️ für die KI-Nutzung vorhanden, sonst offen |
+| ~~7~~ | ~~**Auskunftsfunktion** je Konto~~ | ✅ 2026-11-25: Personen → Auskunft erstellen (Abschnitt 5) |
 | 8 | **Betriebsvereinbarung** | offen — jetzt mit KI-Statistik und Webterminal (Abschnitt 6) |
 | 9 | **Schwellwertanalyse** dokumentieren | offen |
 | ~~10~~ | Verschlüsselung im Ruhezustand | **abgewählt 2026-09-05** |
@@ -434,6 +444,7 @@ eine Kopie an einen getrennten Ort (Syslog-Server) gibt es nicht.
 | ~~12~~ | **Protokollierung des KI-Servers** prüfen | ✅ 2026-11-25: Der KI-Server ist per Firewall nach außen gesperrt und führt Anfragen in einem rotierenden Protokoll von 100 MB; beim heutigen Durchsatz ist es nach höchstens etwa zwei Stunden überschrieben. Das ist eine Speicherung von Inhalten mit faktischer Frist von Stunden |
 | 13 | **Interessenabwägung** für Protokoll, KI-Statistik und Softwaremonitoring dokumentieren | offen |
 | 14 | **Open WebUI**: eigene Liste in Abschnitt 12.5 | offen |
+| 15 | **Syslog-Server** anbinden (Einstellungen → Protokoll an Syslog), Frist und Zugriff dort festlegen | offen: Die Funktion ist da, ein Server noch nicht |
 
 Technisch wächst in dieser Anlage **nichts mehr ohne Frist** — ausser dem Zuhause, das als
 Arbeitsmittel bewusst keine hat. Offen sind vor allem die organisatorischen Punkte: Hinweistext,
@@ -557,6 +568,27 @@ Dokumentation der Verarbeitung.
 
 👉 **Stufe 3 und das Protokoll des KI-Servers:** Die Prüfanfragen landen im Protokoll des
 KI-Servers wie jede andere Anfrage (Abschnitt 11, Punkt 12: rotierend, faktisch Stunden).
+
+---
+
+## 14 · OTA-Git: Geheimnisse beim Push
+
+*Seit 2026-11-25, Wiki Kapitel 27.* Forgejo prüft auf Wunsch die neuen Commits jedes Pushes auf
+private Schlüssel, Tokens, API-Schlüssel, Passwörter im Code, Zugangsdaten in Adressen und Dateien
+wie `.env`. Je nach Einstellung wird nur gezählt, gewarnt oder der Push abgewiesen.
+
+| Frage | Antwort |
+|---|---|
+| Werden Inhalte gelesen? | Ja: die hinzugefügten Zeilen und Dateinamen der neuen Commits, im Hook in Forgejo, während der Push läuft. Daneben nichts |
+| Wird etwas gespeichert? | Nur Zähler je Stunde (`git_geheimnisse`): wie viele Pushes, was mit ihnen geschah, wie viele Treffer je Art. **Kein Geheimnis, kein Dateiname, kein Repository, keine Person** |
+| Wer erfährt den Fundort? | Nur, wer pusht, in der Ausgabe von git. Die Verwaltung nicht |
+| Frist | 365 Tage, täglich aufgeräumt; „Alle Zähler löschen“ sofort |
+| Wer sieht die Zahlen? | Konten mit `settings.manage` (Seite Sicherheit) |
+| Rechtsgrundlage | Art. 32 DSGVO (Sicherheit der Verarbeitung); für eine Behörde Art. 6 Abs. 1 lit. e i. V. m. dem Landesrecht |
+
+👉 **Mitbestimmung:** Keine Zuordnung zu Personen, deshalb nicht zur Leistungs- oder
+Verhaltenskontrolle geeignet. Im Modus *Sperren* greift sie aber in die Arbeit ein; das sollte der
+Personalrat kennen.
 
 ---
 

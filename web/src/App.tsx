@@ -66,7 +66,7 @@ const NAV: { id: View; glyph: string; cap: string; adminOnly: boolean }[] = [
   { id: 'software', glyph: '◫', cap: 'Software', adminOnly: true },
   // Was der KI-Durchgang an Prompt Injection erkannt hat (Kapitel 41). Nur
   // Zähler, keine Inhalte, keine Personen.
-  { id: 'kisicherheit', glyph: '◬', cap: 'KI-Sicherheit', adminOnly: true },
+  { id: 'kisicherheit', glyph: '◬', cap: 'Sicherheit', adminOnly: true },
   // Eigener Punkt und kein Winkel in „Einstellungen": Hier steht, wer gerade
   // unter welcher Adresse arbeitet — das schaut man im Betrieb nach, nicht
   // beim Einrichten.
@@ -404,11 +404,11 @@ export default function App() {
         {current === 'monitor' && <Monitor onToast={toast}
           darfTerminal={!!me && (me.is_admin || me.permissions.includes('arbeitsplatz.terminal'))} />}
         {current === 'software' && <Softwaremonitoring onToast={toast} />}
-        {current === 'kisicherheit' && <KiSicherheit onToast={toast} onEinstellungen={() => {
+        {current === 'kisicherheit' && <KiSicherheit onToast={toast} onEinstellungen={(abschnitt: string) => {
           setView('settings')
           let versuche = 0
           const suchen = () => {
-            const ziel = document.getElementById('ki-sicherheit')
+            const ziel = document.getElementById(abschnitt)
             if (ziel) ziel.scrollIntoView({ behavior: 'smooth', block: 'start' })
             else if (++versuche < 20) setTimeout(suchen, 100)
           }

@@ -171,3 +171,47 @@ def inhalt() -> list[dict]:
             k["name"] = k["name"] or str(angaben.get("name") or "")
             k["am"] = max(k["am"], int(angaben.get("am") or 0))
     return sorted(konten.values(), key=lambda k: k["am"])
+
+
+# --------------------------------------------------------------------------
+# Für die Auskunft nach Art. 15 (api/ota/auskunft.py)
+# --------------------------------------------------------------------------
+
+GRENZE_EINTRAEGE = 200_000
+
+
+def verzeichnis(kennung: str) -> dict:
+    """Was im Zuhause und in der eigenen Ablage eines Kontos liegt: Pfad,
+    Größe, Änderungszeit. **Kein Inhalt.** Symbolische Verweise werden als
+    solche gelistet und nicht verfolgt — sonst führte einer aus dem Zuhause
+    hinaus. Bei mehr als GRENZE_EINTRAEGE Einträgen gekürzt."""
+    kennung = _kennung(kennung)
+    eintraege: list[dict] = []
+    gekuerzt = False
+    for bereich, wurzel in zip(("zuhause", "ablage"), _wurzeln()):
+        basis = wurzel / kennung
+        if not basis.is_dir() or basis.is_symlink():
+            continue
+        for ordner, unter, dateien in os.walk(basis, followlinks=False):
+            unter.sort()
+            for name in sorted(dateien) + [u for u in unter if os.path.islink(os.path.join(ordner, u))]:
+                pfad = os.path.join(ordner, name)
+                try:
+                    st = os.lstat(pfad)
+                except OSError:
+                    continue
+                eintraege.append({
+                    "bereich": bereich,
+                    "pfad": os.path.relpath(pfad, basis),
+                    "groesse": st.st_size,
+                    "geaendert": int(st.st_mtime),
+                    "verweis": os.path.islink(pfad),
+                })
+                if len(eintraege) >= GRENZE_EINTRAEGE:
+                    gekuerzt = True
+                    break
+            if gekuerzt:
+                break
+        if gekuerzt:
+            break
+    return {"eintraege": eintraege, "gekuerzt": gekuerzt}

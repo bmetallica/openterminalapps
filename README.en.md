@@ -371,6 +371,10 @@ explains it in full.
   - **Branch protection by default**: OTA protects the main branch of every repository (no direct
     push, required approvals by another person), once per repository
     ([chapter 27](docs/wiki/en/27-git.md#branch-protection-by-default-)).
+  - **Detect secrets on push**: private keys, tokens, API keys, passwords in code and files such as
+    `.env` in new commits. Observe, Warn (with the location for whoever pushes) or Block, with a
+    way out for false alarms. Only the kind is counted, no location, no repository, no person
+    ([chapter 27](docs/wiki/en/27-git.md#secrets-on-push-)).
 - **IDE AI**, switchable on and off under Settings: an AI assistant (Continue) in VS Code, VSCodium
   and PyCharm/IntelliJ, connected to your own AI server. That can be vLLM, llama.cpp or any other
   server with an OpenAI interface ([chapter 28](docs/wiki/en/28-ide-ai.md)):
@@ -440,8 +444,8 @@ explains it in full.
   - Three stages: remove invisible characters, known patterns (German and English) and optionally a
     checking model on your own AI server, freely selectable and testable.
   - Modes Observe, Warn (note to the model) and Block.
-  - Its own **AI security** page with cases per day, type, application and origin. Only counters are
-    stored, no content, no person.
+  - Its own **Security** page with cases per day, type, application and origin, next to the secrets
+    from OTA Git. Only counters are stored, no content, no person.
 
 ### Workspaces and resources
 
@@ -549,6 +553,9 @@ explains it in full.
 - **Data of deleted accounts** kept or deleted, as administration chooses: home, storage and
   backups go to a recycle bin and are deleted for good after a grace period (0–365 days)
   ([chapter 8](docs/wiki/en/08-nutzer-und-gruppen.md#what-happens-to-the-data-of-a-deleted-account-))
+- **Access report under Art. 15 GDPR at the push of a button**: a ZIP with everything OTA has stored
+  about an account, without passwords, keys and file contents, recorded in the audit log
+  ([chapter 8](docs/wiki/en/08-nutzer-und-gruppen.md#access-report-under-art-15-))
 - **Third-party web applications** in the catalogue (Open WebUI, Grafana, …): OTA creates the OIDC
   access and decides who sees the tile **and who may sign in there**:
   - Keycloak checks this itself, even when the address is called directly; without a group nobody
@@ -619,6 +626,8 @@ with packets standing still.
 - **Logs**: **Operations → Log** has sign-ins, sessions, administrative actions,
   screen connections and disclosures. Behavioural data expires after 90 days, administrative
   actions after 365. Cleanup runs daily, and the cleanup itself is logged
+- **Log to syslog**: optionally every entry also goes to a syslog server (RFC 5424 over TCP, TLS or
+  UDP), with catch-up after an outage ([chapter 11](docs/wiki/en/11-betrieb.md#a-copy-to-a-syslog-server-))
 - **Nothing grows without a limit.** Container logs are capped at 10 MB × 3, for the services
   **and** for every workspace
 - **Backup and restore** of profile, container and database, root workspaces and OTA Git
@@ -763,6 +772,9 @@ make test
 | `test-opencode.sh` | opencode and extensions: settings and preview, nonsense refused; pair the memory (wrong key refused), configure, test embeddings, Traefik routes; in a standard workspace with an editor opencode installs alongside IDE-AI; in a root workspace managed configuration, prompt addition, token, package; MCP from the workspace, the contract not; opencode with a fake model: real session instead of the forged one, a subagent writes into the root session, a new session sees nothing, fields `ota_*` invisible to the model; view only signed in and only own workspaces, forged headers have no effect; takeover of an own installation, own default model stays; stopping revokes, resuming issues a new token, the memory is back |
 | `test-git-branchschutz.sh` | Branch protection by default in OTA Git: set immediately on switching on for repositories with content, empty ones only once they have content; no direct commit to main, not even as admin; required approvals as set, more than 5 refused; a removed rule is not set again; other repositories untouched; in the audit log |
 | `test-ki-sicherheit.sh` | AI security: patterns catch attacks in German and English but no harmless guides; invisible characters removed; Warn inserts the note, the person's question stays unchecked; through :8791 a prepared tool result is blocked, a harmless one passes; counters arrive, the table has no column for content or person; invalid settings refused; model test answers |
+| `test-git-geheimnisse.sh` | Secrets on push: link in existing repositories, new ones get it at once through the template; harmless push and placeholders pass; Block rejects a private key and names file and commit, but not the secret; false alarm overridden with a push option, not when switched off; Warn and Observe accept; counting correct, the table has only time, kind, type and count; switched off, links and template are gone |
+| `test-syslog.sh` | Log to syslog: invalid input refused; test message with reason on failure; TCP with length and with line break, UDP and TLS with own CA arrive, RFC 5424 with facility, sender and MSGID; "without routine" holds back successful sign-ins; after an outage the backlog follows, exactly once, also an entry with an older time; wrong CA detected |
+| `test-auskunft.sh` | Access report under Art. 15: only with the administration permission, not even for one's own account; ZIP with all eleven files; no password hash, no TOTP seed, no file content; audit log, file list of home and storage, link not followed, backups, AI usage; in the audit log |
 | `test-konto-daten.sh` | Data of deleted accounts: "Keep" leaves home and storage in place; "Delete" moves them to the recycle bin, removes the links under the name and deletes them after the grace period together with the backups, other accounts' backups stay; grace period 0 deletes immediately; invalid periods refused, rule in the audit log |
 | `test-konten.sh` | Central sign-in accounts: creating in OTA creates in Keycloak (including the required password change), locally it does not get in; changes, password, second factor, locking and deleting take effect in Keycloak; My account goes through Keycloak; a local legacy account moves over with its password, the emergency account does not |
 | `test-clipboard-bridge.sh` | Copying between two applications in the same workspace: both directions, umlauts, an image, a megabyte, after a pause, and switched off |

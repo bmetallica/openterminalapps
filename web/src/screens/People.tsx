@@ -177,6 +177,24 @@ function UserEditor({ user, groups, onSaved, onClose, onToast }: {
     }
   }
 
+  async function auskunft() {
+    if (!user) return
+    setBusy(true)
+    try {
+      const { blob, datei } = await api.auskunft(user.id)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url; a.download = datei
+      document.body.appendChild(a); a.click(); a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 10_000)
+      onToast(tr('Auskunft für {name} erstellt. Vor dem Herausgeben bitte liesmich.txt lesen.', { name: user.username }))
+    } catch (err) {
+      onToast(err instanceof ApiError ? err.message : tr('Auskunft fehlgeschlagen'), 'bad')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function remove() {
     if (!user) return
     if (!window.confirm(tr('„{name}“ löschen? Ob Zuhause und Ablage mitgehen, steht unter Einstellungen → Löschen von Konten.', { name: user.username }))) return
@@ -284,6 +302,16 @@ function UserEditor({ user, groups, onSaved, onClose, onToast }: {
           <button className="btn btn--sm" disabled={busy}
             onClick={() => void resetTotp()}>
             {tr('Zweiten Faktor abnehmen')}
+          </button>
+        </Field>
+      )}
+
+      {!isNew && (
+        <Field label={tr('Auskunft nach Art. 15 DSGVO')}
+          hint={tr('Ein ZIP mit allem, was OTA über dieses Konto gespeichert hat: Stammdaten, Gruppen, Protokoll, Sitzungen, KI-Nutzung, Sicherungen, OTA-Git und die Liste der Dateien (ohne Inhalt). Keine Passwörter oder Schlüssel. Steht im Protokoll. Vor dem Herausgeben liesmich.txt lesen: Das Protokoll nennt auch Administratoren.')}>
+          <button className="btn btn--sm" disabled={busy}
+            onClick={() => void auskunft()}>
+            {busy ? tr('Wird erstellt…') : tr('Auskunft erstellen')}
           </button>
         </Field>
       )}

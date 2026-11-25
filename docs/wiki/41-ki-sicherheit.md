@@ -96,7 +96,7 @@ Neustart von `ota-ki` beginnt das von vorn.
 
 ## Die Seite KI-Sicherheit
 
-Im Menü **KI-Sicherheit**, für die Verwaltung:
+Im Menü **Sicherheit**, Bereich **KI-Durchgang: Prompt Injection**, für die Verwaltung. (Der zweite Bereich, **OTA-Git: Geheimnisse beim Push**, ist in [Kapitel 27](27-git.md) beschrieben. Bis zum 2026-11-25 hieß der Menüpunkt „KI-Sicherheit“.)
 
 - **Kennzahlen:** geprüfte Inhalte (Werkzeug-Ergebnisse, Dokumente), davon vom Modell beurteilt,
   Fälle, entfernte unsichtbare Zeichen, Warnungen, Sperren, gescheiterte Prüfungen.

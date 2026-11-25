@@ -22,7 +22,7 @@ from .routers import (
     registries as registries_router,
     sessions, shared as shared_router, skeleton as skeleton_router,
     software as software_router, git as git_router, ide_ai as ide_ai_router, opencode as opencode_router,
-    ki_nutzung as ki_nutzung_router, ki_sicherheit as ki_sicherheit_router, dsgvo as dsgvo_router,
+    ki_nutzung as ki_nutzung_router, ki_sicherheit as ki_sicherheit_router, syslog as syslog_router, dsgvo as dsgvo_router,
     erweiterungen as erweiterungen_router, templates,
     news as news_router,
 )
@@ -197,12 +197,26 @@ def _ki_haushalt(runde: int) -> None:
 
 
 def _ki_aufraeumen() -> dict[str, int]:
-    from . import ki_sicherheit, ki_statistik
+    from . import git_geheimnisse, ki_sicherheit, ki_statistik
 
     with SessionLocal() as db:
         weg = ki_statistik.aufraeumen(db)
         ki_sicherheit.aufraeumen(db)
+        git_geheimnisse.aufraeumen(db)
         return weg
+
+
+def _git_geheimnisse_takt() -> None:
+    """Jede Minute: die Geheimnisprüfung in Forgejo nachziehen (neue
+    Repositories, die an der Vorlage vorbeikamen) und die Zähler abholen."""
+    from . import git, git_geheimnisse
+
+    with SessionLocal() as db:
+        if not git.an(db):
+            return
+        erg = git_geheimnisse.abgleichen(db)
+        if erg["pushes"]:
+            log.info("OTA-Git: %d Pushes auf Geheimnisse geprüft", erg["pushes"])
 
 
 def _backup_due() -> bool:
@@ -400,6 +414,11 @@ async def _scheduler() -> None:
                 log.warning("Speicherabbilder nicht entfernt: %s", exc)
 
         try:
+            await asyncio.to_thread(_git_geheimnisse_takt)
+        except Exception as exc:  # noqa: BLE001 — derselbe Grund wie oben
+            log.warning("OTA-Git: Geheimnisprüfung nicht abgeglichen: %s",
+                        getattr(exc, "detail", exc))
+        try:
             await asyncio.to_thread(_git_takt)
             await asyncio.to_thread(_erweiterungen_takt)
         except Exception as exc:  # noqa: BLE001 — derselbe Grund wie oben
@@ -418,6 +437,28 @@ async def _scheduler() -> None:
         except Exception as exc:  # noqa: BLE001 — derselbe Grund wie oben
             log.warning("Verzeichnisabgleich fehlgeschlagen: %s", exc)
 
+
+
+def _syslog_takt() -> int:
+    from . import syslog
+
+    with SessionLocal() as db:
+        return syslog.takt(db)
+
+
+async def _syslog() -> None:
+    """Alle fünf Sekunden: neue Protokolleinträge an den Syslog-Server
+    (syslog.py). Ist er aus, kostet das eine Abfrage der Einstellung."""
+    from . import syslog
+
+    while True:
+        await asyncio.sleep(syslog.TAKT_SEKUNDEN)
+        try:
+            # Ein Rückstand (Server war weg) geht stapelweise nach.
+            while await asyncio.to_thread(_syslog_takt) >= syslog.STAPEL:
+                pass
+        except Exception as exc:  # noqa: BLE001 — der Takt darf nie sterben
+            log.warning("Syslog-Takt: %s", exc)
 
 
 async def _reaper() -> None:
@@ -514,7 +555,7 @@ async def lifespan(_: FastAPI):
             log.warning("Routen der Erweiterungen nicht geschrieben: %s", exc)
 
     tasks = [asyncio.create_task(_reaper()), asyncio.create_task(_scheduler()),
-             asyncio.create_task(_keycloak_fristen())]
+             asyncio.create_task(_keycloak_fristen()), asyncio.create_task(_syslog())]
     try:
         yield
     finally:
@@ -563,6 +604,7 @@ app.include_router(git_router.router)
 app.include_router(ide_ai_router.router)
 app.include_router(ki_nutzung_router.router)
 app.include_router(ki_sicherheit_router.router)
+app.include_router(syslog_router.router)
 app.include_router(opencode_router.router)
 app.include_router(erweiterungen_router.router)
 app.include_router(news_router.router)

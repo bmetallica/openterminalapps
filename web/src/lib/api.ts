@@ -1101,6 +1101,63 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
   return data as T
 }
 
+/** Eine Datei herunterladen statt JSON lesen — mit denselben Fehlermeldungen. */
+async function herunterladen(path: string): Promise<{ blob: Blob; datei: string }> {
+  let res: Response
+  try {
+    res = await fetch(`/api${path}`, { credentials: 'same-origin' })
+  } catch {
+    throw new ApiError(0, t('Keine Verbindung zum Server. Läuft OTA noch?'))
+  }
+  if (!res.ok) {
+    let detail = t('Unerwarteter Fehler ({code})', { code: res.status })
+    try {
+      const d = await res.json()
+      if (d && typeof d.detail === 'string') detail = tServer(d.detail)
+    } catch { /* kein JSON */ }
+    throw new ApiError(res.status, detail)
+  }
+  const kopf = res.headers.get('content-disposition') || ''
+  const datei = /filename="([^"]+)"/.exec(kopf)?.[1] || 'download'
+  return { blob: await res.blob(), datei }
+}
+
+export type GitGeheimnisseEinstellungen = { an: boolean; betriebsart: 'beobachten' | 'warnen' | 'sperren'; uebergehen: boolean }
+export type GitGeheimnisseStand = GitGeheimnisseEinstellungen & {
+  git_an: boolean
+  frist_tage: number
+  abgleich?: { pushes?: number; verweise?: number; repos?: number; laeuft?: boolean; fehler?: string }
+}
+export type GitGeheimnisseStatistik = GitGeheimnisseStand & {
+  tage: number
+  seit: string | null
+  geprueft: number
+  faelle: number
+  nach_aktion: Record<string, number>
+  gekuerzt: number
+  treffer: { typ: string; anzahl: number }[]
+  summe_treffer: number
+  verlauf: { tag: string; geprueft: number; faelle: number; gesperrt: number }[]
+}
+
+export type SyslogEinstellungen = {
+  an: boolean
+  host: string
+  port: number
+  protokoll: 'udp' | 'tcp' | 'tls'
+  rahmung: 'laenge' | 'zeilenumbruch'
+  ca: string
+  facility: string
+  absender: string
+  umfang: 'alle' | 'ohne_alltag'
+}
+export type SyslogStand = SyslogEinstellungen & {
+  lage: { gesendet: number; zuletzt: string | null; fehler: string | null; fehler_seit: string | null }
+  rueckstand: number
+  facilities: string[]
+}
+export type SyslogTest = { ok: boolean; ms: number; fehler?: string; udp?: boolean }
+
 export const api = {
   login: (username: string, password: string, totp?: string) =>
     call<Me>('/auth/login', { method: 'POST', body: JSON.stringify({ username, password, totp }) }),
@@ -1563,6 +1620,17 @@ export const api = {
   dsgvo: () => call<DsgvoHinweis>('/dsgvo'),
   dsgvoSetzen: (text: string) => call<DsgvoHinweis>('/dsgvo', { method: 'PUT', body: JSON.stringify({ text }) }),
   kiStatus: () => call<KiStatus>('/admin/ki-nutzung/status'),
+  auskunft: (id: string) => herunterladen(`/admin/users/${id}/auskunft`),
+  gitGeheimnisse: () => call<GitGeheimnisseStand>('/admin/git/geheimnisse'),
+  gitGeheimnisseEinstellen: (body: Partial<GitGeheimnisseEinstellungen>) =>
+    call<GitGeheimnisseStand>('/admin/git/geheimnisse', { method: 'PUT', body: JSON.stringify(body) }),
+  gitGeheimnisseStatistik: (tage: number) => call<GitGeheimnisseStatistik>(`/admin/git/geheimnisse/statistik?tage=${tage}`),
+  gitGeheimnisseLoeschen: () => call<{ zeilen: number }>('/admin/git/geheimnisse/statistik', { method: 'DELETE' }),
+  syslog: () => call<SyslogStand>('/admin/syslog'),
+  syslogEinstellen: (body: Partial<SyslogEinstellungen>) =>
+    call<SyslogStand>('/admin/syslog', { method: 'PUT', body: JSON.stringify(body) }),
+  syslogTest: (body: Partial<SyslogEinstellungen>) =>
+    call<SyslogTest>('/admin/syslog/test', { method: 'POST', body: JSON.stringify(body) }),
   kiSicherheit: () => call<KiSicherheitStand>('/admin/ki-sicherheit'),
   kiSicherheitEinstellen: (body: Partial<KiSicherheitEinstellungen>) =>
     call<KiSicherheitStand>('/admin/ki-sicherheit', { method: 'PUT', body: JSON.stringify(body) }),

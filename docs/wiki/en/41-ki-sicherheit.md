@@ -91,7 +91,7 @@ the assistant. After a restart of `ota-ki` this starts over.
 
 ## The AI security page
 
-In the menu **AI security**, for administration:
+In the menu **Security**, area **AI gateway: prompt injection**, for administration. (The second area, **OTA Git: secrets on push**, is described in [chapter 27](27-git.md). Until 2026-11-25 the menu item was called "AI security".)
 
 - **Key figures:** content checked (tool results, documents), of which judged by the model, cases,
   invisible characters removed, warnings, blocks, failed checks.

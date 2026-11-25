@@ -163,6 +163,53 @@ with SessionLocal() as db: print(audit.aufraeumen(db))"
 > Präfixe. Wer eine neue, häufige Aktion einführt, trägt sie dort ein — was nicht in der Liste
 > steht, wird im Zweifel behalten.
 
+### Eine Kopie an einen Syslog-Server ✅
+
+*Seit dem 2026-11-25.* Unter **Einstellungen → Protokoll an Syslog**. Jeder Eintrag im Protokoll
+geht dann **zusätzlich** an einen Syslog-Server. Wozu: Wer Zugriff auf die Datenbank hat, kann
+Einträge ändern oder löschen, auch über sich selbst. Eine Kopie an einem Ort, den die
+Administratoren von OTA nicht verwalten, macht das sichtbar (Rechenschaft, Art. 5 Abs. 2 DSGVO).
+
+| Einstellung | Werte |
+|---|---|
+| Server, Port | Name oder Adresse ohne Schema; Port meist 514 (UDP, TCP) oder 6514 (TLS) |
+| Übertragung | **TCP** *(Vorgabe)*, **TLS** (RFC 5425, ab TLS 1.2, Zertifikat und Name werden geprüft) oder **UDP** (ohne Bestätigung) |
+| Rahmung (TCP) | **mit Länge** *(Vorgabe, RFC 6587 Octet Counting, rsyslog und syslog-ng)* oder Zeilenumbruch. TLS immer mit Länge |
+| CA-Zertifikat (TLS) | die CA des Syslog-Servers im PEM-Format; leer: die öffentlichen CAs |
+| Umfang | **ohne Alltag** *(Vorgabe)*: erfolgreiche Anmeldungen und Sitzungsbeginn und -ende bleiben in OTA, gescheiterte Anmeldungen und alles andere gehen mit; oder **alles** |
+| Facility, Absender | Vorgabe `authpriv` und `ota` |
+
+**Testnachricht senden** prüft die Werte im Formular, auch ungespeichert, und sagt, was fehlt:
+Name nicht auflösbar, Verbindung abgelehnt, keine Antwort, Zertifikat abgelehnt. Bei UDP heißt
+„gesendet“ nur, dass das Paket hinausging.
+
+**Das Format** ist RFC 5424, die Nachricht der Eintrag als JSON:
+
+```text
+<85>1 2026-11-25T17:58:03.120Z ota ota - user.deleted - {"id":"…","ts":"…","action":"user.deleted","actor":"anna","object_type":"user","object_id":"…","ip":"10.0.0.5","detail":{…}}
+```
+
+Schwere 4 (Warnung) für Gescheitertes und Abgewiesenes (`login.failed`, `…refused`, `…rejected`),
+sonst 5 (Notiz). Die Aktion steht als MSGID im Kopf; danach filtern geht ohne JSON.
+
+**Nichts geht verloren.** Gesendet wird alle fünf Sekunden aus der Tabelle, nicht im Augenblick
+des Schreibens. Ist der Server weg, bleibt der Stand stehen; was in der Zeit ins Protokoll kam,
+folgt, sobald er wieder antwortet, auch nach einem Neustart der API. Ein Eintrag, dessen
+Transaktion länger lief und deshalb eine ältere Zeit trägt als ein schon gesendeter, kommt auch
+an: OTA schaut zwei Minuten zurück und merkt sich, was es dort schon gesendet hat. Doppelt
+ankommen kann ein Eintrag nur, wenn die Verbindung mitten im Senden abbricht. Eingeschaltet wird
+ab dem Zeitpunkt des Schaltens, nicht mit dem bisherigen Protokoll.
+
+Den Zustand zeigt der Abschnitt selbst: gesendet seit dem Start der API, zuletzt, noch nicht
+gesendet, und ein Fehler, solange der Server nicht erreichbar ist. Im Log der API steht ein
+Fehler einmal, nicht alle fünf Sekunden.
+
+**Datenschutz:** Der Syslog-Server bekommt dieselben Einträge wie das Protokoll, mit Namen und,
+wo OTA sie speichert, Adressen. Damit gilt dort eine eigene Frist; sie gehört ins Löschkonzept
+(`dsgvo.md`, Abschnitt 4). „Ohne Alltag“ hält das Arbeitszeitprofil in OTA.
+
+**Im Protokoll:** `syslog.eingestellt`, mit allen Werten; vom CA-Zertifikat nur, ob es eines gibt.
+
 ## Was unter „Einstellungen" steht ✅
 
 Fünf Dinge gelten für die ganze Anlage und nicht für eine Sitzung: die **Sprache** für alle, die
