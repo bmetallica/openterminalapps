@@ -7,6 +7,7 @@ import { Directory } from './Directory'
 import { GitEinstellungen } from '../components/GitEinstellungen'
 import { IdeAiEinstellungen } from '../components/IdeAiEinstellungen'
 import { OpencodeEinstellungen } from '../components/OpencodeEinstellungen'
+import { KiSicherheitEinstellungen } from '../components/KiSicherheitEinstellungen'
 import { ErweiterungenEinstellungen } from '../components/ErweiterungenEinstellungen'
 import { t, useLang, type Lang } from '../lib/i18n'
 
@@ -205,6 +206,13 @@ export function Settings({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad'
       </div>
       <div style={{ maxWidth: 760 }}>
         <OpencodeEinstellungen onToast={onToast} />
+      </div>
+
+      <div className="section__head" style={{ marginTop: 30 }} id="ki-sicherheit">
+        <span className="silk">{t('KI-Sicherheit')}</span><span className="section__rule" />
+      </div>
+      <div style={{ maxWidth: 760 }}>
+        <KiSicherheitEinstellungen onToast={onToast} />
       </div>
 
       <div className="section__head" style={{ marginTop: 30 }} id="erweiterungen">

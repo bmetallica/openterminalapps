@@ -61,6 +61,7 @@ heute schon funktioniert.
 37. [Zwischenablage für Administratoren](37-zwischenablage-verwaltung.md)
 38. [opencode: der KI-Assistent im Terminal](38-opencode.md)
 39. [Erweiterungen (z. B. Gedächtnis für opencode)](39-erweiterungen.md)
+41. [KI-Sicherheit: Schutz vor Prompt Injection](41-ki-sicherheit.md)
 
 **Betrieb**
 10. [Zertifikate und HTTPS](10-zertifikate-und-https.md)

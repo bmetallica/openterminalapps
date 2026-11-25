@@ -1986,3 +1986,24 @@ input[type="color"] {
 .ki-filter { margin-top: -6px; }
 .ki-filter__wahl { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; }
 .ki-filter__wahl select { max-width: min(260px, 60vw); }
+
+/* KI-Sicherheit (screens/KiSicherheit.tsx) */
+.ki-sicher__teil { padding: 14px 16px; margin-bottom: 18px; }
+.ki-sicher__tabelle { overflow-x: auto; }
+.ki-sicher__tabelle .tbl tbody tr { cursor: default; }
+.ki-kachel--warn { border-color: var(--warn-edge); }
+.ki-kachel--warn .ki-kachel__wert { color: var(--warn-text); }
+.ki-kachel--halt { border-color: var(--halt); }
+.ki-kachel--halt .ki-kachel__wert { color: var(--halt-text); }
+.ki-saeulen { display: flex; align-items: flex-end; gap: 2px; height: 140px; border-bottom: 1px solid var(--edge-lit); }
+.ki-saeulen__spalte { flex: 1 1 0; min-width: 0; height: 100%; display: flex; align-items: flex-end; cursor: default; }
+.ki-saeulen__spalte:hover { background: var(--well); }
+.ki-saeulen__balken { width: 100%; background: var(--caution); border-radius: 4px 4px 0 0; }
+.ki-saeulen__balken--halt { background: var(--halt); }
+.ki-saeulen__achse { display: flex; justify-content: space-between; font-size: 12px; color: var(--label); margin-top: 6px; }
+.ki-sicher__balken { display: grid; gap: 8px; }
+.ki-sicher__zeile { display: grid; grid-template-columns: minmax(90px, 160px) 1fr auto; gap: 10px; align-items: center; font-size: 13px; }
+.ki-sicher__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.ki-sicher__spur { height: 10px; background: var(--well); border-radius: 4px; overflow: hidden; }
+.ki-sicher__spur > span { display: block; height: 100%; background: var(--accent); border-radius: 4px; }
+.ki-sicher__liste { margin: 0; padding-left: 18px; font-size: 13.5px; color: var(--text); }

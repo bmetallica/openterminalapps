@@ -56,6 +56,8 @@ from urllib.parse import urlparse
 import h11
 import httpx
 
+from . import wache
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("otaki")
 
@@ -222,8 +224,10 @@ class Spool:
         self.datei: Path | None = None
         self.seit = 0.0
 
-    def schreiben(self, zeile: dict[str, Any]) -> None:
-        if not LAGE.statistik:
+    def schreiben(self, zeile: dict[str, Any], immer: bool = False) -> None:
+        # `immer`: die Zähler der KI-Sicherheit. Sie hängen nicht an der
+        # Statistik — wer nur die Sicherheit will, bekommt sie auch.
+        if not LAGE.statistik and not immer:
             return
         try:
             if self.datei is None:
@@ -566,8 +570,35 @@ async def _beantworten(conn: h11.Connection, writer: asyncio.StreamWriter, anfra
                  "freigegeben. Freigeben kann ihn die Verwaltung (Einstellungen → IDE-AI)."))
         return
 
-    # --- Körper anpassen
+    # --- KI-Sicherheit (wache.py): Werkzeug-Ergebnisse und Dokumente prüfen
     neu = False
+    sicher = LAGE.konfig.get("sicherheit") or {}
+    if daten is not None and sicher.get("an") and (
+            isinstance(daten.get("messages"), list) or isinstance(daten.get("input"), list)):
+        herkunft_s = f"extern:{dienst.get('kuerzel', '')}" if dienst is not None else "arbeitsplatz"
+        try:
+            geaendert, _typen, sperre = await wache.WACHE.pruefen(
+                daten, sicher, LAGE, herkunft_s, werkzeug)
+        except Exception as exc:  # noqa: BLE001 — die Prüfung darf keine Anfrage kippen
+            log.exception("KI-Sicherheit: Prüfung gescheitert: %s", exc)
+            wache.ZAEHLER.zaehlen(herkunft_s, werkzeug, "pruefung", "interner-fehler", "fehler")
+            geaendert, sperre = False, None
+        if sperre:
+            SPOOL_.schreiben({"zeit": zeit, "quelle": quelle, "session_id": sitzung,
+                              "weg": "name" if ueber_name else "abgefangen",
+                              "server": server.get("kuerzel", ""), "modell": modell,
+                              "pfad": pfad.split("?")[0][:120], "werkzeug": werkzeug,
+                              "status": 403, "dauer_ms": 0, "erstes_ms": None, "ein": None,
+                              "aus": None, **herkunft})
+            await _senden(conn, writer, *_fehler(
+                403, "OTA-Sicherheit: Die Anfrage enthält Inhalt aus einer Datei, Befehlsausgabe, "
+                     f"Webseite oder einem Dokument, der wie ein Angriff auf den KI-Assistenten "
+                     f"aussieht ({sperre}). Sie wurde nicht an das Modell gegeben. Bitte den Inhalt "
+                     "prüfen; bei einem Fehlalarm hilft die Verwaltung."))
+            return
+        neu = geaendert
+
+    # --- Körper anpassen
     streicht_nutzung = False
     if daten is not None:
         if echt != modell:
@@ -692,11 +723,16 @@ async def _haushalt() -> None:
         await asyncio.sleep(10)
         with contextlib.suppress(Exception):
             await LAGE.neu_laden()
+            for zeile in wache.ZAEHLER.leeren():
+                SPOOL_.schreiben(zeile, immer=True)
             SPOOL_.abschliessen()
             status = {"zeit": _jetzt(), "fassung": FASSUNG, "statistik": LAGE.statistik,
                       "server": [s.get("kuerzel") for s in LAGE.server],
                       "extern": [d.get("kuerzel") for d in LAGE.konfig.get("extern") or []],
-                      "modelle": len(LAGE.modelle), **LAGE.zaehler}
+                      "modelle": len(LAGE.modelle), **LAGE.zaehler,
+                      "sicherheit": {"an": bool((LAGE.konfig.get("sicherheit") or {}).get("an")),
+                                     "im_hintergrund": wache.WACHE.im_hintergrund,
+                                     "gemerkt": len(wache.WACHE.speicher)}}
             tmp = KI_DIR / "status.tmp"
             tmp.write_text(json.dumps(status), encoding="utf-8")
             os.replace(tmp, KI_DIR / "status.json")

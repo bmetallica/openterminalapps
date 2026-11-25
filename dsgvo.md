@@ -431,7 +431,7 @@ eine Kopie an einen getrennten Ort (Syslog-Server) gibt es nicht.
 | 9 | **Schwellwertanalyse** dokumentieren | offen |
 | ~~10~~ | Verschlüsselung im Ruhezustand | **abgewählt 2026-09-05** |
 | 11 | **Verzeichnis von Verarbeitungstätigkeiten**: Einträge für OTA, KI-Statistik, Gedächtnis | offen |
-| 12 | **Protokollierung des KI-Servers** prüfen (vLLM/llama.cpp) | offen |
+| ~~12~~ | **Protokollierung des KI-Servers** prüfen | ✅ 2026-11-25: Der KI-Server ist per Firewall nach außen gesperrt und führt Anfragen in einem rotierenden Protokoll von 100 MB; beim heutigen Durchsatz ist es nach höchstens etwa zwei Stunden überschrieben. Das ist eine Speicherung von Inhalten mit faktischer Frist von Stunden |
 | 13 | **Interessenabwägung** für Protokoll, KI-Statistik und Softwaremonitoring dokumentieren | offen |
 | 14 | **Open WebUI**: eigene Liste in Abschnitt 12.5 | offen |
 
@@ -531,6 +531,32 @@ vollständiges Archiv aller KI-Gespräche aller Beschäftigten.
 | W7 | **Datenschutzhinweis in Open WebUI** (Banner oder Hinweis beim ersten Aufruf): Inhalte werden gespeichert, keine Personendaten Dritter und keine besonderen Kategorien eingeben, temporären Chat nutzen | offen |
 | W8 | **Sicherungen** von Open WebUI: Wo liegen sie, wie lange? Gelöschte Chats leben dort weiter | offen |
 | W9 | **Eintrag im Verzeichnis von Verarbeitungstätigkeiten** und Teil der **DSFA** (Abschnitt 9): KI mit frei eingegebenen Inhalten ist der wahrscheinlichste Grund, dass eine DSFA nötig wird | offen |
+
+---
+
+## 13 · KI-Sicherheit — Prüfung auf Prompt Injection
+
+*Seit 2026-11-25, Wiki Kapitel 41.* Der KI-Durchgang prüft auf Wunsch, was ein KI-Assistent
+liest, bevor es das Modell erreicht: **Ergebnisse von Werkzeugen** (Dateien, Befehlsausgaben,
+Webseiten) und **Dokumente**, die Open WebUI mitschickt. **Nicht** geprüft wird, was der Mensch
+selbst eintippt, und nicht der Systemprompt.
+
+| Frage | Antwort |
+|---|---|
+| Werden Inhalte gelesen? | Ja, im Speicher des Durchgangs, während die Anfrage durchläuft (Stufe 1 und 2). Bei Stufe 3 geht der geprüfte Inhalt zusätzlich als eigene Anfrage an ein Modell auf einem **eigenen** KI-Server |
+| Wird etwas gespeichert? | Nur Zähler je Stunde (`ki_sicherheit`): Herkunft (alle Arbeitsplätze zusammen oder ein externer Dienst), Anwendung, Stufe, Typ, Aktion. **Kein Text, kein Ausschnitt, keine Person, kein Arbeitsplatz.** Im Speicher des Durchgangs bleibt je geprüftem Abschnitt eine Prüfsumme (SHA-256) mit dem Ergebnis, bis zu 50 000, bis zum Neustart |
+| Frist | 365 Tage, täglich aufgeräumt; „Alle Zähler löschen“ sofort |
+| Wer sieht es? | Konten mit `settings.manage` (Seite KI-Sicherheit) |
+| Verändert OTA Anfragen? | Stufe 1 entfernt unsichtbare Steuerzeichen. In der Betriebsart *Warnen* kommt vor einen auffälligen Inhalt ein Hinweis an das Modell; in *Sperren* wird die Anfrage abgewiesen |
+| Rechtsgrundlage | Art. 32 DSGVO (Sicherheit der Verarbeitung); für eine Behörde Art. 6 Abs. 1 lit. e i. V. m. dem Landesrecht. Kein Personenbezug in den gespeicherten Daten |
+
+👉 **Mitbestimmung:** Weil nichts einer Person zugeordnet wird, eignet sich die Einrichtung nicht
+zur Leistungs- oder Verhaltenskontrolle. Sie liest aber Inhalte, mit denen Beschäftigte arbeiten,
+auch wenn sie nichts davon behält. Das sollte der Personalrat kennen, und es gehört in die
+Dokumentation der Verarbeitung.
+
+👉 **Stufe 3 und das Protokoll des KI-Servers:** Die Prüfanfragen landen im Protokoll des
+KI-Servers wie jede andere Anfrage (Abschnitt 11, Punkt 12: rotierend, faktisch Stunden).
 
 ---
 

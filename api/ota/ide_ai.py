@@ -366,7 +366,15 @@ def durchgang_konfig(db: DbSession) -> dict[str, Any]:
                    for s in server_liste(e) if s["url"]] if aktiv else [],
         "extern": [{k: d[k] for k in ("kuerzel", "name", "hash", "kopf")}
                    for d in e["extern"]] if aktiv else [],
+        # KI-Sicherheit (ki_sicherheit.py, Prüfung in ki/otaki/wache.py)
+        "sicherheit": _sicherheit(db) if aktiv else {},
     }
+
+
+def _sicherheit(db: DbSession) -> dict[str, Any]:
+    from . import ki_sicherheit
+
+    return ki_sicherheit.konfig(db)
 
 
 def _personen_fuer(db: DbSession, w: dict[str, Any]) -> list[str]:

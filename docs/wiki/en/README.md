@@ -61,6 +61,7 @@ configuration decisions can be made with foresight — but it always says what a
 37. [Clipboard for administrators](37-zwischenablage-verwaltung.md)
 38. [opencode: the AI assistant in the terminal](38-opencode.md)
 39. [Extensions (e.g. memory for opencode)](39-erweiterungen.md)
+41. [AI security: protection against prompt injection](41-ki-sicherheit.md)
 
 **Operations**
 10. [Certificates and HTTPS](10-zertifikate-und-https.md)

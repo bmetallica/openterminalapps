@@ -433,6 +433,15 @@ explains it in full.
   - Everyone sees their own figures under **My AI usage**. A **GDPR** item in the sidebar informs
     everyone; administration can adjust its text.
   - Contents are never recorded, and retention is adjustable.
+- **AI security: protection against prompt injection** in the AI gateway
+  ([chapter 41](docs/wiki/en/41-ki-sicherheit.md)):
+  - What an assistant reads is checked (files, command output, web pages, documents from Open
+    WebUI), not what the person types.
+  - Three stages: remove invisible characters, known patterns (German and English) and optionally a
+    checking model on your own AI server, freely selectable and testable.
+  - Modes Observe, Warn (note to the model) and Block.
+  - Its own **AI security** page with cases per day, type, application and origin. Only counters are
+    stored, no content, no person.
 
 ### Workspaces and resources
 
@@ -753,6 +762,7 @@ make test
 | `test-ide-ai.sh` | IDE-AI: fetch models from the AI server, wrong input refused, API key stays on the server, test question; packages in the package source, only the agent gets the file; in every template with an editor config.yaml with mark, context window and response length, telemetry off, Continue linked in VS Code/VSCodium and JetBrains, firewall lets the AI server through, a question from the workspace gets an answer, own config.yaml stays; "set up again" removes Marketplace copies in JetBrains and VSCodium, switches Continue on and puts the own config.yaml aside; turned off, everything is gone again |
 | `test-opencode.sh` | opencode and extensions: settings and preview, nonsense refused; pair the memory (wrong key refused), configure, test embeddings, Traefik routes; in a standard workspace with an editor opencode installs alongside IDE-AI; in a root workspace managed configuration, prompt addition, token, package; MCP from the workspace, the contract not; opencode with a fake model: real session instead of the forged one, a subagent writes into the root session, a new session sees nothing, fields `ota_*` invisible to the model; view only signed in and only own workspaces, forged headers have no effect; takeover of an own installation, own default model stays; stopping revokes, resuming issues a new token, the memory is back |
 | `test-git-branchschutz.sh` | Branch protection by default in OTA Git: set immediately on switching on for repositories with content, empty ones only once they have content; no direct commit to main, not even as admin; required approvals as set, more than 5 refused; a removed rule is not set again; other repositories untouched; in the audit log |
+| `test-ki-sicherheit.sh` | AI security: patterns catch attacks in German and English but no harmless guides; invisible characters removed; Warn inserts the note, the person's question stays unchecked; through :8791 a prepared tool result is blocked, a harmless one passes; counters arrive, the table has no column for content or person; invalid settings refused; model test answers |
 | `test-konto-daten.sh` | Data of deleted accounts: "Keep" leaves home and storage in place; "Delete" moves them to the recycle bin, removes the links under the name and deletes them after the grace period together with the backups, other accounts' backups stay; grace period 0 deletes immediately; invalid periods refused, rule in the audit log |
 | `test-konten.sh` | Central sign-in accounts: creating in OTA creates in Keycloak (including the required password change), locally it does not get in; changes, password, second factor, locking and deleting take effect in Keycloak; My account goes through Keycloak; a local legacy account moves over with its password, the emergency account does not |
 | `test-clipboard-bridge.sh` | Copying between two applications in the same workspace: both directions, umlauts, an image, a megabyte, after a pause, and switched off |

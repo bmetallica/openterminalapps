@@ -18,6 +18,7 @@ import { useMarke } from './lib/branding'
 import { Registries } from './screens/Registries'
 import { Paketquellen } from './screens/Paketquellen'
 import { Softwaremonitoring } from './screens/Softwaremonitoring'
+import { KiSicherheit } from './screens/KiSicherheit'
 import { StandaloneViewer } from './screens/StandaloneViewer'
 import { anmeldePfad, openInTab, parseRoute, viewPath, type Route } from './lib/routes'
 import { ApiError, alsAngemeldet, api, type ErweiterungAnsicht, type Host, type Me, type Session, type Stream, type Template } from './lib/api'
@@ -28,7 +29,7 @@ import { setTheme, useTheme, type Theme } from './lib/theme'
 import './styles/app.css'
 
 type View = 'dashboard' | 'news' | 'workspaces' | 'webapps' | 'images' | 'registries' | 'paketquellen' | 'storage'
-  | 'files' | 'people' | 'monitor' | 'software' | 'netz' | 'settings' | 'account' | 'help' | 'erinnerungen' | 'dsgvo' | 'meineki'
+  | 'files' | 'people' | 'monitor' | 'software' | 'kisicherheit' | 'netz' | 'settings' | 'account' | 'help' | 'erinnerungen' | 'dsgvo' | 'meineki'
 type Toast = { id: number; msg: string; tone: 'ok' | 'bad' }
 
 const NAV: { id: View; glyph: string; cap: string; adminOnly: boolean }[] = [
@@ -63,6 +64,9 @@ const NAV: { id: View; glyph: string; cap: string; adminOnly: boolean }[] = [
   // Welche Anwendung in welchem Arbeitsplatz steckt, und was nicht auf der
   // Whitelist steht (Kapitel 11). Gegen Wildwuchs, nicht gegen Menschen.
   { id: 'software', glyph: '◫', cap: 'Software', adminOnly: true },
+  // Was der KI-Durchgang an Prompt Injection erkannt hat (Kapitel 41). Nur
+  // Zähler, keine Inhalte, keine Personen.
+  { id: 'kisicherheit', glyph: '◬', cap: 'KI-Sicherheit', adminOnly: true },
   // Eigener Punkt und kein Winkel in „Einstellungen": Hier steht, wer gerade
   // unter welcher Adresse arbeitet — das schaut man im Betrieb nach, nicht
   // beim Einrichten.
@@ -400,6 +404,16 @@ export default function App() {
         {current === 'monitor' && <Monitor onToast={toast}
           darfTerminal={!!me && (me.is_admin || me.permissions.includes('arbeitsplatz.terminal'))} />}
         {current === 'software' && <Softwaremonitoring onToast={toast} />}
+        {current === 'kisicherheit' && <KiSicherheit onToast={toast} onEinstellungen={() => {
+          setView('settings')
+          let versuche = 0
+          const suchen = () => {
+            const ziel = document.getElementById('ki-sicherheit')
+            if (ziel) ziel.scrollIntoView({ behavior: 'smooth', block: 'start' })
+            else if (++versuche < 20) setTimeout(suchen, 100)
+          }
+          setTimeout(suchen, 50)
+        }} />}
         {current === 'netz' && <Netz onToast={toast} />}
         {current === 'settings' && <Settings onToast={toast} />}
         {current === 'account' && <Account me={me} onMe={setMe} onToast={toast} />}

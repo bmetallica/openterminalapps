@@ -442,6 +442,15 @@ ihn vollständig erklärt.
   - Jeder sieht unter **Meine KI-Nutzung** die eigenen Zahlen. Ein Punkt **DSGVO** in der
     Seitenleiste informiert alle; den Text kann die Verwaltung anpassen.
   - Inhalte werden nie erfasst, die Aufbewahrung ist einstellbar.
+- **KI-Sicherheit: Schutz vor Prompt Injection** im KI-Durchgang
+  ([Kapitel 41](docs/wiki/41-ki-sicherheit.md)):
+  - Geprüft wird, was ein Assistent liest (Dateien, Befehlsausgaben, Webseiten, Dokumente aus
+    Open WebUI), nicht was der Mensch tippt.
+  - Drei Stufen: unsichtbare Zeichen entfernen, bekannte Muster (Deutsch und Englisch) und auf
+    Wunsch ein Prüfmodell auf einem eigenen KI-Server, frei wählbar und testbar.
+  - Betriebsarten Beobachten, Warnen (Hinweis an das Modell) und Sperren.
+  - Eigene Seite **KI-Sicherheit** mit Fällen je Tag, Typ, Anwendung und Herkunft. Gespeichert
+    werden nur Zähler, kein Inhalt, keine Person.
 
 ### Workspaces und Ressourcen
 
@@ -767,6 +776,7 @@ make test
 | `test-ide-ai.sh` | IDE-AI: Modelle vom KI-Server abrufen, falsche Eingaben abgewiesen, API-Schlüssel bleibt auf dem Server, Testfrage; Pakete in der Paketquelle, nur der Agent bekommt die Datei; in jeder Vorlage mit Editor config.yaml mit Marke, Kontextfenster und Antwortlänge, Telemetrie aus, Continue in VS Code/VSCodium und JetBrains verknüpft, Firewall lässt den KI-Server durch, Frage aus dem Arbeitsplatz bekommt Antwort, eigene config.yaml bleibt; „neu einrichten“ räumt Marketplace-Kopien in JetBrains und VSCodium weg, schaltet Continue ein und legt die eigene config.yaml beiseite; ausgeschaltet ist alles wieder weg |
 | `test-opencode.sh` | opencode und Erweiterungen: Einstellungen und Vorschau, Unsinn abgewiesen; Gedächtnis koppeln (falscher Schlüssel abgewiesen), konfigurieren, Embeddings testen, Traefik-Wege; im normalen Arbeitsplatz mit Editor installiert sich opencode neben IDE-AI; im Root-Arbeitsplatz verwaltete Konfiguration, Prompt-Zusatz, Token, Paket; MCP aus dem Arbeitsplatz, der Vertrag nicht; opencode mit Fake-Modell: echte Sitzung statt gefälschter, Unteragent schreibt in die Wurzelsitzung, neue Sitzung sieht nichts, Felder `ota_*` für das Modell unsichtbar; Ansicht nur angemeldet und nur eigene Arbeitsplätze, gefälschte Kopfzeilen wirkungslos; Übernahme einer eigenen Installation, eigenes Standardmodell bleibt; Anhalten widerruft, Fortsetzen gibt neues Token, Gedächtnis ist wieder da |
 | `test-git-branchschutz.sh` | Branch-Schutz als Vorgabe in OTA-Git: beim Einschalten sofort für Repositories mit Inhalt, leere erst mit Inhalt; kein direkter Commit auf main, auch nicht als Admin; Pflicht-Freigaben wie eingestellt, mehr als 5 abgelehnt; eine entfernte Regel setzt OTA nicht neu; fremde Repositories unberührt; im Protokoll |
+| `test-ki-sicherheit.sh` | KI-Sicherheit: Muster treffen Angriffe auf Deutsch und Englisch, aber keine harmlosen Anleitungen; unsichtbare Zeichen entfernt; Warnen setzt den Hinweis, die Frage des Menschen bleibt ungeprüft; über :8791 wird ein präpariertes Werkzeug-Ergebnis gesperrt, ein harmloses geht durch; Zähler kommen an, die Tabelle hat keine Spalte für Inhalt oder Person; ungültige Einstellungen abgelehnt; Modelltest antwortet |
 | `test-konto-daten.sh` | Daten gelöschter Konten: „Behalten“ lässt Zuhause und Ablage liegen; „Löschen“ legt sie in den Papierkorb, entfernt die Verweise unter dem Namen und löscht nach der Frist samt Sicherungen, fremde Sicherungen bleiben; Frist 0 löscht sofort; ungültige Fristen abgelehnt, Regel im Protokoll |
 | `test-konten.sh` | Konten der zentralen Anmeldung: Anlegen in OTA legt in Keycloak an (samt Pflicht zum Passwortwechsel), lokal kommt es nicht herein; Ändern, Passwort, zweiter Faktor, Sperren und Löschen wirken in Keycloak; Mein Konto führt über Keycloak; ein lokales Bestandskonto zieht mit seinem Passwort um, das Notfallkonto nicht |
 | `test-clipboard-bridge.sh` | Kopieren zwischen zwei Anwendungen im selben Arbeitsplatz: beide Richtungen, Umlaute, ein Bild, ein Megabyte, nach Pause, und abgeschaltet |

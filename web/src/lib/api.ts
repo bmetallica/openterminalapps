@@ -474,6 +474,44 @@ export type GitStand = {
 
 export type GitBranchschutz = { an: boolean; freigaben: number; fuer_admins: boolean }
 
+/** KI-Sicherheit (Handbuch Kapitel 41): Schutz vor Prompt Injection im KI-Durchgang. */
+export type KiSicherheitEinstellungen = {
+  an: boolean
+  unsichtbar: boolean
+  muster: boolean
+  modell_an: boolean
+  modell: string
+  umfang: 'alle' | 'auffaellig'
+  betriebsart: 'beobachten' | 'warnen' | 'sperren'
+  zeitlimit: number
+}
+export type KiSicherheitStand = KiSicherheitEinstellungen & {
+  modelle: { id: string; titel: string; server: string }[]
+  durchgang: boolean
+  aktiv: boolean
+  frist_tage: number
+}
+export type KiSicherheitProbe = { ms: number; urteil: boolean | null; richtig: boolean; fehler: string | null; antwort: string }
+export type KiSicherheitTest = { modell: string; ok: boolean; angriff: KiSicherheitProbe; harmlos: KiSicherheitProbe }
+export type KiSicherheitStatistik = {
+  tage: number
+  seit: string | null
+  geprueft: Record<string, number>
+  modell_geprueft: number
+  faelle: { stufe: string; typ: string; aktionen: Record<string, number>; summe: number }[]
+  summe_faelle: number
+  /** Ein Fall je auffälligem Inhalt, nach Aktion. */
+  faelle_nach_aktion: Record<string, number>
+  /** Treffer je Typ: ein Inhalt kann mehrere Typen treffen. */
+  summe_treffer: number
+  verlauf: { tag: string; geprueft: number; faelle: number; gesperrt: number }[]
+  anwendungen: { name: string; faelle: number }[]
+  herkunft: { name: string; faelle: number }[]
+  fehler: Record<string, number>
+  hinweise: Record<string, number>
+  lage: { an?: boolean; im_hintergrund?: number; gemerkt?: number }
+}
+
 export type Permission = { key: string; text: string }
 
 /** Was eine Sitzung im Netz darf. Durchgesetzt wird es im Router, nicht hier. */
@@ -1525,6 +1563,13 @@ export const api = {
   dsgvo: () => call<DsgvoHinweis>('/dsgvo'),
   dsgvoSetzen: (text: string) => call<DsgvoHinweis>('/dsgvo', { method: 'PUT', body: JSON.stringify({ text }) }),
   kiStatus: () => call<KiStatus>('/admin/ki-nutzung/status'),
+  kiSicherheit: () => call<KiSicherheitStand>('/admin/ki-sicherheit'),
+  kiSicherheitEinstellen: (body: Partial<KiSicherheitEinstellungen>) =>
+    call<KiSicherheitStand>('/admin/ki-sicherheit', { method: 'PUT', body: JSON.stringify(body) }),
+  kiSicherheitTest: (modell: string) =>
+    call<KiSicherheitTest>('/admin/ki-sicherheit/test', { method: 'POST', body: JSON.stringify({ modell }) }),
+  kiSicherheitStatistik: (tage: number) => call<KiSicherheitStatistik>(`/admin/ki-sicherheit/statistik?tage=${tage}`),
+  kiSicherheitLoeschen: () => call<{ zeilen: number }>('/admin/ki-sicherheit/statistik', { method: 'DELETE' }),
   ideAiExternAnlegen: (name: string, kopf: boolean) =>
     call<{ kuerzel: string; schluessel: string; stand: IdeAiStand }>('/admin/ide-ai/extern',
       { method: 'POST', body: JSON.stringify({ name, kopf }) }),

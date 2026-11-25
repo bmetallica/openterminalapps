@@ -1119,6 +1119,30 @@ class KiAnfrage(Base):
     bytes: Mapped[int | None] = mapped_column(BigInteger)
 
 
+class KiSicherheit(Base):
+    """KI-Sicherheit (ki_sicherheit.py): Fälle je Stunde. **Kein Inhalt, keine
+    Person, kein Arbeitsplatz** — nur Herkunft (Arbeitsplatz allgemein oder
+    ein externer Dienst), Anwendung, Stufe, Typ und was geschah."""
+
+    __tablename__ = "ki_sicherheit"
+    stunde: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
+    herkunft: Mapped[str] = mapped_column(String(48), primary_key=True)
+    anwendung: Mapped[str] = mapped_column(String(16), primary_key=True)
+    stufe: Mapped[str] = mapped_column(String(16), primary_key=True)
+    typ: Mapped[str] = mapped_column(String(48), primary_key=True)
+    aktion: Mapped[str] = mapped_column(String(16), primary_key=True)
+    anzahl: Mapped[int] = mapped_column(BigInteger, default=0)
+
+
+class KiSicherheitDatei(Base):
+    """Welche Spool-Dateien schon gezählt sind: Eine zweimal abgeholte Datei
+    zählte sonst doppelt."""
+
+    __tablename__ = "ki_sicherheit_dateien"
+    name: Mapped[str] = mapped_column(String(120), primary_key=True)
+    am: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class KiStunde(Base):
     """Die Summen einer Stunde je Mensch, Arbeitsplatz, Server, Modell und Anwendung —
     für Graphen über Tage und Wochen und über die Frist der Einzelanfragen

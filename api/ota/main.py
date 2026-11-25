@@ -22,7 +22,7 @@ from .routers import (
     registries as registries_router,
     sessions, shared as shared_router, skeleton as skeleton_router,
     software as software_router, git as git_router, ide_ai as ide_ai_router, opencode as opencode_router,
-    ki_nutzung as ki_nutzung_router, dsgvo as dsgvo_router,
+    ki_nutzung as ki_nutzung_router, ki_sicherheit as ki_sicherheit_router, dsgvo as dsgvo_router,
     erweiterungen as erweiterungen_router, templates,
     news as news_router,
 )
@@ -197,10 +197,12 @@ def _ki_haushalt(runde: int) -> None:
 
 
 def _ki_aufraeumen() -> dict[str, int]:
-    from . import ki_statistik
+    from . import ki_sicherheit, ki_statistik
 
     with SessionLocal() as db:
-        return ki_statistik.aufraeumen(db)
+        weg = ki_statistik.aufraeumen(db)
+        ki_sicherheit.aufraeumen(db)
+        return weg
 
 
 def _backup_due() -> bool:
@@ -560,6 +562,7 @@ app.include_router(software_router.router)
 app.include_router(git_router.router)
 app.include_router(ide_ai_router.router)
 app.include_router(ki_nutzung_router.router)
+app.include_router(ki_sicherheit_router.router)
 app.include_router(opencode_router.router)
 app.include_router(erweiterungen_router.router)
 app.include_router(news_router.router)

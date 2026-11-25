@@ -298,6 +298,8 @@ test:
 	@./scripts/test-gemeinsame-daten.sh
 	@# IDE-AI gegen den KI-Server in OTA_TEST_KI_URL (Kapitel 28).
 	@./scripts/test-ide-ai.sh
+	@# KI-Sicherheit: Muster, unsichtbare Zeichen, Sperren über :8791, Zähler ohne Inhalt.
+	@./scripts/test-ki-sicherheit.sh
 	@echo
 	@./scripts/test-clipboard-bridge.sh || \
 	  echo "  (übersprungen — dafür muss ein Arbeitsplatz mit zwei Apps laufen)"
