@@ -443,7 +443,7 @@ Verwaltungsklasse (365 Tage), und Zugriff sollte dort nur haben, wer OTA **nicht
 | 11 | **Verzeichnis von Verarbeitungstätigkeiten**: Einträge für OTA, KI-Statistik, Gedächtnis | offen |
 | ~~12~~ | **Protokollierung des KI-Servers** prüfen | ✅ 2026-11-25: Der KI-Server ist per Firewall nach außen gesperrt und führt Anfragen in einem rotierenden Protokoll von 100 MB; beim heutigen Durchsatz ist es nach höchstens etwa zwei Stunden überschrieben. Das ist eine Speicherung von Inhalten mit faktischer Frist von Stunden |
 | 13 | **Interessenabwägung** für Protokoll, KI-Statistik und Softwaremonitoring dokumentieren | offen |
-| 14 | **Open WebUI**: eigene Liste in Abschnitt 12.5 | offen |
+| 14 | **Open WebUI**: eigene Liste in Abschnitt 12.5 | ⚠️ W2, W4, W5, W7, W8 und W10 erledigt; W1, W3, W6 und W9 offen |
 | 15 | **Syslog-Server** anbinden (Einstellungen → Protokoll an Syslog), Frist und Zugriff dort festlegen | offen: Die Funktion ist da, ein Server noch nicht |
 
 Technisch wächst in dieser Anlage **nichts mehr ohne Frist** — ausser dem Zuhause, das als
@@ -494,7 +494,8 @@ In seiner Datenbank (Vorgabe: SQLite unter `/app/backend/data`) und seinem Daten
 | **Container-Protokoll** (stdout) | Anfragepfade, je nach Stufe E-Mail | nach Docker-Einstellung des Containers |
 
 Das ist der Kern: **Open WebUI löscht von sich aus nichts.** Ohne Regel wächst dort ein
-vollständiges Archiv aller KI-Gespräche aller Beschäftigten.
+vollständiges Archiv aller KI-Gespräche aller Beschäftigten. In dieser Anlage gilt seit
+2026-11-25 eine Löschfrist von 90 Tagen für Chats (12.5, W2).
 
 ### 12.3 Wohin Daten das Haus verlassen können
 
@@ -533,14 +534,14 @@ vollständiges Archiv aller KI-Gespräche aller Beschäftigten.
 | # | Aufgabe | Stand |
 |---|---|---|
 | W1 | **Einstellungen der eingesetzten Instanz prüfen und dokumentieren** (12.3, 12.4), in der Admin-Oberfläche, nicht nur in der Umgebung | ⚠️ Umgebung geprüft 2026-11-20, Admin-Oberfläche offen |
-| W2 | **Löschfrist für Chats** festlegen (z. B. 90 Tage ohne Änderung) und umsetzen. Open WebUI kann das nicht selbst; nötig ist eine Aufgabe auf dessen Datenbank oder eine Regel „Nutzer löschen selbst“ | offen |
+| W2 | **Löschfrist für Chats** festlegen (z. B. 90 Tage ohne Änderung) und umsetzen. Open WebUI kann das nicht selbst; nötig ist eine Aufgabe auf dessen Datenbank oder eine Regel „Nutzer löschen selbst“ | ✅ 90 Tage, umgesetzt 2026-11-25 |
 | W3 | **Ausgeschiedene Beschäftigte:** OTA sperrt das Konto in Keycloak, **das Konto in Open WebUI mit allen Chats, Dateien und Erinnerungen bleibt**. Gehört ins Löschkonzept (4.2): in Open WebUI unter *Administration → Benutzer* löschen | offen |
-| W4 | **Admin-Zugriff auf Chats** abschalten oder in der Betriebsvereinbarung regeln | offen |
-| W5 | **Community-Teilen, Versionsprüfung** abschalten (Telemetrie ist aus, geprüft 2026-11-20) | ⚠️ teilweise |
-| W10 | **Container-Protokoll begrenzen** (`--log-opt max-size=10m --log-opt max-file=3` beim nächsten Neuanlegen von Open WebUI) — läuft heute ohne Grenze | offen |
+| W4 | **Admin-Zugriff auf Chats** abschalten oder in der Betriebsvereinbarung regeln | ✅ abgeschaltet 2026-11-25 |
+| W5 | **Community-Teilen, Versionsprüfung** abschalten (Telemetrie ist aus, geprüft 2026-11-20) | ✅ abgeschaltet 2026-11-25 |
+| W10 | **Container-Protokoll begrenzen** (`--log-opt max-size=10m --log-opt max-file=3` beim nächsten Neuanlegen von Open WebUI) | ✅ begrenzt 2026-11-25 |
 | W6 | **SearXNG:** Suchmaschinen und eigene Protokollierung prüfen | offen |
-| W7 | **Datenschutzhinweis in Open WebUI** (Banner oder Hinweis beim ersten Aufruf): Inhalte werden gespeichert, keine Personendaten Dritter und keine besonderen Kategorien eingeben, temporären Chat nutzen | offen |
-| W8 | **Sicherungen** von Open WebUI: Wo liegen sie, wie lange? Gelöschte Chats leben dort weiter | offen |
+| W7 | **Datenschutzhinweis in Open WebUI** (Banner oder Hinweis beim ersten Aufruf): Inhalte werden gespeichert, keine Personendaten Dritter und keine besonderen Kategorien eingeben, temporären Chat nutzen | ✅ Banner eingerichtet 2026-11-25 |
+| W8 | **Sicherungen** von Open WebUI: Wo liegen sie, wie lange? Gelöschte Chats leben dort weiter | ✅ in der Sicherung der virtuellen Maschine, 7 Tage; danach sind gelöschte Chats auch dort weg |
 | W9 | **Eintrag im Verzeichnis von Verarbeitungstätigkeiten** und Teil der **DSFA** (Abschnitt 9): KI mit frei eingegebenen Inhalten ist der wahrscheinlichste Grund, dass eine DSFA nötig wird | offen |
 
 ---
