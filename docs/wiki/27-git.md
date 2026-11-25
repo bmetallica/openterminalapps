@@ -140,6 +140,38 @@ Repositories anlegen darf jeder. Neue Repositories sind privat.
 Forgejo. Über ihn pflegt OTA die Konten. Das Passwort wird bei jedem Einschalten aus der `.env`
 gesetzt.
 
+## Branch-Schutz als Vorgabe ✅
+
+*Seit dem 2026-11-25.* Unter **Einstellungen → Git → Branch-Schutz als Vorgabe**. Forgejo kennt
+keine Regel für alle Repositories; Branch-Schutz steht dort je Repository. Ist der Schalter an,
+setzt OTA ihn selbst, auf den **Hauptzweig** (meist `main`) jedes Repositorys:
+
+| Regel | Wirkung |
+|---|---|
+| kein direkter Push | Auf den Hauptzweig kommt nichts außer über einen Pull-Request, auch nicht vom Site-Admin und nicht von einem KI-Assistenten im Arbeitsplatz |
+| **Pflicht-Freigaben** (0–5, Vorgabe 1) | So viele **andere** Personen müssen freigeben. Selbst freigeben geht in Forgejo nicht |
+| alte Freigaben verfallen | Kommt nach der Freigabe noch etwas dazu, muss neu freigegeben werden |
+| abgelehnte Prüfung blockiert | Solange jemand „Änderungen angefordert“ hat, wird nicht zusammengeführt |
+| **Auch für Administratoren des Repositorys** (Vorgabe aus) | Aus: Der Eigentümer darf trotz fehlender Freigabe zusammenführen. An: niemand |
+
+**Wann:** beim Einschalten sofort für alle vorhandenen Repositories, danach im 15-Minuten-Takt
+für neue. Ein **leeres** Repository bekommt die Regel erst, wenn es Inhalt hat; sonst würde schon
+der erste Push abgewiesen. Archivierte und gespiegelte bleiben unberührt, ebenso eines, das schon
+eine Regel für den Hauptzweig hat.
+
+**Einmal je Repository.** OTA merkt sich, welche Repositories die Regel bekommen haben, und setzt
+sie dort nie wieder. Wer in einem Repository Administrator ist, kann sie ändern oder entfernen,
+und das bleibt so. Neue Werte für Freigaben gelten für Repositories, die die Regel ab dann
+bekommen. Ausschalten nimmt keine Regel weg.
+
+**Wo die Regel hält:** In einem **persönlichen** Repository ist der Eigentümer Administrator und
+kann sie abschalten. In einer **Organisation**, in der die Entwickler in einem Team nur
+**Schreibrecht** haben, können das nur die Eigentümer der Organisation. Code, der in die
+Produktion geht, gehört deshalb in eine Organisation.
+
+**Im Protokoll:** `git.branchschutz_eingestellt` (wer welche Werte gesetzt hat) und
+`git.branchschutz_gesetzt` (wie viele und welche Repositories eine Regel bekommen haben).
+
 ## Einstellungen ändern
 
 - **Andere Subdomain:**

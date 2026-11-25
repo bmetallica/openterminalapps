@@ -45,6 +45,26 @@ def einstellen(body: dict, request: Request, actor: User = Depends(current_user)
             raise HTTPException(status.HTTP_400_BAD_REQUEST,
                                 "Die Adresse von OTA beginnt mit https://.")
         settings_store.put(db, settings_store.GIT_OTA_URL, url)
+    neu_geschuetzt = False
+    if "branchschutz" in body:
+        eingabe = body.get("branchschutz") or {}
+        regel = git.branchschutz(db)
+        if "freigaben" in eingabe:
+            try:
+                freigaben = int(eingabe["freigaben"])
+            except (TypeError, ValueError):
+                freigaben = -1
+            if not 0 <= freigaben <= 5:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                                    "Zwischen 0 und 5 Freigaben, bitte.")
+            regel["freigaben"] = freigaben
+        if "fuer_admins" in eingabe:
+            regel["fuer_admins"] = bool(eingabe["fuer_admins"])
+        if "an" in eingabe:
+            neu_geschuetzt = bool(eingabe["an"]) and not regel["an"]
+            regel["an"] = bool(eingabe["an"])
+        settings_store.put(db, settings_store.GIT_BRANCHSCHUTZ, regel)
+        audit.record(db, "git.branchschutz_eingestellt", actor=actor, request=request, **regel)
     audit.record(db, "git.eingestellt", actor=actor, request=request,
                  domain=git.domain(db), gruppen=len(git.gruppen_ids(db)))
     db.commit()
@@ -59,6 +79,13 @@ def einstellen(body: dict, request: Request, actor: User = Depends(current_user)
                 git.konten_abgleichen(db)
         except (git.GitFehler, keycloak.KeycloakFehler) as exc:
             raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+        if neu_geschuetzt:
+            # Gleich beim Einschalten, nicht erst im nächsten Takt.
+            try:
+                ergebnis = git.branchschutz_setzen(db)
+            except git.GitFehler as exc:
+                raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+            return {**git.stand(db), "ergebnis": ergebnis}
     return git.stand(db)
 
 

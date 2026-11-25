@@ -465,8 +465,14 @@ export type GitStand = {
   konten: number
   gesperrt: number
   tokens: number
+  /** Branch-Schutz als Vorgabe für jedes Repository (einmal je Repository). */
+  branchschutz: GitBranchschutz
+  /** Wie viele Repositories ihn schon bekommen haben. */
+  branchschutz_repos: number
   ergebnis?: unknown
 }
+
+export type GitBranchschutz = { an: boolean; freigaben: number; fuer_admins: boolean }
 
 export type Permission = { key: string; text: string }
 
@@ -1471,7 +1477,7 @@ export const api = {
   deleteUser: (id: string) =>
     call<{ status: string }>(`/admin/users/${id}`, { method: 'DELETE' }),
   git: () => call<GitStand>('/admin/git'),
-  gitEinstellen: (body: { domain?: string; gruppen?: string[]; ota_url?: string }) =>
+  gitEinstellen: (body: { domain?: string; gruppen?: string[]; ota_url?: string; branchschutz?: Partial<GitBranchschutz> }) =>
     call<GitStand>('/admin/git', { method: 'PUT', body: JSON.stringify(body) }),
   gitAn: () => call<GitStand>('/admin/git/an', { method: 'POST' }),
   gitAus: () => call<GitStand>('/admin/git/aus', { method: 'POST' }),

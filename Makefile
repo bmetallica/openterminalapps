@@ -290,6 +290,7 @@ test:
 	@./scripts/test-ressourcen.sh
 	@./scripts/test-software.sh
 	@./scripts/test-git.sh
+	@./scripts/test-git-branchschutz.sh
 	@./scripts/test-duplizieren.sh
 	@# News: Rechte, Entwürfe, Zähler für die Seitenleiste.
 	@./scripts/test-news.sh

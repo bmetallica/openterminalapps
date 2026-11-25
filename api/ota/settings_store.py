@@ -92,6 +92,12 @@ GIT_AN = "git.an"
 GIT_DOMAIN = "git.domain"
 GIT_GRUPPEN = "git.gruppen"
 GIT_OTA_URL = "git.ota_url"
+# Branch-Schutz als Vorgabe (git.branchschutz_setzen): an/aus, Pflicht-
+# Freigaben, ob er auch für Eigentümer gilt; und welche Repositories ihn
+# schon bekommen haben (Forgejo-Kennungen). Jedes bekommt ihn **einmal**:
+# Wer ihn danach für sein Repository abschaltet, behält das.
+GIT_BRANCHSCHUTZ = "git.branchschutz"
+GIT_BRANCHSCHUTZ_ERLEDIGT = "git.branchschutz_erledigt"
 
 # IDE-AI (Kapitel 28): alles in einem Eintrag — Server, Schlüssel, Modelle
 # samt Kontextfenster, Gruppen. Vorgaben und Prüfung in ide_ai.py.
@@ -139,6 +145,8 @@ DEFAULTS: dict[str, Any] = {
     GIT_DOMAIN: "",
     GIT_GRUPPEN: [],
     GIT_OTA_URL: "",
+    GIT_BRANCHSCHUTZ: {"an": False, "freigaben": 1, "fuer_admins": False},
+    GIT_BRANCHSCHUTZ_ERLEDIGT: [],
     IDE_AI: {},
     OPENCODE: {},
     REPO_MODUS: "zuerst",

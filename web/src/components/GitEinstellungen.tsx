@@ -122,6 +122,55 @@ export function GitEinstellungen({ onToast }: {
         )}
       </Field>
 
+      <Field label={tr('Branch-Schutz als Vorgabe')}
+        hint={tr('OTA schützt den Hauptzweig jedes Repositorys, sobald es Inhalt hat: kein direkter Push, Änderungen nur über einen Pull-Request mit Freigabe durch eine andere Person. Jedes Repository bekommt die Regel einmal; wer dort Administrator ist, kann sie ändern oder entfernen, und OTA setzt sie dann nicht neu. In Organisationen, in denen die Entwickler nur Schreibrecht haben, bleibt sie damit stehen.')}>
+        <Toggle on={stand.branchschutz.an}
+          name={stand.branchschutz.an ? tr('Eingeschaltet') : tr('Ausgeschaltet')}
+          note={stand.branchschutz.an
+            ? tr('{n} Repositories haben die Regel bekommen. Neue folgen spätestens nach 15 Minuten.', { n: stand.branchschutz_repos })
+            : tr('Bestehende Regeln bleiben, wenn es aus ist.')}
+          onChange={(v) => {
+            if (busy) return
+            void tun('schutz', async () => {
+              const s = await api.gitEinstellen({ branchschutz: { an: v } })
+              const n = (s.ergebnis as { gesetzt?: string[] } | undefined)?.gesetzt?.length
+              return v ? tr('Branch-Schutz ist Vorgabe. Eben gesetzt: {n}', { n: n ?? 0 }) : tr('Branch-Schutz ist keine Vorgabe mehr.')
+            })
+          }} />
+      </Field>
+
+      {stand.branchschutz.an && (
+        <>
+          <Field label={tr('Pflicht-Freigaben')}
+            hint={tr('So viele andere Personen müssen einen Pull-Request freigeben. Selbst freigeben geht in Forgejo nicht. 0 heißt: nur kein direkter Push. Gilt für Repositories, die die Regel ab jetzt bekommen.')}>
+            <div className="numfield">
+              <input type="number" min={0} max={5} step={1} aria-label={tr('Pflicht-Freigaben')}
+                defaultValue={stand.branchschutz.freigaben}
+                onBlur={(e) => {
+                  const n = Number(e.target.value)
+                  if (n === stand.branchschutz.freigaben) return
+                  void tun('schutz', async () => {
+                    await api.gitEinstellen({ branchschutz: { freigaben: n } })
+                    return tr('Gespeichert.')
+                  })
+                }} />
+            </div>
+          </Field>
+          <Field label={tr('Auch für Administratoren des Repositorys')}
+            hint={tr('Aus: Der Eigentümer eines Repositorys darf trotz fehlender Freigabe zusammenführen. An: niemand, auch er nicht. Für Einzelprojekte heißt das, dass immer eine zweite Person mitliest.')}>
+            <Toggle on={stand.branchschutz.fuer_admins}
+              name={stand.branchschutz.fuer_admins ? tr('Eingeschaltet') : tr('Ausgeschaltet')}
+              onChange={(v) => {
+                if (busy) return
+                void tun('schutz', async () => {
+                  await api.gitEinstellen({ branchschutz: { fuer_admins: v } })
+                  return tr('Gespeichert.')
+                })
+              }} />
+          </Field>
+        </>
+      )}
+
       {stand.an && (
         <div className="viewer__row" style={{ gap: 10, flexWrap: 'wrap', marginTop: 4 }}>
           <a className="btn" href={`https://${stand.domain}/`} target="_blank" rel="noreferrer">

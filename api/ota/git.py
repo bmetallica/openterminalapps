@@ -30,7 +30,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session as DbSession
 
-from . import agent_client, keycloak, settings_store
+from . import agent_client, audit, keycloak, settings_store
 from .config import settings
 from .db import engine
 from .models import (
@@ -440,7 +440,102 @@ def stand(db: DbSession) -> dict:
         "konten": db.query(GitKonto).count(),
         "gesperrt": db.query(GitKonto).filter(GitKonto.gesperrt.is_(True)).count(),
         "tokens": db.query(GitToken).count(),
+        "branchschutz": branchschutz(db),
+        "branchschutz_repos": len(settings_store.get(db, settings_store.GIT_BRANCHSCHUTZ_ERLEDIGT) or []),
     }
+
+
+# --------------------------------------------------------------------------
+# Branch-Schutz als Vorgabe
+#
+# Forgejo kennt keine Regel für alle Repositories; Branch-Schutz steht je
+# Repository. OTA setzt ihn deshalb selbst, im Takt (main._git_takt), auf den
+# Hauptzweig jedes Repositorys, das schon Inhalt hat. Ein leeres überspringt
+# es: Dort legt erst der erste Push den Zweig an, und eine Regel davor würde
+# genau diesen Push abweisen.
+#
+# **Einmal je Repository.** Was danach geschieht, entscheidet, wer dort
+# Administrator ist: In einem persönlichen Repository ist das der
+# Eigentümer, und schaltet er den Schutz ab, ist das seine Entscheidung. In
+# einer Organisation, in der die Entwickler nur Schreibrecht haben, kann ihn
+# niemand außer den Eigentümern der Organisation entfernen. Dort gehört
+# Code hin, der in die Produktion geht (Handbuch Kapitel 27).
+# --------------------------------------------------------------------------
+
+def branchschutz(db: DbSession) -> dict:
+    wert = settings_store.get(db, settings_store.GIT_BRANCHSCHUTZ)
+    wert = wert if isinstance(wert, dict) else {}
+    try:
+        freigaben = min(max(int(wert.get("freigaben", 1)), 0), 5)
+    except (TypeError, ValueError):
+        freigaben = 1
+    return {"an": bool(wert.get("an")), "freigaben": freigaben,
+            "fuer_admins": bool(wert.get("fuer_admins"))}
+
+
+def _regel(zweig: str, regel: dict) -> dict:
+    return {
+        "rule_name": zweig,
+        "branch_name": zweig,
+        # Kein direkter Push: Änderungen nur über einen Pull-Request.
+        "enable_push": False,
+        "required_approvals": regel["freigaben"],
+        # Eine Freigabe gilt für das, was geprüft wurde. Kommt danach etwas
+        # dazu, muss neu freigegeben werden.
+        "dismiss_stale_approvals": True,
+        "block_on_rejected_reviews": True,
+        # Sonst darf der Eigentümer trotz fehlender Freigabe zusammenführen.
+        "apply_to_admins": regel["fuer_admins"],
+    }
+
+
+def branchschutz_setzen(db: DbSession) -> dict:
+    """Allen Repositories ohne Branch-Schutz auf dem Hauptzweig einen geben,
+    jedem einmal. Gibt zurück, wo er gesetzt wurde."""
+    regel = branchschutz(db)
+    if not regel["an"] or not an(db):
+        return {"gesetzt": [], "fehler": []}
+    erledigt = {int(i) for i in settings_store.get(db, settings_store.GIT_BRANCHSCHUTZ_ERLEDIGT) or []}
+    gesetzt: list[str] = []
+    fehler: list[str] = []
+    neu = False
+    seite = 1
+    while True:
+        daten = _pruefen(_ruf("GET", "/repos/search", params={"limit": 50, "page": seite}),
+                         "Repositories lesen").json().get("data") or []
+        for repo in daten:
+            if (repo["id"] in erledigt or repo.get("empty") or repo.get("archived")
+                    or repo.get("mirror")):
+                continue
+            voll = repo["full_name"]
+            zweig = repo.get("default_branch") or "main"
+            try:
+                vorhanden = _pruefen(_ruf("GET", f"/repos/{voll}/branch_protections"),
+                                     f"Branch-Schutz von {voll} lesen").json() or []
+                if not any(zweig in (v.get("rule_name"), v.get("branch_name")) for v in vorhanden):
+                    _pruefen(_ruf("POST", f"/repos/{voll}/branch_protections",
+                                  json=_regel(zweig, regel)),
+                             f"Branch-Schutz für {voll}")
+                    gesetzt.append(f"{voll}:{zweig}")
+            except GitFehler as exc:
+                # Nicht als erledigt merken: Der nächste Takt versucht es wieder.
+                log.warning("%s", exc)
+                fehler.append(voll)
+                continue
+            erledigt.add(int(repo["id"]))
+            neu = True
+        if len(daten) < 50:
+            break
+        seite += 1
+    if neu:
+        settings_store.put(db, settings_store.GIT_BRANCHSCHUTZ_ERLEDIGT, sorted(erledigt))
+    if gesetzt:
+        audit.record(db, "git.branchschutz_gesetzt", object_type="git", object_id="branchschutz",
+                     anzahl=len(gesetzt), repositories=gesetzt[:50],
+                     freigaben=regel["freigaben"], fuer_admins=regel["fuer_admins"])
+        log.info("OTA-Git: Branch-Schutz gesetzt für %s", ", ".join(gesetzt))
+    db.commit()
+    return {"gesetzt": gesetzt, "fehler": fehler}
 
 
 def nach_aenderung(db: DbSession, user: User | None = None) -> None:

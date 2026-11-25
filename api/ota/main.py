@@ -318,6 +318,11 @@ def _git_takt() -> None:
                 db.rollback()
         git.tokens_aufraeumen(db)
         git.konten_abgleichen(db)
+        try:
+            git.branchschutz_setzen(db)
+        except git.GitFehler as exc:
+            log.warning("OTA-Git: Branch-Schutz nicht gesetzt: %s", exc)
+            db.rollback()
 
 
 def _erweiterungen_takt() -> None:

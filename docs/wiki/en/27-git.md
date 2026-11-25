@@ -134,6 +134,37 @@ Everyone may create repositories. New repositories are private.
 form. OTA maintains the accounts through it. The password is set from `.env` every time it is turned
 on.
 
+## Branch protection by default ✅
+
+*Since 2026-11-25.* Under **Settings → Git → Branch protection by default**. Forgejo has no rule
+for all repositories; branch protection is set per repository there. With the switch on, OTA sets
+it itself, on the **main branch** (usually `main`) of every repository:
+
+| Rule | Effect |
+|---|---|
+| no direct push | Nothing reaches the main branch except through a pull request, not even from the site admin or from an AI assistant in the workspace |
+| **Required approvals** (0–5, default 1) | This many **other** people must approve. Approving your own is not possible in Forgejo |
+| stale approvals are dismissed | If something is added after the approval, it has to be approved again |
+| a rejected review blocks | As long as someone has "requested changes", nothing is merged |
+| **Also for repository administrators** (default off) | Off: the owner may merge despite missing approval. On: nobody may |
+
+**When:** immediately for all existing repositories when switched on, then every 15 minutes for
+new ones. An **empty** repository gets the rule only once it has content; otherwise the very first
+push would be refused. Archived and mirrored repositories stay untouched, as does one that already
+has a rule for the main branch.
+
+**Once per repository.** OTA remembers which repositories have received the rule and never sets it
+there again. Whoever is administrator in a repository can change or remove it, and that stays so.
+New values for approvals apply to repositories that receive the rule from then on. Switching off
+removes no rule.
+
+**Where the rule holds:** in a **personal** repository the owner is administrator and can switch it
+off. In an **organisation** where developers only have **write access** in a team, only the
+organisation's owners can. Code that goes into production therefore belongs in an organisation.
+
+**In the audit log:** `git.branchschutz_eingestellt` (who set which values) and
+`git.branchschutz_gesetzt` (how many and which repositories received a rule).
+
 ## Changing settings
 
 - **Another subdomain:**
