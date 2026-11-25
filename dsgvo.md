@@ -1,6 +1,6 @@
 # Datenschutz — Betrachtung nach DSGVO und BDSG
 
-**Stand: 2026-11-20**, am Quelltext geprüft. Die erste Fassung entstand am 2026-09-04 (Commit
+**Stand: 2026-11-25**, am Quelltext geprüft. Die erste Fassung entstand am 2026-09-04 (Commit
 `99e9400`); seitdem dazugekommen sind die KI-Nutzungsstatistik, das Gedächtnis für opencode, das
 Softwaremonitoring, das Terminal-Protokoll, OTA-Git und der Hinweis „DSGVO“ in der Seitenleiste.
 
@@ -241,10 +241,10 @@ freiwillig (§ 26 Abs. 2 BDSG), und beim ersten Widerruf wäre die Grundlage weg
 | Gedächtnis (Erweiterung) | ✅ | 180 Tage ohne Aktivität; mit dem Konto |
 | Softwaremonitoring | ✅ | mit dem Ende des Arbeitsplatzes |
 | Container-Protokolle (auch Traefik) | ✅ rotiert | 10 MB × 3 je Container |
-| Sicherungen | ✅ | `keep_daily` / `keep_weekly` |
+| Sicherungen | ✅ | `keep_daily` / `keep_weekly`; die eines **gelöschten** Kontos nur mit der Einstellung „Löschen“ (4.1) |
 | `sessions`, `net_leases` | mit dem Konto | keine eigene Frist |
 | `app_streams` (laufende Anwendungen) | beim Schliessen | — |
-| Zuhause, Ablagen auf der Platte | ❌ **nie automatisch** | — |
+| Zuhause, Ablagen auf der Platte | ⚙️ **einstellbar** (seit 2026-11-25): beim Löschen des Kontos behalten (Vorgabe) oder nach einer Frist löschen | 0–365 Tage nach dem Löschen des Kontos |
 | Konto in Keycloak | wird **gesperrt**, nicht gelöscht | — |
 | Konto in OTA-Git, Repositories | wird **gesperrt**, nicht gelöscht | — |
 
@@ -256,20 +256,29 @@ Im Quelltext (`api/ota/routers/admin.py`, `delete_user`):
 Netzadressen, eigene Kachelnamen (Kaskade); **Root-Arbeitsplätze samt Docker-Daten**; alle Daten im
 **Gedächtnis**; Git-Tokens.
 
-**Bleibt:**
+**Je nach Einstellung** (*Einstellungen → Löschen von Konten*, seit 2026-11-25; Wiki Kapitel 08):
 
-1. **Das Zuhause** unter `/srv/ota/profiles/<konto-id>/` — mit allem darin. Die API sagt es
-   selbst: „Das Profil auf der Platte bleibt bestehen.“
-2. **Die Ablagen** unter `userfiles/` und was in `groupfiles/` und `shared/` liegt.
+* **Behalten** (Vorgabe): Zuhause und Ablage bleiben auf der Platte, die Sicherungen des Kontos
+  auch, und zwar **unbegrenzt**: Die Aufbewahrung behält die letzten Stände je Name, und für ein
+  gelöschtes Konto kommt keiner mehr dazu.
+* **Löschen nach N Tagen** (0 = sofort): Zuhause und Ablage wandern in einen Papierkorb und werden
+  nach der Frist endgültig gelöscht, **samt den Sicherungen des Kontos**. Jeder Schritt steht im
+  Protokoll (`user.daten_entfernt`, `user.daten_geloescht`), die Regel selbst mit Wert und
+  Zeitpunkt (`settings.konto_daten`).
+
+**Bleibt in jedem Fall:**
+
+1. Was in `groupfiles/` und `shared/` liegt (gehört der Gruppe bzw. allen).
+2. Datenbanksicherungen mit dem Konto, bis sie aus der Aufbewahrung fallen.
 3. **Das Konto in Keycloak**, gesperrt (sonst legte die nächste Anmeldung es neu an).
 4. **Das Konto in OTA-Git** samt Repositories, gesperrt.
 5. **Das Protokoll**: `actor_name` bleibt bis zum Ablauf der Frist stehen.
 6. **Die KI-Statistik** mit Namen bis zum Ablauf ihrer Frist (2.5).
-7. **Die Sicherungen**, bis die Aufbewahrungsregel greift.
+7. **Das Konto in Open WebUI** mit allen Chats (Abschnitt 12, W3).
 
-👉 **Ein Löschersuchen nach Art. 17 lässt sich nicht mit einem Knopf erfüllen.** Punkte 1–4 sind
-Handarbeit. Der Betreiber hat „Konto endgültig entfernen“ am 2026-09-04 bewusst abgewählt; damit
-braucht es ein **Löschkonzept mit Fristen** und eine kurze Anleitung. Dass Namen in Protokoll und
+👉 **Mit der Einstellung „Löschen“ erfüllt das Löschen des Kontos ein Löschersuchen nach Art. 17
+für OTA weitgehend mit einem Knopf**; offen bleiben Keycloak, OTA-Git und Open WebUI. Mit
+„Behalten“ ist es Handarbeit nach einem **Löschkonzept mit Fristen**. Dass Namen in Protokoll und
 Statistik bis zum Fristablauf stehen bleiben, ist mit Art. 17 Abs. 3 lit. b/e verteidigbar — weil
 es eine dokumentierte Frist gibt.
 
@@ -277,7 +286,7 @@ es eine dokumentierte Frist gibt.
 
 | Datum | Frist | Umsetzung |
 |---|---|---|
-| Zuhause und Ablagen nach Ausscheiden | **30 Tage archiviert, dann gelöscht** | von Hand nach Anleitung |
+| Zuhause und Ablagen nach Ausscheiden | **30 Tage archiviert, dann gelöscht** | ✅ Einstellung „Löschen“, Frist 30 Tage (seit 2026-11-25) |
 | Keycloak-Konto | nach derselben Frist löschen | Keycloak-Konsole |
 | Git-Konto | Repositories übergeben, dann Konto löschen | Forgejo-Verwaltung |
 | alles andere | wie in der Tabelle oben | ✅ vorhanden |
@@ -416,7 +425,7 @@ eine Kopie an einen getrennten Ort (Syslog-Server) gibt es nicht.
 | ~~3~~ | ~~Dateirechte auf Sicherungen und Profile~~ | ✅ 2026-09-04 |
 | ~~4~~ | ~~Aufbewahrungsfristen für `audit_log` und Container-Protokolle~~ | ✅ 2026-09-04/05 |
 | 5 | **Datenschutzhinweis** | ⚠️ teilweise: Punkt „DSGVO“ existiert (sichtbar, solange die KI-Statistik läuft). **Offen: Text prüfen, verantwortliche Stelle und Datenschutzbeauftragte eintragen**; ggf. dauerhaft sichtbar machen |
-| ~~6~~ | „Konto endgültig entfernen“ | **abgewählt 2026-09-04** — stattdessen Löschkonzept und Anleitung (4.2) |
+| ~~6~~ | „Konto endgültig entfernen“ | **abgewählt 2026-09-04**; dafür seit 2026-11-25 die Einstellung, Zuhause, Ablage und Sicherungen gelöschter Konten nach einer Frist zu löschen (4.1). Keycloak und OTA-Git sperren weiterhin nur |
 | 7 | **Auskunftsfunktion** je Konto | ⚠️ für die KI-Nutzung vorhanden, sonst offen |
 | 8 | **Betriebsvereinbarung** | offen — jetzt mit KI-Statistik und Webterminal (Abschnitt 6) |
 | 9 | **Schwellwertanalyse** dokumentieren | offen |

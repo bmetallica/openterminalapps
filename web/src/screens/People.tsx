@@ -179,6 +179,7 @@ function UserEditor({ user, groups, onSaved, onClose, onToast }: {
 
   async function remove() {
     if (!user) return
+    if (!window.confirm(tr('„{name}“ löschen? Ob Zuhause und Ablage mitgehen, steht unter Einstellungen → Löschen von Konten.', { name: user.username }))) return
     setBusy(true)
     try {
       const res = await api.deleteUser(user.id)

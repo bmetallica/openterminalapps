@@ -45,6 +45,7 @@ from . import ide_ai
 from . import opencode as opencode_ops
 from . import software as software_ops
 from . import kerne
+from . import konto_daten
 from . import lxcfs as lxcfs_ops
 from . import clipboard as clip_scripts
 from . import discover
@@ -3770,6 +3771,39 @@ def kerne_raeumen() -> dict[str, int]:
     if ergebnis["dateien"]:
         _usage.clear()
     return ergebnis
+
+
+class KontoDatenRequest(BaseModel):
+    name: str = ""
+    sofort: bool = False
+
+
+@app.post("/konten/{kennung}/daten-entfernen", dependencies=[Depends(require_token)])
+def konto_daten_entfernen(kennung: str, req: KontoDatenRequest) -> dict[str, Any]:
+    """Zuhause und Ablage eines gelöschten Kontos in den Papierkorb
+    (konto_daten.py). Ruft die API beim Löschen, wenn die Verwaltung es so
+    eingestellt hat."""
+    try:
+        ergebnis = konto_daten.entfernen(kennung, req.name, req.sofort)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Keine gültige Kennung") from exc
+    except OSError as exc:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR,
+                            f"Daten nicht verschoben: {exc}") from exc
+    _usage.clear()
+    return ergebnis
+
+
+@app.post("/konten/papierkorb-leeren", dependencies=[Depends(require_token)])
+def konten_papierkorb_leeren(tage: int) -> dict[str, Any]:
+    """Was länger als `tage` im Papierkorb liegt, endgültig löschen. Ruft die
+    API einmal am Tag."""
+    return konto_daten.leeren(tage)
+
+
+@app.get("/konten/papierkorb", dependencies=[Depends(require_token)])
+def konten_papierkorb() -> list[dict[str, Any]]:
+    return konto_daten.inhalt()
 
 
 @app.get("/profiles/{username}/usage", dependencies=[Depends(require_token)])

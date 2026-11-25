@@ -436,8 +436,56 @@ sieht im Admin-UI einen unmissverständlichen Hinweis.
 
 ## Offboarding
 
-Beim Ausscheiden: Konto deaktivieren, Sessions beenden, Profil archivieren, dann löschen. Profile
-enthalten personenbezogene Daten (SSH-Schlüssel, Browser-Verlauf) und unterliegen der DSGVO.
+Beim Ausscheiden: Konto deaktivieren, Sessions beenden, dann löschen. Profile enthalten
+personenbezogene Daten (SSH-Schlüssel, Browser-Verlauf, Verläufe der KI-Assistenten) und
+unterliegen der DSGVO.
+
+### Was mit den Daten eines gelöschten Kontos geschieht ✅
+
+*Seit dem 2026-11-25.* Unter **Einstellungen → Löschen von Konten**:
+
+| Einstellung | Zuhause und Ablage | Sicherungen des Kontos |
+|---|---|---|
+| **Behalten** *(Vorgabe)* | bleiben auf der Platte, gelöscht wird von Hand | bleiben, auch über die Aufbewahrung hinaus (siehe unten) |
+| **Löschen**, Frist N Tage | kommen in den Papierkorb und werden nach N Tagen endgültig gelöscht | werden mit dem Zuhause gelöscht |
+| **Löschen**, Frist 0 | werden sofort gelöscht | werden sofort gelöscht |
+
+Immer, unabhängig von der Einstellung, gehen mit: Root-Arbeitsplätze samt Docker-Daten, die Daten
+in Erweiterungen (Gedächtnis) und die Git-Tokens. Immer bleiben: das Konto in Keycloak und in
+OTA-Git, beide **gesperrt**, und das Konto in Open WebUI (eine eigene Anwendung, die OTA nicht
+anfasst; dort unter *Administration → Benutzer* löschen).
+
+**Der Papierkorb** liegt in der jeweiligen Wurzel: `/srv/ota/profiles/.geloescht/<Kennung>` und
+`/srv/ota/userfiles/.geloescht/<Kennung>`, nur für root lesbar. Daneben steht
+`<Kennung>.json` mit Zeitpunkt und Anmeldenamen. Die Verweise unter dem Namen
+(`/srv/ota/profiles/anna`) verschwinden sofort. Gelöscht wird beim täglichen Aufräumen der API.
+Es gilt die Frist, die **dann** eingestellt ist, auch für Konten von früher; und was im
+Papierkorb liegt, wird auch dann gelöscht, wenn die Einstellung inzwischen auf „Behalten“ steht.
+
+**Ein Irrtum innerhalb der Frist** lässt sich von Hand zurückholen. Das gelöschte Konto selbst
+kommt nicht zurück: Meldet sich der Mensch wieder an (Keycloak-Konto entsperren), bekommt er
+eine neue Kennung. Seine Daten ziehen dann um:
+
+```bash
+ALT=<Kennung aus dem Papierkorb>; NEU=<neue Kennung, Verwaltung → Nutzer>
+mv /srv/ota/profiles/.geloescht/$ALT /srv/ota/profiles/$NEU      # Zuhause; vorher ein leeres $NEU entfernen
+mv /srv/ota/userfiles/.geloescht/$ALT /srv/ota/userfiles/$NEU    # Ablage
+rm /srv/ota/profiles/.geloescht/$ALT.json /srv/ota/userfiles/.geloescht/$ALT.json
+```
+
+**Warum die Sicherungen mitgehen:** Die Aufbewahrung behält die letzten `keep_daily` Sicherungen
+je Name. Für ein gelöschtes Konto entstehen keine neuen mehr, also verdrängt auch nichts die alten.
+Mit „Behalten“ bleiben sie deshalb unbegrenzt; dann gehören sie in die Handarbeit des
+Löschkonzepts. Sicherungen der Datenbank enthalten das Konto weiter, bis sie aus der Aufbewahrung
+fallen.
+
+**Ein echtes Verzeichnis unter dem Namen** (`/srv/ota/profiles/anna` als Ordner, nicht als
+Verweis) stammt von vor der Umstellung auf Kennungen und wird nie angefasst.
+
+**Im Protokoll:** `settings.konto_daten` (wer die Regel wann auf welchen Wert gesetzt hat),
+`user.daten_entfernt` (in den Papierkorb bzw. sofort gelöscht), `user.daten_geloescht` (nach der
+Frist endgültig) und `user.daten_nicht_entfernt`, wenn der Agent nicht erreichbar war. Dann
+liegen die Daten weiter an ihrem Platz und müssen von Hand gelöscht werden.
 
 ## Audit-Log
 

@@ -110,6 +110,13 @@ REPO_BAU_SNAPSHOT = "repo.bau_snapshot"
 REPO_ALTER_GELB = "repo.alter_gelb"
 REPO_ALTER_ROT = "repo.alter_rot"
 
+# Was mit Zuhause und Ablage geschieht, wenn ein Konto gelöscht wird
+# (admin.delete_user, agent/otaagent/konto_daten.py): behalten (die Vorgabe,
+# wie bisher) oder nach `tage` Tagen löschen, 0 = sofort. Die Frist ist der
+# Spielraum für einen Irrtum.
+KONTO_DATEN = "konto.daten_loeschen"
+KONTO_DATEN_TAGE_MAX = 365
+
 DEFAULTS: dict[str, Any] = {
     # Acht Stunden: ein Arbeitstag. Wer morgens kommt, meldet sich einmal an.
     AUTH_IDLE_MINUTES: 480,
@@ -138,6 +145,7 @@ DEFAULTS: dict[str, Any] = {
     REPO_BAU_SNAPSHOT: "",
     REPO_ALTER_GELB: 7,
     REPO_ALTER_ROT: 30,
+    KONTO_DATEN: {"an": False, "tage": 30},
 }
 
 _cache: dict[str, tuple[float, Any]] = {}
@@ -215,3 +223,14 @@ def allowed_origins(db: DbSession) -> list[str]:
 def breakglass(db: DbSession) -> str:
     """Der Name des Notfallkontos. Leer heisst: keines bestimmt."""
     return str(get(db, BREAKGLASS) or "")
+
+
+def konto_daten(db: DbSession) -> dict[str, Any]:
+    """Die Regel für die Daten gelöschter Konten, geprüft wie beim Schreiben."""
+    wert = get(db, KONTO_DATEN)
+    wert = wert if isinstance(wert, dict) else {}
+    try:
+        tage = int(wert.get("tage", 30))
+    except (TypeError, ValueError):
+        tage = 30
+    return {"an": bool(wert.get("an")), "tage": min(max(tage, 0), KONTO_DATEN_TAGE_MAX)}

@@ -549,6 +549,9 @@ export type GlobalSettings = {
   app_origins: string[]
   /** Was ein Konto ohne jede Gruppe auf seinem Dashboard liest. */
   ohne_gruppe_hinweis: string
+  /** Zuhause und Ablage gelöschter Konten löschen, nach so vielen Tagen (0 = sofort). */
+  konto_daten_loeschen: boolean
+  konto_daten_frist_tage: number
 }
 
 /** Ein Programm, wie es im Image gefunden wurde. */

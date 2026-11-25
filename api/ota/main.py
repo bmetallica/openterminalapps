@@ -242,6 +242,14 @@ def _protokoll_aufraeumen() -> dict[str, int]:
         return audit.aufraeumen(db)
 
 
+def _konten_papierkorb() -> dict:
+    """Zuhause und Ablage gelöschter Konten nach Ablauf der Frist (konto_daten.py)."""
+    from . import konto_daten
+
+    with SessionLocal() as db:
+        return konto_daten.papierkorb_leeren(db)
+
+
 def _verzeichnis_takt() -> dict | None:
     """Der Abgleich der Verzeichnisgruppen, wenn er im Takt dran ist — und
     nur, wenn ueberhaupt ein Verzeichnis angebunden ist."""
@@ -365,6 +373,13 @@ async def _scheduler() -> None:
                              weg["anfragen"], weg["stunden"])
             except Exception as exc:  # noqa: BLE001 — derselbe Grund wie oben
                 log.warning("KI-Nutzung nicht aufgeraeumt: %s", exc)
+            try:
+                weg = await asyncio.to_thread(_konten_papierkorb)
+                if weg.get("entfernt"):
+                    log.info("Daten gelöschter Konten endgültig entfernt: %s",
+                             ", ".join(e.get("name") or e["kennung"] for e in weg["entfernt"]))
+            except Exception as exc:  # noqa: BLE001 — derselbe Grund wie oben
+                log.warning("Papierkorb gelöschter Konten nicht geleert: %s", exc)
             # Speicherabbilder abgestuerzter Programme aus den Zuhausen
             # (agent/otaagent/kerne.py). Beim Messen vor einem Start raeumt
             # der Agent ohnehin das eine Zuhause; das hier haelt die Anzeige

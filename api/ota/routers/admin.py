@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session as DbSession
 
-from .. import agent_client, audit, erweiterungen, git, keycloak, verknuepfen, verzeichnis
+from .. import agent_client, audit, erweiterungen, git, keycloak, konto_daten, verknuepfen, verzeichnis
 import os
 import re
 from ..db import get_db
@@ -455,6 +455,7 @@ def delete_user(
                             "Das ist der letzte Administrator und kann nicht gelöscht werden.")
 
     name = user.username
+    kennung = str(user.id)
     # Seine Root-Arbeitsplaetze gehen mit — samt Docker-Daten.
     verknuepfen.root_plaetze_entfernen(db, user)
     # In Keycloak wird gesperrt, nicht geloescht (keycloak.py: „Nichts
@@ -474,7 +475,10 @@ def delete_user(
     audit.record(db, "user.deleted", actor=actor, object_type="user",
                  object_id=name, request=request)
     db.commit()
-    return {"status": f"{name} gelöscht.{gesperrt} Das Profil auf der Platte bleibt bestehen."}
+    # Zuhause und Ablage: je nach Einstellung behalten, in den Papierkorb oder
+    # sofort weg (konto_daten.py).
+    daten = konto_daten.nach_dem_loeschen(db, kennung, name, actor)
+    return {"status": f"{name} gelöscht.{gesperrt}{daten}"}
 
 
 # --------------------------------------------------------------------------
@@ -777,6 +781,8 @@ def read_settings(db: DbSession = Depends(get_db)) -> dict:
         "disk_floor_gb": settings_store.disk_floor_bytes(db) // 1024 ** 3,
         "app_origins": settings_store.allowed_origins(db),
         "ohne_gruppe_hinweis": settings_store.get(db, settings_store.OHNE_GRUPPE_HINWEIS),
+        "konto_daten_loeschen": settings_store.konto_daten(db)["an"],
+        "konto_daten_frist_tage": settings_store.konto_daten(db)["tage"],
     }
 
 
@@ -840,6 +846,22 @@ def write_settings(
             raise HTTPException(status.HTTP_400_BAD_REQUEST,
                                 "Eine Untergrenze zwischen 0 und 10000 GB, bitte.")
         settings_store.put(db, settings_store.DISK_FLOOR_GB, body.disk_floor_gb)
+
+    if body.konto_daten_loeschen is not None or body.konto_daten_frist_tage is not None:
+        regel = settings_store.konto_daten(db)
+        if body.konto_daten_frist_tage is not None:
+            if not 0 <= body.konto_daten_frist_tage <= settings_store.KONTO_DATEN_TAGE_MAX:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                                    "Eine Frist zwischen 0 und 365 Tagen, bitte.")
+            regel["tage"] = body.konto_daten_frist_tage
+        if body.konto_daten_loeschen is not None:
+            regel["an"] = body.konto_daten_loeschen
+        settings_store.put(db, settings_store.KONTO_DATEN, regel)
+        # Eigener Eintrag mit dem Wert: Wann welche Regel galt, ist für ein
+        # Löschersuchen eine Frage, die sich später stellt.
+        audit.record(db, "settings.konto_daten", actor=actor, object_type="settings",
+                     object_id="konto_daten", request=request,
+                     loeschen=regel["an"], frist_tage=regel["tage"])
 
     audit.record(db, "settings.updated", actor=actor, object_type="settings",
                  object_id="global", request=request)

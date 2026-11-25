@@ -430,8 +430,54 @@ it on sees an unmistakable notice in the admin UI.
 
 ## Offboarding
 
-When someone leaves: disable the account, end sessions, archive the profile, then delete. Profiles
-contain personal data (SSH keys, browser history) and are subject to the GDPR.
+When someone leaves: disable the account, end sessions, then delete. Profiles contain personal data
+(SSH keys, browser history, AI assistant histories) and are subject to the GDPR.
+
+### What happens to the data of a deleted account ✅
+
+*Since 2026-11-25.* Under **Settings → Deleting accounts**:
+
+| Setting | Home and storage | Backups of the account |
+|---|---|---|
+| **Keep** *(default)* | stay on disk, deleted by hand | stay, even beyond the retention (see below) |
+| **Delete**, grace period N days | go to the recycle bin and are deleted for good after N days | are deleted together with the home |
+| **Delete**, grace period 0 | are deleted immediately | are deleted immediately |
+
+Always, regardless of the setting, removed as well: root workspaces including their Docker data,
+the data in extensions (memory) and the Git tokens. Always kept: the account in Keycloak and in OTA
+Git, both **locked**, and the account in Open WebUI (a separate application that OTA does not
+touch; delete it there under *Admin panel → Users*).
+
+**The recycle bin** lives in each root: `/srv/ota/profiles/.geloescht/<id>` and
+`/srv/ota/userfiles/.geloescht/<id>`, readable by root only. Next to it is `<id>.json` with the time
+and the sign-in name. The links under the name (`/srv/ota/profiles/anna`) disappear immediately.
+Deletion happens during the API's daily cleanup. The grace period that applies is the one set
+**then**, also for accounts deleted earlier; and what is in the recycle bin is deleted even if the
+setting has since been switched to "Keep".
+
+**A mistake within the grace period** can be undone by hand. The deleted account itself does not
+come back: if the person signs in again (unlock the Keycloak account), they get a new id. Their data
+then moves:
+
+```bash
+OLD=<id from the recycle bin>; NEW=<new id, Administration → Users>
+mv /srv/ota/profiles/.geloescht/$OLD /srv/ota/profiles/$NEW      # home; remove an empty $NEW first
+mv /srv/ota/userfiles/.geloescht/$OLD /srv/ota/userfiles/$NEW    # storage
+rm /srv/ota/profiles/.geloescht/$OLD.json /srv/ota/userfiles/.geloescht/$OLD.json
+```
+
+**Why the backups go too:** retention keeps the last `keep_daily` backups per name. A deleted
+account gets no new ones, so nothing pushes the old ones out. With "Keep" they therefore stay
+indefinitely and belong to the manual part of the deletion policy. Database backups still contain
+the account until they drop out of retention.
+
+**A real directory under the name** (`/srv/ota/profiles/anna` as a folder, not a link) dates from
+before the switch to ids and is never touched.
+
+**In the audit log:** `settings.konto_daten` (who set the rule to which value and when),
+`user.daten_entfernt` (moved to the recycle bin or deleted immediately), `user.daten_geloescht`
+(deleted for good after the grace period) and `user.daten_nicht_entfernt` if the agent was not
+reachable. The data then stays where it is and has to be deleted by hand.
 
 ## Audit log
 

@@ -767,6 +767,10 @@ class SettingsIn(BaseModel):
     disk_floor_gb: int | None = None
     # Was ein Konto ohne jede Gruppe auf seinem Dashboard liest.
     ohne_gruppe_hinweis: str | None = Field(default=None, max_length=1000)
+    # Zuhause und Ablage gelöschter Konten löschen, nach so vielen Tagen
+    # (0 = sofort). Siehe konto_daten.py.
+    konto_daten_loeschen: bool | None = None
+    konto_daten_frist_tage: int | None = None
 
 
 

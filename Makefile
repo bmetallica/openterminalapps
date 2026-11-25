@@ -283,6 +283,9 @@ test:
 	@# Keycloak, Umzug lokaler Bestandskonten mit ihrem Passwort.
 	@./scripts/test-konten.sh
 	@echo
+	@# Daten gelöschter Konten: behalten, Papierkorb mit Frist, sofort.
+	@./scripts/test-konto-daten.sh
+	@echo
 	@# Geaenderte CPU/RAM erreichen vorhandene Container (docker update).
 	@./scripts/test-ressourcen.sh
 	@./scripts/test-software.sh

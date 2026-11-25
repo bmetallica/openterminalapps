@@ -534,6 +534,9 @@ explains it in full.
 - **Roles and permissions** per group, enforced in the API. Administrators are `root` in their own
   container. Accounts are disabled instead of deleted, and every administrative action is in the
   audit log
+- **Data of deleted accounts** kept or deleted, as administration chooses: home, storage and
+  backups go to a recycle bin and are deleted for good after a grace period (0–365 days)
+  ([chapter 8](docs/wiki/en/08-nutzer-und-gruppen.md#what-happens-to-the-data-of-a-deleted-account-))
 - **Third-party web applications** in the catalogue (Open WebUI, Grafana, …): OTA creates the OIDC
   access and decides who sees the tile **and who may sign in there**:
   - Keycloak checks this itself, even when the address is called directly; without a group nobody
@@ -746,6 +749,7 @@ make test
 | `test-news.sh` | News: everyone reads, writing only with `settings.manage`; draft invisible and not new; publishing counts for the sidebar, opening resets, a correction does not count again; pinned on top; text stored unchanged; create, change, delete in the log |
 | `test-ide-ai.sh` | IDE-AI: fetch models from the AI server, wrong input refused, API key stays on the server, test question; packages in the package source, only the agent gets the file; in every template with an editor config.yaml with mark, context window and response length, telemetry off, Continue linked in VS Code/VSCodium and JetBrains, firewall lets the AI server through, a question from the workspace gets an answer, own config.yaml stays; "set up again" removes Marketplace copies in JetBrains and VSCodium, switches Continue on and puts the own config.yaml aside; turned off, everything is gone again |
 | `test-opencode.sh` | opencode and extensions: settings and preview, nonsense refused; pair the memory (wrong key refused), configure, test embeddings, Traefik routes; in a standard workspace with an editor opencode installs alongside IDE-AI; in a root workspace managed configuration, prompt addition, token, package; MCP from the workspace, the contract not; opencode with a fake model: real session instead of the forged one, a subagent writes into the root session, a new session sees nothing, fields `ota_*` invisible to the model; view only signed in and only own workspaces, forged headers have no effect; takeover of an own installation, own default model stays; stopping revokes, resuming issues a new token, the memory is back |
+| `test-konto-daten.sh` | Data of deleted accounts: "Keep" leaves home and storage in place; "Delete" moves them to the recycle bin, removes the links under the name and deletes them after the grace period together with the backups, other accounts' backups stay; grace period 0 deletes immediately; invalid periods refused, rule in the audit log |
 | `test-konten.sh` | Central sign-in accounts: creating in OTA creates in Keycloak (including the required password change), locally it does not get in; changes, password, second factor, locking and deleting take effect in Keycloak; My account goes through Keycloak; a local legacy account moves over with its password, the emergency account does not |
 | `test-clipboard-bridge.sh` | Copying between two applications in the same workspace: both directions, umlauts, an image, a megabyte, after a pause, and switched off |
 | `test-i18n` (`scripts/i18n-pruefen.py`) | Bilingual: every interface text and every server message has an English entry, no German text bypasses the translation, and every manual chapter exists in English with the same structure |

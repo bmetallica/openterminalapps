@@ -101,6 +101,20 @@ def kerne_raeumen() -> dict[str, Any]:
     return _call("POST", "/profiles/kerne-raeumen", timeout=900.0)
 
 
+def konto_daten_entfernen(kennung: str, name: str, sofort: bool) -> dict[str, Any]:
+    return _call("POST", f"/konten/{kennung}/daten-entfernen",
+                 json={"name": name, "sofort": sofort})
+
+
+def konten_papierkorb_leeren(tage: int) -> dict[str, Any]:
+    # Ein grosses Zuhause zu loeschen dauert; mehrere am selben Tag laenger.
+    return _call("POST", "/konten/papierkorb-leeren", params={"tage": tage}, timeout=1800.0)
+
+
+def konten_papierkorb() -> list[dict[str, Any]]:
+    return _call("GET", "/konten/papierkorb")
+
+
 def list_images() -> list[dict[str, Any]]:
     return _call("GET", "/images")
 

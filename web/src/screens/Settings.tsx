@@ -134,6 +134,50 @@ export function Settings({ onToast }: { onToast: (m: string, tone?: 'ok' | 'bad'
         </p>
       </div>
 
+      <div className="section__head" style={{ marginTop: 26 }} id="konto-loeschen">
+        <span className="silk">{t('Löschen von Konten')}</span><span className="section__rule" />
+      </div>
+
+      <div className="panel" style={{ padding: '18px 20px', maxWidth: 620 }}>
+        <Field
+          label={t('Zuhause und Ablage eines gelöschten Kontos')}
+          hint={t('„Behalten“ lässt die Daten auf der Platte; gelöscht wird dann von Hand nach dem Löschkonzept. „Löschen“ legt sie beim Löschen des Kontos in einen Papierkorb und entfernt sie nach der Frist endgültig, samt den Sicherungen dieses Kontos.')}>
+          <Segmented
+            label={t('Zuhause und Ablage eines gelöschten Kontos')}
+            value={data.konto_daten_loeschen ? 'loeschen' : 'behalten'}
+            options={[
+              { value: 'behalten', label: t('Behalten') },
+              { value: 'loeschen', label: t('Löschen'), tone: 'halt' },
+            ]}
+            onChange={(v) => void save({ konto_daten_loeschen: v === 'loeschen' },
+              v === 'loeschen'
+                ? t('Daten gelöschter Konten werden gelöscht')
+                : t('Daten gelöschter Konten bleiben bestehen'))} />
+        </Field>
+
+        {data.konto_daten_loeschen && (
+          <Field
+            label={t('Frist bis zum endgültigen Löschen')}
+            hint={t('So lange lässt sich ein Irrtum noch rückgängig machen (Handbuch, Kapitel 08). 0 löscht sofort beim Löschen des Kontos.')}>
+            <div className="numfield">
+              <input type="number" min={0} max={365} step={1}
+                aria-label={t('Frist bis zum endgültigen Löschen')}
+                value={data.konto_daten_frist_tage}
+                onChange={(e) => setData({ ...data, konto_daten_frist_tage: Number(e.target.value) })}
+                onBlur={(e) => void save({ konto_daten_frist_tage: Number(e.target.value) },
+                  Number(e.target.value) === 0
+                    ? t('Daten gelöschter Konten werden sofort gelöscht')
+                    : t('Frist auf {n} Tage gesetzt', { n: e.target.value }))} />
+              <span className="numfield__unit">{t('Tage')}</span>
+            </div>
+          </Field>
+        )}
+
+        <p className="note-info" style={{ marginTop: 6 }}>
+          {t('Gilt für Konten, die ab jetzt gelöscht werden. Das Konto in der zentralen Anmeldung und in OTA-Git wird weiterhin nur gesperrt. Open WebUI ist eine eigene Anwendung; dort bleibt das Konto, bis es jemand löscht.')}
+        </p>
+      </div>
+
       <div className="section__head" style={{ marginTop: 30 }} id="erlaubte-ziele">
         <span className="silk">{t('Anwendungen')}</span><span className="section__rule" />
       </div>
