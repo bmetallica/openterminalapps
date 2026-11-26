@@ -28,6 +28,7 @@ session, no host — until someone explicitly allows it ([firewall.md](firewall.
 what it may do on the network. Below, what else can be started.*
 
 **Contents:** [Quick start](#quick-start) · [Updating](#updating) ·
+[Security and data protection](#security-and-data-protection-at-a-glance) ·
 [What it does](#what-it-does) — [workspace](#for-everyone-the-workspace-in-the-browser),
 [root workspace](#root-workspace-root-and-docker-in-the-container),
 [development](#development-git-and-ai-in-the-editor-and-the-terminal),
@@ -273,6 +274,24 @@ stack.
 Going back to the previous version is `git checkout <old-state> && sudo make update`. What does
 **not** go back is the database: new columns stay. They do not bother an older version, but data
 that did not exist before is simply there.
+
+## Security and data protection at a glance
+
+OTA is built for public authorities and companies where source code, credentials and personal data
+must not leave the house. The individual safeguards are listed below under their topics. In short:
+
+| Area | What OTA does |
+|---|---|
+| **Network** | Its own `internal` network per workspace behind a router. There is no path to the neighbour, the host or the company network. Profiles *isolated*, *internet* and *off* (only with a reason in the audit log), allow rules by address or name, time-limited port forwards ([firewall.md](firewall.md), [chapter 23](docs/wiki/en/23-netz.md)) |
+| **Containers** | No privileged containers. Root workspaces run under Sysbox; root in the container is unprivileged on the host. Limits for CPU, RAM, processes and disk ([chapter 25](docs/wiki/en/25-root-arbeitsplatz.md)) |
+| **Sign-in** | Keycloak with AD/LDAP, second factor enforceable per group (passkey or one-time password), sign-out after inactivity, emergency access with a rate limit, accounts are disabled instead of deleted ([chapter 18](docs/wiki/en/18-zentrale-anmeldung.md)) |
+| **AI** | The AI gateway keeps the AI server's key out of the workspaces, controls access per group and checks what an assistant reads for **prompt injection** (patterns, invisible characters, optionally a checking model). Content is never stored ([chapter 41](docs/wiki/en/41-ki-sicherheit.md)) |
+| **Code** | OTA Git protects the main branch of every repository (**branch protection** with required approval) and detects **secrets on push**: keys, tokens, passwords, `.env` files ([chapter 27](docs/wiki/en/27-git.md)) |
+| **Traceability** | Audit log for sign-ins, sessions, administration, screen viewing and the root web terminal, with fixed retention periods and optionally a copy to a **syslog server** (RFC 5424, TLS) ([chapter 11](docs/wiki/en/11-betrieb.md)) |
+| **Data protection** | **Access report under Art. 15 GDPR** at the push of a button. Data of deleted accounts, backups included, is deleted after a configurable grace period. AI statistics without names; names only with a reason in the audit log. No content, nothing loaded from foreign hosts ([dsgvo.md](dsgvo.md), German) |
+| **Maintenance** | `make update` brings security updates for all images, `make cve` lists fixable vulnerabilities, `make sbom` produces bills of materials in SPDX and CycloneDX; software monitoring reports programs that are not approved ([chapter 11](docs/wiki/en/11-betrieb.md)) |
+
+What is still missing is listed openly in [dsgvo.md](dsgvo.md) (section 11) and [roadmap.md](roadmap.md).
 
 ## What it does
 
@@ -734,14 +753,14 @@ socket — the same separation applies to the host's file system.
 ## Documentation
 
 - **[Manual](docs/wiki/en/README.md)** — usage, administration, operations, troubleshooting
-  (40 chapters, eight of them for users; [German](docs/wiki/README.md))
+  (41 chapters, eight of them for users; [German](docs/wiki/README.md))
 - **[plan.md](plan.md)** — architecture **and the reasoning behind it**, including the dead ends
   (German)
 - **[docs/adr/](docs/adr/README.md)** — decisions that are expensive to undo, with the alternatives
   that would not have held (German)
 - **[roadmap.md](roadmap.md)** — implementation status, honestly (German)
-- **[dsgvo.md](dsgvo.md)** — which personal data lives where, for how long, who sees it — and the
-  four places where something is missing today (German)
+- **[dsgvo.md](dsgvo.md)** — which personal data lives where, for how long, who sees it — and
+  what is still open there today (German)
 - **[firewall.md](firewall.md)** — the workspaces' network protection: one network per session, a
   router in front, profiles and port forwards in the interface — including the four things that
   turned out differently than planned while building (German)

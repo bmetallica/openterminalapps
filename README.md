@@ -28,6 +28,7 @@ Nachbarsitzung, kein Wirt — bis jemand es ausdrücklich freigibt ([firewall.md
 bekommen hat — und was sie im Netz darf. Darunter, was sich sonst noch starten lässt.*
 
 **Inhalt:** [Schnellstart](#schnellstart) · [Aktualisieren](#aktualisieren) ·
+[Sicherheit und Datenschutz](#sicherheit-und-datenschutz-auf-einen-blick) ·
 [Was es kann](#was-es-kann) — [Arbeitsplatz](#für-alle-der-arbeitsplatz-im-browser),
 [Root-Arbeitsplatz](#root-arbeitsplatz-root-und-docker-im-container),
 [Entwickeln](#entwickeln-git-und-ki-im-editor-und-im-terminal),
@@ -276,6 +277,25 @@ vollständiges Neuaufsetzen des Stacks.
 Ein Rückschritt auf die vorige Fassung ist `git checkout <alter-stand> && sudo make update`. Was
 dabei **nicht** zurückwandert, ist die Datenbank: Neue Spalten bleiben stehen. Sie stören eine
 ältere Fassung nicht, aber Daten, die es vorher nicht gab, sind dann eben da.
+
+## Sicherheit und Datenschutz auf einen Blick
+
+OTA ist für den Betrieb in Behörden und Unternehmen gebaut, in denen Quellcode, Zugangsdaten und
+Personendaten nicht nach draußen dürfen. Die einzelnen Schutzmaßnahmen stehen unten bei ihren
+Themen. Zusammengefasst:
+
+| Bereich | Was OTA tut |
+|---|---|
+| **Netz** | Ein eigenes `internal`-Netz je Arbeitsplatz hinter einem Router. Zum Nachbarn, zum Wirt und ins Firmennetz führt kein Weg. Profile *abgeschottet*, *internet* und *aus* (nur mit Begründung im Protokoll), Freigaben nach Adresse oder Name, befristete Portfreigaben ([firewall.md](firewall.md), [Kapitel 23](docs/wiki/23-netz.md)) |
+| **Container** | Keine privilegierten Container. Root-Arbeitsplätze laufen unter Sysbox, root im Container ist auf dem Host unprivilegiert. Grenzen für CPU, RAM, Prozesse und Platz ([Kapitel 25](docs/wiki/25-root-arbeitsplatz.md)) |
+| **Anmeldung** | Keycloak mit AD/LDAP, zweiter Faktor je Gruppe erzwingbar (Passkey oder Einmalkennwort), Abmelden nach Untätigkeit, Notzugang mit Bremse, Konten werden deaktiviert statt gelöscht ([Kapitel 18](docs/wiki/18-zentrale-anmeldung.md)) |
+| **KI** | Der KI-Durchgang hält den Schlüssel des KI-Servers aus den Arbeitsplätzen, regelt den Zugang je Gruppe und prüft, was ein Assistent liest, auf **Prompt Injection** (Muster, unsichtbare Zeichen, auf Wunsch ein Prüfmodell). Inhalte werden nie gespeichert ([Kapitel 41](docs/wiki/41-ki-sicherheit.md)) |
+| **Code** | OTA-Git schützt den Hauptzweig jedes Repositorys (**Branch-Schutz** mit Pflicht-Freigabe) und erkennt **Geheimnisse beim Push**: Schlüssel, Tokens, Passwörter, `.env`-Dateien ([Kapitel 27](docs/wiki/27-git.md)) |
+| **Nachvollziehbarkeit** | Protokoll für Anmeldungen, Sitzungen, Verwaltung, Aufschalten und root-Webterminal, mit festen Fristen und auf Wunsch als Kopie an einen **Syslog-Server** (RFC 5424, TLS) ([Kapitel 11](docs/wiki/11-betrieb.md)) |
+| **Datenschutz** | **Auskunft nach Art. 15 DSGVO** auf Knopfdruck. Daten gelöschter Konten samt Sicherungen werden nach einer einstellbaren Frist mitgelöscht. KI-Statistik ohne Namen, Namen nur mit Begründung im Protokoll. Keine Inhalte, kein Nachladen von fremden Hosts ([dsgvo.md](dsgvo.md)) |
+| **Pflege** | `make update` bringt Sicherheitsupdates für alle Images, `make cve` listet behebbare Lücken, `make sbom` erzeugt Stücklisten in SPDX und CycloneDX; Softwaremonitoring meldet nicht freigegebene Programme ([Kapitel 11](docs/wiki/11-betrieb.md#sicherheitslücken-cves-)) |
+
+Was noch fehlt, steht offen in [dsgvo.md](dsgvo.md) (Abschnitt 11) und [roadmap.md](roadmap.md).
 
 ## Was es kann
 
@@ -749,14 +769,14 @@ nicht — dieselbe Trennung gilt für das Dateisystem des Hosts.
 
 ## Dokumentation
 
-- **[Handbuch](docs/wiki/README.md)** — Bedienung, Verwaltung, Betrieb, Fehlersuche (40 Kapitel,
+- **[Handbuch](docs/wiki/README.md)** — Bedienung, Verwaltung, Betrieb, Fehlersuche (41 Kapitel,
   davon acht eigens für Anwender; [English](docs/wiki/en/README.md))
 - **[plan.md](plan.md)** — Architektur **und die Begründungen dahinter**, samt der Sackgassen
 - **[docs/adr/](docs/adr/README.md)** — Entscheidungen, die teuer rückgängig zu machen sind, mit den
   Alternativen, die nicht getragen hätten
 - **[roadmap.md](roadmap.md)** — Umsetzungsstand, ehrlich
 - **[dsgvo.md](dsgvo.md)** — welche personenbezogenen Daten wo liegen, wie lange, wer sie sieht —
-  und die vier Stellen, an denen heute etwas fehlt
+  und was dort heute noch offen ist
 - **[firewall.md](firewall.md)** — die Netzabsicherung der Arbeitsplätze: ein Netz je Sitzung, ein
   Router davor, Profile und Portfreigaben in der Oberfläche — samt der vier Dinge, die beim Bauen
   anders kamen als geplant
