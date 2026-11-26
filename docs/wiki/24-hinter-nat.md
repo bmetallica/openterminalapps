@@ -12,20 +12,20 @@ Das Beispiel durchs ganze Kapitel:
 
 | | Adresse |
 |---|---|
-| Firewall, von aussen | `10.50.0.33` |
-| OTA-Host, innen | `192.168.1.22` |
-| Reverse Proxy, innen | `192.168.1.23` |
-| OpenLDAP, aussen | `10.50.0.1` |
-| Name für die Nutzer | `https://ota.ai.vermkv.local` (DNS `*.ai.vermkv.local` → `10.50.0.33`) |
+| Firewall, von aussen | `10.20.0.33` |
+| OTA-Host, innen | `192.168.50.22` |
+| Reverse Proxy, innen | `192.168.50.23` |
+| OpenLDAP, aussen | `10.20.0.1` |
+| Name für die Nutzer | `https://ota.ki.firma.local` (DNS `*.ki.firma.local` → `10.20.0.33`) |
 
 ```
-  Nutzer im 10er-Netz                          OTA-Netz 192.168.1.0/24
+  Nutzer im 10er-Netz                          OTA-Netz 192.168.50.0/24
   ───────────────────                          ─────────────────────────────────────────
                           ┌──────────────┐
   Browser ──443/tcp──────▶│   Firewall   │──443──▶ Reverse Proxy .23 ──8443──▶ OTA .22
-          ──3478/tcp─────▶│  10.50.0.33  │──3478─────────────────────────────▶ OTA .22 (coturn)
+          ──3478/tcp─────▶│  10.20.0.33  │──3478─────────────────────────────▶ OTA .22 (coturn)
                           │              │
-  OpenLDAP 10.50.0.1 ◀────│──636/tcp─────│◀──────── Keycloak auf OTA .22
+  OpenLDAP 10.20.0.1 ◀────│──636/tcp─────│◀──────── Keycloak auf OTA .22
                           └──────────────┘
 ```
 
@@ -45,10 +45,10 @@ schon das Fortsetzen ([Kapitel 20](20-selkies-versuch.md#auf-20-anheben)).
 
 | Extern | Ziel innen | Proto | Wofür | Pflicht |
 |---|---|---|---|---|
-| `10.50.0.33:443` | `192.168.1.23:443` (Reverse Proxy) | TCP | Oberfläche, API, Anmeldung (`/auth`), KasmVNC-Streams, WebSockets | ja |
-| `10.50.0.33:3478` | `192.168.1.22:3478` (OTA-Host, **nicht** der Proxy) | TCP | TURN — der Bildstrom von Selkies **1.6.2** | nur für Golden Images auf dem alten Basisimage |
-| `10.50.0.33:80` | `192.168.1.23:80` | TCP | nur die Umleitung auf HTTPS | nein |
-| `10.50.0.33:30000–30019` | `192.168.1.22:30000–30019` | TCP | befristete Portfreigaben aus einem Arbeitsplatz („+ NAT", [Kapitel 23](23-netz.md)) | nur wenn genutzt |
+| `10.20.0.33:443` | `192.168.50.23:443` (Reverse Proxy) | TCP | Oberfläche, API, Anmeldung (`/auth`), KasmVNC-Streams, WebSockets | ja |
+| `10.20.0.33:3478` | `192.168.50.22:3478` (OTA-Host, **nicht** der Proxy) | TCP | TURN — der Bildstrom von Selkies **1.6.2** | nur für Golden Images auf dem alten Basisimage |
+| `10.20.0.33:80` | `192.168.50.23:80` | TCP | nur die Umleitung auf HTTPS | nein |
+| `10.20.0.33:30000–30019` | `192.168.50.22:30000–30019` | TCP | befristete Portfreigaben aus einem Arbeitsplatz („+ NAT", [Kapitel 23](23-netz.md)) | nur wenn genutzt |
 
 - **Keycloak braucht keinen eigenen Port.** Es liegt unter `/auth` auf derselben Adresse wie OTA.
   Die API spricht Keycloak intern an, nicht über die Firewall.
@@ -58,10 +58,10 @@ schon das Fortsetzen ([Kapitel 20](20-selkies-versuch.md#auf-20-anheben)).
 - **Der Relay-Bereich `49160–49260` bleibt zu.** Mit `relay` benutzt ihn nur coturn selbst, auf dem
   OTA-Host, zwischen sich und dem Arbeitsplatz. Von aussen wird er nie angesprochen.
 - **Eine Hairpin-NAT braucht es nicht.** Der Arbeitsplatz bekommt dieselbe TURN-Adresse wie der
-  Browser (`10.50.0.33`); der Router der Arbeitsplätze biegt sie auf den Host um, bevor ein Paket
+  Browser (`10.20.0.33`); der Router der Arbeitsplätze biegt sie auf den Host um, bevor ein Paket
   die Firewall überhaupt erreicht.
 
-Die Strecke Reverse Proxy → OTA (`192.168.1.23` → `192.168.1.22:8443`) liegt im selben Netz und
+Die Strecke Reverse Proxy → OTA (`192.168.50.23` → `192.168.50.22:8443`) liegt im selben Netz und
 geht nicht über die Firewall.
 
 **Nicht weiterleiten:** 8449 (Traefik-Dashboard), 5000 (Registry), 5432 (Datenbank), 8080 und
@@ -71,20 +71,20 @@ geht nicht über die Firewall.
 
 | Quelle | Ziel | Port | Wofür |
 |---|---|---|---|
-| `192.168.1.22` | `10.50.0.1` | **636/TCP** | Keycloak liest das Verzeichnis (ldaps) |
-| `192.168.1.22` | DNS-Server | 53/UDP+TCP | Namensauflösung — der Name des Verzeichnisses, `*.ai.vermkv.local` |
-| `192.168.1.22` | NTP-Server | 123/UDP | Uhrzeit — eine falsche Uhr bricht TLS und die Einmalkennwörter |
-| `192.168.1.22` | Internet oder Firmenproxy | **80 und 443** bzw. Proxy-Port | Images holen und bauen ([Kapitel 21](21-firmenproxy.md)). **80 ist kein Versehen:** `apt` holt Debian-Pakete über HTTP; ohne Port 80 scheitert `make update` beim Bauen der Dienste |
+| `192.168.50.22` | `10.20.0.1` | **636/TCP** | Keycloak liest das Verzeichnis (ldaps) |
+| `192.168.50.22` | DNS-Server | 53/UDP+TCP | Namensauflösung — der Name des Verzeichnisses, `*.ki.firma.local` |
+| `192.168.50.22` | NTP-Server | 123/UDP | Uhrzeit — eine falsche Uhr bricht TLS und die Einmalkennwörter |
+| `192.168.50.22` | Internet oder Firmenproxy | **80 und 443** bzw. Proxy-Port | Images holen und bauen ([Kapitel 21](21-firmenproxy.md)). **80 ist kein Versehen:** `apt` holt Debian-Pakete über HTTP; ohne Port 80 scheitert `make update` beim Bauen der Dienste |
 
 - **636 und nicht 389.** OTA legt die Anbindung mit `startTls: false` an; StartTLS auf 389 lässt
   sich in der Oberfläche nicht einstellen. `ldap://…:389` hiesse: das Kennwort des Dienstkontos
   und jede Anmeldung im Klartext durch die Firewall.
 - **Nur lesend.** Die Anbindung ist `READ_ONLY`: Keycloak liest Konten und Gruppen und prüft
   Passwörter per Bind, schreibt aber nie zurück. Das Dienstkonto braucht deshalb nur Leserecht.
-- **Absender ist `192.168.1.22`.** Keycloak läuft in einem Docker-Netz, Docker setzt ausgehende
+- **Absender ist `192.168.50.22`.** Keycloak läuft in einem Docker-Netz, Docker setzt ausgehende
   Verbindungen auf die Adresse des Hosts um. Setzt die Firewall für diese Richtung zusätzlich
-  Source-NAT, sieht das Verzeichnis `10.50.0.33`. Danach richten sich die ACLs am LDAP-Server.
-- **Arbeitsplätze** erscheinen im äusseren Netz ebenfalls als `192.168.1.22`. Wer aus einem
+  Source-NAT, sieht das Verzeichnis `10.20.0.33`. Danach richten sich die ACLs am LDAP-Server.
+- **Arbeitsplätze** erscheinen im äusseren Netz ebenfalls als `192.168.50.22`. Wer aus einem
   Arbeitsplatz etwas im 10er-Netz erreichen soll, braucht die Freigabe **zweimal**: an der Firewall
   und im Router der Arbeitsplätze (Oberfläche → Netz, [Kapitel 23](23-netz.md)).
 
@@ -94,12 +94,12 @@ geht nicht über die Firewall.
 
 ```bash
 # Der Reverse Proxy — die Adresse, von der er verbindet.
-OTA_TRUSTED_PROXIES=192.168.1.23/32
+OTA_TRUSTED_PROXIES=192.168.50.23/32
 
 # TURN: unter welcher Adresse die Browser ihn erreichen, und an welche er
 # sich bindet. Ohne NAT ist beides dasselbe und OTA_TURN_BIND bleibt leer.
-OTA_TURN_HOST=10.50.0.33
-OTA_TURN_BIND=192.168.1.22
+OTA_TURN_HOST=10.20.0.33
+OTA_TURN_BIND=192.168.50.22
 OTA_TURN_PORT=3478
 OTA_TURN_PROTOCOL=tcp
 OTA_TURN_ICE_POLICY=relay
@@ -112,7 +112,7 @@ OTA_NTP_HOST=<NTP-Server>
 Danach `make up`. Das erzeugt `traefik.yml` und `turnserver.conf` neu und startet, was sich
 geändert hat.
 
-- **`OTA_TURN_HOST` darf auch ein Name sein** (`ota.ai.vermkv.local`), wenn er aussen auf die
+- **`OTA_TURN_HOST` darf auch ein Name sein** (`ota.ki.firma.local`), wenn er aussen auf die
   Firewall auflöst. `OTA_TURN_BIND` muss eine Adresse des Hosts sein — `scripts/turn-config.sh`
   warnt, wenn nicht. Eine IP ist der robustere Weg: Den Namen löst der Router bei jedem Abgleich
   auf, und ohne Namensdienst fällt die Umleitung aus.
@@ -128,12 +128,12 @@ geändert hat.
   **in** Root-Arbeitsplätzen ([Kapitel 25](25-root-arbeitsplatz.md)). Liegt das Firmennetz in
   `172.16.0.0/12`, einen anderen Bereich eintragen.
 
-### Der Reverse Proxy (`192.168.1.23`)
+### Der Reverse Proxy (`192.168.50.23`)
 
-Er terminiert TLS mit dem Zertifikat für `*.ai.vermkv.local` und reicht an OTA weiter. Vier Dinge
+Er terminiert TLS mit dem Zertifikat für `*.ki.firma.local` und reicht an OTA weiter. Vier Dinge
 müssen stimmen:
 
-1. **Ziel `https://192.168.1.22:8443`.** Der Proxy muss dem Zertifikat von OTA vertrauen —
+1. **Ziel `https://192.168.50.22:8443`.** Der Proxy muss dem Zertifikat von OTA vertrauen —
    `deploy/certs/ota-ca.crt` hinterlegen. `make cert` trägt die Adressen des Hosts von selbst ein.
 2. **`X-Forwarded-Proto: https`, `X-Forwarded-Host` und `X-Forwarded-Port: 443`** setzen. Ohne
    den Port trägt Traefik `8443` ein, und für einen OIDC-Client ist das ein anderer Aussteller.
@@ -146,12 +146,12 @@ Mit nginx:
 server {
     listen 443 ssl;
     http2 on;
-    server_name ota.ai.vermkv.local;
-    ssl_certificate     /etc/nginx/certs/ai.vermkv.local.crt;
-    ssl_certificate_key /etc/nginx/certs/ai.vermkv.local.key;
+    server_name ota.ki.firma.local;
+    ssl_certificate     /etc/nginx/certs/ki.firma.local.crt;
+    ssl_certificate_key /etc/nginx/certs/ki.firma.local.key;
 
     location / {
-        proxy_pass https://192.168.1.22:8443;
+        proxy_pass https://192.168.50.22:8443;
         proxy_ssl_trusted_certificate /etc/nginx/certs/ota-ca.crt;
         proxy_ssl_verify on;
 
@@ -184,12 +184,12 @@ stehen (SNI). Das Zertifikat dort stellt OTA für die Subdomain selbst aus, von 
 server {
     listen 443 ssl;
     http2 on;
-    server_name git.ai.vermkv.local;
-    ssl_certificate     /etc/nginx/certs/ai.vermkv.local.crt;
-    ssl_certificate_key /etc/nginx/certs/ai.vermkv.local.key;
+    server_name git.ki.firma.local;
+    ssl_certificate     /etc/nginx/certs/ki.firma.local.crt;
+    ssl_certificate_key /etc/nginx/certs/ki.firma.local.key;
 
     location / {
-        proxy_pass https://192.168.1.22:8443;
+        proxy_pass https://192.168.50.22:8443;
         proxy_ssl_trusted_certificate /etc/nginx/certs/ota-ca.crt;
         proxy_ssl_verify on;
         proxy_ssl_server_name on;
@@ -224,7 +224,7 @@ einzurichten.
 **Welche Adresse in `OTA_TRUSTED_PROXIES` gehört**, zeigt Traefik selbst — nachsehen statt raten:
 
 ```bash
-curl -sk https://ota.ai.vermkv.local/api/gibtsnicht -o /dev/null
+curl -sk https://ota.ki.firma.local/api/gibtsnicht -o /dev/null
 docker logs ota-traefik --tail 5 | grep gibtsnicht     # erste Spalte = Absender
 ```
 
@@ -253,7 +253,7 @@ docker logs ota-keycloak 2>&1 | grep -i truststore  # „Found the following tru
 Das Verzeichnis wird nach `/opt/keycloak/conf/truststores` eingehängt; Keycloak liest jede Datei
 darin von selbst. Es gehört zur Anlage und steht nicht im Repository (`.gitignore`).
 
-**Das Zertifikat muss zur Adresse passen.** Wer `ldaps://10.50.0.1:636` einträgt, braucht ein
+**Das Zertifikat muss zur Adresse passen.** Wer `ldaps://10.20.0.1:636` einträgt, braucht ein
 Zertifikat mit der IP im `subjectAltName`. Meist steht dort nur der Name — dann den Namen eintragen
 und dafür sorgen, dass der Host ihn auflöst.
 
@@ -272,7 +272,7 @@ Bis zum 2026-09-25 liess sich OTA hinter einer NAT nicht mit Selkies betreiben. 
    der Browser. Der Router biegt `OTA_TURN_HOST:3478` auf `OTA_TURN_BIND` um; sichtbar unter
    **Netz → Was ohne Zutun gilt** als Zeile mit der Herkunft `OTA_TURN_HOST → OTA_TURN_BIND`.
 3. **`OTA_SELF_ADDRESS` ist eine eigene Einstellung.** Sie hing fest an `OTA_TURN_HOST` und hätte
-   hinter NAT auf `10.50.0.33:8443` gezeigt — ein Port, der dort gar nicht offen ist.
+   hinter NAT auf `10.20.0.33:8443` gezeigt — ein Port, der dort gar nicht offen ist.
 4. **Truststore für Keycloak** (`deploy/keycloak-truststore/`). Vorher liess sich ein Verzeichnis
    mit einem Zertifikat aus einer Firmen-CA überhaupt nicht verschlüsselt anbinden. Dazu sagt der
    Verbindungstest jetzt, **warum** er scheitert — vorher stand für jeden Fall „nicht erreichbar",
@@ -296,14 +296,14 @@ make up
 es für die Dauer der Reihe eine DNAT-Regel auf dem Host an, die für das Netz des Prüfbrowsers die
 Rolle der Firewall spielt (`OTA_TURN_HOST:3478 → OTA_TURN_BIND`). Der Browser kennt dann nur die
 veröffentlichte Adresse, Selkies im Arbeitsplatz geht über die Umleitung im Router. Gemessen am
-2026-09-25 mit `OTA_TURN_HOST=10.50.0.33`: 1311 Bilder, die Zähler der Umleitung im Router
+2026-09-25 mit `OTA_TURN_HOST=10.20.0.33`: 1311 Bilder, die Zähler der Umleitung im Router
 stiegen.
 
 Von aussen — auf einem Rechner im 10er-Netz:
 
 ```bash
-curl -s -o /dev/null -w "%{http_code}\n" https://ota.ai.vermkv.local/healthz   # 200
-nc -zv 10.50.0.33 3478                                                          # offen
+curl -s -o /dev/null -w "%{http_code}\n" https://ota.ki.firma.local/healthz   # 200
+nc -zv 10.20.0.33 3478                                                          # offen
 ```
 
 Auf dem OTA-Host:
@@ -323,7 +323,7 @@ mit ihr gelangen Verbindung und Anmeldung des Dienstkontos.
 | Bild | Ursache |
 |---|---|
 | Seite lädt, „Waiting for stream" | 3478/TCP nicht weitergeleitet, oder auf den Reverse Proxy statt auf den OTA-Host |
-| Anmeldung springt auf `https://192.168.1.22:8443` | `OTA_TRUSTED_PROXIES` fehlt oder nennt die falsche Adresse |
+| Anmeldung springt auf `https://192.168.50.22:8443` | `OTA_TRUSTED_PROXIES` fehlt oder nennt die falsche Adresse |
 | Anmeldung scheitert mit „invalid issuer" in einer fremden Anwendung | Der Proxy schickt `X-Forwarded-Port` nicht |
 | `turn-config.sh` warnt „keine Adresse dieses Hosts" | `OTA_TURN_BIND` fehlt oder ist falsch |
 | Verzeichnistest: „verschlüsselte Verbindung scheitert" | CA fehlt in `deploy/keycloak-truststore/`, oder das Zertifikat passt nicht zur Adresse |

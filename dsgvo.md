@@ -9,6 +9,10 @@ personenbezogenen Daten wo liegen, wie lange, wer sie sieht und was davon fehlt.
 ob das im konkreten Unternehmen genügt, gehört zum Datenschutzbeauftragten. Die Punkte, die ihn
 sicher interessieren, sind mit 👉 gekennzeichnet.
 
+**Dieses Dokument beschreibt OTA allgemein**, für jede Anlage. Welche Optionen in einer konkreten
+Anlage eingeschaltet sind, welche Fristen dort gelten, was entschieden und was schon erledigt ist,
+führt der Betreiber in einem eigenen Dokument, nicht im Repository.
+
 Die technische Seite steht in `security.md`. Dieses Dokument verweist an einigen Stellen auf deren
 Befunde (H4, M2, N3 …); **`security.md` liegt bewusst nicht im Repository** — es beschreibt offene
 Schwachstellen samt Weg dorthin und wird beim Betreiber geführt.
@@ -116,7 +120,7 @@ Dazu:
 
 **Die Zwischenablage** liegt ausschliesslich im Container und wird nirgends zentral gespeichert.
 
-### 2.5 KI-Nutzungsstatistik (optional — in dieser Anlage **eingeschaltet**)
+### 2.5 KI-Nutzungsstatistik (optional, ab Werk aus)
 
 Läuft über den KI-Durchgang `ota-ki`. Gezählt werden **nur Aufrufe eines Modells** (Chat,
 Completions, Embeddings …), nie Inhalte.
@@ -146,7 +150,7 @@ Schutz vor Auswertung einzelner Personen:
 👉 Die Zeilen in `ki_anfragen` und `ki_stunden` hängen **nicht** am Konto: Wird ein Konto
 gelöscht, bleiben sie mit Namen bis zum Ablauf ihrer Frist stehen.
 
-### 2.6 Gedächtnis für opencode (Erweiterung — in dieser Anlage nur für die Gruppe der opencode-Entwickler)
+### 2.6 Gedächtnis für opencode (Erweiterung, je Gruppe einschaltbar)
 
 Eigenständige Anwendung mit eigener Datenbank
 ([plugin_ota-opencode](https://github.com/bmetallica/plugin_ota-opencode)).
@@ -286,10 +290,10 @@ es eine dokumentierte Frist gibt.
 
 | Datum | Frist | Umsetzung |
 |---|---|---|
-| Zuhause und Ablagen nach Ausscheiden | **30 Tage archiviert, dann gelöscht** | ✅ Einstellung „Löschen“, Frist 30 Tage (seit 2026-11-25) |
+| Zuhause und Ablagen nach Ausscheiden | **30 Tage archiviert, dann gelöscht** | Einstellung „Löschen“ mit Frist 30 Tage |
 | Keycloak-Konto | nach derselben Frist löschen | Keycloak-Konsole |
 | Git-Konto | Repositories übergeben, dann Konto löschen | Forgejo-Verwaltung |
-| alles andere | wie in der Tabelle oben | ✅ vorhanden |
+| alles andere | wie in der Tabelle oben | in OTA vorhanden |
 
 ---
 
@@ -297,7 +301,7 @@ es eine dokumentierte Frist gibt.
 
 | Recht | Heute machbar? |
 |---|---|
-| **Information** (Art. 13) | ⚠️ Teilweise: Der Punkt **DSGVO** in der Seitenleiste erklärt, was über Arbeitsplätze und KI-Nutzung erfasst wird, wie lange und wer es sieht — **aber nur, solange die KI-Statistik läuft** (in dieser Anlage: ja). Der Text ist anpassbar (Markdown, Fristen werden eingesetzt); **verantwortliche Stelle und Datenschutzbeauftragte müssen eingetragen werden.** |
+| **Information** (Art. 13) | ⚠️ Teilweise: Der Punkt **DSGVO** in der Seitenleiste erklärt, was über Arbeitsplätze und KI-Nutzung erfasst wird, wie lange und wer es sieht — **aber nur, solange die KI-Statistik läuft**. Der Text ist anpassbar (Markdown, Fristen werden eingesetzt); **verantwortliche Stelle und Datenschutzbeauftragte müssen eingetragen werden.** |
 | **Auskunft** (Art. 15) | ✅ Seit 2026-11-25 auf Knopfdruck: **Personen → Konto → Auskunft erstellen** ergibt ein ZIP mit Stammdaten, Protokoll, Terminal-Protokoll, Sitzungen, KI-Nutzung, Softwarefunden, Sicherungen, OTA-Git und der Liste der Dateien (Wiki Kapitel 08), protokolliert als `user.auskunft`. Vor dem Herausgeben Art. 15 Abs. 4 abwägen: Protokoll und Terminal-Protokoll nennen Administratoren. Die KI-Nutzung sieht jeder zusätzlich selbst (**Meine KI-Nutzung**); das Gedächtnis exportiert jeder selbst (JSON, Markdown). Open WebUI ist nicht enthalten (Abschnitt 12). |
 | **Berichtigung** (Art. 16) | ✅ Name und E-Mail über die Verwaltung bzw. Keycloak/AD. |
 | **Löschung** (Art. 17) | ⚠️ Teilweise, siehe 4.1. |
@@ -347,8 +351,8 @@ Alle drei Zugriffe hinterlassen eine Spur im Protokoll; damit ist eine solche Ve
 
 ## 7 · Drittlandübermittlung: der Zeichensatz von Google — behoben
 
-> **Stand 2026-09-04: erledigt.** Der Abschnitt bleibt stehen, weil er die einzige
-> Drittlandübermittlung dokumentiert, die es in dieser Anlage je gab.
+> **Seit 2026-09-04 behoben.** Der Abschnitt bleibt stehen, weil er die einzige
+> Drittlandübermittlung dokumentiert, die es in OTA je gab.
 
 `web/index.html` lud **bis** zum 2026-09-04 bei jedem Aufruf der Oberfläche zwei Schriften von
 Google. Dabei übermittelte der Browser jedes Nutzers **IP-Adresse, User-Agent und Referer an
@@ -367,7 +371,7 @@ keine einzige Anfrage an einen fremden Host. Lizenzen (OFL 1.1) in
 | Anforderung | Stand |
 |---|---|
 | **Verschlüsselung der Übertragung** | ✅ TLS 1.2 als Untergrenze, gemessen |
-| **Verschlüsselung im Ruhezustand** | ❌ **Bewusst nicht** (2026-09-05). Weder Datenbank noch Zuhause noch Sicherungen sind verschlüsselt; bei einer gestohlenen Platte ist alles lesbar. Ersatzweise Dateirechte 0600/0700; ein Abzug, der ausser Haus geht, wird von Hand verschlüsselt |
+| **Verschlüsselung im Ruhezustand** | ❌ **Nicht in OTA eingebaut.** OTA verschlüsselt weder Datenbank noch Zuhause noch Sicherungen; bei einer gestohlenen Platte ist alles lesbar. Vorhanden sind Dateirechte 0600/0700. Wer mehr braucht, verschlüsselt die Platte (z. B. LUKS) und Abzüge, die ausser Haus gehen |
 | **Zugangskontrolle** | ✅ Keycloak, zweiter Faktor (Passkey oder Einmalkennwort) je Gruppe erzwingbar, Kontosperre nach Fehlversuchen je (Konto, Absender), Bremse vor dem Notzugang |
 | **Zugriffskontrolle** | ✅ Rechte je Gruppe, serverseitig an jedem Endpunkt geprüft und automatisch getestet; Gruppenlaufwerke nur für Mitglieder; Gedächtnis mit Row Level Security |
 | **Trennungskontrolle** | ⚠️ Im Netz vollständig: jeder Arbeitsplatz in einem eigenen Netz, untereinander nicht erreichbar. Im Dateisystem durch getrennte Einhängungen und `0700` — aber **alle normalen Container laufen als dieselbe UID 1000**. Root-Arbeitsplätze laufen unter Sysbox, root im Container ist auf dem Host unprivilegiert |
@@ -378,10 +382,9 @@ keine einzige Anfrage an einen fremden Host. Lizenzen (OFL 1.1) in
 | **Belastbarkeit** | ✅ Kontingente je Zuhause, Untergrenze für freien Platz, Grenzen für CPU, RAM und Prozesse |
 | **Regelmässige Überprüfung** | ✅ über zwanzig automatische Prüfreihen; `make cve` gleicht alle Images gegen Schwachstellenlisten ab; Sicherheitsupdates mit jedem `make update` |
 
-**Die zweite Zeile ist die verbliebene Lücke — und sie ist eine bewusste.** Die Anlage steht im
-eigenen Haus, gegen einen kompromittierten Wirt hilft Verschlüsselung im Ruhezustand ohnehin nicht.
-**Das gehört in die Risikobetrachtung, nicht in die Mängelliste** — dokumentiert gehört es
-trotzdem.
+**Die zweite Zeile ist die verbliebene Lücke.** Ob sie geschlossen werden muss, entscheidet der
+Betreiber in seiner Risikobetrachtung; gegen einen kompromittierten Wirt hilft Verschlüsselung im
+Ruhezustand ohnehin nicht. Dokumentiert gehört die Entscheidung in jedem Fall.
 
 ---
 
@@ -416,7 +419,7 @@ handhabbar.
 Protokoll an Syslog (Wiki Kapitel 11). Jeder Protokolleintrag geht zusätzlich an einen
 Syslog-Server (RFC 5424, TCP, TLS oder UDP); was während eines Ausfalls anfällt, wird nachgeliefert.
 Ohne diese Kopie liegen die Protokolle nur auf demselben Host, und wer root auf dem Wirt hat, kann
-sie ändern. **In dieser Anlage ist noch kein Syslog-Server angebunden** (Abschnitt 11, Punkt 15).
+sie ändern.
 
 👉 **Was der Syslog-Server dann hat:** dieselben Einträge wie das Protokoll, mit Namen und, wo OTA
 sie speichert, Adressen. Mit dem Umfang „ohne Alltag“ (Vorgabe) bleiben erfolgreiche Anmeldungen
@@ -426,43 +429,40 @@ Verwaltungsklasse (365 Tage), und Zugriff sollte dort nur haben, wer OTA **nicht
 
 ---
 
-## 11 · Was zu tun ist
+## 11 · Was der Betreiber zu tun hat
 
-| # | Aufgabe | Stand |
-|---|---|---|
-| ~~1~~ | ~~Zeichensatz mitliefern~~ | ✅ 2026-09-04 |
-| ~~2~~ | ~~Aufschalten protokollieren~~ | ✅ 2026-09-04 |
-| ~~3~~ | ~~Dateirechte auf Sicherungen und Profile~~ | ✅ 2026-09-04 |
-| ~~4~~ | ~~Aufbewahrungsfristen für `audit_log` und Container-Protokolle~~ | ✅ 2026-09-04/05 |
-| 5 | **Datenschutzhinweis** | ⚠️ teilweise: Punkt „DSGVO“ existiert (sichtbar, solange die KI-Statistik läuft). **Offen: Text prüfen, verantwortliche Stelle und Datenschutzbeauftragte eintragen**; ggf. dauerhaft sichtbar machen |
-| ~~6~~ | „Konto endgültig entfernen“ | **abgewählt 2026-09-04**; dafür seit 2026-11-25 die Einstellung, Zuhause, Ablage und Sicherungen gelöschter Konten nach einer Frist zu löschen (4.1). Keycloak und OTA-Git sperren weiterhin nur |
-| ~~7~~ | ~~**Auskunftsfunktion** je Konto~~ | ✅ 2026-11-25: Personen → Auskunft erstellen (Abschnitt 5) |
-| 8 | **Betriebsvereinbarung** | offen — jetzt mit KI-Statistik und Webterminal (Abschnitt 6) |
-| 9 | **Schwellwertanalyse** dokumentieren | offen |
-| ~~10~~ | Verschlüsselung im Ruhezustand | **abgewählt 2026-09-05** |
-| 11 | **Verzeichnis von Verarbeitungstätigkeiten**: Einträge für OTA, KI-Statistik, Gedächtnis | offen |
-| ~~12~~ | **Protokollierung des KI-Servers** prüfen | ✅ 2026-11-25: Der KI-Server ist per Firewall nach außen gesperrt und führt Anfragen in einem rotierenden Protokoll von 100 MB; beim heutigen Durchsatz ist es nach höchstens etwa zwei Stunden überschrieben. Das ist eine Speicherung von Inhalten mit faktischer Frist von Stunden |
-| 13 | **Interessenabwägung** für Protokoll, KI-Statistik und Softwaremonitoring dokumentieren | offen |
-| 14 | **Open WebUI**: eigene Liste in Abschnitt 12.5 | ⚠️ W2, W4, W5, W7, W8 und W10 erledigt; W1, W3, W6 und W9 offen |
-| 15 | **Syslog-Server** anbinden (Einstellungen → Protokoll an Syslog), Frist und Zugriff dort festlegen | offen: Die Funktion ist da, ein Server noch nicht |
+OTA bringt die Technik mit. Was danach bleibt, ist je Anlage zu erledigen und dort zu
+dokumentieren, nicht hier:
 
-Technisch wächst in dieser Anlage **nichts mehr ohne Frist** — ausser dem Zuhause, das als
-Arbeitsmittel bewusst keine hat. Offen sind vor allem die organisatorischen Punkte: Hinweistext,
-Betriebsvereinbarung, Schwellwertanalyse, Verarbeitungsverzeichnis und das Löschkonzept für
-ausgeschiedene Beschäftigte.
+| # | Aufgabe |
+|---|---|
+| 1 | **Datenschutzhinweis**: Den Text des Punkts „DSGVO“ prüfen, verantwortliche Stelle und Datenschutzbeauftragte eintragen; ggf. dauerhaft sichtbar machen (Abschnitt 5) |
+| 2 | **Löschkonzept** für ausgeschiedene Beschäftigte: Einstellung „Löschen“ mit Frist, dazu Keycloak, OTA-Git und Open WebUI (4.1, 4.2) |
+| 3 | **Betriebsvereinbarung** bzw. Dienstvereinbarung, mit KI-Statistik und Webterminal (Abschnitt 6) |
+| 4 | **Schwellwertanalyse** bzw. DSFA dokumentieren (Abschnitt 9) |
+| 5 | **Verzeichnis von Verarbeitungstätigkeiten**: Einträge für OTA, KI-Statistik, Gedächtnis, Open WebUI |
+| 6 | **Interessenabwägung** für Protokoll, KI-Statistik und Softwaremonitoring dokumentieren (Abschnitt 3) |
+| 7 | **Protokollierung des KI-Servers** prüfen: Speichert er Anfragen oder Inhalte, wie lange, wer sieht sie? (Abschnitt 1) |
+| 8 | **Syslog-Server** anbinden (Einstellungen → Protokoll an Syslog), Frist und Zugriff dort festlegen (Abschnitt 10) |
+| 9 | **Verschlüsselung im Ruhezustand** bewerten (Abschnitt 8) |
+| 10 | **Open WebUI**, falls angebunden: die eigene Liste in Abschnitt 12.5 |
+| 11 | **Prüfkonten** in einer produktiven Anlage abschalten (Nachbemerkung) |
+
+Technisch wächst in OTA **nichts ohne Frist**, ausser dem Zuhause, das als Arbeitsmittel bewusst
+keine hat (oder nach Kontolöschung die eingestellte). Offen bleiben die organisatorischen Punkte.
 
 ## 12 · Open WebUI — eine eigene Verarbeitung neben OTA
 
-*Stand 2026-11-20, beschrieben nach Open WebUI 0.12.*
+*Beschrieben nach Open WebUI 0.12.*
 
-**Geprüft am 2026-11-20 (Umgebung des Containers `open-webui`):** gesetzt sind nur
-`ENABLE_FORWARD_USER_INFO_HEADERS=true` sowie `SCARF_NO_ANALYTICS=true`, `DO_NOT_TRACK=true` und
-`ANONYMIZED_TELEMETRY=false`. **Telemetrie ist damit aus.** Alles andere steht auf der Vorgabe
-oder in der Datenbank (Admin-Oberfläche, noch zu prüfen): Admin-Zugriff auf Chats, Export,
-Community-Teilen, Versionsprüfung, Prüfprotokoll, Websuche. Das **Container-Protokoll** läuft als
-`json-file` **ohne Größengrenze und ohne Rotation**.
+**Was zu prüfen ist:** In der Umgebung des Containers die Telemetrie (`SCARF_NO_ANALYTICS=true`,
+`DO_NOT_TRACK=true`, `ANONYMIZED_TELEMETRY=false`) und `ENABLE_FORWARD_USER_INFO_HEADERS` für die
+Zuordnung in der KI-Statistik. Vieles steht aber in der Datenbank und ist nur in der
+Admin-Oberfläche zu sehen: Admin-Zugriff auf Chats, Export, Community-Teilen, Versionsprüfung,
+Prüfprotokoll, Websuche. Das **Container-Protokoll** läuft ohne eigene Vorgabe als `json-file`
+**ohne Größengrenze und ohne Rotation**.
 
-Open WebUI ist die Chat-Oberfläche für den KI-Server. Es läuft in dieser Anlage als **eigener
+Open WebUI ist die Chat-Oberfläche für den KI-Server. Es läuft als **eigener
 Container neben OTA**. OTA richtet es nicht ein und hat keinen Zugriff auf seine Daten. Es ist
 deshalb **eine eigene Verarbeitungstätigkeit** mit eigenem Eintrag im Verzeichnis. Und es ist
 datenschutzrechtlich **gewichtiger als OTA**: OTA speichert über die KI-Nutzung nur Zahlen. Open
@@ -494,8 +494,8 @@ In seiner Datenbank (Vorgabe: SQLite unter `/app/backend/data`) und seinem Daten
 | **Container-Protokoll** (stdout) | Anfragepfade, je nach Stufe E-Mail | nach Docker-Einstellung des Containers |
 
 Das ist der Kern: **Open WebUI löscht von sich aus nichts.** Ohne Regel wächst dort ein
-vollständiges Archiv aller KI-Gespräche aller Beschäftigten. In dieser Anlage gilt seit
-2026-11-25 eine Löschfrist von 90 Tagen für Chats (12.5, W2).
+vollständiges Archiv aller KI-Gespräche aller Beschäftigten. Eine Löschfrist für Chats muss der
+Betreiber selbst einrichten (12.5, W2).
 
 ### 12.3 Wohin Daten das Haus verlassen können
 
@@ -531,18 +531,18 @@ vollständiges Archiv aller KI-Gespräche aller Beschäftigten. In dieser Anlage
 
 ### 12.5 Was zu tun ist (Open WebUI)
 
-| # | Aufgabe | Stand |
-|---|---|---|
-| W1 | **Einstellungen der eingesetzten Instanz prüfen und dokumentieren** (12.3, 12.4), in der Admin-Oberfläche, nicht nur in der Umgebung | ⚠️ Umgebung geprüft 2026-11-20, Admin-Oberfläche offen |
-| W2 | **Löschfrist für Chats** festlegen (z. B. 90 Tage ohne Änderung) und umsetzen. Open WebUI kann das nicht selbst; nötig ist eine Aufgabe auf dessen Datenbank oder eine Regel „Nutzer löschen selbst“ | ✅ 90 Tage, umgesetzt 2026-11-25 |
-| W3 | **Ausgeschiedene Beschäftigte:** OTA sperrt das Konto in Keycloak, **das Konto in Open WebUI mit allen Chats, Dateien und Erinnerungen bleibt**. Gehört ins Löschkonzept (4.2): in Open WebUI unter *Administration → Benutzer* löschen | offen |
-| W4 | **Admin-Zugriff auf Chats** abschalten oder in der Betriebsvereinbarung regeln | ✅ abgeschaltet 2026-11-25 |
-| W5 | **Community-Teilen, Versionsprüfung** abschalten (Telemetrie ist aus, geprüft 2026-11-20) | ✅ abgeschaltet 2026-11-25 |
-| W10 | **Container-Protokoll begrenzen** (`--log-opt max-size=10m --log-opt max-file=3` beim nächsten Neuanlegen von Open WebUI) | ✅ begrenzt 2026-11-25 |
-| W6 | **SearXNG:** Suchmaschinen und eigene Protokollierung prüfen | offen |
-| W7 | **Datenschutzhinweis in Open WebUI** (Banner oder Hinweis beim ersten Aufruf): Inhalte werden gespeichert, keine Personendaten Dritter und keine besonderen Kategorien eingeben, temporären Chat nutzen | ✅ Banner eingerichtet 2026-11-25 |
-| W8 | **Sicherungen** von Open WebUI: Wo liegen sie, wie lange? Gelöschte Chats leben dort weiter | ✅ in der Sicherung der virtuellen Maschine, 7 Tage; danach sind gelöschte Chats auch dort weg |
-| W9 | **Eintrag im Verzeichnis von Verarbeitungstätigkeiten** und Teil der **DSFA** (Abschnitt 9): KI mit frei eingegebenen Inhalten ist der wahrscheinlichste Grund, dass eine DSFA nötig wird | offen |
+| # | Aufgabe |
+|---|---|
+| W1 | **Einstellungen der eingesetzten Instanz prüfen und dokumentieren** (12.3, 12.4), in der Admin-Oberfläche, nicht nur in der Umgebung |
+| W2 | **Löschfrist für Chats** festlegen (z. B. 90 Tage ohne Änderung) und umsetzen. Open WebUI kann das nicht selbst; nötig ist eine Aufgabe auf dessen Datenbank oder eine Regel „Nutzer löschen selbst“ |
+| W3 | **Ausgeschiedene Beschäftigte:** OTA sperrt das Konto in Keycloak, **das Konto in Open WebUI mit allen Chats, Dateien und Erinnerungen bleibt**. Gehört ins Löschkonzept (4.2): in Open WebUI unter *Administration → Benutzer* löschen |
+| W4 | **Admin-Zugriff auf Chats** abschalten oder in der Betriebsvereinbarung regeln |
+| W5 | **Community-Teilen, Versionsprüfung und Telemetrie** abschalten |
+| W6 | **SearXNG:** Suchmaschinen und eigene Protokollierung prüfen |
+| W7 | **Datenschutzhinweis in Open WebUI** (Banner oder Hinweis beim ersten Aufruf): Inhalte werden gespeichert, keine Personendaten Dritter und keine besonderen Kategorien eingeben, temporären Chat nutzen |
+| W8 | **Sicherungen** von Open WebUI: Wo liegen sie, wie lange? Gelöschte Chats leben dort weiter |
+| W9 | **Eintrag im Verzeichnis von Verarbeitungstätigkeiten** und Teil der **DSFA** (Abschnitt 9): KI mit frei eingegebenen Inhalten ist der wahrscheinlichste Grund, dass eine DSFA nötig wird |
+| W10 | **Container-Protokoll begrenzen** (`--log-opt max-size=10m --log-opt max-file=3` beim Anlegen von Open WebUI) |
 
 ---
 
@@ -568,7 +568,7 @@ auch wenn sie nichts davon behält. Das sollte der Personalrat kennen, und es ge
 Dokumentation der Verarbeitung.
 
 👉 **Stufe 3 und das Protokoll des KI-Servers:** Die Prüfanfragen landen im Protokoll des
-KI-Servers wie jede andere Anfrage (Abschnitt 11, Punkt 12: rotierend, faktisch Stunden).
+KI-Servers wie jede andere Anfrage; dessen Protokollierung gehört geprüft (Abschnitt 11, Punkt 7).
 
 ---
 

@@ -230,9 +230,9 @@ Pakete über OTAs **eigene** Adresse (`OTA_SELF_ADDRESS`), nicht über den Proxy
 
 ```nginx
 location /repo/ {
-    allow 10.50.0.0/24;      # wer Pakete von aussen holen darf (Beispiel)
+    allow 10.20.0.0/24;      # wer Pakete von aussen holen darf (Beispiel)
     deny  all;
-    proxy_pass https://192.168.1.22:8443;
+    proxy_pass https://192.168.50.22:8443;
 }
 ```
 

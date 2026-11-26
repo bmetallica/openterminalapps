@@ -7,7 +7,7 @@
 
 set -uo pipefail
 
-BASE="${1:-https://192.168.66.224:8443}"
+BASE="${1:-$("$(dirname "$0")/ota-adresse.sh")}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CA="$ROOT/deploy/certs/ota-ca.crt"
 JAR="$(mktemp)"

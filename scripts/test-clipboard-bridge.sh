@@ -12,7 +12,7 @@ pass=0; fail=0
 ok()  { printf '  \033[32m✓\033[0m %s\n' "$1"; pass=$((pass+1)); }
 bad() { printf '  \033[31m✗\033[0m %s\n' "$1"; fail=$((fail+1)); }
 
-BASE="${OTA_BASE:-https://192.168.66.224:8443}"
+BASE="${OTA_BASE:-$("$(dirname "$0")/ota-adresse.sh")}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CA="$ROOT/deploy/certs/ota-ca.crt"
 JAR="$(mktemp)"

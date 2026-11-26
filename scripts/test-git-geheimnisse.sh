@@ -24,7 +24,7 @@ expect() { if [ "$2" = "$1" ]; then ok "$3"; else bad "$3 — erwartet $1, bekom
 enthaelt() { if grep -q -- "$2" <<<"$1"; then ok "$3"; else bad "$3 — „$2“ fehlt"; fi; }
 fehlt() { if grep -q -- "$2" <<<"$1"; then bad "$3 — „$2“ steht drin"; else ok "$3"; fi; }
 
-BASE="${1:-https://192.168.66.224:8443}"
+BASE="${1:-$("$(dirname "$0")/ota-adresse.sh")}"
 TMP="$(mktemp -d)"
 ADMIN="${OTA_TEST_ADMIN:-notfall}"
 ADMIN_PW="${OTA_TEST_ADMIN_PW:?OTA_TEST_ADMIN_PW fehlt}"

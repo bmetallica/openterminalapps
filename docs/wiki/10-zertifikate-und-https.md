@@ -125,7 +125,7 @@ openssl x509 -in deploy/certs/ota.crt -noout -subject -dates -ext subjectAltName
 
 ## OTA hinter einem weiteren Reverse Proxy ✅
 
-*Gemessen am 2026-08-28 mit Caddy unter `ota.boden.home`.*
+*Gemessen am 2026-08-28 mit Caddy unter `ota.firma.local`.*
 
 Steht vor OTA noch ein Reverse Proxy — weil dort ein Zertifikat liegt, dem alle Rechner ohnehin
 vertrauen —, sind zwei Einstellungen nötig. Ohne sie läuft OTA zwar, aber die Anmeldung führt an
@@ -136,8 +136,8 @@ und daran hängt, dass die Desktop-Verknüpfungen in ihrem eigenen Fenster bleib
 ### 1 · Der Proxy schickt Name und Port mit
 
 ```caddy
-ota.boden.home {
-	reverse_proxy https://192.168.66.224:8443 {
+ota.firma.local {
+	reverse_proxy https://192.168.10.20:8443 {
 		transport http {
 			tls_trusted_ca_certs /etc/caddy/ota-ca.crt
 		}
@@ -157,7 +157,7 @@ ota.boden.home {
 In **`deploy/.env`**:
 
 ```bash
-OTA_TRUSTED_PROXIES=192.168.66.251/32
+OTA_TRUSTED_PROXIES=192.168.10.21/32
 ```
 
 Danach `make up` (oder `./scripts/traefik-config.sh` und Traefik neu starten).
@@ -170,7 +170,7 @@ Danach `make up` (oder `./scripts/traefik-config.sh` und Traefik neu starten).
 > `scripts/traefik-config.sh` aus `traefik.yml.vorlage`; Handarbeit gehört in die Vorlage.
 
 Mehrere Adressen durch Komma getrennt und **in Anführungszeichen** —
-`OTA_TRUSTED_PROXIES="192.168.66.251/32,10.0.0.5/32"`. Die Datei wird von Skripten eingelesen, und
+`OTA_TRUSTED_PROXIES="192.168.10.21/32,10.0.0.5/32"`. Die Datei wird von Skripten eingelesen, und
 ein Leerzeichen ohne Anführungszeichen macht aus dem Rest der Zeile einen Befehl.
 
 Ohne diesen Eintrag **ersetzt** Traefik die Kopfzeilen des Proxys durch seine eigenen — er traut
@@ -179,7 +179,7 @@ kommt, einschliesslich der Absender-IP, die in Protokollen und Sperren landet. D
 eigene Proxy.
 
 > **Die Adresse, unter der der Name auflöst, ist nicht unbedingt die, von der die Anfrage kommt.**
-> Hier löste `ota.boden.home` auf `192.168.66.1` auf, verbunden hat sich aber `192.168.66.251`.
+> Hier löste `ota.firma.local` auf `192.168.10.1` auf, verbunden hat sich aber `192.168.10.21`.
 > Nachsehen statt raten:
 >
 > ```bash

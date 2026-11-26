@@ -248,7 +248,7 @@ Zwei Schlösser sichern das ab, und sie sichern gegen Verschiedenes:
   die Seite der Web-Anwendungen einen Knopf dorthin.
 
 Eingetragen wird eine **Herkunft**, also Schema, Host und gegebenenfalls Port, ohne Pfad: etwa
-`https://ai.firma.de` oder `http://192.168.66.225:3000`. Die Rückadresse einer Anwendung muss mit
+`https://ai.firma.de` oder `http://192.168.10.30:3000`. Die Rückadresse einer Anwendung muss mit
 einer davon beginnen. `http://` ist erlaubt und wird in der Liste als *unverschlüsselt* markiert —
 der Anmeldecode geht dann im Klartext über die Leitung. Platzhalter (`*`) nimmt OTA nicht an.
 Wird ein Ziel entfernt, bleiben Anwendungen dorthin angelegt, lassen sich aber nicht mehr ändern.

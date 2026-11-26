@@ -4,7 +4,7 @@
 > Fokus: VS Code (Desktop-Variante im Browser), Golden Images, eigene Nutzerverwaltung,
 > AD/LDAP nur optional, dunkles modernes UI, striktes Admin/User-Rechtekonzept.
 
-Stand: 2026-08-26 · Host: `RAG` (192.168.66.224) · Projektverzeichnis: `/opt/openterminalapps`
+Stand: 2026-08-26 · Projektverzeichnis: `/opt/openterminalapps`
 
 ---
 
@@ -66,27 +66,15 @@ Arbeitsplatz ist mit 4 Kernen / 6 GB veranschlagt. Für 20 parallele Arbeitsplä
 **mindestens 64 GB RAM, 16+ Kerne und 1 TB SSD**. Dieser Host trägt Entwicklung und einen Piloten mit
 zwei bis drei Arbeitsplätzen, nicht die Zielgröße. → §17.1
 
-## 2. Ist-Analyse dieses Hosts (verifiziert)
+## 2. Ausgangslage (verifiziert)
 
-Alle Angaben wurden auf dem Host geprüft, nicht angenommen.
+Entwickelt wurde auf einem Debian-13-Host mit Docker, auf dem bereits Kasm Workspaces lief und
+Port 443 belegte. Die Bestandsaufnahme dieses Hosts (Hardware, Adressen, belegte Ports, Konten)
+gehört zur Anlage und steht nicht im Repository. Was daraus für OTA folgt:
 
-### 2.1 Plattform
-| Sache | Wert |
-|---|---|
-| OS | Debian GNU/Linux 13 (trixie) |
-| Docker | 29.7.0, Compose v5.3.1 |
-| CPU / RAM / Swap | 4 Cores / 15 GB / 10 GB |
-| Disk `/` | 186 GB, 117 GB belegt, **60 GB frei** |
-| Hostname / IP | `RAG` / 192.168.66.224 |
-| Tooling | git 2.47.3, Node 20.19.2, Python 3.13.5 |
-
-### 2.2 Laufendes Kasm (1.19.0)
-Container: `kasm_proxy` (**belegt 0.0.0.0:443**), `kasm_api`, `kasm_manager`, `kasm_agent`, `kasm_db` (Postgres), `kasm_guac`, `kasm_rdp_gateway` (**3389**), `kasm_rdp_https_gateway`.
-Installation unter `/opt/kasm/current -> /opt/kasm/1.19.0`, Alt-Version `1.18.1` liegt daneben.
-Zertifikat: self-signed, `CN=RAG`, gültig bis 2031.
-
-**Bereits belegte Ports auf dem Host** (Auswahl): 22, 443, 2222, 3000, 3001, 3389, 5440, 6080, 6661, 6662, 7634, 7878, 7999, 8000, 8080, 8088, 8090, 8091, 8096, 8420.
-→ OTA nimmt im Parallelbetrieb **8443/tcp** (HTTPS) und übernimmt 443 erst bei der Abschaltung von Kasm.
+- OTA nimmt im Parallelbetrieb **8443/tcp** (HTTPS) und übernimmt 443 erst bei der Abschaltung von
+  Kasm.
+- Das Zuhause eines Kasm-Nutzers soll ohne Verlust umziehen (§14).
 
 ### 2.3 Der VS-Code-Workspace (das zu erhaltende Kernstück)
 Image `kasmweb/vs-code:1.18.0-rolling-weekly` (6,21 GB):
@@ -106,18 +94,8 @@ persistent_profile_path = /srv/kasm_profiles/{username}
 categories              = ["Development"]
 ```
 
-### 2.4 Nutzer und Daten von `bmetallica`
-- Kasm-User `bmetallica` (`f7e0f6f9-…`, realm `local`, aktiv), Mitglied in **`All Users` UND `Administrators`**
-- Profil auf dem Host: **`/srv/kasm_profiles/bmetallica`, 805 MB**, Owner `bmetallica:bmetallica`
-- Inhalt u. a.:
-  - `.config/Code/` (VS-Code-User-Data, 726 MB inkl. Chrome-Profil in `.config/google-chrome`)
-  - `.config/Code/User/settings.json` — enthält reale Einstellungen: `twinny.*` (Ollama auf `http://192.168.66.225`), `continue.*`, `myfeed.gatewayUrl`, `claudeCode.preferredLocation`
-  - `.vscode/extensions/` (Remote-SSH-Extensions), `.vscode-shared/`
-  - `.continue/` (3,7 MB), `.copilot/`, `.dotnet/`
-  - `.ssh/`, `.gnupg/`, `.pki/` — **Schlüsselmaterial, migrationskritisch**
-  - XFCE-Desktop-Einstellungen (`.config/xfce4`), Thunar, GTK-Theme
-  - Ballast: `core.1087` (20 MB Coredump), `.cache/` (52 MB) — beim Umzug ausschließen
-- Weitere Images in Kasm: Obsidian, Thunderbird, GIMP, Inkscape, LibreOffice, IntelliJ IDEA (`linuxserver/intellij-idea`), zwei VNC-Direktverbindungen (`HauptPC`, `VNC-HauptPC`), Easy Diffusion (deaktiviert)
+### 2.4 Ein Kasm-Profil
+- Ein Kasm-Profil liegt unter `/srv/kasm_profiles/<name>` und enthält u. a. `.config/Code/` (VS-Code-Daten samt Browserprofil), `.vscode/extensions/`, `.continue/`, `.ssh/`, `.gnupg/`, `.pki/` (**Schlüsselmaterial, migrationskritisch**), die XFCE-Einstellungen und Ballast wie Coredumps und `.cache/`, der beim Umzug ausgeschlossen wird
 - Relevante Gruppen-Settings, die OTA nachbilden muss: `allow_persistent_profile`, `allow_kasm_clipboard_up/down/seamless`, `allow_kasm_uploads/downloads`, `allow_kasm_audio`, `allow_kasm_microphone`, `max_kasms_per_user=5`, `keepalive_expiration=3600`, `keepalive_expiration_action=delete`, `idle_disconnect`, `allow_totp_2fa`, `allow_webauthn_2fa`
 
 ---
@@ -285,7 +263,7 @@ Vendor-Binaries (Chrome, JetBrains Ultimate, Docker Desktop, MS-Produkte) brauch
 | `ota-worker` | Celery *oder* APScheduler im API-Prozess | Idle-Timeout, Session-GC, Image-Builds, Profil-Backups |
 | `ota-db` | PostgreSQL 16 | Persistenz |
 | `traefik` | Traefik v3 | TLS, Routing, `forwardAuth`, dynamische Session-Routen über Docker-Provider |
-| *(optional)* `ota-guac` | guacd | Nur falls RDP/SSH-Targets gebraucht werden (`HauptPC`-Verbindungen aus Kasm) |
+| *(optional)* `ota-guac` | guacd | Nur falls RDP/SSH-Targets gebraucht werden (VNC-Direktverbindungen aus Kasm) |
 
 **Begründung der Stack-Wahl**
 - *Python/FastAPI statt Node*: Das Docker-SDK für Python ist ausgereifter als dockerode, async/await passt zu WebSocket-Handling, und Alembic gibt saubere Migrationen. Python 3.13 ist bereits auf dem Host.
@@ -1472,7 +1450,7 @@ Anmeldung und alle übrigen Daten unversehrt.
 
 - **TLS ist Pflicht**, nicht optional: Die Clipboard-API des Browsers (`navigator.clipboard`) funktioniert nur in Secure Contexts. Ohne HTTPS kein nahtloses Copy/Paste.
 - Parallelbetrieb mit Kasm: OTA auf **8443**, danach Umzug auf 443
-- Zertifikate: Für den internen Betrieb eine eigene CA oder Let's-Encrypt-DNS-01 (die Domain `home-bmetallica.de` ist offenbar vorhanden). Self-signed erzeugt bei jedem Nutzer Browserwarnungen — beim Rollout vermeiden.
+- Zertifikate: Für den internen Betrieb eine eigene CA oder Let's-Encrypt-DNS-01 . Self-signed erzeugt bei jedem Nutzer Browserwarnungen — beim Rollout vermeiden.
 - Netzsegmentierung (Stand 2026-09-04, umgesetzt):
   - `ota_public` — Traefik ↔ web/api/keycloak/turn
   - `ota_internal` — api ↔ db ↔ agent ↔ registry (`internal`, kein Internet)
@@ -1715,27 +1693,27 @@ mit Pfeiltasten bedienbar und mit `aria-valuetext` in menschlicher Form („2,7 
 mit Escape, Popover mit Escape und Klick daneben. `prefers-reduced-motion` schaltet alle Animationen
 ab. Responsiv bis 430 px Breite: Rail schrumpft auf Icons, Buchten und Zuweisung brechen einspaltig.
 
-## 14. Migration von `bmetallica`
+## 14. Migration eines Kasm-Profils
 
-Ziel: `bmetallica` meldet sich in OTA an und findet **exakt seinen VS-Code-Desktop** vor — gleiche Extensions, gleiche `settings.json`, gleiche SSH-Keys, gleiches XFCE-Layout.
+Ziel: Ein Kasm-Nutzer meldet sich in OTA an und findet **exakt seinen VS-Code-Desktop** vor — gleiche Extensions, gleiche `settings.json`, gleiche SSH-Keys, gleiches XFCE-Layout.
 
 ### 14.1 Vorgehen
-1. **Nutzer anlegen**: `bmetallica`, Mitglied in `admins` und `users` (entspricht seinen Kasm-Gruppen `Administrators` + `All Users`). Der Kasm-Passwort-Hash wird **nicht** übernommen — ein Import fremder Hash-Formate ist unnötiges Risiko. Stattdessen: Admin setzt ein Initialpasswort, `must_change_password = true`.
+1. **Nutzer anlegen**: `<name>`, Mitglied in `admins` und `users` (entspricht seinen Kasm-Gruppen `Administrators` + `All Users`). Der Kasm-Passwort-Hash wird **nicht** übernommen — ein Import fremder Hash-Formate ist unnötiges Risiko. Stattdessen: Admin setzt ein Initialpasswort, `must_change_password = true`.
 2. **Profil kopieren** (Kasm dabei gestoppt oder Session beendet, damit nichts halb geschrieben wird):
    ```bash
    rsync -aHAX --info=progress2 \
      --exclude='core.*' --exclude='.cache/' --exclude='*.sock' \
      --exclude='.config/google-chrome/*/Cache/' \
      --exclude='.config/Code/Cache*/' --exclude='.config/Code/CachedData/' \
-     /srv/kasm_profiles/bmetallica/ /srv/ota/profiles/bmetallica/user/
-   chown -R 1000:1000 /srv/ota/profiles/bmetallica/user/
+     /srv/kasm_profiles/<name>/ /srv/ota/profiles/<name>/user/
+   chown -R 1000:1000 /srv/ota/profiles/<name>/user/
    ```
    Erwartete Größe nach Ausschluss: deutlich unter 805 MB. **Bewusst mitgenommen**: `.ssh`, `.gnupg`, `.pki`, `.continue`, `.copilot`, `.vscode`, `.config/Code/User`, `.config/xfce4`, `.config/google-chrome` (ohne Caches).
    `.kasmpasswd` wird **nicht** übernommen — OTA erzeugt pro Session ein frisches VNC-Secret.
 3. **Template anlegen** „Visual Studio Code": Image `kasmweb/vs-code:1.18.0-rolling-weekly`, 2 Cores, 2,7 GB, Kategorie *Development*, `persistent_profile_scope = user`, Pfad `/srv/ota/profiles/{username}/user` → `/home/kasm-user`. Damit ist es exakt die Kasm-Konfiguration.
-4. **Zuweisen** an Gruppe `users` (damit später alle Entwickler es bekommen) und an `bmetallica`.
+4. **Zuweisen** an Gruppe `users` (damit später alle Entwickler es bekommen) und an `<name>`.
 5. **Verifikation — Abnahmekriterien:**
-   - [ ] `settings.json` enthält weiterhin `twinny.ollamaHostname`, `continue.*`, `myfeed.gatewayUrl`, `claudeCode.preferredLocation`
+   - [ ] `settings.json` enthält weiterhin alle eigenen Einstellungen
    - [ ] Remote-SSH-Extensions vorhanden und funktionsfähig
    - [ ] `ssh -T` gegen ein bekanntes Ziel funktioniert (Keys intakt, Permissions `600`)
    - [ ] XFCE-Desktop sieht aus wie vorher (Panels, Theme, Sprache Deutsch)
@@ -1744,7 +1722,7 @@ Ziel: `bmetallica` meldet sich in OTA an und findet **exakt seinen VS-Code-Deskt
 6. **Rückfallebene**: Kasm bleibt bis zur Abnahme unangetastet lauffähig; `/srv/kasm_profiles` wird **kopiert, nicht verschoben**, und zusätzlich als Tarball nach `/srv/ota/backups/` gesichert.
 
 ### 14.2 Weitere Kasm-Inhalte
-Aus den bestehenden Images werden Templates: Obsidian, Thunderbird, GIMP, Inkscape, LibreOffice, IntelliJ IDEA. Die beiden VNC-Direktverbindungen (`HauptPC`, `VNC-HauptPC`) brauchen die Guacamole-Engine → Phase M7, in v1 bleiben sie in Kasm oder werden per externem Client genutzt.
+Aus den bestehenden Images werden Templates: Obsidian, Thunderbird, GIMP, Inkscape, LibreOffice, IntelliJ IDEA. Die VNC-Direktverbindungen brauchen die Guacamole-Engine → Phase M7, in v1 bleiben sie in Kasm oder werden per externem Client genutzt.
 
 ---
 

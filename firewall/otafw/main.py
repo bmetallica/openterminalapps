@@ -167,7 +167,7 @@ def _ziel_pruefen(ziel: str) -> str:
     wird aufgeloest. Alles andere faellt **einzeln** heraus, laut im
     Protokoll: Der Satz wird atomar gesetzt, und ein einziges ungueltiges
     Ziel liess bis zum 2026-10-05 den ganzen Satz scheitern — gemessen mit
-    `https://ota.ai.vermkv` als Ziel, jeder Abgleich endete mit 500, und
+    `https://ota.ki.firma` als Ziel, jeder Abgleich endete mit 500, und
     neue Arbeitsplaetze hatten kein Netz.
     """
     import ipaddress

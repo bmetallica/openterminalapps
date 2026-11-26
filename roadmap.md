@@ -722,7 +722,7 @@ sondern daraus, dass jemand es benutzt hat:
       `authenticationConfig`, der einzelne Schritt heisst das Feld aber `authenticatorConfig`. Bei
       jedem `make identity` entstand eine neue Konfiguration, die alte blieb verwaist liegen
 - ~~**Guacamole-Engine** für RDP/VNC-Ziele~~ — **gestrichen (2026-09-03).** Ein eigener
-      Meilenstein mit eigener Abnahme für zwei Direktverbindungen; `HauptPC` und `VNC-HauptPC`
+      Meilenstein mit eigener Abnahme für zwei Direktverbindungen; die VNC-Direktverbindungen
       laufen weiter als Kasm-Images
 - ~~**code-server** als leichte Engine für reine Editor-Sessions~~ — **gestrichen (2026-09-03).**
       Überschneidet sich fast vollständig mit dem, was der Arbeitsplatz ohnehin kann; die

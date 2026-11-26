@@ -45,13 +45,16 @@
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import puppeteer from './../tests/node_modules/puppeteer-core/lib/esm/puppeteer/puppeteer-core.js'
+import { execFileSync as otaExec } from 'node:child_process'
+// Adresse der Anlage aus deploy/.env statt einer fest eingetragenen (scripts/ota-adresse.sh).
+const otaAdresse = (was = 'basis') => otaExec(new URL('./ota-adresse.sh', import.meta.url).pathname, [was]).toString().trim()
 
 const env = Object.fromEntries(
   readFileSync(new URL('../deploy/.env', import.meta.url), 'utf8')
     .split('\n').filter((z) => z.includes('=') && !z.trim().startsWith('#'))
     .map((z) => [z.slice(0, z.indexOf('=')).trim(), z.slice(z.indexOf('=') + 1).trim()]))
 
-const BASE = process.env.OTA_BASE ?? 'https://192.168.66.224:8443'
+const BASE = process.env.OTA_BASE ?? otaAdresse()
 const CDP = process.env.OTA_CDP ?? 'http://127.0.0.1:9225'
 const PROBE = process.env.OTA_PROBE ?? ''
 const USER = process.env.OTA_TEST_ADMIN ?? env.OTA_TEST_ADMIN ?? 'notfall'

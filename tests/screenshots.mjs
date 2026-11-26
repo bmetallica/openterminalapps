@@ -21,8 +21,11 @@
 import { execSync } from 'node:child_process'
 import { mkdirSync } from 'node:fs'
 import puppeteer from 'puppeteer-core'
+import { execFileSync as otaExec } from 'node:child_process'
+// Adresse der Anlage aus deploy/.env statt einer fest eingetragenen (scripts/ota-adresse.sh).
+const otaAdresse = (was = 'basis') => otaExec(new URL('../scripts/ota-adresse.sh', import.meta.url).pathname, [was]).toString().trim()
 
-const BASE = process.env.OTA_BASE ?? 'https://192.168.66.224:8443'
+const BASE = process.env.OTA_BASE ?? otaAdresse()
 const USER = process.env.OTA_TEST_ADMIN ?? 'notfall'
 const PW = process.env.OTA_TEST_ADMIN_PW
 if (!PW) {

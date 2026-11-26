@@ -24,7 +24,7 @@
 #
 # Die Erweiterung: OTA_TEST_GEDAECHTNIS (Vorgabe /opt/plugin_ota-opencode);
 # fehlt sie, wird nur opencode geprüft. Der KI-Server für die Embeddings:
-# OTA_TEST_KI_URL (Vorgabe http://192.168.66.225:8080), Modell
+# OTA_TEST_KI_URL (Umgebung oder deploy/.env), Modell
 # OTA_TEST_EMBED_MODELL (Vorgabe nomic-embed-text). Stellt am Ende her, was
 # vorher eingestellt war. OTA_TEST_BEHALTEN=1 lässt den Arbeitsplatz stehen.
 set -uo pipefail
@@ -42,7 +42,7 @@ B="${OTA_BASE:-https://127.0.0.1:${OTA_HTTPS_PORT:-8443}}"
 TMP="$(mktemp -d)"
 ADMIN="${OTA_TEST_ADMIN:-notfall}"
 ADMIN_PW="${OTA_TEST_ADMIN_PW:?OTA_TEST_ADMIN_PW fehlt}"
-KI="${OTA_TEST_KI_URL:-http://192.168.66.225:8080}"
+KI="${OTA_TEST_KI_URL:-$("$(dirname "$0")/ota-adresse.sh" ki)}"
 EMBED="${OTA_TEST_EMBED_MODELL:-nomic-embed-text}"
 PLUGIN="${OTA_TEST_GEDAECHTNIS:-/opt/plugin_ota-opencode}"
 IMAGE="${OTA_ROOT_TAG:-ota/base-desktop-root:1}"

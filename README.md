@@ -204,11 +204,11 @@ laufen, kommt **3478/TCP** direkt auf den OTA-Host dazu, und in `deploy/.env` zw
 die der Firewall und die eigene:
 
 ```bash
-OTA_TURN_HOST=10.50.0.33        # die Firewall — so sehen die Browser den TURN
-OTA_TURN_BIND=192.168.1.22      # der Host — daran bindet sich coturn
+OTA_TURN_HOST=10.20.0.33        # die Firewall — so sehen die Browser den TURN
+OTA_TURN_BIND=192.168.50.22      # der Host — daran bindet sich coturn
 OTA_TURN_PROTOCOL=tcp
 OTA_TURN_ICE_POLICY=relay
-OTA_TRUSTED_PROXIES=192.168.1.23/32
+OTA_TRUSTED_PROXIES=192.168.50.23/32
 ```
 
 Eine Hairpin-NAT an der Firewall braucht es nicht: Der Router der Arbeitsplätze biegt die

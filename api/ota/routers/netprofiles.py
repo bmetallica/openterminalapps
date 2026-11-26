@@ -100,7 +100,7 @@ def _ziel_pruefen(ziel: str) -> None:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
             f"„{ziel}“ ist weder eine Adresse noch ein Name. Erwartet wird "
-            "etwas wie 192.168.66.10, 10.20.0.0/16 oder git.firma.de.")
+            "etwas wie 192.168.10.50, 10.20.0.0/16 oder git.firma.de.")
 
 
 def _ports_pruefen(ports: str) -> None:

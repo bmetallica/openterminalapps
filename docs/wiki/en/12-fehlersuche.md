@@ -822,7 +822,7 @@ anyone attempting a start.
 **Symptom.** The session starts, the tab stays empty, and the check says:
 
 ```
-3. Erlaubnis für 192.168.1.22:59236 -> ABGELEHNT: 403 Forbidden IP
+3. Erlaubnis für 192.168.50.22:59236 -> ABGELEHNT: 403 Forbidden IP
 ```
 
 The TURN server refuses the permission for the peer because its address is in its **block list**.

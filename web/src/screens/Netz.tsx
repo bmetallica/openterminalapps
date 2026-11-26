@@ -51,7 +51,7 @@ function Regeln({ regeln, onChange, disabled }: {
       {regeln.map((regel, i) => (
         <div key={i} className="netz__regel">
           <input type="text" value={regel.ziel} disabled={disabled}
-            placeholder={t('192.168.66.10, 10.20.0.0/16 oder git.firma.de')}
+            placeholder={t('192.168.10.50, 10.20.0.0/16 oder git.firma.de')}
             aria-label={t('Ziel')}
             onChange={(e) => setze(i, { ziel: e.target.value })} />
           <input type="text" value={regel.ports} disabled={disabled}

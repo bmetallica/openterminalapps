@@ -59,3 +59,7 @@ firewall-roadmap.md
 # gehoert zur Anlage, nicht ins Repository.
 deploy/keycloak-truststore/
 deploy/keycloak-theme/.stand
+
+# Stand der eigenen Anlagen (Produktiv- und Testsystem): Adressen, Namen,
+# Entscheidungen und der Datenschutz-Sachstand. Gehört nicht ins Repository.
+lokal/

@@ -196,7 +196,7 @@ In `deploy/.env` muss dafür stehen, unter welcher Adresse die **Browser**
 diesen Host erreichen, und ein Geheimnis für die TURN-Anmeldung:
 
 ```
-OTA_TURN_HOST=192.168.66.224
+OTA_TURN_HOST=192.168.10.20
 OTA_TURN_SECRET=…            # openssl rand -base64 32
 OTA_TURN_PROTOCOL=udp        # tcp bei kleiner MTU, siehe unten
 OTA_TURN_ICE_POLICY=all      # relay bei kleiner MTU, siehe unten
@@ -220,9 +220,9 @@ einer Docker-Bridge meldet als Relay-Adresse die des Hosts, verschickt die
 vermittelten Pakete aber mit der Container-Adresse als Absender:
 
 ```
-2. Allocate mit Anmeldung  -> Relay 192.168.66.224:65502
-5. Client -> Relay -> Peer: b'HINAUS' von 192.168.0.4:65502
-   Absender != Relay 192.168.66.224:65502  [ausgehend KAPUTT]
+2. Allocate mit Anmeldung  -> Relay 192.168.10.20:65502
+5. Client -> Relay -> Peer: b'HINAUS' von 192.168.10.4:65502
+   Absender != Relay 192.168.10.20:65502  [ausgehend KAPUTT]
 ```
 
 Jeder WebRTC-Stack verwirft ein Paket, dessen Absender nicht zu dem Kandidaten

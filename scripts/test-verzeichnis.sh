@@ -24,7 +24,7 @@ expect() { if [ "$2" = "$1" ]; then ok "$3 ($2)"; else bad "$3 — erwartet $1, 
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 [ -f "$ROOT/deploy/.env" ] && [ -z "${OTA_TEST_ADMIN_PW:-}" ] && { set -a; . "$ROOT/deploy/.env"; set +a; }
-BASE_URL="${OTA_BASE:-https://192.168.66.224:8443}"
+BASE_URL="${OTA_BASE:-$("$(dirname "$0")/ota-adresse.sh")}"
 CA="$ROOT/deploy/certs/ota-ca.crt"
 TMP="$(mktemp -d)"
 ADMIN="${OTA_TEST_ADMIN:-notfall}"

@@ -139,7 +139,7 @@ die eines Docker-Netzes, nicht `0.0.0.0`. `make setup` schlägt die erste eigene
 vor und erzeugt das Geheimnis dazu:
 
 ```ini
-OTA_TURN_HOST=192.168.66.224   # Vorschlag von make setup — prüfen!
+OTA_TURN_HOST=192.168.10.20   # Vorschlag von make setup — prüfen!
 OTA_TURN_SECRET=…              # wird erzeugt
 ```
 

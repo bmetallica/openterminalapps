@@ -14,7 +14,7 @@
 #     also die haeufigste Adressierung ueberhaupt. coturn antwortete dort auf
 #     die Erlaubnis fuer den eigenen Browser mit „403 Forbidden IP", und im
 #     Browser stand nichts. Gefunden am 2026-09-10 auf einer frischen Anlage
-#     unter 192.168.1.22.
+#     unter 192.168.50.22.
 #
 # Geraten wird deshalb nichts mehr. Gesperrt werden:
 #

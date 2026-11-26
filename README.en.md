@@ -202,11 +202,11 @@ images with Selkies 1.6.2 are running, **3478/TCP** directly to the OTA host is 
 addresses in `deploy/.env`, the firewall's and the host's own:
 
 ```bash
-OTA_TURN_HOST=10.50.0.33        # the firewall — this is how browsers see TURN
-OTA_TURN_BIND=192.168.1.22      # the host — coturn binds to this
+OTA_TURN_HOST=10.20.0.33        # the firewall — this is how browsers see TURN
+OTA_TURN_BIND=192.168.50.22      # the host — coturn binds to this
 OTA_TURN_PROTOCOL=tcp
 OTA_TURN_ICE_POLICY=relay
-OTA_TRUSTED_PROXIES=192.168.1.23/32
+OTA_TRUSTED_PROXIES=192.168.50.23/32
 ```
 
 Hairpin NAT on the firewall is not needed: the workspaces' router redirects the published address

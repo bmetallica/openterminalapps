@@ -29,7 +29,7 @@ ok()  { printf '  \033[32m✓\033[0m %s\n' "$1"; pass=$((pass+1)); }
 bad() { printf '  \033[31m✗\033[0m %s\n' "$1"; fail=$((fail+1)); }
 expect() { if [ "$2" = "$1" ]; then ok "$3 ($2)"; else bad "$3 — erwartet $1, bekommen $2"; fi; }
 
-B="${OTA_BASE:-https://192.168.66.224:8443}"
+B="${OTA_BASE:-$("$(dirname "$0")/ota-adresse.sh")}"
 CA="$ROOT/deploy/certs/ota-ca.crt"
 TMP="$(mktemp -d)"
 ADMIN="${OTA_TEST_ADMIN:-notfall}"
@@ -139,7 +139,7 @@ api -X PUT "$B/api/admin/git" -d "{\"domain\":\"$DOMAIN\",\"ota_url\":\"$B\",\"g
 R=$(api -X POST "$B/api/admin/git/an")
 expect "True" "$(jqp "str(d['an'])" <<<"$R")" "OTA-Git ist an"
 expect "healthy" "$(jqp "d['dienst'].get('gesund')" <<<"$R")" "Forgejo meldet sich gesund"
-CODE=$(curl -s --cacert "$CA" --resolve "$DOMAIN:8443:192.168.66.224" "https://$DOMAIN:8443/user/login" -o "$TMP/login.html" -w '%{http_code}')
+CODE=$(curl -s --cacert "$CA" --resolve "$DOMAIN:8443:$("$(dirname "$0")/ota-adresse.sh" host)" "https://$DOMAIN:8443/user/login" -o "$TMP/login.html" -w '%{http_code}')
 expect "200" "$CODE" "Unter der Subdomain antwortet Forgejo, Zertifikat von der OTA-CA"
 grep -q "user/oauth2/ota" "$TMP/login.html" && ok "… mit der Anmeldung über Keycloak" || bad "Kein Knopf für die Anmeldung über Keycloak"
 expect "200" "$(curl -sk -o /dev/null -w '%{http_code}' "$B/healthz")" "OTA selbst bleibt erreichbar"
@@ -236,6 +236,7 @@ im "cd r && git pull -q && test -f a.txt" && ok "… und es gilt (pull)" || bad 
 # ------------------------------------------------------------------ Proxy
 echo
 echo "Hinter einem Reverse Proxy"
+OTA_HOST_ADRESSE=$("$(dirname "$0")/ota-adresse.sh" host)
 openssl req -x509 -newkey rsa:2048 -nodes -keyout "$TMP/p.key" -out "$TMP/p.crt" -days 1 -subj "/CN=$DOMAIN" 2>/dev/null
 cat > "$TMP/nginx.conf" <<EOF
 events {}
@@ -244,7 +245,7 @@ http {
     listen 8443 ssl;
     ssl_certificate /p/p.crt; ssl_certificate_key /p/p.key;
     location / {
-      proxy_pass https://192.168.66.224:8443;
+      proxy_pass https://$OTA_HOST_ADRESSE:8443;
       proxy_set_header Host \$host;
       proxy_ssl_server_name on;
       proxy_ssl_name \$host;

@@ -139,7 +139,7 @@ needs an address at which the **browsers** reach it — not that of a Docker net
 `make setup` suggests the host's first own address and generates the secret for it:
 
 ```ini
-OTA_TURN_HOST=192.168.66.224   # suggestion from make setup — check it!
+OTA_TURN_HOST=192.168.10.20   # suggestion from make setup — check it!
 OTA_TURN_SECRET=…              # is generated
 ```
 

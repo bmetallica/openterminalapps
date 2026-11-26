@@ -64,7 +64,7 @@ verworfen), mit `udp` als Vorgabe und beiden Wegen im Angebot:
 
 ```
 Gewaehlte Kandidatenpaare:
-  host/:44991 -> relay/192.168.66.224:49185  empfangen=0B gesendet=14630B
+  host/:44991 -> relay/192.168.10.20:49185  empfangen=0B gesendet=14630B
 KEIN BILD.
 ```
 

@@ -127,7 +127,7 @@ def _wirt(wert: str) -> str:
     """Aus einer Angabe in der .env den blossen Wirt machen.
 
     Gemessen am 2026-10-05 auf der Produktivanlage: `OTA_SELF_ADDRESS` stand
-    auf `https://ota.ai.vermkv`. Das landete wortwoertlich im Regelwerk des
+    auf `https://ota.ki.firma`. Das landete wortwoertlich im Regelwerk des
     Routers, `nft` verwarf den **ganzen** Satz, und jeder Abgleich endete mit
     500 — neue Arbeitsplaetze bekamen weder Regeln noch Route. Eine Adresse
     mit Schema, Port oder Pfad ist ein naheliegender Tippfehler; er soll eine

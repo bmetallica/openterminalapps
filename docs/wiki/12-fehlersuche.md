@@ -842,7 +842,7 @@ Durchlauf weg — auch ohne dass jemand einen Start versucht.
 **Symptom.** Die Sitzung startet, der Tab bleibt leer, und die Prüfung sagt:
 
 ```
-3. Erlaubnis für 192.168.1.22:59236 -> ABGELEHNT: 403 Forbidden IP
+3. Erlaubnis für 192.168.50.22:59236 -> ABGELEHNT: 403 Forbidden IP
 ```
 
 Der TURN-Server verweigert die Erlaubnis für die Gegenstelle, weil deren Adresse in seiner

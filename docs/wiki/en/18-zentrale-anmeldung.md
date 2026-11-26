@@ -241,7 +241,7 @@ Two locks secure this, and they secure against different things:
   applications page shows a button leading there.
 
 What is entered is an **origin**, i.e. scheme, host and port if needed, without a path: such as
-`https://ai.company.com` or `http://192.168.66.225:3000`. An application's redirect address must
+`https://ai.company.com` or `http://192.168.10.30:3000`. An application's redirect address must
 start with one of them. `http://` is allowed and is marked *unencrypted* in the list — the sign-in
 code then goes over the wire in plain text. OTA does not accept wildcards (`*`). If a destination is
 removed, applications pointing there stay, but can no longer be changed.

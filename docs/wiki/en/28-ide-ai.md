@@ -23,8 +23,8 @@ editors.
 
 Under **Settings → IDE-AI**:
 
-1. Enter the **AI server address**, with `/v1`, e.g. `http://192.168.1.2:3000/v1` (vLLM) or
-   `http://192.168.1.3:8080/v1` (llama.cpp). Without a path, OTA adds `/v1`.
+1. Enter the **AI server address**, with `/v1`, e.g. `http://192.168.50.2:3000/v1` (vLLM) or
+   `http://192.168.50.3:8080/v1` (llama.cpp). Without a path, OTA adds `/v1`.
 2. **Fetch models**. OTA asks the server for `/v1/models`.
 3. In the table, **offer** the models that should be available and choose the **default model**.
    Enter **context window** and **response length** in tokens for each model.
@@ -118,7 +118,7 @@ models:
 - name: Hauptmodell
   provider: openai
   model: Hauptmodell
-  apiBase: http://192.168.66.225:8080/v1
+  apiBase: http://192.168.10.30:8080/v1
   defaultCompletionOptions:
     contextLength: 65536
     maxTokens: 2048

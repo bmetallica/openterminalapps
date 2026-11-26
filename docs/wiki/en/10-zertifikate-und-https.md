@@ -125,7 +125,7 @@ openssl x509 -in deploy/certs/ota.crt -noout -subject -dates -ext subjectAltName
 
 ## OTA behind another reverse proxy ✅
 
-*Measured on 2026-08-28 with Caddy under `ota.boden.home`.*
+*Measured on 2026-08-28 with Caddy under `ota.firma.local`.*
 
 If yet another reverse proxy sits in front of OTA — because it holds a certificate all computers
 trust anyway — two settings are needed. Without them OTA still runs, but the sign-in leads to the
@@ -135,8 +135,8 @@ the desktop shortcuts stay in their own window depends on it ([chapter 3](03-arb
 ### 1 · The proxy sends name and port along
 
 ```caddy
-ota.boden.home {
-	reverse_proxy https://192.168.66.224:8443 {
+ota.firma.local {
+	reverse_proxy https://192.168.10.20:8443 {
 		transport http {
 			tls_trusted_ca_certs /etc/caddy/ota-ca.crt
 		}
@@ -156,7 +156,7 @@ Caddy sets `X-Forwarded-Host` by itself; the port it does not.
 In **`deploy/.env`**:
 
 ```bash
-OTA_TRUSTED_PROXIES=192.168.66.251/32
+OTA_TRUSTED_PROXIES=192.168.10.21/32
 ```
 
 Then `make up` (or `./scripts/traefik-config.sh` and restart Traefik).
@@ -169,7 +169,7 @@ Then `make up` (or `./scripts/traefik-config.sh` and restart Traefik).
 > `traefik.yml.vorlage`; manual edits belong in the template.
 
 Several addresses separated by commas and **in quotes** —
-`OTA_TRUSTED_PROXIES="192.168.66.251/32,10.0.0.5/32"`. The file is read by scripts, and a space
+`OTA_TRUSTED_PROXIES="192.168.10.21/32,10.0.0.5/32"`. The file is read by scripts, and a space
 without quotes turns the rest of the line into a command.
 
 Without this entry Traefik **replaces** the proxy's headers with its own — it does not trust them,
@@ -177,7 +177,7 @@ and that is the right default. Whoever is listed here may claim where a request 
 including the sender IP that ends up in logs and lockouts. Therefore: only your own proxy.
 
 > **The address the name resolves to is not necessarily the one the request comes from.**
-> Here `ota.boden.home` resolved to `192.168.66.1`, but `192.168.66.251` connected.
+> Here `ota.firma.local` resolved to `192.168.10.1`, but `192.168.10.21` connected.
 > Look it up instead of guessing:
 >
 > ```bash

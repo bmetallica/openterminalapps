@@ -113,7 +113,7 @@ def url_pruefen(roh: str) -> str:
         return ""
     teile = urlparse(url)
     if teile.scheme not in ("http", "https") or not teile.hostname:
-        raise IdeAiFehler("Die Adresse beginnt mit http:// oder https://, z. B. http://192.168.1.2:3000/v1.")
+        raise IdeAiFehler("Die Adresse beginnt mit http:// oder https://, z. B. http://192.168.50.2:3000/v1.")
     try:
         teile.port
     except ValueError as exc:

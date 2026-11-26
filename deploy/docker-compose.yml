@@ -80,8 +80,8 @@ services:
   # vermittelten Pakete aber mit der Container-Adresse als Absender. Gemessen
   # mit `scripts/pruef-turn.py` gegen die alte Fassung:
   #
-  #     5. Client -> Relay -> Peer: b'HINAUS' von 192.168.0.4:65502
-  #        Absender != Relay 192.168.66.224:65502
+  #     5. Client -> Relay -> Peer: b'HINAUS' von 192.168.10.4:65502
+  #        Absender != Relay 192.168.10.20:65502
   #
   # Jeder WebRTC-Stack verwirft ein Paket, dessen Absender nicht zu dem
   # Kandidaten passt, auf den er wartet. Im Browser sah das aus wie

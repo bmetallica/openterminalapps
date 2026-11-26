@@ -23,8 +23,8 @@ Editoren.
 
 Unter **Einstellungen → IDE-AI**:
 
-1. **Adresse des KI-Servers** eintragen, mit `/v1`, z. B. `http://192.168.1.2:3000/v1` (vLLM) oder
-   `http://192.168.1.3:8080/v1` (llama.cpp). Ohne Pfad ergänzt OTA `/v1`.
+1. **Adresse des KI-Servers** eintragen, mit `/v1`, z. B. `http://192.168.50.2:3000/v1` (vLLM) oder
+   `http://192.168.50.3:8080/v1` (llama.cpp). Ohne Pfad ergänzt OTA `/v1`.
 2. **Modelle abrufen**. OTA fragt den Server nach `/v1/models`.
 3. In der Tabelle die Modelle **anbieten**, die zur Auswahl stehen sollen, und das **Standardmodell**
    wählen. Für jedes Modell **Kontextfenster** und **Antwortlänge** in Tokens eintragen.
@@ -117,7 +117,7 @@ models:
 - name: Hauptmodell
   provider: openai
   model: Hauptmodell
-  apiBase: http://192.168.66.225:8080/v1
+  apiBase: http://192.168.10.30:8080/v1
   defaultCompletionOptions:
     contextLength: 65536
     maxTokens: 2048

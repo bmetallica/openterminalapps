@@ -8,8 +8,11 @@
 import { execSync } from 'node:child_process'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import puppeteer from 'puppeteer-core'
+import { execFileSync as otaExec } from 'node:child_process'
+// Adresse der Anlage aus deploy/.env statt einer fest eingetragenen (scripts/ota-adresse.sh).
+const otaAdresse = (was = 'basis') => otaExec(new URL('../scripts/ota-adresse.sh', import.meta.url).pathname, [was]).toString().trim()
 
-const BASE = process.env.OTA_BASE ?? 'https://192.168.66.224:8443'
+const BASE = process.env.OTA_BASE ?? otaAdresse()
 // Der Notzugang, nicht ein Mensch.
 //
 // Seit der Übernahme (auth-roadmap.md §5.1) melden sich Menschen über
@@ -1203,7 +1206,7 @@ try {
 
   // IDE-AI (Kapitel 28): Modelle abrufen, ohne etwas zu speichern. Der
   // KI-Server der Testanlage; OTA_TEST_KI_URL=aus überspringt das.
-  const ki = process.env.OTA_TEST_KI_URL ?? 'http://192.168.66.225:8080'
+  const ki = process.env.OTA_TEST_KI_URL ?? otaAdresse('ki')
   check(!!(await page.$('#ide-ai')), 'Einstellungen → IDE-AI vorhanden')
   if (ki !== 'aus') {
     const url = await page.$('input[aria-label="Adresse des KI-Servers"]')

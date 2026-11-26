@@ -94,7 +94,7 @@ Two lists, both with the same form: **destination · ports · protocol · note**
   package mirror. Maintained in one place instead of repeated in every profile.
 * **Per profile** — what only this group of workspaces needs.
 
-A destination can be an address (`192.168.66.10`), a range (`10.20.0.0/16`) **or a name**
+A destination can be an address (`192.168.10.50`), a range (`10.20.0.0/16`) **or a name**
 (`git.company.com`). Ports individually (`443`), as a list (`80,443`) or as a range (`8080-8090`).
 
 **The note is mandatory.** A rule without a justification is, in a year, one nobody dares to remove.

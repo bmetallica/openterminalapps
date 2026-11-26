@@ -15,10 +15,13 @@
 import puppeteer from './../tests/node_modules/puppeteer-core/lib/esm/puppeteer/puppeteer-core.js'
 import { readFileSync } from 'node:fs'
 import { execSync } from 'node:child_process'
+import { execFileSync as otaExec } from 'node:child_process'
+// Adresse der Anlage aus deploy/.env statt einer fest eingetragenen (scripts/ota-adresse.sh).
+const otaAdresse = (was = 'basis') => otaExec(new URL('./ota-adresse.sh', import.meta.url).pathname, [was]).toString().trim()
 
 const env = Object.fromEntries(readFileSync(new URL('../deploy/.env', import.meta.url), 'utf8')
   .split('\n').filter((z) => /^[A-Z_]+=/.test(z)).map((z) => [z.split('=')[0], z.slice(z.indexOf('=') + 1)]))
-const BASE = process.env.OTA_BASE ?? 'https://192.168.66.224:8443'
+const BASE = process.env.OTA_BASE ?? otaAdresse()
 const SLUG = process.env.OTA_SLUG ?? ''
 
 const browser = await puppeteer.connect({ browserURL: process.env.OTA_CDP, defaultViewport: { width: 1440, height: 900 } })

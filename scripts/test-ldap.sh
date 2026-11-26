@@ -23,7 +23,7 @@ ok()  { printf '  \033[32m✓\033[0m %s\n' "$1"; pass=$((pass+1)); }
 bad() { printf '  \033[31m✗\033[0m %s\n' "$1"; fail=$((fail+1)); }
 expect() { if [ "$2" = "$1" ]; then ok "$3 ($2)"; else bad "$3 — erwartet $1, bekommen $2"; fi; }
 
-BASE_URL="${OTA_BASE:-https://192.168.66.224:8443}"
+BASE_URL="${OTA_BASE:-$("$(dirname "$0")/ota-adresse.sh")}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CA="$ROOT/deploy/certs/ota-ca.crt"
 TMP="$(mktemp -d)"

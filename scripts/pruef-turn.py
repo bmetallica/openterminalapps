@@ -18,9 +18,9 @@ nicht, verwirft jeder WebRTC-Stack es, und das Bild bleibt schwarz.
 Genau daran ist der erste Anlauf gescheitert — ein TURN je Sitzung, im
 Session-Container, hinter einer Docker-Bridge:
 
-    2. Allocate mit Anmeldung  -> Relay 192.168.66.224:65502
-    5. Client -> Relay -> Peer: b'HINAUS' von 192.168.0.4:65502
-       Absender != Relay 192.168.66.224:65502  [ausgehend KAPUTT]
+    2. Allocate mit Anmeldung  -> Relay 192.168.10.20:65502
+    5. Client -> Relay -> Peer: b'HINAUS' von 192.168.10.4:65502
+       Absender != Relay 192.168.10.20:65502  [ausgehend KAPUTT]
 
 Deshalb läuft TURN seither als Dienst `turn` im Stack, auf dem Netz des Hosts
 (`deploy/docker-compose.yml`).

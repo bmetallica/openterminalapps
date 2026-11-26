@@ -93,7 +93,7 @@ Zwei Listen, beide mit derselben Form: **Ziel · Ports · Protokoll · Notiz**.
   Paketspiegel. An einer Stelle gepflegt statt in jedem Profil wiederholt.
 * **Je Profil** — was nur diese Gruppe von Arbeitsplätzen braucht.
 
-Als Ziel geht eine Adresse (`192.168.66.10`), ein Bereich (`10.20.0.0/16`) **oder ein Name**
+Als Ziel geht eine Adresse (`192.168.10.50`), ein Bereich (`10.20.0.0/16`) **oder ein Name**
 (`git.firma.de`). Ports einzeln (`443`), als Liste (`80,443`) oder als Bereich (`8080-8090`).
 
 **Die Notiz ist Pflicht.** Eine Freigabe ohne Begründung ist in einem Jahr eine, die niemand zu

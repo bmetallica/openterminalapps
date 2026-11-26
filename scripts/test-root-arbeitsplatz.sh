@@ -168,7 +168,7 @@ print(len(netze), ' '.join(str(n) for n in netze if not any(n.subnet_of(e) for e
 fi
 
 # Die inneren Container gehen durch denselben Router wie der Arbeitsplatz.
-LAN="${OTA_TURN_BIND:-${OTA_TURN_HOST:-192.168.66.224}}"
+LAN="${OTA_TURN_BIND:-${OTA_TURN_HOST:-$("$(dirname "$0")/ota-adresse.sh" host)}}"
 INNEN=$(drin "docker run --rm alpine:3.20 sh -c '
   wget -q -T8 -O /dev/null https://example.com && echo I:JA || echo I:NEIN
   nc -z -w3 ${LAN%.*}.1 80 && echo L:JA || echo L:NEIN

@@ -72,7 +72,7 @@
   <text class="unter" x="682" y="180">z. B. 93.184.x.x</text>
   <rect x="664" y="234" width="172" height="62" rx="8" fill="#0F172A" stroke="#1E293B" stroke-width="1.5"/>
   <text class="titel" x="682" y="260">Das Firmennetz</text>
-  <text class="unter" x="682" y="280">192.168.66.0/24</text>
+  <text class="unter" x="682" y="280">192.168.10.0/24</text>
     <circle cx="642" cy="65.0" r="11" fill="#090D16" stroke="#06B6D4" stroke-width="1.5"/><path d="M637 65.0 L641 69.0 L648 61.0" fill="none" stroke="#06B6D4" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
   <text class="urteil" x="624" y="52.0" text-anchor="end" fill="#06B6D4">erlaubt</text>
   <circle cx="536" cy="165.0" r="11" fill="#090D16" stroke="#EF4444" stroke-width="1.5"/><path d="M531 160.0 L541 170.0 M541 160.0 L531 170.0" stroke="#EF4444" stroke-width="2.4" stroke-linecap="round"/>

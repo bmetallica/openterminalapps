@@ -15,7 +15,7 @@
 #   * Ausfall: Liegt ota-ki, nimmt die Firewall die Umleitung heraus, und die
 #     echte Adresse antwortet direkt. Danach kommt sie zurück.
 #
-# Der KI-Server: OTA_TEST_KI_URL (Vorgabe http://192.168.66.225:8080) und
+# Der KI-Server: OTA_TEST_KI_URL (Umgebung oder deploy/.env) und
 # OTA_TEST_KI_MODELL (Vorgabe Hauptmodell). Stellt am Ende her, was vorher
 # eingestellt war, und löscht die Zahlen, die der Test erzeugt hat, nicht —
 # sie stehen unter dem Testkonto.
@@ -29,11 +29,11 @@ ok()  { printf '  \033[32m✓\033[0m %s\n' "$1"; pass=$((pass+1)); }
 bad() { printf '  \033[31m✗\033[0m %s\n' "$1"; fail=$((fail+1)); }
 expect() { if [ "$2" = "$1" ]; then ok "$3 ($2)"; else bad "$3 — erwartet $1, bekommen $2"; fi; }
 
-B="${OTA_BASE:-https://192.168.66.224:8443}"
+B="${OTA_BASE:-$("$(dirname "$0")/ota-adresse.sh")}"
 TMP="$(mktemp -d)"
 ADMIN="${OTA_TEST_ADMIN:-notfall}"
 ADMIN_PW="${OTA_TEST_ADMIN_PW:?OTA_TEST_ADMIN_PW fehlt}"
-KI="${OTA_TEST_KI_URL:-http://192.168.66.225:8080}"
+KI="${OTA_TEST_KI_URL:-$("$(dirname "$0")/ota-adresse.sh" ki)}"
 MODELL="${OTA_TEST_KI_MODELL:-Hauptmodell}"
 VORLAGE="${OTA_TEST_VORLAGE:-arbeitsplatz}"
 

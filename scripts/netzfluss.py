@@ -284,7 +284,7 @@ bau("netzfluss-internet.svg",
     "Stufe „Internet“ — die Vorgabe",
     ["Stufe: internet", "NAT auf die Wirtsadresse"],
     [("oben",  "Das Internet",   "z. B. 93.184.x.x",  "erlaubt", "durch"),
-     ("mitte", "Das Firmennetz", "192.168.66.0/24", "verworfen", "gesperrt"),
+     ("mitte", "Das Firmennetz", "192.168.10.0/24", "verworfen", "gesperrt"),
      ("unten", "Nachbar-Arbeitsplatz", "10.99.3.10", "kein Weg", "kein-weg")],
     "Öffentliche Ziele gehen durch, alles Private ist zu — zum Nachbarn führt keine Leitung.")
 
@@ -293,14 +293,14 @@ bau("netzfluss-abgeschottet.svg",
     ["Stufe: abgeschottet", "nur der Grundregelsatz"],
     [("oben",  "TURN, OTA, DNS", "der Grundregelsatz", "erlaubt", "durch"),
      ("mitte", "Das Internet",   "z. B. 93.184.x.x", "verworfen", "gesperrt"),
-     ("unten", "Das Firmennetz", "192.168.66.0/24", "verworfen", "gesperrt")],
+     ("unten", "Das Firmennetz", "192.168.10.0/24", "verworfen", "gesperrt")],
     "Nur was OTA für sich selbst braucht — sonst käme nicht einmal ein Bild an.")
 
 bau("netzfluss-aus.svg",
     "Stufe „Aus“ — alles durch",
     ["Stufe: aus", "keine Filterung"],
     [("oben",  "Das Internet",   "z. B. 93.184.x.x", "erlaubt", "durch"),
-     ("mitte", "Das Firmennetz", "192.168.66.0/24", "erlaubt", "durch"),
+     ("mitte", "Das Firmennetz", "192.168.10.0/24", "erlaubt", "durch"),
      ("unten", "Nachbar-Arbeitsplatz", "10.99.3.10", "kein Weg", "kein-weg")],
     "Der Router filtert nicht mehr — aber er bleibt der Weg. Auch hier kein Nachbar.")
 

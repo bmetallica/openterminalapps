@@ -159,9 +159,9 @@ export function IdeAiEinstellungen({ onToast }: {
       </Field>
 
       <Field label={tr('Adresse des KI-Servers')}
-        hint={tr('Die OpenAI-Schnittstelle, mit /v1 — z. B. http://192.168.1.2:3000/v1 (vLLM) oder http://192.168.1.3:8080/v1 (llama.cpp). Ohne Pfad ergänzt OTA /v1.')}>
+        hint={tr('Die OpenAI-Schnittstelle, mit /v1 — z. B. http://192.168.50.2:3000/v1 (vLLM) oder http://192.168.50.3:8080/v1 (llama.cpp). Ohne Pfad ergänzt OTA /v1.')}>
         <div className="row-item">
-          <input value={e.url} placeholder="http://192.168.1.2:3000/v1" aria-label={tr('Adresse des KI-Servers')}
+          <input value={e.url} placeholder="http://192.168.50.2:3000/v1" aria-label={tr('Adresse des KI-Servers')}
             onChange={(ev) => setze({ url: ev.target.value })} />
           <button className="btn" disabled={busy !== null || !e.url.trim()} onClick={abrufen}>
             {busy === 'abrufen' ? tr('Wird abgerufen…') : tr('Modelle abrufen')}
@@ -511,7 +511,7 @@ function WeitererServer({ w, gesetzt, schluessel, busy, onToast, onSchluessel, o
         <button className="btn btn--halt" onClick={onEntfernen}>{tr('Entfernen')}</button>
       </div>
       <div className="row-item" style={{ marginTop: 8 }}>
-        <input value={w.url} placeholder="http://192.168.1.4:8000/v1" aria-label={tr('Adresse des KI-Servers')}
+        <input value={w.url} placeholder="http://192.168.50.4:8000/v1" aria-label={tr('Adresse des KI-Servers')}
           onChange={(ev) => onChange({ url: ev.target.value })} />
         <button className="btn" disabled={busy !== null || !w.url.trim()}
           onClick={() => void tun(`abrufen-${w.kuerzel}`, async () => {

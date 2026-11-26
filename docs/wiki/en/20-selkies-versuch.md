@@ -175,7 +175,7 @@ Traefik, and everything that follows remains necessary: TURN, its ports, its blo
 TURN sign-in:
 
 ```
-OTA_TURN_HOST=192.168.66.224
+OTA_TURN_HOST=192.168.10.20
 OTA_TURN_SECRET=…            # openssl rand -base64 32
 OTA_TURN_PROTOCOL=udp        # tcp with a small MTU, see below
 OTA_TURN_ICE_POLICY=all      # relay with a small MTU, see below
@@ -196,9 +196,9 @@ A TURN behind a Docker bridge reports the host's address as relay address, but s
 packets with the container address as sender:
 
 ```
-2. Allocate mit Anmeldung  -> Relay 192.168.66.224:65502
-5. Client -> Relay -> Peer: b'HINAUS' von 192.168.0.4:65502
-   Absender != Relay 192.168.66.224:65502  [ausgehend KAPUTT]
+2. Allocate mit Anmeldung  -> Relay 192.168.10.20:65502
+5. Client -> Relay -> Peer: b'HINAUS' von 192.168.10.4:65502
+   Absender != Relay 192.168.10.20:65502  [ausgehend KAPUTT]
 ```
 
 (The sender does not match the relay address — outgoing broken.)
