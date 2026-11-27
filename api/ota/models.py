@@ -1149,6 +1149,32 @@ class GitGeheimnis(Base):
     anzahl: Mapped[int] = mapped_column(BigInteger, default=0)
 
 
+class KiFallbericht(Base):
+    """KI-Sicherheit: ein Bericht je Fall (ki/otaki/wache.py, Fallberichte).
+
+    **Mit Inhalt, ohne Person:** kurze Ausschnitte um die Fundstelle
+    (Geheimnisse, E-Mail-Adressen, Heimatverzeichnisse unkenntlich), Werkzeug
+    und Quelle (Datei, Adresse, Befehl). Kein Konto, kein Arbeitsplatz, keine
+    Sitzung; die Zeit auf die Minute. Ab Werk aus, Frist einstellbar
+    (`fallbericht_tage`), Einsicht nur mit Begründung im Prüfprotokoll
+    (`ki.fallbericht_eingesehen`)."""
+
+    __tablename__ = "ki_fallberichte"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    zeit: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    herkunft: Mapped[str] = mapped_column(String(48), default="")
+    anwendung: Mapped[str] = mapped_column(String(16), default="")
+    stufe: Mapped[str] = mapped_column(String(16), default="")
+    quelle_art: Mapped[str] = mapped_column(String(16), default="")
+    werkzeug: Mapped[str] = mapped_column(String(48), default="")
+    quelle: Mapped[str] = mapped_column(Text, default="")
+    typen: Mapped[list] = mapped_column(JSONB, default=list)
+    aktion: Mapped[str] = mapped_column(String(16), default="")
+    laenge: Mapped[int] = mapped_column(Integer, default=0)
+    auszuege: Mapped[list] = mapped_column(JSONB, default=list)
+    eingesehen: Mapped[int] = mapped_column(Integer, default=0)
+
+
 class KiSicherheitDatei(Base):
     """Welche Spool-Dateien schon gezählt sind: Eine zweimal abgeholte Datei
     zählte sonst doppelt."""

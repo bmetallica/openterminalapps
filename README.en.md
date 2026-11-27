@@ -285,7 +285,7 @@ must not leave the house. The individual safeguards are listed below under their
 | **Network** | Its own `internal` network per workspace behind a router. There is no path to the neighbour, the host or the company network. Profiles *isolated*, *internet* and *off* (only with a reason in the audit log), allow rules by address or name, time-limited port forwards ([firewall.md](firewall.md), [chapter 23](docs/wiki/en/23-netz.md)) |
 | **Containers** | No privileged containers. Root workspaces run under Sysbox; root in the container is unprivileged on the host. Limits for CPU, RAM, processes and disk ([chapter 25](docs/wiki/en/25-root-arbeitsplatz.md)) |
 | **Sign-in** | Keycloak with AD/LDAP, second factor enforceable per group (passkey or one-time password), sign-out after inactivity, emergency access with a rate limit, accounts are disabled instead of deleted ([chapter 18](docs/wiki/en/18-zentrale-anmeldung.md)) |
-| **AI** | The AI gateway keeps the AI server's key out of the workspaces, controls access per group and checks what an assistant reads for **prompt injection** (patterns, invisible characters, optionally a checking model). Content is never stored ([chapter 41](docs/wiki/en/41-ki-sicherheit.md)) |
+| **AI** | The AI gateway keeps the AI server's key out of the workspaces, controls access per group and checks what an assistant reads for **prompt injection** (patterns, invisible characters, optionally a checking model). Counters are stored; case reports with an excerpt only on request, without a person, with a retention period and access only with a reason in the audit log ([chapter 41](docs/wiki/en/41-ki-sicherheit.md)) |
 | **Code** | OTA Git protects the main branch of every repository (**branch protection** with required approval) and detects **secrets on push**: keys, tokens, passwords, `.env` files ([chapter 27](docs/wiki/en/27-git.md)) |
 | **Traceability** | Audit log for sign-ins, sessions, administration, screen viewing and the root web terminal, with fixed retention periods and optionally a copy to a **syslog server** (RFC 5424, TLS) ([chapter 11](docs/wiki/en/11-betrieb.md)) |
 | **Data protection** | **Access report under Art. 15 GDPR** at the push of a button. Data of deleted accounts, backups included, is deleted after a configurable grace period. AI statistics without names; names only with a reason in the audit log. No content, nothing loaded from foreign hosts ([dsgvo.md](dsgvo.md), German) |
@@ -463,8 +463,12 @@ explains it in full.
   - Three stages: remove invisible characters, known patterns (German and English) and optionally a
     checking model on your own AI server, freely selectable and testable.
   - Modes Observe, Warn (note to the model) and Block.
-  - Its own **Security** page with cases per day, type, application and origin, next to the secrets
-    from OTA Git. Only counters are stored, no content, no person.
+  - Its own **Security** page with cases per day, type, application, origin and tool (`read`,
+    `bash`, `webfetch` …), next to the secrets from OTA Git. The counters contain no content and no
+    person.
+  - **Case reports** (off by default): per case tool, source and an excerpt around the match,
+    secrets and e-mail addresses masked, without a person. Opened only with a reason recorded in
+    the audit log; deletion rotation after 30 days (adjustable up to 90).
 
 ### Workspaces and resources
 

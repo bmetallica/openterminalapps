@@ -149,6 +149,27 @@ export function KiSicherheitEinstellungen({ onToast }: { onToast: (m: string, to
               </Field>
             </>
           )}
+
+          <Field label={tr('Fallberichte')}
+            hint={tr('Zu jedem Fall ein kurzer Bericht: das Werkzeug (Datei lesen, Befehl, Webseite), die Quelle (Dateiname, Adresse, Befehl) und je Treffer ein Ausschnitt von etwa 300 Zeichen um die Fundstelle. Passwörter, Tokens, Schlüssel und E-Mail-Adressen werden vorher unkenntlich gemacht, Heimatverzeichnisse als ~ geschrieben. Keine Person, kein Arbeitsplatz. Einen Bericht öffnet die Verwaltung nur mit Begründung; jede Einsicht steht im Prüfprotokoll. Weil hier Inhalte gespeichert werden: vor dem Einschalten mit Datenschutz und Personalvertretung abstimmen.')}>
+            <Toggle on={stand.fallberichte} name={stand.fallberichte ? tr('Eingeschaltet') : tr('Ausgeschaltet')}
+              onChange={(v) => {
+                if (busy) return
+                if (v && !window.confirm(tr('Fallberichte speichern Ausschnitte aus gelesenen Inhalten. Mit Datenschutz und Personalvertretung abgestimmt?'))) return
+                void setze({ fallberichte: v }, v ? tr('Fallberichte sind eingeschaltet.') : tr('Fallberichte sind ausgeschaltet.'))
+              }} />
+          </Field>
+          {stand.fallberichte && (
+            <Field label={tr('Aufbewahrung der Fallberichte')}
+              hint={tr('Danach löscht OTA einen Bericht von selbst. Empfehlung: 30 Tage. Das reicht, um einem Fall auch über Urlaub hinweg nachzugehen, und hält den Bestand an Inhalten klein. Höchstens {n} Tage.', { n: stand.fallbericht_tage_max })}>
+              <div className="numfield">
+                <input type="number" min={1} max={stand.fallbericht_tage_max} step={1} aria-label={tr('Aufbewahrung der Fallberichte')}
+                  defaultValue={stand.fallbericht_tage}
+                  onBlur={(e) => { const n = Number(e.target.value); if (n !== stand.fallbericht_tage) void setze({ fallbericht_tage: n }) }} />
+                <span className="numfield__unit">{tr('Tage')}</span>
+              </div>
+            </Field>
+          )}
         </>
       )}
     </div>

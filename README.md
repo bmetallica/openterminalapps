@@ -289,7 +289,7 @@ Themen. Zusammengefasst:
 | **Netz** | Ein eigenes `internal`-Netz je Arbeitsplatz hinter einem Router. Zum Nachbarn, zum Wirt und ins Firmennetz führt kein Weg. Profile *abgeschottet*, *internet* und *aus* (nur mit Begründung im Protokoll), Freigaben nach Adresse oder Name, befristete Portfreigaben ([firewall.md](firewall.md), [Kapitel 23](docs/wiki/23-netz.md)) |
 | **Container** | Keine privilegierten Container. Root-Arbeitsplätze laufen unter Sysbox, root im Container ist auf dem Host unprivilegiert. Grenzen für CPU, RAM, Prozesse und Platz ([Kapitel 25](docs/wiki/25-root-arbeitsplatz.md)) |
 | **Anmeldung** | Keycloak mit AD/LDAP, zweiter Faktor je Gruppe erzwingbar (Passkey oder Einmalkennwort), Abmelden nach Untätigkeit, Notzugang mit Bremse, Konten werden deaktiviert statt gelöscht ([Kapitel 18](docs/wiki/18-zentrale-anmeldung.md)) |
-| **KI** | Der KI-Durchgang hält den Schlüssel des KI-Servers aus den Arbeitsplätzen, regelt den Zugang je Gruppe und prüft, was ein Assistent liest, auf **Prompt Injection** (Muster, unsichtbare Zeichen, auf Wunsch ein Prüfmodell). Inhalte werden nie gespeichert ([Kapitel 41](docs/wiki/41-ki-sicherheit.md)) |
+| **KI** | Der KI-Durchgang hält den Schlüssel des KI-Servers aus den Arbeitsplätzen, regelt den Zugang je Gruppe und prüft, was ein Assistent liest, auf **Prompt Injection** (Muster, unsichtbare Zeichen, auf Wunsch ein Prüfmodell). Gespeichert werden Zähler; Fallberichte mit Ausschnitt nur auf Wunsch, ohne Person, mit Frist und Einsicht nur mit Begründung im Protokoll ([Kapitel 41](docs/wiki/41-ki-sicherheit.md)) |
 | **Code** | OTA-Git schützt den Hauptzweig jedes Repositorys (**Branch-Schutz** mit Pflicht-Freigabe) und erkennt **Geheimnisse beim Push**: Schlüssel, Tokens, Passwörter, `.env`-Dateien ([Kapitel 27](docs/wiki/27-git.md)) |
 | **Nachvollziehbarkeit** | Protokoll für Anmeldungen, Sitzungen, Verwaltung, Aufschalten und root-Webterminal, mit festen Fristen und auf Wunsch als Kopie an einen **Syslog-Server** (RFC 5424, TLS) ([Kapitel 11](docs/wiki/11-betrieb.md)) |
 | **Datenschutz** | **Auskunft nach Art. 15 DSGVO** auf Knopfdruck. Daten gelöschter Konten samt Sicherungen werden nach einer einstellbaren Frist mitgelöscht. KI-Statistik ohne Namen, Namen nur mit Begründung im Protokoll. Keine Inhalte, kein Nachladen von fremden Hosts ([dsgvo.md](dsgvo.md)) |
@@ -473,8 +473,12 @@ ihn vollständig erklärt.
   - Drei Stufen: unsichtbare Zeichen entfernen, bekannte Muster (Deutsch und Englisch) und auf
     Wunsch ein Prüfmodell auf einem eigenen KI-Server, frei wählbar und testbar.
   - Betriebsarten Beobachten, Warnen (Hinweis an das Modell) und Sperren.
-  - Eigene Seite **Sicherheit** mit Fällen je Tag, Typ, Anwendung und Herkunft, daneben die
-    Geheimnisse aus OTA-Git. Gespeichert werden nur Zähler, kein Inhalt, keine Person.
+  - Eigene Seite **Sicherheit** mit Fällen je Tag, Typ, Anwendung, Herkunft und Werkzeug
+    (`read`, `bash`, `webfetch` …), daneben die Geheimnisse aus OTA-Git. Die Zähler enthalten
+    keinen Inhalt und keine Person.
+  - **Fallberichte** (ab Werk aus): je Fall Werkzeug, Quelle und Ausschnitt um die Fundstelle,
+    Geheimnisse und E-Mail-Adressen unkenntlich, ohne Person. Öffnen nur mit Begründung, die im
+    Prüfprotokoll steht; Löschrotation nach 30 Tagen (einstellbar bis 90).
 
 ### Workspaces und Ressourcen
 

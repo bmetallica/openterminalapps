@@ -484,12 +484,36 @@ export type KiSicherheitEinstellungen = {
   umfang: 'alle' | 'auffaellig'
   betriebsart: 'beobachten' | 'warnen' | 'sperren'
   zeitlimit: number
+  /** Fallberichte: Ausschnitt um die Fundstelle, Werkzeug, Quelle (ab Werk aus). */
+  fallberichte: boolean
+  fallbericht_tage: number
 }
 export type KiSicherheitStand = KiSicherheitEinstellungen & {
   modelle: { id: string; titel: string; server: string }[]
   durchgang: boolean
   aktiv: boolean
   frist_tage: number
+  fallbericht_tage_max: number
+}
+/** Ein Fallbericht in der Liste: ohne Inhalt. */
+export type KiFall = {
+  id: string
+  stunde: string
+  herkunft: string
+  anwendung: string
+  stufe: string
+  quelle_art: string
+  werkzeug: string
+  typen: string[]
+  aktion: string
+  eingesehen: number
+}
+/** Ein geöffneter Fallbericht: nur mit Begründung, steht im Protokoll. */
+export type KiFallVoll = Omit<KiFall, 'stunde'> & {
+  zeit: string
+  quelle: string
+  laenge: number
+  auszuege: { typ: string; text: string }[]
 }
 export type KiSicherheitProbe = { ms: number; urteil: boolean | null; richtig: boolean; fehler: string | null; antwort: string }
 export type KiSicherheitTest = { modell: string; ok: boolean; angriff: KiSicherheitProbe; harmlos: KiSicherheitProbe }
@@ -507,6 +531,8 @@ export type KiSicherheitStatistik = {
   verlauf: { tag: string; geprueft: number; faelle: number; gesperrt: number }[]
   anwendungen: { name: string; faelle: number }[]
   herkunft: { name: string; faelle: number }[]
+  /** Fälle nach dem Werkzeug, dessen Ergebnis auffiel. */
+  werkzeuge: { name: string; faelle: number }[]
   fehler: Record<string, number>
   hinweise: Record<string, number>
   lage: { an?: boolean; im_hintergrund?: number; gemerkt?: number }
@@ -1638,6 +1664,11 @@ export const api = {
     call<KiSicherheitTest>('/admin/ki-sicherheit/test', { method: 'POST', body: JSON.stringify({ modell }) }),
   kiSicherheitStatistik: (tage: number) => call<KiSicherheitStatistik>(`/admin/ki-sicherheit/statistik?tage=${tage}`),
   kiSicherheitLoeschen: () => call<{ zeilen: number }>('/admin/ki-sicherheit/statistik', { method: 'DELETE' }),
+  kiFaelle: (tage: number) => call<{ an: boolean; frist_tage: number; faelle: KiFall[] }>(`/admin/ki-sicherheit/faelle?tage=${tage}`),
+  kiFallEinsehen: (id: string, grund: string) =>
+    call<KiFallVoll>(`/admin/ki-sicherheit/faelle/${encodeURIComponent(id)}/einsehen`, { method: 'POST', body: JSON.stringify({ grund }) }),
+  kiFallLoeschen: (id: string) => call<{ geloescht: number }>(`/admin/ki-sicherheit/faelle/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  kiFaelleLoeschen: () => call<{ geloescht: number }>('/admin/ki-sicherheit/faelle', { method: 'DELETE' }),
   ideAiExternAnlegen: (name: string, kopf: boolean) =>
     call<{ kuerzel: string; schluessel: string; stand: IdeAiStand }>('/admin/ide-ai/extern',
       { method: 'POST', body: JSON.stringify({ name, kopf }) }),

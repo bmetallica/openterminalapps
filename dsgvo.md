@@ -556,9 +556,10 @@ selbst eintippt, und nicht der Systemprompt.
 | Frage | Antwort |
 |---|---|
 | Werden Inhalte gelesen? | Ja, im Speicher des Durchgangs, während die Anfrage durchläuft (Stufe 1 und 2). Bei Stufe 3 geht der geprüfte Inhalt zusätzlich als eigene Anfrage an ein Modell auf einem **eigenen** KI-Server |
-| Wird etwas gespeichert? | Nur Zähler je Stunde (`ki_sicherheit`): Herkunft (alle Arbeitsplätze zusammen oder ein externer Dienst), Anwendung, Stufe, Typ, Aktion. **Kein Text, kein Ausschnitt, keine Person, kein Arbeitsplatz.** Im Speicher des Durchgangs bleibt je geprüftem Abschnitt eine Prüfsumme (SHA-256) mit dem Ergebnis, bis zu 50 000, bis zum Neustart |
-| Frist | 365 Tage, täglich aufgeräumt; „Alle Zähler löschen“ sofort |
-| Wer sieht es? | Konten mit `settings.manage` (Seite KI-Sicherheit) |
+| Wird etwas gespeichert? | Zähler je Stunde (`ki_sicherheit`): Herkunft (alle Arbeitsplätze zusammen oder ein externer Dienst), Anwendung, Stufe, Typ, Aktion, Werkzeug (`read`, `bash` …). **Kein Text, kein Ausschnitt, keine Person, kein Arbeitsplatz.** Im Speicher des Durchgangs bleibt je geprüftem Abschnitt eine Prüfsumme (SHA-256) mit dem Ergebnis, bis zu 50 000, bis zum Neustart |
+| Fallberichte (optional, ab Werk aus) | Je Fall (`ki_fallberichte`): Zeit auf die Minute, Typ, Werkzeug, **Quelle** (Dateiname, Adresse, Befehl) und **Ausschnitte** von bis zu 160 Zeichen vor und nach der Fundstelle. Vorher unkenntlich gemacht: Schlüssel, Tokens, Passwörter, Zugangsdaten in Adressen, E-Mail-Adressen, lange Zeichenketten; Heimatverzeichnisse als `~`. **Kein Konto, kein Arbeitsplatz, keine Sitzung.** Das sind Inhalte; ein Personenbezug im Text selbst (Name in einer Datei, Projektname) ist nicht auszuschließen |
+| Frist | Zähler 365 Tage, täglich aufgeräumt; „Alle Zähler löschen“ sofort. Fallberichte nach einstellbarer Frist (1 bis 90 Tage, **Vorgabe 30**), täglich aufgeräumt; einzeln oder alle sofort löschbar |
+| Wer sieht es? | Konten mit `settings.manage` (Seite Sicherheit). Einen Fallbericht öffnen sie nur **mit Begründung**; jede Einsicht steht mit Begründung im Prüfprotokoll (`ki.fallbericht_eingesehen`, lange Frist), ebenso das Löschen (`ki.fallbericht_geloescht`) |
 | Verändert OTA Anfragen? | Stufe 1 entfernt unsichtbare Steuerzeichen. In der Betriebsart *Warnen* kommt vor einen auffälligen Inhalt ein Hinweis an das Modell; in *Sperren* wird die Anfrage abgewiesen |
 | Rechtsgrundlage | Art. 32 DSGVO (Sicherheit der Verarbeitung); für eine Behörde Art. 6 Abs. 1 lit. e i. V. m. dem Landesrecht. Kein Personenbezug in den gespeicherten Daten |
 
@@ -566,6 +567,13 @@ selbst eintippt, und nicht der Systemprompt.
 zur Leistungs- oder Verhaltenskontrolle. Sie liest aber Inhalte, mit denen Beschäftigte arbeiten,
 auch wenn sie nichts davon behält. Das sollte der Personalrat kennen, und es gehört in die
 Dokumentation der Verarbeitung.
+
+👉 **Fallberichte** speichern Inhalte, mit denen Beschäftigte gearbeitet haben, wenn auch ohne
+Zuordnung zu einer Person. Vor dem Einschalten gehören sie in die Dokumentation der Verarbeitung
+und sind mit Datenschutz und Personalvertretung abzustimmen: Zweck (Aufklärung von Angriffen und
+Fehlalarmen), Frist, Kreis der Berechtigten und die Pflicht zur Begründung. Die Zuordnung zu einem
+Menschen ließe sich nur über die personenbezogene KI-Nutzung (Kapitel 28) herstellen, und die
+verlangt ihrerseits eine Auskunft mit Begründung im Protokoll.
 
 👉 **Stufe 3 und das Protokoll des KI-Servers:** Die Prüfanfragen landen im Protokoll des
 KI-Servers wie jede andere Anfrage; dessen Protokollierung gehört geprüft (Abschnitt 11, Punkt 7).

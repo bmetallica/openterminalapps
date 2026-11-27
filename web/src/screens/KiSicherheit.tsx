@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Segmented } from '../components/controls'
-import { ApiError, api, type KiSicherheitStand, type KiSicherheitStatistik } from '../lib/api'
+import { ApiError, api, type KiFall, type KiFallVoll, type KiSicherheitStand, type KiSicherheitStatistik } from '../lib/api'
 import { getLang, t as tr, useLang } from '../lib/i18n'
 import { GitGeheimnisseSicht } from './GitGeheimnisse'
 
@@ -12,9 +12,13 @@ import { GitGeheimnisseSicht } from './GitGeheimnisse'
  * * **OTA-Git** (Kapitel 27): Geheimnisse, die beim Push erkannt wurden
  *   (GitGeheimnisse.tsx).
  *
- * Gezeigt wird nur, was gezählt wird: Fälle je Tag, Typ, Stufe, Aktion,
- * Anwendung und Herkunft. Kein Inhalt, keine Person, kein Arbeitsplatz —
- * deshalb ohne Auskunft und Begründung wie bei der KI-Nutzung.
+ * Gezeigt wird, was gezählt wird: Fälle je Tag, Typ, Stufe, Aktion,
+ * Anwendung, Herkunft und Werkzeug. Kein Inhalt, keine Person, kein
+ * Arbeitsplatz — deshalb ohne Auskunft und Begründung.
+ *
+ * Ausnahme sind die **Fallberichte** (wenn eingeschaltet): Die Liste zeigt nur
+ * Zeit, Typ und Werkzeug; einen Bericht mit Ausschnitt und Quelle öffnet die
+ * Verwaltung nur mit Begründung, die im Prüfprotokoll landet.
  */
 
 const SPANNEN: [string, number][] = [['24 h', 1], ['7 Tage', 7], ['30 Tage', 30], ['90 Tage', 90], ['1 Jahr', 365]]
@@ -174,7 +178,10 @@ export function KiSicherheit({ onToast, onEinstellungen }: {
           <div className="ki-torten">
             <Balken titel={tr('Fälle nach Anwendung')} werte={stat.anwendungen.map((a) => ({ name: anwendungName(a.name), wert: a.faelle }))} />
             <Balken titel={tr('Fälle nach Herkunft')} werte={stat.herkunft.map((a) => ({ name: herkunftName(a.name), wert: a.faelle }))} />
+            <Balken titel={tr('Fälle nach Werkzeug')} werte={(stat.werkzeuge ?? []).map((a) => ({ name: werkzeugName(a.name), wert: a.faelle }))} />
           </div>
+
+          <Fallberichte tage={tage} onToast={onToast} />
 
           {(fehlerSumme > 0 || Object.keys(stat.hinweise).length > 0) && (
             <section className="panel ki-sicher__teil">
@@ -189,7 +196,8 @@ export function KiSicherheit({ onToast, onEinstellungen }: {
           <section className="panel ki-sicher__teil">
             <h2 className="ki-titel">{tr('Was hier gezählt wird, und was nicht')}</h2>
             <p className="sub">{tr('Geprüft wird nur, was ein KI-Assistent liest und nicht vom Menschen stammt: Ergebnisse von Werkzeugen (Dateien, Befehlsausgaben, Webseiten) und Dokumente, die Open WebUI mitschickt. Die Eingaben des Menschen und der Systemprompt bleiben ungeprüft.')}</p>
-            <p className="sub">{tr('Gespeichert werden ausschließlich Zähler je Stunde: Herkunft (alle Arbeitsplätze zusammen oder ein externer Dienst), Anwendung, Stufe, Typ und Aktion. Kein Text, kein Ausschnitt, keine Person, kein Arbeitsplatz. Der Inhalt wird nur im Speicher des KI-Durchgangs geprüft; von jedem geprüften Abschnitt bleibt dort nur eine Prüfsumme, damit eine Unterhaltung nicht bei jedem Aufruf neu zählt.')}</p>
+            <p className="sub">{tr('Gezählt wird je Stunde: Herkunft (alle Arbeitsplätze zusammen oder ein externer Dienst), Anwendung, Stufe, Typ, Aktion und das Werkzeug, dessen Ergebnis auffiel. Keine Person, kein Arbeitsplatz. Der Inhalt wird nur im Speicher des KI-Durchgangs geprüft; von jedem geprüften Abschnitt bleibt dort nur eine Prüfsumme, damit eine Unterhaltung nicht bei jedem Aufruf neu zählt.')}</p>
+            <p className="sub">{tr('Text wird nur mit eingeschalteten Fallberichten gespeichert: kurze Ausschnitte um die Fundstelle, ohne Geheimnisse, ohne Person, mit eigener Frist. Einsicht nur mit Begründung im Prüfprotokoll.')}</p>
             <p className="sub">{tr('Aufbewahrung: {n} Tage, danach löscht OTA die Zähler von selbst.', { n: stand?.frist_tage ?? 365 })}{' '}
               {stat.seit && tr('Erster Eintrag: {d}.', { d: new Date(stat.seit).toLocaleDateString(getLang() === 'en' ? 'en-GB' : 'de-DE') })}</p>
             <button className="btn btn--ghost" onClick={() => void loeschen()}>{tr('Alle Zähler löschen')}</button>
@@ -296,6 +304,151 @@ function Balken({ titel, werte }: { titel: string; werte: { name: string; wert: 
       )}
     </section>
   )
+}
+
+const datumZeit = (iso: string, mitMinute = true) => new Date(iso).toLocaleString(getLang() === 'en' ? 'en-GB' : 'de-DE',
+  { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: mitMinute ? '2-digit' : undefined })
+
+/**
+ * Fallberichte: Liste ohne Inhalt, Bericht nur mit Begründung. Die Begründung
+ * gilt für genau einen Bericht und steht mit ihm im Prüfprotokoll.
+ */
+function Fallberichte({ tage, onToast }: { tage: number; onToast: (m: string, tone?: 'ok' | 'bad') => void }) {
+  const [liste, setListe] = useState<{ an: boolean; frist_tage: number; faelle: KiFall[] } | null>(null)
+  const [frage, setFrage] = useState<string | null>(null)
+  const [grund, setGrund] = useState('')
+  const [offen, setOffen] = useState<KiFallVoll | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const laden = useCallback(async () => {
+    try { setListe(await api.kiFaelle(tage)) } catch { setListe(null) }
+  }, [tage])
+  useEffect(() => { void laden() }, [laden])
+
+  async function einsehen(id: string) {
+    setBusy(true)
+    try {
+      setOffen(await api.kiFallEinsehen(id, grund)); setFrage(null); setGrund(''); void laden()
+    } catch (err) {
+      onToast(err instanceof ApiError ? err.message : tr('Hat nicht geklappt'), 'bad')
+    } finally { setBusy(false) }
+  }
+
+  async function loeschen(id: string) {
+    if (!window.confirm(tr('Diesen Fallbericht löschen? Das steht im Protokoll.'))) return
+    try {
+      await api.kiFallLoeschen(id)
+      if (offen?.id === id) setOffen(null)
+      onToast(tr('Fallbericht gelöscht.')); void laden()
+    } catch (err) {
+      onToast(err instanceof ApiError ? err.message : tr('Hat nicht geklappt'), 'bad')
+    }
+  }
+
+  async function alleLoeschen() {
+    if (!window.confirm(tr('Alle Fallberichte löschen? Das steht im Protokoll.'))) return
+    try {
+      const r = await api.kiFaelleLoeschen()
+      setOffen(null); onToast(tr('{n} Fallberichte gelöscht.', { n: r.geloescht })); void laden()
+    } catch (err) {
+      onToast(err instanceof ApiError ? err.message : tr('Hat nicht geklappt'), 'bad')
+    }
+  }
+
+  if (!liste) return null
+  if (!liste.an && liste.faelle.length === 0) {
+    return (
+      <section className="panel ki-sicher__teil">
+        <h2 className="ki-titel">{tr('Fallberichte')}</h2>
+        <p className="sub">{tr('Fallberichte sind ausgeschaltet. Dann bleibt von einem Fall nur der Zähler. Einschalten unter Einstellungen → KI-Sicherheit.')}</p>
+      </section>
+    )
+  }
+  return (
+    <section className="panel ki-sicher__teil">
+      <h2 className="ki-titel">{tr('Fallberichte')}</h2>
+      <p className="sub">{tr('Je Fall Werkzeug, Quelle und Ausschnitte um die Fundstelle, ohne Person und ohne Geheimnisse. Einen Bericht öffnen nur mit Begründung; jede Einsicht steht im Prüfprotokoll. OTA löscht Berichte nach {n} Tagen.', { n: liste.frist_tage })}</p>
+      {!liste.an && <p className="note-warn">{tr('Fallberichte sind ausgeschaltet; die vorhandenen werden nach Ablauf der Frist gelöscht.')}</p>}
+      {liste.faelle.length === 0 ? <p className="sub">{tr('Im Zeitraum keine Fallberichte.')}</p> : (
+        <div className="ki-sicher__tabelle">
+          <table className="tbl">
+            <thead><tr>
+              <th>{tr('Stunde')}</th><th>{tr('Typ')}</th><th>{tr('Werkzeug')}</th><th>{tr('Anwendung')}</th>
+              <th>{tr('Herkunft')}</th><th>{tr('Aktion')}</th><th></th>
+            </tr></thead>
+            <tbody>
+              {liste.faelle.map((f) => (
+                <tr key={f.id}>
+                  <td className="data">{datumZeit(f.stunde)}</td>
+                  <td>{f.typen.map((ty) => tr(TYPEN[ty]?.name ?? ty)).join(', ')}</td>
+                  <td>{werkzeugName(f.werkzeug)}</td>
+                  <td>{anwendungName(f.anwendung)}</td>
+                  <td>{herkunftName(f.herkunft)}</td>
+                  <td>{tr(AKTIONEN[f.aktion] ?? f.aktion)}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    <button className="btn btn--ghost" onClick={() => { setFrage(f.id); setGrund('') }}>{tr('Einsehen')}</button>
+                    {f.eingesehen > 0 && <span className="sub" title={tr('So oft eingesehen')}> · {zahl(f.eingesehen)}×</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {frage && (
+        <div className="note-warn" style={{ marginTop: 12 }}>
+          <p style={{ marginTop: 0 }}>{tr('Warum öffnest du diesen Fallbericht? Die Begründung steht mit deinem Namen im Prüfprotokoll.')}</p>
+          <textarea rows={2} style={{ width: '100%' }} value={grund} maxLength={500} aria-label={tr('Begründung')}
+            placeholder={tr('z. B. Prüfung eines Fehlalarms der Stufe 2, Meldung vom …')}
+            onChange={(e) => setGrund(e.target.value)} />
+          <div className="viewer__row" style={{ gap: 8, marginTop: 8 }}>
+            <button className="btn" disabled={busy || grund.trim().length < 10} onClick={() => void einsehen(frage)}>{tr('Mit Begründung öffnen')}</button>
+            <button className="btn btn--ghost" onClick={() => setFrage(null)}>{tr('Abbrechen')}</button>
+          </div>
+        </div>
+      )}
+
+      {offen && (
+        <div className="panel" style={{ marginTop: 12, padding: '12px 16px' }}>
+          <div className="viewer__row" style={{ justifyContent: 'space-between' }}>
+            <h3 className="ki-titel" style={{ margin: 0 }}>{tr('Fallbericht vom {d}', { d: datumZeit(offen.zeit) })}</h3>
+            <button className="btn btn--ghost" onClick={() => setOffen(null)}>{tr('Schließen')}</button>
+          </div>
+          <table className="tbl" style={{ marginTop: 8 }}>
+            <tbody>
+              <tr><th>{tr('Typ')}</th><td>{offen.typen.map((ty) => tr(TYPEN[ty]?.name ?? ty)).join(', ')}</td></tr>
+              <tr><th>{tr('Stufe')}</th><td>{tr(STUFEN[offen.stufe] ?? offen.stufe)}</td></tr>
+              <tr><th>{tr('Werkzeug')}</th><td>{werkzeugName(offen.werkzeug)}</td></tr>
+              <tr><th>{tr('Quelle')}</th><td className="data" style={{ wordBreak: 'break-all' }}>{offen.quelle || tr('nicht übermittelt')}</td></tr>
+              <tr><th>{tr('Anwendung')}</th><td>{anwendungName(offen.anwendung)}</td></tr>
+              <tr><th>{tr('Herkunft')}</th><td>{herkunftName(offen.herkunft)}</td></tr>
+              <tr><th>{tr('Aktion')}</th><td>{tr(AKTIONEN[offen.aktion] ?? offen.aktion)}</td></tr>
+              <tr><th>{tr('Länge des Inhalts')}</th><td className="data">{tr('{n} Zeichen', { n: zahl(offen.laenge) })}</td></tr>
+            </tbody>
+          </table>
+          {offen.auszuege.map((a, i) => (
+            <div key={i} style={{ marginTop: 10 }}>
+              <p className="silk" style={{ marginBottom: 4 }}>{tr('Fundstelle: {t}', { t: tr(TYPEN[a.typ]?.name ?? a.typ) })}</p>
+              <pre className="ki-sicher__auszug" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: 0 }}>{a.text}</pre>
+            </div>
+          ))}
+          <div className="viewer__row" style={{ marginTop: 10 }}>
+            <button className="btn btn--ghost" onClick={() => void loeschen(offen.id)}>{tr('Fallbericht löschen')}</button>
+          </div>
+        </div>
+      )}
+      {liste.faelle.length > 0 && (
+        <button className="btn btn--ghost" style={{ marginTop: 12 }} onClick={() => void alleLoeschen()}>{tr('Alle Fallberichte löschen')}</button>
+      )}
+    </section>
+  )
+}
+
+function werkzeugName(w: string): string {
+  if (w === 'dokument') return tr('Dokument (Open WebUI)')
+  if (w === 'unbekannt' || !w) return tr('unbekannt')
+  return w
 }
 
 function anwendungName(w: string): string {

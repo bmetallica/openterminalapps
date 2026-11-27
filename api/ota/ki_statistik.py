@@ -163,11 +163,11 @@ def abholen(db: DbSession) -> int:
 
 def _datei_uebernehmen(db: DbSession, name: str, zeilen: list[dict[str, Any]]) -> int:
     # Die Zähler der KI-Sicherheit stehen im selben Spool (ki_sicherheit.py).
-    sicher = [z for z in zeilen if z.get("art") == "sicherheit"]
+    sicher = [z for z in zeilen if z.get("art") in ("sicherheit", "fallbericht")]
     if sicher:
         from . import ki_sicherheit
 
-        zeilen = [z for z in zeilen if z.get("art") != "sicherheit"]
+        zeilen = [z for z in zeilen if z.get("art") not in ("sicherheit", "fallbericht")]
         ki_sicherheit.uebernehmen(db, name, sicher)
         db.commit()
     sitzungen = {_uuid(z.get("session_id")) for z in zeilen} - {None}

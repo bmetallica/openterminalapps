@@ -725,6 +725,8 @@ async def _haushalt() -> None:
             await LAGE.neu_laden()
             for zeile in wache.ZAEHLER.leeren():
                 SPOOL_.schreiben(zeile, immer=True)
+            for zeile in wache.BERICHTE.leeren():
+                SPOOL_.schreiben(zeile, immer=True)
             SPOOL_.abschliessen()
             status = {"zeit": _jetzt(), "fassung": FASSUNG, "statistik": LAGE.statistik,
                       "server": [s.get("kuerzel") for s in LAGE.server],

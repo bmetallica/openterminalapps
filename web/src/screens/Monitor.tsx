@@ -136,6 +136,11 @@ const ACTION_TEXT: Record<string, string> = {
   'ki.nutzung_angesehen': 'KI-Nutzung eines Menschen angesehen',
   'ki.auskunft': 'Personenbezogene KI-Auskunft geöffnet',
   'ki.extern_angelegt': 'Externer KI-Dienst angelegt',
+  // KI-Sicherheit (Kapitel 41)
+  'ki.sicherheit_eingestellt': 'KI-Sicherheit eingestellt',
+  'ki.sicherheit_geloescht': 'Zähler der KI-Sicherheit gelöscht',
+  'ki.fallbericht_eingesehen': 'Fallbericht der KI-Sicherheit eingesehen',
+  'ki.fallbericht_geloescht': 'Fallbericht der KI-Sicherheit gelöscht',
   'ki.extern_geloescht': 'Externer KI-Dienst entfernt',
   'dsgvo.hinweis_geaendert': 'Datenschutzhinweis geändert',
   'ki.nutzung_geloescht': 'Alle KI-Nutzungsdaten gelöscht',

@@ -4,11 +4,17 @@ Die Prüfung selbst läuft im KI-Durchgang (`ki/otaki/wache.py`). Hier stehen
 die Einstellungen, die Übernahme der Zähler aus dem Spool und die Auswertung
 für die Seite **KI-Sicherheit**.
 
-**Datensparsam aus Prinzip:** Der Durchgang liefert nur Zähler je Stunde,
+**Datensparsam aus Prinzip:** Der Durchgang liefert Zähler je Stunde,
 Herkunft (alle Arbeitsplätze zusammen oder ein externer Dienst wie Open
-WebUI), Anwendung, Stufe, Typ und Aktion. Kein Text, kein Ausschnitt, keine
-Person, kein Arbeitsplatz. Damit ist die Seite keine Auswertung über
-Menschen, sondern eine über Angriffe.
+WebUI), Anwendung, Stufe, Typ, Aktion und Werkzeug. Keine Person, kein
+Arbeitsplatz. Damit ist die Seite keine Auswertung über Menschen, sondern eine
+über Angriffe.
+
+**Fallberichte** (ab Werk aus): je Fall kurze Ausschnitte um die Fundstelle,
+Werkzeug und Quelle — Inhalt, aber ohne Person. Die Liste zeigt nur Zeit,
+Typ und Werkzeug; den Bericht selbst gibt es nur gegen eine Begründung, die
+im Prüfprotokoll steht (`ki.fallbericht_eingesehen`). Frist
+`fallbericht_tage`, Vorgabe 30 Tage, höchstens 90.
 """
 from __future__ import annotations
 
@@ -24,12 +30,18 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session as DbSession
 
 from . import ide_ai, settings_store
-from .models import KiSicherheit, KiSicherheitDatei
+from .models import KiFallbericht, KiSicherheit, KiSicherheitDatei
 
 log = logging.getLogger("ota.ki_sicherheit")
 
 SCHLUESSEL = "ki.sicherheit"
 FRIST_TAGE = 365
+# Fallberichte: 30 Tage reichen, um einem Fall nachzugehen — auch über Urlaub
+# und Wochenende hinweg —, und halten den Bestand an Inhalten klein. Länger als
+# ein Quartal braucht es nicht: Ein Fall, dem bis dahin niemand nachging,
+# klärt sich nicht mehr.
+FALLBERICHT_TAGE = 30
+FALLBERICHT_TAGE_MAX = 90
 
 VORGABE: dict[str, Any] = {
     "an": False,
@@ -45,6 +57,9 @@ VORGABE: dict[str, Any] = {
     "betriebsart": "beobachten",
     # Sekunden, die eine Bewertung durch das Modell dauern darf
     "zeitlimit": 15,
+    # Fallberichte: Ausschnitt um die Fundstelle, Werkzeug, Quelle
+    "fallberichte": False,
+    "fallbericht_tage": FALLBERICHT_TAGE,
 }
 BETRIEBSARTEN = ("beobachten", "warnen", "sperren")
 UMFAENGE = ("alle", "auffaellig")
@@ -65,6 +80,10 @@ def einstellungen(db: DbSession) -> dict[str, Any]:
         e["zeitlimit"] = min(max(int(e["zeitlimit"]), 3), 120)
     except (TypeError, ValueError):
         e["zeitlimit"] = 15
+    try:
+        e["fallbericht_tage"] = min(max(int(e["fallbericht_tage"]), 1), FALLBERICHT_TAGE_MAX)
+    except (TypeError, ValueError):
+        e["fallbericht_tage"] = FALLBERICHT_TAGE
     return {k: e[k] for k in VORGABE}
 
 
@@ -77,7 +96,7 @@ def modelle(db: DbSession) -> list[dict[str, str]]:
 
 def speichern(db: DbSession, eingabe: dict[str, Any]) -> dict[str, Any]:
     e = einstellungen(db)
-    for k in ("an", "unsichtbar", "muster", "modell_an"):
+    for k in ("an", "unsichtbar", "muster", "modell_an", "fallberichte"):
         if k in eingabe:
             e[k] = bool(eingabe[k])
     if "betriebsart" in eingabe:
@@ -96,6 +115,14 @@ def speichern(db: DbSession, eingabe: dict[str, Any]) -> dict[str, Any]:
         if not 3 <= z <= 120:
             raise SicherheitFehler("Ein Zeitlimit zwischen 3 und 120 Sekunden, bitte.")
         e["zeitlimit"] = z
+    if "fallbericht_tage" in eingabe:
+        try:
+            f = int(eingabe["fallbericht_tage"])
+        except (TypeError, ValueError):
+            f = 0
+        if not 1 <= f <= FALLBERICHT_TAGE_MAX:
+            raise SicherheitFehler("Eine Frist zwischen 1 und 90 Tagen, bitte.")
+        e["fallbericht_tage"] = f
     if "modell" in eingabe:
         m = str(eingabe["modell"] or "")
         if m and m not in {x["id"] for x in modelle(db)}:
@@ -205,14 +232,47 @@ def _zeit(roh: Any) -> datetime | None:
     return z if z.tzinfo else z.replace(tzinfo=timezone.utc)
 
 
+def _text(roh: Any, laenge: int) -> str:
+    return str(roh or "")[:laenge]
+
+
+def _bericht(z: dict[str, Any]) -> KiFallbericht | None:
+    zeit = _zeit(z.get("zeit"))
+    if zeit is None:
+        return None
+    typen = [_text(t, 48) for t in (z.get("typen") or []) if t][:10]
+    auszuege = [{"typ": _text(a.get("typ"), 48), "text": _text(a.get("text"), 2000)}
+                for a in (z.get("auszuege") or []) if isinstance(a, dict)][:5]
+    try:
+        laenge = int(z.get("laenge") or 0)
+    except (TypeError, ValueError):
+        laenge = 0
+    return KiFallbericht(zeit=zeit, herkunft=_text(z.get("herkunft"), 48),
+                         anwendung=_text(z.get("anwendung"), 16), stufe=_text(z.get("stufe"), 16),
+                         quelle_art=_text(z.get("quelle_art"), 16),
+                         werkzeug=_text(z.get("werkzeug"), 48), quelle=_text(z.get("quelle"), 300),
+                         typen=typen, aktion=_text(z.get("aktion"), 16), laenge=laenge,
+                         auszuege=auszuege)
+
+
 def uebernehmen(db: DbSession, datei: str, zeilen: list[dict[str, Any]]) -> int:
-    """Die Zähler aus einer Spool-Datei, einmal je Datei."""
+    """Zähler und Fallberichte aus einer Spool-Datei, einmal je Datei.
+
+    Fallberichte nur, solange sie eingeschaltet sind: Wer sie abschaltet, will
+    auch die nicht, die noch unterwegs waren."""
     if not zeilen:
         return 0
     neu = db.execute(insert(KiSicherheitDatei).values(name=datei[:120])
                      .on_conflict_do_nothing().returning(KiSicherheitDatei.name)).scalar()
     if neu is None:
         return 0
+    berichte = [z for z in zeilen if z.get("art") == "fallbericht"]
+    zeilen = [z for z in zeilen if z.get("art") != "fallbericht"]
+    if berichte and einstellungen(db)["fallberichte"]:
+        for z in berichte:
+            b = _bericht(z)
+            if b is not None:
+                db.add(b)
     summen: dict[tuple, int] = {}
     for z in zeilen:
         stunde = _zeit(z.get("stunde"))
@@ -238,6 +298,11 @@ def uebernehmen(db: DbSession, datei: str, zeilen: list[dict[str, Any]]) -> int:
 def aufraeumen(db: DbSession) -> int:
     grenze = datetime.now(timezone.utc) - timedelta(days=FRIST_TAGE)
     weg = db.execute(delete(KiSicherheit).where(KiSicherheit.stunde < grenze)).rowcount or 0
+    frist = einstellungen(db)["fallbericht_tage"]
+    berichte = db.execute(delete(KiFallbericht).where(
+        KiFallbericht.zeit < datetime.now(timezone.utc) - timedelta(days=frist))).rowcount or 0
+    if berichte:
+        log.info("KI-Sicherheit: %d Fallberichte nach %d Tagen gelöscht", berichte, frist)
     db.execute(delete(KiSicherheitDatei).where(
         KiSicherheitDatei.am < datetime.now(timezone.utc) - timedelta(days=30)))
     db.commit()
@@ -248,6 +313,35 @@ def alles_loeschen(db: DbSession) -> int:
     weg = db.execute(delete(KiSicherheit)).rowcount or 0
     db.commit()
     return weg
+
+
+# ----------------------------------------------------------- Fallberichte
+
+def faelle(db: DbSession, tage: int) -> list[dict[str, Any]]:
+    """Die Liste ohne Inhalt: Zeit auf die Stunde, Herkunft, Anwendung,
+    Werkzeug, Typen, Aktion. Quelle und Ausschnitte nur über `einsehen`."""
+    ab = datetime.now(timezone.utc) - timedelta(days=min(max(int(tage), 1), FALLBERICHT_TAGE_MAX))
+    zeilen = db.execute(select(KiFallbericht).where(KiFallbericht.zeit >= ab)
+                        .order_by(KiFallbericht.zeit.desc()).limit(500)).scalars().all()
+    return [{"id": str(b.id), "stunde": b.zeit.replace(minute=0).isoformat(),
+             "herkunft": b.herkunft, "anwendung": b.anwendung, "stufe": b.stufe,
+             "quelle_art": b.quelle_art, "werkzeug": b.werkzeug, "typen": b.typen,
+             "aktion": b.aktion, "eingesehen": b.eingesehen} for b in zeilen]
+
+
+def bericht(db: DbSession, fall_id: Any) -> KiFallbericht | None:
+    return db.get(KiFallbericht, fall_id)
+
+
+def bericht_voll(b: KiFallbericht) -> dict[str, Any]:
+    return {"id": str(b.id), "zeit": b.zeit.isoformat(), "herkunft": b.herkunft,
+            "anwendung": b.anwendung, "stufe": b.stufe, "quelle_art": b.quelle_art,
+            "werkzeug": b.werkzeug, "quelle": b.quelle, "typen": b.typen, "aktion": b.aktion,
+            "laenge": b.laenge, "auszuege": b.auszuege, "eingesehen": b.eingesehen}
+
+
+def faelle_loeschen(db: DbSession) -> int:
+    return db.execute(delete(KiFallbericht)).rowcount or 0
 
 
 # -------------------------------------------------------------- Auswertung
@@ -270,6 +364,7 @@ def uebersicht(db: DbSession, tage: int) -> dict[str, Any]:
     nach_tag: dict[str, dict[str, int]] = {}
     nach_anwendung: dict[str, int] = {}
     nach_herkunft: dict[str, int] = {}
+    nach_werkzeug: dict[str, int] = {}
     fehler: dict[str, int] = {}
     hinweise: dict[str, int] = {}
     # Ein Fall je auffälligem Abschnitt, nach dem, was geschah. Die Treffer je
@@ -286,6 +381,9 @@ def uebersicht(db: DbSession, tage: int) -> dict[str, Any]:
                 t["gesperrt"] += n
             nach_anwendung[anwendung or "?"] = nach_anwendung.get(anwendung or "?", 0) + n
             nach_herkunft[herkunft or "?"] = nach_herkunft.get(herkunft or "?", 0) + n
+            continue
+        if stufe == "werkzeug":
+            nach_werkzeug[typ or "unbekannt"] = nach_werkzeug.get(typ or "unbekannt", 0) + n
             continue
         if aktion == "geprueft":
             if stufe == "pruefung":
@@ -319,6 +417,8 @@ def uebersicht(db: DbSession, tage: int) -> dict[str, Any]:
                               key=lambda x: -x["faelle"]),
         "herkunft": sorted(({"name": k, "faelle": v} for k, v in nach_herkunft.items()),
                            key=lambda x: -x["faelle"]),
+        "werkzeuge": sorted(({"name": k, "faelle": v} for k, v in nach_werkzeug.items()),
+                            key=lambda x: -x["faelle"]),
         "fehler": fehler,
         "hinweise": hinweise,
     }

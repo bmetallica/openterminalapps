@@ -97,19 +97,75 @@ In the menu **Security**, area **AI gateway: prompt injection**, for administrat
   invisible characters removed, warnings, blocks, failed checks.
 - **Cases per day**, as a chart or a table.
 - **Cases by type**, with stage, an explanation of every type and what happened.
-- **Cases by application** (opencode, Continue, Open WebUI …) and **by origin** (workspaces together
-  or an external service).
+- **Cases by application** (opencode, Continue, Open WebUI …), **by origin** (workspaces together
+  or an external service) and **by tool**: which tool of the assistant delivered the flagged
+  content (`read`, `bash`, `webfetch` …; "Document" for Open WebUI). The name comes from the tool
+  call the assistant sends along with the request; if it is missing, "unknown" is shown.
+- **Case reports** (when switched on, see below).
 - **State of the checks:** time-outs, unreachable AI server, unreadable model answers, truncated and
   skipped checks.
 
+## Case reports
+
+A counter says *that* something was flagged, not *what*. To follow up a case, for example to
+recognise a false alarm or to find the file that contained an attack, there are **case reports**.
+They are **off by default**: *Settings → AI security → Case reports*.
+
+**What a case report contains:**
+
+| Field | Content |
+|---|---|
+| Time | to the minute |
+| Type, stage, action | what was flagged and what happened |
+| Tool | the assistant's tool (`read`, `bash`, `webfetch` …) or "Document" |
+| Source | file name, address or command from the tool call; for Open WebUI the name of the document |
+| Application, origin | as with the counters: e.g. Python, "Workspaces" or an external service |
+| Excerpts | per hit up to 160 characters before and after the match, at most three. If only the check model (stage 3) flagged it, the beginning of the content |
+| Length | how long the checked content was |
+
+**What a case report does not contain:** no account, no person, no workspace, no session. Before an
+excerpt or a source leaves the gateway, OTA masks:
+
+- private keys, tokens of well-known services (GitHub, GitLab, OpenAI, Slack, AWS, Google, JWT);
+- values after `password=`, `token:`, `api_key=`, `secret=` and similar names, `Bearer …`;
+- credentials in addresses (`https://name:password@…`);
+- e-mail addresses;
+- home directories: `/home/anna/project` becomes `~/project`, so no login name ends up in the
+  report;
+- every string of 40 characters or more without spaces (probably a key).
+
+**Access only with a reason.** The list of case reports on the *Security* page shows only hour,
+type, tool, application, origin and action. Source and excerpts are shown by **View**. That needs a
+reason of at least ten characters. It is recorded with the administrator's name in the audit log
+(`ki.fallbericht_eingesehen`), every access separately. The list counts how often a report was
+opened. Deleting a report is recorded as well.
+
+**Deletion rotation.** OTA deletes a case report by itself after the configured period, during the
+daily cleanup. **Default and recommendation: 30 days**, adjustable from 1 to 90 days. 30 days are
+enough to follow up a case even across holidays and keep the amount of stored content small. More
+than a quarter is not needed: a case nobody followed up by then will not be cleared up any more.
+**Delete all case reports** empties the table immediately.
+
+**Limits:** at most 200 case reports per hour; anything above is only counted (note "case reports
+skipped"). Switching case reports off also drops those still on their way. Existing ones stay
+until their period ends, unless deleted. On its way to the database a report sits for up to one
+minute in the gateway's spool (`/srv/ota/runtime/ki/spool`), afterwards only in the database.
+
 ## Data protection: what is stored
 
-**Only counters, per hour:** origin (all workspaces together or an external service), application,
-stage, type, action, count. Table `ki_sicherheit`.
+**Counters, per hour:** origin (all workspaces together or an external service), application,
+stage, type, action, tool, count. Table `ki_sicherheit`.
 
-**Not stored:** no text, no excerpt, no file name, no person, no workspace, no address. The content is
-checked in the gateway's memory and passed on; afterwards only its checksum stays in memory (see
-above).
+**Not in the counters:** no text, no excerpt, no file name, no person, no workspace, no address. The
+content is checked in the gateway's memory and passed on; afterwards only its checksum stays in
+memory (see above).
+
+**With case reports** (off by default) additionally: per case, excerpts around the match and the
+source, without a person and with secrets masked (table `ki_fallberichte`, configurable period,
+default 30 days, access only with a reason). This is **content**: despite everything it can
+contain a hint to people, such as a project name or a name in the text. Hence off by default, with
+its own short period, and to be agreed with data protection and staff representatives before
+switching it on (`dsgvo.md`, section 13).
 
 The page is therefore an evaluation of **attacks**, not of people. Who was affected by a case cannot
 be read from it. That is intended: a finding almost never says anything about the person, but about
@@ -130,6 +186,11 @@ with data protection and the staff council.
 |---|---|
 | `ki.sicherheit_eingestellt` | settings changed, with all values |
 | `ki.sicherheit_geloescht` | all counters deleted |
+| `ki.fallbericht_eingesehen` | a case report opened, with reason, time and type of the case |
+| `ki.fallbericht_geloescht` | one or all case reports deleted |
+
+Both entries belong to the long retention class of the audit log (chapter 11): who read which
+report when and why must remain traceable later on.
 
 ## Limits
 

@@ -2007,3 +2007,4 @@ input[type="color"] {
 .ki-sicher__spur { height: 10px; background: var(--well); border-radius: 4px; overflow: hidden; }
 .ki-sicher__spur > span { display: block; height: 100%; background: var(--accent); border-radius: 4px; }
 .ki-sicher__liste { margin: 0; padding-left: 18px; font-size: 13.5px; color: var(--text); }
+.ki-sicher__auszug { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 12.5px; line-height: 1.5; padding: 10px 12px; border-radius: var(--r-ctl); background: var(--well); border: 1px solid var(--edge); color: var(--text); max-height: 320px; overflow: auto; }

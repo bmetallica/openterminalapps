@@ -102,19 +102,77 @@ Im Menü **Sicherheit**, Bereich **KI-Durchgang: Prompt Injection**, für die Ve
   Fälle, entfernte unsichtbare Zeichen, Warnungen, Sperren, gescheiterte Prüfungen.
 - **Fälle je Tag**, als Grafik oder Tabelle.
 - **Fälle nach Typ**, mit Stufe, einer Erklärung jedes Typs und was geschah.
-- **Fälle nach Anwendung** (opencode, Continue, Open WebUI …) und **nach Herkunft** (Arbeitsplätze
-  zusammen oder ein externer Dienst).
+- **Fälle nach Anwendung** (opencode, Continue, Open WebUI …), **nach Herkunft** (Arbeitsplätze
+  zusammen oder ein externer Dienst) und **nach Werkzeug**: welches Werkzeug des Assistenten den
+  auffälligen Inhalt geliefert hat (`read`, `bash`, `webfetch` …; „Dokument“ für Open WebUI). Der
+  Name kommt aus dem Werkzeugaufruf, den der Assistent in der Anfrage mitschickt; fehlt er,
+  steht „unbekannt“.
+- **Fallberichte** (wenn eingeschaltet, siehe unten).
 - **Zustand der Prüfung:** Zeitüberschreitungen, nicht erreichbarer KI-Server, unlesbare Antworten
   des Modells, gekürzte und übersprungene Prüfungen.
 
+## Fallberichte
+
+Ein Zähler sagt, *dass* etwas angeschlagen hat, aber nicht, *was*. Um einem Fall nachzugehen,
+etwa einen Fehlalarm zu erkennen oder die Datei zu finden, die einen Angriff enthielt, gibt es
+**Fallberichte**. Sie sind **ab Werk aus**: *Einstellungen → KI-Sicherheit → Fallberichte*.
+
+**Was ein Fallbericht enthält:**
+
+| Feld | Inhalt |
+|---|---|
+| Zeit | auf die Minute |
+| Typ, Stufe, Aktion | was angeschlagen hat und was geschah |
+| Werkzeug | das Werkzeug des Assistenten (`read`, `bash`, `webfetch` …) oder „Dokument“ |
+| Quelle | Dateiname, Adresse oder Befehl aus dem Werkzeugaufruf, bei Open WebUI der Name des Dokuments |
+| Anwendung, Herkunft | wie bei den Zählern: z. B. Python, „Arbeitsplätze“ oder ein externer Dienst |
+| Ausschnitte | je Treffer bis zu 160 Zeichen vor und nach der Fundstelle, höchstens drei. Hat nur das Prüfmodell (Stufe 3) angeschlagen, der Anfang des Inhalts |
+| Länge | wie lang der geprüfte Inhalt war |
+
+**Was ein Fallbericht nicht enthält:** kein Konto, keine Person, kein Arbeitsplatz, keine
+Sitzung. Bevor ein Ausschnitt oder eine Quelle den Durchgang verlässt, macht OTA unkenntlich:
+
+- private Schlüssel, Tokens bekannter Dienste (GitHub, GitLab, OpenAI, Slack, AWS, Google, JWT);
+- Werte hinter `password=`, `token:`, `api_key=`, `secret=` und ähnlichen Namen, `Bearer …`;
+- Zugangsdaten in Adressen (`https://name:passwort@…`);
+- E-Mail-Adressen;
+- Heimatverzeichnisse: `/home/anna/projekt` wird zu `~/projekt`, damit kein Anmeldename im
+  Bericht steht;
+- jede Zeichenkette ab 40 Zeichen ohne Leerzeichen (vermutlich ein Schlüssel).
+
+**Einsicht nur mit Begründung.** Die Liste der Fallberichte auf der Seite *Sicherheit* zeigt nur
+Stunde, Typ, Werkzeug, Anwendung, Herkunft und Aktion. Quelle und Ausschnitte zeigt **Einsehen**.
+Dafür ist eine Begründung nötig, mindestens zehn Zeichen. Sie steht mit dem Namen der Verwaltung
+im Prüfprotokoll (`ki.fallbericht_eingesehen`), jede Einsicht einzeln. Die Liste zählt mit, wie
+oft ein Bericht geöffnet wurde. Auch das Löschen eines Berichts steht im Protokoll.
+
+**Löschrotation.** OTA löscht einen Fallbericht nach der eingestellten Frist von selbst, beim
+täglichen Aufräumen. **Vorgabe und Empfehlung: 30 Tage**, einstellbar von 1 bis 90 Tage. 30 Tage
+reichen, um einem Fall auch über Urlaub und Feiertage hinweg nachzugehen, und halten den Bestand an
+Inhalten klein. Länger als ein Quartal braucht es nicht: Ein Fall, dem bis dahin niemand
+nachgegangen ist, klärt sich nicht mehr. **Alle Fallberichte löschen** leert die Tabelle sofort.
+
+**Grenzen:** höchstens 200 Fallberichte je Stunde; was darüber liegt, wird nur gezählt (Hinweis
+„Fallberichte übersprungen“). Wer Fallberichte ausschaltet, bekommt auch die nicht mehr, die
+noch unterwegs waren. Die vorhandenen bleiben bis zum Ende ihrer Frist, es sei denn, man löscht
+sie. Auf dem Weg zur Datenbank liegt ein Bericht bis zu einer Minute im Spool des Durchgangs
+(`/srv/ota/runtime/ki/spool`), danach nur noch in der Datenbank.
+
 ## Datenschutz: was gespeichert wird
 
-**Nur Zähler, je Stunde:** Herkunft (alle Arbeitsplätze zusammen oder ein externer Dienst),
-Anwendung, Stufe, Typ, Aktion, Anzahl. Tabelle `ki_sicherheit`.
+**Zähler, je Stunde:** Herkunft (alle Arbeitsplätze zusammen oder ein externer Dienst),
+Anwendung, Stufe, Typ, Aktion, Werkzeug, Anzahl. Tabelle `ki_sicherheit`.
 
-**Nicht gespeichert:** kein Text, kein Ausschnitt, kein Dateiname, keine Person, kein Arbeitsplatz,
-keine Adresse. Der Inhalt wird im Speicher des Durchgangs geprüft und weitergegeben; danach bleibt
-von ihm nur die Prüfsumme im Speicher (siehe oben).
+**Nicht in den Zählern:** kein Text, kein Ausschnitt, kein Dateiname, keine Person, kein
+Arbeitsplatz, keine Adresse. Der Inhalt wird im Speicher des Durchgangs geprüft und weitergegeben;
+danach bleibt von ihm nur die Prüfsumme im Speicher (siehe oben).
+
+**Mit Fallberichten** (ab Werk aus) zusätzlich: je Fall Ausschnitte um die Fundstelle und die
+Quelle, ohne Person und mit unkenntlich gemachten Geheimnissen (Tabelle `ki_fallberichte`, Frist
+einstellbar, Vorgabe 30 Tage, Einsicht nur mit Begründung). Das sind **Inhalte**: Sie können
+trotz allem einen Hinweis auf Menschen enthalten, etwa einen Projektnamen oder einen Namen im
+Text. Deshalb ab Werk aus, mit eigener kurzer Frist, und vor dem Einschalten mit Datenschutz und
+Personalvertretung abzustimmen (`dsgvo.md`, Abschnitt 13).
 
 Damit ist die Seite eine Auswertung über **Angriffe**, nicht über Menschen. Wer von einem Fall
 betroffen war, lässt sich aus ihr nicht ablesen. Das ist Absicht: Ein Fund sagt fast nie etwas über
@@ -135,6 +193,11 @@ Abschnitt 13) und sollte mit Datenschutz und Personalrat besprochen sein.
 |---|---|
 | `ki.sicherheit_eingestellt` | Einstellungen geändert, mit allen Werten |
 | `ki.sicherheit_geloescht` | alle Zähler gelöscht |
+| `ki.fallbericht_eingesehen` | ein Fallbericht geöffnet, mit Begründung, Zeit und Typ des Falls |
+| `ki.fallbericht_geloescht` | ein Fallbericht oder alle gelöscht |
+
+Beide Einträge gehören zur langen Frist des Protokolls (Kapitel 11): Wer wann warum einen
+Bericht gelesen hat, muss sich auch später noch nachvollziehen lassen.
 
 ## Grenzen
 

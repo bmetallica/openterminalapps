@@ -24,12 +24,20 @@ Anweisungen, und das ist richtig so.
 2. *Muster*: bekannte Formulierungen und Techniken (unten, `MUSTER`).
 3. *Modell*: ein Sprachmodell auf einem eigenen KI-Server beurteilt den Text.
 
-**Was gespeichert wird: nichts vom Inhalt.** Gezählt werden nur Fälle, je
-Stunde, Herkunft (Arbeitsplatz oder externer Dienst), Anwendung, Stufe, Typ und
-Aktion. Kein Text, kein Ausschnitt, keine Person, kein Arbeitsplatz. Der
-Inhalt wird nur im Speicher geprüft; im Zwischenspeicher steht von jedem
-geprüften Abschnitt nur sein SHA-256 und das Ergebnis, damit eine Unterhaltung,
-die bei jedem Aufruf vollständig mitgeschickt wird, nicht jedes Mal neu zählt.
+**Was gespeichert wird.** Gezählt werden Fälle, je Stunde, Herkunft
+(Arbeitsplatz oder externer Dienst), Anwendung, Stufe, Typ und Aktion, dazu je
+Fall das Werkzeug, dessen Ergebnis auffiel (`read`, `bash`, `webfetch` …, Stufe
+„werkzeug“). Keine Person, kein Arbeitsplatz. Der Inhalt wird nur im Speicher
+geprüft; im Zwischenspeicher steht von jedem geprüften Abschnitt nur sein
+SHA-256 und das Ergebnis, damit eine Unterhaltung, die bei jedem Aufruf
+vollständig mitgeschickt wird, nicht jedes Mal neu zählt.
+
+**Fallberichte** (Einstellung, ab Werk aus): Zu jedem Fall ein kurzer Bericht
+mit der Fundstelle — je Treffer höchstens `AUSZUG` Zeichen um die Stelle,
+Geheimnisse und E-Mail-Adressen unkenntlich, Heimatverzeichnisse als `~` —
+dazu Werkzeug und Quelle (Datei, Adresse, Befehl). Keine Person, kein
+Arbeitsplatz, die Zeit auf die Minute. Die API bewahrt sie nach Frist auf;
+Einsicht nur mit Begründung im Prüfprotokoll (api/ota/routers/ki_sicherheit.py).
 """
 from __future__ import annotations
 
@@ -51,6 +59,9 @@ STUECK = 6000            # Zeichen je Bewertung durch das Modell
 STUECKE_MAX = 4          # je Abschnitt; der Rest wird als „gekürzt“ gezählt
 SPEICHER_MAX = 50_000    # Ergebnisse im Zwischenspeicher (nur Hash → Typen)
 WARTESCHLANGE_MAX = 100  # Bewertungen im Hintergrund, mehr wird übersprungen
+AUSZUG = 160             # Zeichen vor und nach einer Fundstelle im Fallbericht
+AUSZUEGE_MAX = 3         # Fundstellen je Fallbericht
+BERICHTE_MAX = 200       # Fallberichte je Stunde; darüber nur noch gezählt
 
 # ----------------------------------------------------------- Stufe 1: Zeichen
 
@@ -135,6 +146,83 @@ def muster(text: str) -> list[str]:
     return [typ for typ, m in MUSTER if m.search(text)]
 
 
+def fundstellen(text: str, typen: list[str]) -> list[tuple[str, int, int]]:
+    """(Typ, Anfang, Ende) des ersten Treffers je Muster-Typ."""
+    raus = []
+    for typ, m in MUSTER:
+        if typ in typen:
+            t = m.search(text)
+            if t:
+                raus.append((typ, t.start(), t.end()))
+    return raus
+
+
+# ------------------------------------------------- Fallbericht: unkenntlich
+
+_UNKENNTLICH = (
+    (re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?(-----END [A-Z ]*PRIVATE KEY-----|$)", re.DOTALL),
+     "[privater Schlüssel]"),
+    (re.compile(r"\b(gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|glpat-[A-Za-z0-9_-]{16,}"
+                r"|sk-[A-Za-z0-9_-]{16,}|xox[abposr]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}"
+                r"|AIza[0-9A-Za-z_-]{30,}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,})"),
+     "[Geheimnis]"),
+    (re.compile(r"(?i)\b(bearer|token|basic)\s+[A-Za-z0-9._~+/=-]{12,}"), r"\1 [Geheimnis]"),
+    (re.compile(r"(?i)\b(?P<k>[\w.-]*(?:passw(?:or)?[dt]|secret|token|api[_-]?key|apikey|credential)[\w.-]*)"
+                r"(?P<s>\s*[:=]\s*)(?P<q>['\"]?)[^\s'\"]{4,}(?P=q)"), r"\g<k>\g<s>\g<q>[Geheimnis]\g<q>"),
+    (re.compile(r"(?i)\b([a-z][a-z0-9+.-]*://)[^/\s:@]+:[^/\s@]+@"), r"\1[Zugang]@"),
+    (re.compile(r"[\w.+-]+@[\w-]+(\.[\w-]+)+"), "[E-Mail]"),
+    (re.compile(r"/(home|Users)/[^/\s'\"]+"), "~"),
+    (re.compile(r"\b[A-Za-z0-9+/_-]{40,}={0,2}"), "[langer Wert]"),
+)
+
+
+def unkenntlich(text: str) -> str:
+    """Geheimnisse, E-Mail-Adressen und Heimatverzeichnisse aus einem
+    Ausschnitt nehmen. Lieber zu viel als zu wenig: Ein Fallbericht soll
+    zeigen, *was* da stand, nicht die Schlüssel, die darin vorkamen."""
+    for muster_, ersatz in _UNKENNTLICH:
+        text = muster_.sub(ersatz, text)
+    return text
+
+
+def auszug(text: str, anfang: int, ende: int) -> str:
+    a, e = max(0, anfang - AUSZUG), min(len(text), ende + AUSZUG)
+    stueck = text[a:e]
+    if e - a > 2 * AUSZUG + 400:          # sehr langer Treffer: Mitte kürzen
+        stueck = text[a:anfang + 200] + " […] " + text[ende - 200:e]
+    return ("…" if a > 0 else "") + unkenntlich(stueck) + ("…" if e < len(text) else "")
+
+
+_QUELLE_SCHLUESSEL = ("filePath", "file_path", "path", "filename", "file", "url", "uri",
+                      "command", "cmd", "query", "pattern")
+
+
+def quelle_aus(argumente: Any) -> str:
+    """Datei, Adresse oder Befehl aus den Argumenten eines Werkzeugaufrufs."""
+    if isinstance(argumente, str):
+        try:
+            argumente = json.loads(argumente)
+        except ValueError:
+            return unkenntlich(argumente[:200])
+    if not isinstance(argumente, dict):
+        return ""
+    for k in _QUELLE_SCHLUESSEL:
+        v = argumente.get(k)
+        if isinstance(v, str) and v.strip():
+            return unkenntlich(v.strip()[:200])
+        if isinstance(v, list) and v and all(isinstance(x, str) for x in v):
+            return unkenntlich(" ".join(v)[:200])
+    return ""
+
+
+_NAME = re.compile(r"[^a-z0-9_.:-]+")
+
+
+def werkzeug_name(name: Any) -> str:
+    n = _NAME.sub("_", str(name or "").strip().lower()).strip("_")
+    return n[:40] or "unbekannt"
+
+
 # ------------------------------------------------------------- Stufe 3: Modell
 
 URTEIL_TYPEN = ("anweisung", "datenabfluss", "rollenwechsel", "verschleierung", "sonstiges")
@@ -180,7 +268,16 @@ def stuecke(text: str) -> tuple[list[str], bool]:
 
 # ----------------------------------------------------------- Abschnitte finden
 
-_KONTEXT = re.compile(r"<(context|source)\b[^>]*>(.*?)</\1>", re.DOTALL | re.IGNORECASE)
+_KONTEXT = re.compile(r"<(context|source)\b([^>]*)>(.*?)</\1>", re.DOTALL | re.IGNORECASE)
+_ATTR = re.compile(r"\b(name|source|url|src|title|id)\s*=\s*[\"']([^\"']{1,300})[\"']", re.IGNORECASE)
+
+
+def _dokument_quelle(attribute: str) -> str:
+    werte = dict((k.lower(), v) for k, v in _ATTR.findall(attribute or ""))
+    for k in ("url", "src", "source", "name", "title", "id"):
+        if werte.get(k):
+            return unkenntlich(werte[k][:200])
+    return ""
 
 
 @dataclass
@@ -191,6 +288,8 @@ class Abschnitt:
     hash: str = ""
     typen: list[str] = field(default_factory=list)   # Stufe 2 und 3
     zeichen: list[str] = field(default_factory=list)  # Stufe 1
+    werkzeug: str = ""       # Name des Werkzeugs (read, bash …) oder „dokument“
+    quelle: str = ""         # Datei, Adresse oder Befehl, nur für den Fallbericht
 
 
 def _texte(inhalt: Any) -> list[tuple[Any, str]]:
@@ -207,25 +306,49 @@ def _texte(inhalt: Any) -> list[tuple[Any, str]]:
     return raus
 
 
+def _aufrufe(daten: dict[str, Any]) -> dict[str, tuple[str, Any]]:
+    """Kennung eines Werkzeugaufrufs → (Name, Argumente), aus den Nachrichten
+    des Assistenten (Chat Completions) und den function_call (Responses)."""
+    raus: dict[str, tuple[str, Any]] = {}
+    for n in daten.get("messages") or []:
+        if isinstance(n, dict) and isinstance(n.get("tool_calls"), list):
+            for c in n["tool_calls"]:
+                if isinstance(c, dict) and c.get("id"):
+                    f = c.get("function") if isinstance(c.get("function"), dict) else {}
+                    raus[str(c["id"])] = (str(f.get("name") or ""), f.get("arguments"))
+    eingabe = daten.get("input")
+    if isinstance(eingabe, list):
+        for e in eingabe:
+            if isinstance(e, dict) and e.get("type") == "function_call" and e.get("call_id"):
+                raus[str(e["call_id"])] = (str(e.get("name") or ""), e.get("arguments"))
+    return raus
+
+
 def abschnitte(daten: dict[str, Any]) -> list[Abschnitt]:
     raus: list[Abschnitt] = []
+    aufrufe = _aufrufe(daten)
     for mi, n in enumerate(daten.get("messages") or []):
         if not isinstance(n, dict):
             continue
         rolle = n.get("role")
         for ti, text in _texte(n.get("content")):
             if rolle in ("tool", "function"):
-                raus.append(Abschnitt("werkzeug", text, ("messages", mi, ti)))
+                name, argumente = aufrufe.get(str(n.get("tool_call_id") or ""), (n.get("name") or "", None))
+                raus.append(Abschnitt("werkzeug", text, ("messages", mi, ti),
+                                      werkzeug=werkzeug_name(name), quelle=quelle_aus(argumente)))
             elif rolle in ("user", "system"):
                 for m in _KONTEXT.finditer(text):
-                    raus.append(Abschnitt("dokument", m.group(2), ("messages", mi, ti)))
+                    raus.append(Abschnitt("dokument", m.group(3), ("messages", mi, ti),
+                                          werkzeug="dokument", quelle=_dokument_quelle(m.group(2))))
     # Responses-API: Ergebnisse von Werkzeugaufrufen
     eingabe = daten.get("input")
     if isinstance(eingabe, list):
         for ii, e in enumerate(eingabe):
             if isinstance(e, dict) and e.get("type") == "function_call_output" \
                     and isinstance(e.get("output"), str):
-                raus.append(Abschnitt("werkzeug", e["output"], ("input", ii, "output")))
+                name, argumente = aufrufe.get(str(e.get("call_id") or ""), ("", None))
+                raus.append(Abschnitt("werkzeug", e["output"], ("input", ii, "output"),
+                                      werkzeug=werkzeug_name(name), quelle=quelle_aus(argumente)))
     return [a for a in raus if len(a.text) >= MINDESTLAENGE]
 
 
@@ -284,6 +407,49 @@ class Zaehlwerk:
 
 
 ZAEHLER = Zaehlwerk()
+
+
+class Fallberichte:
+    """Fallberichte bis zur nächsten Leerung (jede Minute in den Spool).
+    Höchstens BERICHTE_MAX je Stunde: Eine Flut gleicher Fälle soll nicht die
+    Platte füllen; was darüber liegt, wird nur noch gezählt."""
+
+    def __init__(self) -> None:
+        self.offen: list[dict[str, Any]] = []
+        self.stunde = ""
+        self.in_stunde = 0
+
+    def melden(self, a: Abschnitt, herkunft: str, anwendung: str, aktion: str,
+               stufe: str) -> None:
+        jetzt = datetime.now(timezone.utc)
+        stunde = jetzt.strftime("%Y-%m-%dT%H")
+        if stunde != self.stunde:
+            self.stunde, self.in_stunde = stunde, 0
+        if self.in_stunde >= BERICHTE_MAX:
+            ZAEHLER.zaehlen(herkunft, anwendung, "bericht", "uebersprungen", "hinweis")
+            return
+        self.in_stunde += 1
+        stellen = fundstellen(a.text, a.typen)[:AUSZUEGE_MAX]
+        auszuege = [{"typ": typ, "text": auszug(a.text, an, en)} for typ, an, en in stellen]
+        if not auszuege:
+            # Nur das Modell hat angeschlagen: Es nennt keine Stelle. Dann der Anfang.
+            auszuege = [{"typ": next((t for t in a.typen if t.startswith("modell-")), "modell"),
+                         "text": auszug(a.text, 0, min(len(a.text), AUSZUG))}]
+        self.offen.append({
+            "art": "fallbericht",
+            "zeit": jetzt.replace(second=0, microsecond=0).isoformat(),
+            "herkunft": herkunft[:48], "anwendung": anwendung[:16], "stufe": stufe,
+            "quelle_art": a.art, "werkzeug": a.werkzeug or "unbekannt", "quelle": a.quelle,
+            "typen": list(a.typen), "aktion": aktion, "laenge": len(a.text),
+            "auszuege": auszuege,
+        })
+
+    def leeren(self) -> list[dict[str, Any]]:
+        raus, self.offen = self.offen, []
+        return raus
+
+
+BERICHTE = Fallberichte()
 
 
 # --------------------------------------------------------------------- Wache
@@ -418,6 +584,11 @@ class Wache:
             for typ in a.typen:
                 ZAEHLER.zaehlen(herkunft, anwendung, "modell" if typ.startswith("modell-") else "muster",
                                 typ, aktion)
+            if a.typen:
+                ZAEHLER.zaehlen(herkunft, anwendung, "werkzeug", a.werkzeug or "unbekannt", aktion)
+                if cfg.get("fallberichte"):
+                    stufe = "modell" if all(t.startswith("modell-") for t in a.typen) else "muster"
+                    BERICHTE.melden(a, herkunft, anwendung, aktion, stufe)
         auffaellig = [a for a in teile if a.typen]
         for a in auffaellig:
             alle_typen += [t for t in a.typen if t not in alle_typen]
@@ -445,6 +616,10 @@ class Wache:
                 if not a.typen:
                     # Bisher unauffällig: erst das Modell macht ihn zum Fall.
                     ZAEHLER.zaehlen(herkunft, anwendung, "abschnitt", a.art, "gezaehlt")
+                    ZAEHLER.zaehlen(herkunft, anwendung, "werkzeug", a.werkzeug or "unbekannt", "gezaehlt")
+                    if cfg.get("fallberichte"):
+                        a.typen = [typ]
+                        BERICHTE.melden(a, herkunft, anwendung, "gezaehlt", "modell")
                 if a.hash in self.speicher and typ not in self.speicher[a.hash]:
                     self.speicher[a.hash].append(typ)
         finally:
