@@ -79,12 +79,18 @@ SECTIONS: dict[str, tuple[str, bool]] = {
     "39": ("Für Administratoren", True),
     "40": ("Betrieb", True),
     "41": ("Für Administratoren", True),
+    "42": ("Für Datenschutzbeauftragte", False),
 }
+
+# Was der/die Datenschutzbeauftragte zusätzlich lesen darf (Kapitel 42):
+# die Kapitel, in denen steht, was OTA über Menschen erfasst.
+DATENSCHUTZ_KAPITEL = {"08", "11", "27", "28", "39", "41"}
 
 # In dieser Reihenfolge stehen die Rubriken im Handbuch, innerhalb einer Rubrik
 # nach Nummer. Ohne das stuende ein spaeteres Anwenderkapitel hinter allen
 # Verwaltungskapiteln, in einer zweiten Gruppe „Für Anwender".
-RUBRIKEN = ["Grundlagen", "Für Anwender", "Für Administratoren", "Betrieb", "Weiteres"]
+RUBRIKEN = ["Grundlagen", "Für Anwender", "Für Datenschutzbeauftragte", "Für Administratoren", "Betrieb",
+            "Weiteres"]
 # „Los geht's" ist der Einstieg und steht vor den älteren Kapiteln 3 und 4.
 ZUERST = ("29",)
 
@@ -130,7 +136,8 @@ def _chapters(user: User, lang: str = "") -> list[HelpChapter]:
         if path.name == "README.md":
             continue
         section, admin_only = SECTIONS.get(path.name[:2], ("Weiteres", True))
-        if admin_only and not user.is_admin:
+        if admin_only and not user.is_admin and not (
+                path.name[:2] in DATENSCHUTZ_KAPITEL and "datenschutz.pruefen" in user.permissions):
             continue
         out.append(HelpChapter(
             slug=path.stem,

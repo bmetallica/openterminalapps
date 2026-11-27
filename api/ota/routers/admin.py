@@ -439,27 +439,21 @@ def user_usage(username: str, db: DbSession = Depends(get_db)) -> dict:
     }
 
 
-@router.get("/users/{user_id}/auskunft", dependencies=[Depends(manage_users)])
+@router.post("/users/{user_id}/auskunft", dependencies=[Depends(manage_users)])
 def auskunft(
     user_id: uuid.UUID,
+    body: dict,
     request: Request,
     actor: User = Depends(current_user),
     db: DbSession = Depends(get_db),
 ) -> Response:
-    """Auskunft nach Art. 15 DSGVO als ZIP (auskunft.py, Handbuch Kapitel 08)."""
-    from .. import auskunft as auskunft_mod
+    """Auskunft nach Art. 15 DSGVO als ZIP (auskunft.py, Handbuch Kapitel 08).
 
-    user = db.get(User, user_id)
-    if not user:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Nutzer nicht gefunden")
-    inhalt, zaehler = auskunft_mod.erstellen(db, user, actor)
-    audit.record(db, "user.auskunft", actor=actor, object_type="user", object_id=str(user.id),
-                 request=request, name=user.username, dateien=zaehler)
-    db.commit()
-    datei = f"auskunft-{re.sub(r'[^A-Za-z0-9._-]', '_', user.username)}-{datetime.now(timezone.utc):%Y%m%d-%H%M}.zip"
-    return Response(content=inhalt, media_type="application/zip",
-                    headers={"Content-Disposition": f'attachment; filename="{datei}"',
-                             "Cache-Control": "no-store"})
+    Seit 2026-11-27 nur mit Begründung (z. B. Aktenzeichen), wie auf der
+    Seite Datenschutz (routers/datenschutz.py)."""
+    from .datenschutz import auskunft_erstellen
+
+    return auskunft_erstellen(db, user_id, str(body.get("grund") or ""), actor, request)
 
 
 @router.delete("/users/{user_id}", dependencies=[Depends(manage_users)])
@@ -742,6 +736,7 @@ def list_permissions() -> list[dict[str, str]]:
         "anwendungen.verwalten": "Externe Anwendungen (OIDC) anlegen",
         "arbeitsplatz.root": "Root-Arbeitsplatz nutzen (root und Docker im Container)",
         "arbeitsplatz.terminal": "Per Webterminal als root in laufende Arbeitsplätze",
+        "datenschutz.pruefen": "Datenschutz prüfen: Lagebild, Prüfprotokoll, Auskunft, Datenschutzhinweis (nur lesend)",
     }
     return [{"key": k, "text": texts.get(k, k)} for k in PERMISSIONS]
 

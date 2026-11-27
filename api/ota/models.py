@@ -56,6 +56,9 @@ PERMISSIONS = (
     # Aufschalten auf den Bildschirm: Wer es hat, liest jede Datei im Zuhause
     # eines Nutzers. Jede Eingabe wird protokolliert (TerminalEintrag).
     "arbeitsplatz.terminal",
+    # Datenschutzbeauftragte: Lagebild, Prüfprotokoll, Auskunft nach Art. 15,
+    # Datenschutzhinweis (datenschutz.py). Nur lesend, keine Verwaltung.
+    "datenschutz.pruefen",
 )
 
 

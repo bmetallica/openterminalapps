@@ -288,7 +288,7 @@ must not leave the house. The individual safeguards are listed below under their
 | **AI** | The AI gateway keeps the AI server's key out of the workspaces, controls access per group and checks what an assistant reads for **prompt injection** (patterns, invisible characters, optionally a checking model). Counters are stored; case reports with an excerpt only on request, without a person, with a retention period and access only with a reason in the audit log ([chapter 41](docs/wiki/en/41-ki-sicherheit.md)) |
 | **Code** | OTA Git protects the main branch of every repository (**branch protection** with required approval) and detects **secrets on push**: keys, tokens, passwords, `.env` files ([chapter 27](docs/wiki/en/27-git.md)) |
 | **Traceability** | Audit log for sign-ins, sessions, administration, screen viewing and the root web terminal, with fixed retention periods and optionally a copy to a **syslog server** (RFC 5424, TLS) ([chapter 11](docs/wiki/en/11-betrieb.md)) |
-| **Data protection** | **Access report under Art. 15 GDPR** at the push of a button. Data of deleted accounts, backups included, is deleted after a configurable grace period. AI statistics without names; names only with a reason in the audit log. No content, nothing loaded from foreign hosts ([dsgvo.md](dsgvo.md), German) |
+| **Data protection** | A page and group of their own for **data protection officers**: overview of all processing with retention periods, who may do what, every access to other people's data, audit log with filters and export, without administrative rights ([chapter 42](docs/wiki/en/42-datenschutz.md)). **Access report under Art. 15 GDPR** at the push of a button, only with a reason. Data of deleted accounts, backups included, is deleted after a configurable grace period. AI statistics without names; names only with a reason in the audit log. No content, nothing loaded from foreign hosts ([dsgvo.md](dsgvo.md), German) |
 | **Maintenance** | `make update` brings security updates for all images, `make cve` lists fixable vulnerabilities, `make sbom` produces bills of materials in SPDX and CycloneDX; software monitoring reports programs that are not approved ([chapter 11](docs/wiki/en/11-betrieb.md)) |
 
 What is still missing is listed openly in [dsgvo.md](dsgvo.md) (section 11) and [roadmap.md](roadmap.md).
@@ -456,6 +456,17 @@ explains it in full.
   - Everyone sees their own figures under **My AI usage**. A **GDPR** item in the sidebar informs
     everyone; administration can adjust its text.
   - Contents are never recorded, and retention is adjustable.
+- **Data protection: a page for data protection officers**
+  ([chapter 42](docs/wiki/en/42-datenschutz.md)):
+  - Its own system group `datenschutz`, read-only: no settings, no accounts, no screen viewing,
+    not the AI usage of individual people, not the content of case reports.
+  - Overview: every processing in plain words, on or off, with its retention period, plus open
+    points.
+  - Who may do what: groups with far-reaching permissions and their members.
+  - Access: who accessed other people's data or screens, with the reason.
+  - Audit log with filters by period and person, CSV for Excel.
+  - Access reports under Art. 15 and the privacy notice. Texts in plain language, no IT knowledge
+    needed.
 - **AI security: protection against prompt injection** in the AI gateway
   ([chapter 41](docs/wiki/en/41-ki-sicherheit.md)):
   - What an assistant reads is checked (files, command output, web pages, documents from Open
@@ -757,7 +768,7 @@ socket — the same separation applies to the host's file system.
 ## Documentation
 
 - **[Manual](docs/wiki/en/README.md)** — usage, administration, operations, troubleshooting
-  (41 chapters, eight of them for users; [German](docs/wiki/README.md))
+  (42 chapters, eight of them for users; [German](docs/wiki/README.md))
 - **[plan.md](plan.md)** — architecture **and the reasoning behind it**, including the dead ends
   (German)
 - **[docs/adr/](docs/adr/README.md)** — decisions that are expensive to undo, with the alternatives

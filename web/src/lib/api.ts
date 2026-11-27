@@ -1128,10 +1128,13 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 
 /** Eine Datei herunterladen statt JSON lesen — mit denselben Fehlermeldungen. */
-async function herunterladen(path: string): Promise<{ blob: Blob; datei: string }> {
+async function herunterladen(path: string, body?: unknown): Promise<{ blob: Blob; datei: string }> {
   let res: Response
   try {
-    res = await fetch(`/api${path}`, { credentials: 'same-origin' })
+    res = await fetch(`/api${path}`, body === undefined ? { credentials: 'same-origin' } : {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    })
   } catch {
     throw new ApiError(0, t('Keine Verbindung zum Server. Läuft OTA noch?'))
   }
@@ -1146,6 +1149,23 @@ async function herunterladen(path: string): Promise<{ blob: Blob; datei: string 
   const kopf = res.headers.get('content-disposition') || ''
   const datei = /filename="([^"]+)"/.exec(kopf)?.[1] || 'download'
   return { blob: await res.blob(), datei }
+}
+
+/** Datenschutz (Kapitel 42): Lagebild, Berechtigungen, Prüfprotokoll, Auskunft. */
+export type DsPunkt = { id: string; an: boolean; werte: Record<string, any> }
+export type DsLage = { punkte: DsPunkt[]; hinweise: string[] }
+export type DsRechte = {
+  gruppen: { name: string; beschreibung: string; system: boolean; rechte: string[];
+    mitglieder: { name: string; konto: string; aktiv: boolean }[] }[]
+  je_recht: { recht: string; anzahl: number }[]
+}
+export type DsEintrag = { ts: string; wer: string | null; aktion: string; objekt_art: string | null;
+  objekt: string | null; ip: string | null; detail: Record<string, any>; konto: string | null }
+export type DsProtokoll = { gesamt: number; seite: number; je_seite: number; eintraege: DsEintrag[] }
+export type DsPerson = { id: string; konto: string; name: string; email: string; aktiv: boolean }
+export type DsFilter = { von?: string; bis?: string; art?: string; wer?: string; person?: string }
+function dsQuery(f: DsFilter): string {
+  return Object.entries(f).filter(([, v]) => v).map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&')
 }
 
 export type GitGeheimnisseEinstellungen = { an: boolean; betriebsart: 'beobachten' | 'warnen' | 'sperren'; uebergehen: boolean }
@@ -1646,7 +1666,14 @@ export const api = {
   dsgvo: () => call<DsgvoHinweis>('/dsgvo'),
   dsgvoSetzen: (text: string) => call<DsgvoHinweis>('/dsgvo', { method: 'PUT', body: JSON.stringify({ text }) }),
   kiStatus: () => call<KiStatus>('/admin/ki-nutzung/status'),
-  auskunft: (id: string) => herunterladen(`/admin/users/${id}/auskunft`),
+  auskunft: (id: string, grund: string) => herunterladen(`/admin/users/${id}/auskunft`, { grund }),
+  // Datenschutz (Kapitel 42)
+  dsLage: () => call<DsLage>('/datenschutz/lage'),
+  dsRechte: () => call<DsRechte>('/datenschutz/rechte'),
+  dsProtokoll: (f: DsFilter, seite: number) => call<DsProtokoll>(`/datenschutz/protokoll?${dsQuery(f)}&seite=${seite}`),
+  dsProtokollCsv: (f: DsFilter) => herunterladen(`/datenschutz/protokoll.csv?${dsQuery(f)}`),
+  dsPersonen: (q: string) => call<DsPerson[]>(`/datenschutz/personen?q=${encodeURIComponent(q)}`),
+  dsAuskunft: (id: string, grund: string) => herunterladen(`/datenschutz/auskunft/${encodeURIComponent(id)}`, { grund }),
   gitGeheimnisse: () => call<GitGeheimnisseStand>('/admin/git/geheimnisse'),
   gitGeheimnisseEinstellen: (body: Partial<GitGeheimnisseEinstellungen>) =>
     call<GitGeheimnisseStand>('/admin/git/geheimnisse', { method: 'PUT', body: JSON.stringify(body) }),

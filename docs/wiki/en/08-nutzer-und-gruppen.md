@@ -21,12 +21,13 @@ prerequisites. There is no requirement for an external identity provider.
 
 ## Roles
 
-Two system groups that cannot be deleted:
+Three system groups that cannot be deleted:
 
 | Group | May |
 |---|---|
 | **`admins`** | Everything: workspaces, golden images, users, groups, assignments, registries, all sessions, audit log, global settings |
 | **`users`** | Only their own: start assigned workspaces, manage their own sessions, their own settings |
+| **`datenschutz`** | *Since 2026-11-27.* For data protection officers (permission `datenschutz.pruefen`): the **Data protection** page with overview, permissions, access, audit log, access reports under Art. 15 and the privacy notice. Read-only, no administration ([chapter 42](42-datenschutz.md)) |
 
 Further groups can be created freely and serve for assignment and resource overrides
 ([chapter 6](06-ressourcen-und-zuteilung.md)).
@@ -482,7 +483,9 @@ reachable. The data then stays where it is and has to be deleted by hand.
 ## Access report under Art. 15 ✅
 
 *Since 2026-11-25.* Under **People → open the account → Create access report** (permission
-*create and change users*). The result is a ZIP with everything OTA has stored about the account:
+*create and change users*) and on the **Data protection → Access request** page (group
+`datenschutz`, [chapter 42](42-datenschutz.md)). **Since 2026-11-27 only with a reason** of at
+least ten characters, e.g. file reference and date of the request. The result is a ZIP with everything OTA has stored about the account:
 
 | File | Content |
 |---|---|
@@ -508,7 +511,7 @@ home is listed as a link, not followed.
 account, and `terminal.csv` contains what they typed. Whether that goes out as it is, is a weighing
 under Art. 15(4) GDPR; if in doubt, agree it with data protection.
 
-**In the audit log:** `user.auskunft`, with the number of entries per file.
+**In the audit log:** `user.auskunft`, with the reason and the number of entries per file.
 
 ## Audit log
 

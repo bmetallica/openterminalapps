@@ -292,7 +292,7 @@ Themen. Zusammengefasst:
 | **KI** | Der KI-Durchgang hält den Schlüssel des KI-Servers aus den Arbeitsplätzen, regelt den Zugang je Gruppe und prüft, was ein Assistent liest, auf **Prompt Injection** (Muster, unsichtbare Zeichen, auf Wunsch ein Prüfmodell). Gespeichert werden Zähler; Fallberichte mit Ausschnitt nur auf Wunsch, ohne Person, mit Frist und Einsicht nur mit Begründung im Protokoll ([Kapitel 41](docs/wiki/41-ki-sicherheit.md)) |
 | **Code** | OTA-Git schützt den Hauptzweig jedes Repositorys (**Branch-Schutz** mit Pflicht-Freigabe) und erkennt **Geheimnisse beim Push**: Schlüssel, Tokens, Passwörter, `.env`-Dateien ([Kapitel 27](docs/wiki/27-git.md)) |
 | **Nachvollziehbarkeit** | Protokoll für Anmeldungen, Sitzungen, Verwaltung, Aufschalten und root-Webterminal, mit festen Fristen und auf Wunsch als Kopie an einen **Syslog-Server** (RFC 5424, TLS) ([Kapitel 11](docs/wiki/11-betrieb.md)) |
-| **Datenschutz** | **Auskunft nach Art. 15 DSGVO** auf Knopfdruck. Daten gelöschter Konten samt Sicherungen werden nach einer einstellbaren Frist mitgelöscht. KI-Statistik ohne Namen, Namen nur mit Begründung im Protokoll. Keine Inhalte, kein Nachladen von fremden Hosts ([dsgvo.md](dsgvo.md)) |
+| **Datenschutz** | Eigene Seite und Gruppe für **Datenschutzbeauftragte**: Überblick über alle Verarbeitungen mit Fristen, wer was darf, alle Zugriffe auf Daten anderer, Prüfprotokoll mit Filtern und Export, ohne Verwaltungsrechte ([Kapitel 42](docs/wiki/42-datenschutz.md)). **Auskunft nach Art. 15 DSGVO** auf Knopfdruck, nur mit Begründung. Daten gelöschter Konten samt Sicherungen werden nach einer einstellbaren Frist mitgelöscht. KI-Statistik ohne Namen, Namen nur mit Begründung im Protokoll. Keine Inhalte, kein Nachladen von fremden Hosts ([dsgvo.md](dsgvo.md)) |
 | **Pflege** | `make update` bringt Sicherheitsupdates für alle Images, `make cve` listet behebbare Lücken, `make sbom` erzeugt Stücklisten in SPDX und CycloneDX; Softwaremonitoring meldet nicht freigegebene Programme ([Kapitel 11](docs/wiki/11-betrieb.md#sicherheitslücken-cves-)) |
 
 Was noch fehlt, steht offen in [dsgvo.md](dsgvo.md) (Abschnitt 11) und [roadmap.md](roadmap.md).
@@ -466,6 +466,15 @@ ihn vollständig erklärt.
   - Jeder sieht unter **Meine KI-Nutzung** die eigenen Zahlen. Ein Punkt **DSGVO** in der
     Seitenleiste informiert alle; den Text kann die Verwaltung anpassen.
   - Inhalte werden nie erfasst, die Aufbewahrung ist einstellbar.
+- **Datenschutz: eine Seite für Datenschutzbeauftragte**
+  ([Kapitel 42](docs/wiki/42-datenschutz.md)):
+  - Eigene Systemgruppe `datenschutz`, nur lesend: keine Einstellungen, keine Konten, kein
+    Aufschalten, nicht die KI-Nutzung einzelner Menschen, nicht der Inhalt der Fallberichte.
+  - Überblick: jede Verarbeitung in Worten, ein oder aus, mit Frist, dazu offene Punkte.
+  - Wer darf was: Gruppen mit weitreichenden Rechten und ihre Mitglieder.
+  - Zugriffe: wer auf Daten oder Bildschirme anderer zugegriffen hat, mit Begründung.
+  - Prüfprotokoll mit Filtern nach Zeitraum und Person, CSV für Excel.
+  - Auskunft nach Art. 15 und Datenschutzhinweis. Texte allgemeinverständlich, ohne IT-Wissen.
 - **KI-Sicherheit: Schutz vor Prompt Injection** im KI-Durchgang
   ([Kapitel 41](docs/wiki/41-ki-sicherheit.md)):
   - Geprüft wird, was ein Assistent liest (Dateien, Befehlsausgaben, Webseiten, Dokumente aus
@@ -773,7 +782,7 @@ nicht — dieselbe Trennung gilt für das Dateisystem des Hosts.
 
 ## Dokumentation
 
-- **[Handbuch](docs/wiki/README.md)** — Bedienung, Verwaltung, Betrieb, Fehlersuche (41 Kapitel,
+- **[Handbuch](docs/wiki/README.md)** — Bedienung, Verwaltung, Betrieb, Fehlersuche (42 Kapitel,
   davon acht eigens für Anwender; [English](docs/wiki/en/README.md))
 - **[plan.md](plan.md)** — Architektur **und die Begründungen dahinter**, samt der Sackgassen
 - **[docs/adr/](docs/adr/README.md)** — Entscheidungen, die teuer rückgängig zu machen sind, mit den

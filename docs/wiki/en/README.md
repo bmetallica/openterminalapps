@@ -63,6 +63,9 @@ configuration decisions can be made with foresight — but it always says what a
 39. [Extensions (e.g. memory for opencode)](39-erweiterungen.md)
 41. [AI security: protection against prompt injection](41-ki-sicherheit.md)
 
+**For data protection officers**
+42. [Data protection: the page for data protection officers](42-datenschutz.md)
+
 **Operations**
 10. [Certificates and HTTPS](10-zertifikate-und-https.md)
 11. [Operations and updates](11-betrieb.md)

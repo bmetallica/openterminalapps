@@ -20,7 +20,7 @@ type Tab = 'Arbeitsplätze' | 'Protokoll' | 'Sicherung' | 'KI-Nutzung'
    Darunter ausgerechnet `session.attached`: der Eintrag, den ein Betroffener
    oder ein Betriebsrat lesen können muss. Wer einen neuen Vorgang
    protokolliert, trägt ihn hier ein. */
-const ACTION_TEXT: Record<string, string> = {
+export const ACTION_TEXT: Record<string, string> = {
   // Anmeldung
   'login.ok': 'Anmeldung',
   'login.oidc_ok': 'Anmeldung über die zentrale Anmeldung',
@@ -136,6 +136,23 @@ const ACTION_TEXT: Record<string, string> = {
   'ki.nutzung_angesehen': 'KI-Nutzung eines Menschen angesehen',
   'ki.auskunft': 'Personenbezogene KI-Auskunft geöffnet',
   'ki.extern_angelegt': 'Externer KI-Dienst angelegt',
+  // Konten und Rechte (für die Seite Datenschutz, Kapitel 42)
+  'user.auskunft': 'Auskunft nach Art. 15 erstellt',
+  'user.deaktiviert': 'Konto gesperrt',
+  'user.daten_geloescht': 'Daten eines gelöschten Kontos entfernt',
+  'user.daten_entfernt': 'Daten eines Kontos entfernt',
+  'user.daten_nicht_entfernt': 'Daten eines Kontos konnten nicht entfernt werden',
+  'erweiterung.nutzer_geloescht': 'Daten eines Kontos in einer Erweiterung gelöscht',
+  'erweiterung.eingestellt': 'Erweiterung eingestellt',
+  'verzeichnis.gruppen_gesetzt': 'Gruppen aus dem Verzeichnis zugeordnet',
+  'verzeichnis.gruppen_entfernt': 'Gruppen aus dem Verzeichnis entzogen',
+  'ide_ai.eingestellt': 'KI-Anbindung eingestellt',
+  'git.geheimnisse_eingestellt': 'Prüfung auf Passwörter im Code eingestellt',
+  'git.geheimnisse_geloescht': 'Zähler der Passwortprüfung gelöscht',
+  'syslog.eingestellt': 'Kopie des Protokolls (Syslog) eingestellt',
+  'settings.konto_daten': 'Regel für Daten gelöschter Konten geändert',
+  'datenschutz.protokoll_exportiert': 'Prüfprotokoll exportiert',
+  'datenschutz.protokoll_person': 'Prüfprotokoll nach einer Person durchsucht',
   // KI-Sicherheit (Kapitel 41)
   'ki.sicherheit_eingestellt': 'KI-Sicherheit eingestellt',
   'ki.sicherheit_geloescht': 'Zähler der KI-Sicherheit gelöscht',

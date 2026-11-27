@@ -2008,3 +2008,18 @@ input[type="color"] {
 .ki-sicher__spur > span { display: block; height: 100%; background: var(--accent); border-radius: 4px; }
 .ki-sicher__liste { margin: 0; padding-left: 18px; font-size: 13.5px; color: var(--text); }
 .ki-sicher__auszug { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 12.5px; line-height: 1.5; padding: 10px 12px; border-radius: var(--r-ctl); background: var(--well); border: 1px solid var(--edge); color: var(--text); max-height: 320px; overflow: auto; }
+
+/* Datenschutz (Kapitel 42) */
+.ds-hinweise { margin: 0; padding-left: 18px; display: grid; gap: 6px; color: var(--text); font-size: 14px; }
+.ds-punkte { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(380px, 100%), 1fr)); gap: 12px; }
+.ds-punkt { border: 1px solid var(--edge); border-radius: var(--r-panel); padding: 12px 14px; background: var(--bay-2); font-size: 14px; }
+.ds-punkt__kopf { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.ds-marke { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--well); color: var(--label); border: 1px solid var(--edge); }
+.ds-marke--an { background: var(--live-bg); color: var(--live); border-color: transparent; }
+.ds-filter { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: flex-end; margin: 10px 0 14px; }
+.ds-filter label, .ds-grund { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--label); }
+.ds-grund { margin: 8px 0 4px; max-width: 640px; }
+.ds-grund textarea { width: 100%; }
+.ds-suche { display: flex; flex-direction: column; }
+.ds-treffer { list-style: none; margin: 4px 0 0; padding: 6px; min-width: 260px; display: grid; gap: 2px; background: var(--bay); border: 1px solid var(--edge-lit); border-radius: var(--r-ctl); box-shadow: var(--shadow-pop); }
+.ds-person { display: inline-flex; gap: 8px; align-items: center; font-size: 14px; }

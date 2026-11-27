@@ -302,7 +302,7 @@ es eine dokumentierte Frist gibt.
 | Recht | Heute machbar? |
 |---|---|
 | **Information** (Art. 13) | ⚠️ Teilweise: Der Punkt **DSGVO** in der Seitenleiste erklärt, was über Arbeitsplätze und KI-Nutzung erfasst wird, wie lange und wer es sieht — **aber nur, solange die KI-Statistik läuft**. Der Text ist anpassbar (Markdown, Fristen werden eingesetzt); **verantwortliche Stelle und Datenschutzbeauftragte müssen eingetragen werden.** |
-| **Auskunft** (Art. 15) | ✅ Seit 2026-11-25 auf Knopfdruck: **Personen → Konto → Auskunft erstellen** ergibt ein ZIP mit Stammdaten, Protokoll, Terminal-Protokoll, Sitzungen, KI-Nutzung, Softwarefunden, Sicherungen, OTA-Git und der Liste der Dateien (Wiki Kapitel 08), protokolliert als `user.auskunft`. Vor dem Herausgeben Art. 15 Abs. 4 abwägen: Protokoll und Terminal-Protokoll nennen Administratoren. Die KI-Nutzung sieht jeder zusätzlich selbst (**Meine KI-Nutzung**); das Gedächtnis exportiert jeder selbst (JSON, Markdown). Open WebUI ist nicht enthalten (Abschnitt 12). |
+| **Auskunft** (Art. 15) | ✅ Seit 2026-11-25 auf Knopfdruck: **Personen → Konto → Auskunft erstellen**, seit 2026-11-27 auch für die Gruppe `datenschutz` unter **Datenschutz → Auskunft** (Abschnitt 15), **nur mit Begründung** im Protokoll; ergibt ein ZIP mit Stammdaten, Protokoll, Terminal-Protokoll, Sitzungen, KI-Nutzung, Softwarefunden, Sicherungen, OTA-Git und der Liste der Dateien (Wiki Kapitel 08), protokolliert als `user.auskunft`. Vor dem Herausgeben Art. 15 Abs. 4 abwägen: Protokoll und Terminal-Protokoll nennen Administratoren. Die KI-Nutzung sieht jeder zusätzlich selbst (**Meine KI-Nutzung**); das Gedächtnis exportiert jeder selbst (JSON, Markdown). Open WebUI ist nicht enthalten (Abschnitt 12). |
 | **Berichtigung** (Art. 16) | ✅ Name und E-Mail über die Verwaltung bzw. Keycloak/AD. |
 | **Löschung** (Art. 17) | ⚠️ Teilweise, siehe 4.1. |
 | **Einschränkung** (Art. 18) | Teilweise: Konto deaktivieren; die Daten bleiben unberührt. |
@@ -447,6 +447,7 @@ dokumentieren, nicht hier:
 | 9 | **Verschlüsselung im Ruhezustand** bewerten (Abschnitt 8) |
 | 10 | **Open WebUI**, falls angebunden: die eigene Liste in Abschnitt 12.5 |
 | 11 | **Prüfkonten** in einer produktiven Anlage abschalten (Nachbemerkung) |
+| 12 | **Datenschutzbeauftragte** in die Gruppe `datenschutz` aufnehmen, nicht in `admins` (Abschnitt 15) |
 
 Technisch wächst in OTA **nichts ohne Frist**, ausser dem Zuhause, das als Arbeitsmittel bewusst
 keine hat (oder nach Kontolöschung die eingestellte). Offen bleiben die organisatorischen Punkte.
@@ -598,6 +599,32 @@ wie `.env`. Je nach Einstellung wird nur gezählt, gewarnt oder der Push abgewie
 👉 **Mitbestimmung:** Keine Zuordnung zu Personen, deshalb nicht zur Leistungs- oder
 Verhaltenskontrolle geeignet. Im Modus *Sperren* greift sie aber in die Arbeit ein; das sollte der
 Personalrat kennen.
+
+---
+
+## 15 · Die Seite Datenschutz für Datenschutzbeauftragte
+
+*Seit 2026-11-27, Wiki Kapitel 42.* Eine eigene Systemgruppe **`datenschutz`** mit dem Recht
+`datenschutz.pruefen` gibt Datenschutzbeauftragten eine eigene Seite, ohne Verwaltungsrechte:
+
+| Bereich | Inhalt |
+|---|---|
+| Überblick | jede Verarbeitung in Worten, ein oder aus, mit Frist; offene Punkte (Standardtext im Hinweis, kein Syslog, Daten gelöschter Konten ohne Frist …) |
+| Wer darf was | Gruppen mit weitreichenden Rechten und ihre Mitglieder |
+| Zugriffe | Einträge im Prüfprotokoll zu Einsicht in Daten anderer (Aufschalten, Terminal, KI-Auskunft, Fallberichte, Auskünfte), Konten, Rechten und Datenschutz-Einstellungen, mit Begründung und betroffenem Konto |
+| Prüfprotokoll | vollständig, Filter nach Zeitraum, handelnder und betroffener Person, CSV-Export |
+| Auskunft | Art. 15 mit Pflicht zur Begründung |
+| Datenschutzhinweis | ansehen und ändern |
+
+| Frage | Antwort |
+|---|---|
+| Was darf die Gruppe nicht? | Einstellungen ändern, Konten oder Gruppen verwalten, aufschalten, Terminals öffnen, die KI-Nutzung einzelner Menschen sehen, Fallberichte öffnen |
+| Was steht über sie im Protokoll? | Auskunft (`user.auskunft`, mit Begründung), CSV-Export (`datenschutz.protokoll_exportiert`, mit Filtern), Suche nach einer Person (`datenschutz.protokoll_person`, einmal je zehn Minuten), Änderung des Hinweises (`dsgvo.hinweis_geaendert`) |
+| Neue Daten? | Keine. Die Seite liest, was ohnehin gespeichert ist; neu sind nur die Protokolleinträge über ihre eigene Nutzung (lange Frist) |
+
+👉 **Trennung der Aufgaben:** Datenschutzbeauftragte gehören in `datenschutz`, nicht in
+`admins`. Sonst kontrolliert sich die Verwaltung selbst. Umgekehrt sieht die Verwaltung im
+Prüfprotokoll, was die Gruppe `datenschutz` abgerufen hat.
 
 ---
 

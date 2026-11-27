@@ -23,6 +23,7 @@ from .routers import (
     sessions, shared as shared_router, skeleton as skeleton_router,
     software as software_router, git as git_router, ide_ai as ide_ai_router, opencode as opencode_router,
     ki_nutzung as ki_nutzung_router, ki_sicherheit as ki_sicherheit_router, syslog as syslog_router, dsgvo as dsgvo_router,
+    datenschutz as datenschutz_router,
     erweiterungen as erweiterungen_router, templates,
     news as news_router,
 )
@@ -544,6 +545,15 @@ async def lifespan(_: FastAPI):
         except Exception as exc:  # noqa: BLE001
             log.warning("Mitgelieferte Netzprofile nicht angelegt: %s", exc)
 
+    # Die Gruppe für den Datenschutz (Kapitel 42): da, ohne dass jemand
+    # `seed` laufen lässt — eine Anlage, die schon steht, bekommt sie so auch.
+    with SessionLocal() as db:
+        try:
+            from . import datenschutz
+            datenschutz.gruppe_sicherstellen(db)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Gruppe datenschutz nicht angelegt: %s", exc)
+
     # Die Routen der Erweiterungen: Ein neu angelegter Traefik oder Agent
     # kennt sie sonst erst nach dem nächsten Abgleich.
     with SessionLocal() as db:
@@ -604,6 +614,7 @@ app.include_router(git_router.router)
 app.include_router(ide_ai_router.router)
 app.include_router(ki_nutzung_router.router)
 app.include_router(ki_sicherheit_router.router)
+app.include_router(datenschutz_router.router)
 app.include_router(syslog_router.router)
 app.include_router(opencode_router.router)
 app.include_router(erweiterungen_router.router)

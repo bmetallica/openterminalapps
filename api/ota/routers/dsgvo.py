@@ -26,7 +26,8 @@ from ..models import User
 
 router = APIRouter(prefix="/api/dsgvo", tags=["dsgvo"])
 
-schreiben = require_permission("settings.manage")
+# Den Text verantwortet inhaltlich der/die Datenschutzbeauftragte (Kapitel 42).
+schreiben = require_permission("settings.manage", "datenschutz.pruefen")
 
 
 class HinweisIn(BaseModel):
@@ -34,7 +35,7 @@ class HinweisIn(BaseModel):
 
 
 def _darf_schreiben(user: User) -> bool:
-    return user.is_admin or "settings.manage" in user.permissions
+    return user.is_admin or bool({"settings.manage", "datenschutz.pruefen"} & user.permissions)
 
 
 @router.get("")

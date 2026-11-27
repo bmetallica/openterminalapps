@@ -63,6 +63,9 @@ heute schon funktioniert.
 39. [Erweiterungen (z. B. Gedächtnis für opencode)](39-erweiterungen.md)
 41. [KI-Sicherheit: Schutz vor Prompt Injection](41-ki-sicherheit.md)
 
+**Für Datenschutzbeauftragte**
+42. [Datenschutz: die Seite für Datenschutzbeauftragte](42-datenschutz.md)
+
 **Betrieb**
 10. [Zertifikate und HTTPS](10-zertifikate-und-https.md)
 11. [Betrieb und Updates](11-betrieb.md)

@@ -8,7 +8,8 @@
 #   * Es enthält **keine** Geheimnisse: keinen Passwort-Hash, keinen
 #     TOTP-Startwert, keine Zugangsdaten von Sitzungen und keinen
 #     Dateiinhalt. Ein Verweis aus dem Zuhause hinaus wird nicht verfolgt.
-#   * Die Auskunft steht im Protokoll.
+#   * Nur mit Begründung (seit 2026-11-27); sie steht mit der Auskunft im
+#     Protokoll.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -75,11 +76,17 @@ sql "INSERT INTO ki_stunden (stunde, user_id, template_id, server, modell, werkz
      VALUES (date_trunc('hour', now()), '$U', '00000000-0000-0000-0000-000000000000', 'pruef', 'pruef-modell', 'opencode', '$N', '', 3, 0, 0, 10, 20, 30, 40)" >/dev/null
 
 # Ohne Recht: auch nicht für sich selbst.
-expect "403" "$(curl -sk -o /dev/null -w '%{http_code}' -b "$TMP/nutzer.jar" "$BASE/api/admin/users/$U/auskunft")" \
+GRUND="Pruefreihe Auskunft $INHALT"
+expect "403" "$(curl -sk -o /dev/null -w '%{http_code}' -b "$TMP/nutzer.jar" -X POST -H 'Content-Type: application/json' \
+  -d "{\"grund\":\"$GRUND\"}" "$BASE/api/admin/users/$U/auskunft")" \
   "Ohne Verwaltungsrecht: 403, auch für das eigene Konto"
-expect "404" "$(code "$BASE/api/admin/users/00000000-0000-0000-0000-000000000001/auskunft")" "Unbekanntes Konto: 404"
+expect "404" "$(code -X POST -H 'Content-Type: application/json' -d "{\"grund\":\"$GRUND\"}" \
+  "$BASE/api/admin/users/00000000-0000-0000-0000-000000000001/auskunft")" "Unbekanntes Konto: 404"
+expect "422" "$(code -X POST -H 'Content-Type: application/json' -d '{"grund":"kurz"}' "$BASE/api/admin/users/$U/auskunft")" \
+  "Ohne ausreichende Begründung: 422"
 
-KOPF=$(curl -sk -b "$TMP/admin.jar" -D - -o "$TMP/a.zip" "$BASE/api/admin/users/$U/auskunft" | tr -d '\r')
+KOPF=$(curl -sk -b "$TMP/admin.jar" -D - -o "$TMP/a.zip" -X POST -H 'Content-Type: application/json' \
+  -d "{\"grund\":\"$GRUND\"}" "$BASE/api/admin/users/$U/auskunft" | tr -d '\r')
 grep -qi "^content-type: application/zip" <<<"$KOPF" && ok "Ein ZIP" || bad "Ein ZIP — $(head -3 <<<"$KOPF")"
 grep -qi "filename=\"auskunft-$N-" <<<"$KOPF" && ok "… mit sprechendem Dateinamen" || bad "… mit sprechendem Dateinamen"
 mkdir -p "$TMP/a" && python3 -c 'import zipfile,sys; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])' "$TMP/a.zip" "$TMP/a"
@@ -107,8 +114,8 @@ grep -q "pruef-modell" "$TMP/a/ki_stunden.csv" && ok "KI-Nutzung" || bad "KI-Nut
 head -c 3 "$TMP/a/protokoll.csv" | od -An -tx1 | grep -q "ef bb bf" && ok "CSV mit BOM für Excel" || bad "CSV mit BOM für Excel"
 grep -q "Art. 15 Abs. 4" "$TMP/a/liesmich.txt" && ok "liesmich.txt erklärt die Abwägung" || bad "liesmich.txt erklärt die Abwägung"
 
-expect "1" "$(sql "SELECT count(*) FROM audit_log WHERE action = 'user.auskunft' AND object_id = '$U' AND actor_name = '$ADMIN'")" \
-  "Steht mit Namen der Verwaltung im Protokoll"
+expect "1" "$(sql "SELECT count(*) FROM audit_log WHERE action = 'user.auskunft' AND object_id = '$U' AND actor_name = '$ADMIN' AND detail->>'grund' = '$GRUND'")" \
+  "Steht mit Namen der Verwaltung und Begründung im Protokoll"
 
 echo
 echo "Ergebnis: $pass bestanden, $fail fehlgeschlagen"

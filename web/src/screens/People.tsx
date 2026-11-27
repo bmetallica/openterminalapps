@@ -179,9 +179,12 @@ function UserEditor({ user, groups, onSaved, onClose, onToast }: {
 
   async function auskunft() {
     if (!user) return
+    const grund = window.prompt(tr('Begründung für die Auskunft, z. B. Aktenzeichen oder Datum des Antrags. Sie steht im Prüfprotokoll.'))
+    if (grund === null) return
+    if (grund.trim().length < 10) { onToast(tr('Bitte eine Begründung mit mindestens 10 Zeichen angeben.'), 'bad'); return }
     setBusy(true)
     try {
-      const { blob, datei } = await api.auskunft(user.id)
+      const { blob, datei } = await api.auskunft(user.id, grund)
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url; a.download = datei
@@ -308,7 +311,7 @@ function UserEditor({ user, groups, onSaved, onClose, onToast }: {
 
       {!isNew && (
         <Field label={tr('Auskunft nach Art. 15 DSGVO')}
-          hint={tr('Ein ZIP mit allem, was OTA über dieses Konto gespeichert hat: Stammdaten, Gruppen, Protokoll, Sitzungen, KI-Nutzung, Sicherungen, OTA-Git und die Liste der Dateien (ohne Inhalt). Keine Passwörter oder Schlüssel. Steht im Protokoll. Vor dem Herausgeben liesmich.txt lesen: Das Protokoll nennt auch Administratoren.')}>
+          hint={tr('Ein ZIP mit allem, was OTA über dieses Konto gespeichert hat: Stammdaten, Gruppen, Protokoll, Sitzungen, KI-Nutzung, Sicherungen, OTA-Git und die Liste der Dateien (ohne Inhalt). Keine Passwörter oder Schlüssel. Nur mit Begründung, die im Protokoll steht. Vor dem Herausgeben liesmich.txt lesen: Das Protokoll nennt auch Administratoren.')}>
           <button className="btn btn--sm" disabled={busy}
             onClick={() => void auskunft()}>
             {busy ? tr('Wird erstellt…') : tr('Auskunft erstellen')}

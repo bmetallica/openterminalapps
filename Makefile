@@ -286,6 +286,7 @@ test:
 	@# Daten gelöschter Konten: behalten, Papierkorb mit Frist, sofort.
 	@./scripts/test-konto-daten.sh
 	@./scripts/test-auskunft.sh
+	@./scripts/test-datenschutz.sh
 	@./scripts/test-syslog.sh
 	@echo
 	@# Geaenderte CPU/RAM erreichen vorhandene Container (docker update).

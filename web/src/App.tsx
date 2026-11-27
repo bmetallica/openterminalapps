@@ -23,13 +23,14 @@ import { StandaloneViewer } from './screens/StandaloneViewer'
 import { anmeldePfad, openInTab, parseRoute, viewPath, type Route } from './lib/routes'
 import { ApiError, alsAngemeldet, api, type ErweiterungAnsicht, type Host, type Me, type Session, type Stream, type Template } from './lib/api'
 import { Erinnerungen, GEDAECHTNIS } from './screens/Erinnerungen'
+import { Datenschutz } from './screens/Datenschutz'
 import { gb } from './lib/format'
 import { setKontoLang, setLang, t, useLang, type Lang } from './lib/i18n'
 import { setTheme, useTheme, type Theme } from './lib/theme'
 import './styles/app.css'
 
 type View = 'dashboard' | 'news' | 'workspaces' | 'webapps' | 'images' | 'registries' | 'paketquellen' | 'storage'
-  | 'files' | 'people' | 'monitor' | 'software' | 'kisicherheit' | 'netz' | 'settings' | 'account' | 'help' | 'erinnerungen' | 'dsgvo' | 'meineki'
+  | 'files' | 'people' | 'monitor' | 'software' | 'kisicherheit' | 'netz' | 'settings' | 'account' | 'help' | 'erinnerungen' | 'dsgvo' | 'meineki' | 'datenschutz'
 type Toast = { id: number; msg: string; tone: 'ok' | 'bad' }
 
 const NAV: { id: View; glyph: string; cap: string; adminOnly: boolean }[] = [
@@ -79,6 +80,9 @@ const NAV: { id: View; glyph: string; cap: string; adminOnly: boolean }[] = [
   // Der Datenschutzhinweis. Für alle, solange die KI-Nutzungsstatistik
   // läuft; die Verwaltung sieht ihn immer, um den Text vorher anzupassen.
   { id: 'dsgvo', glyph: '§', cap: 'DSGVO', adminOnly: false },
+  // Die Sicht der/des Datenschutzbeauftragten (Kapitel 42): Recht
+  // `datenschutz.pruefen`, auch für die Verwaltung.
+  { id: 'datenschutz', glyph: '⚖', cap: 'Datenschutz', adminOnly: false },
 ]
 
 /* Das eigene Konto sitzt unten bei „Abmelden", nicht oben bei den Ansichten:
@@ -291,6 +295,7 @@ export default function App() {
       : n.id === 'webapps' ? darfAnwendungen
       : n.id === 'dsgvo' ? dsgvo
       : n.id === 'meineki' ? kiStatistik
+      : n.id === 'datenschutz' ? (me.is_admin || me.permissions.includes('datenschutz.pruefen'))
         : !n.adminOnly || me.is_admin)
 
   /* Der Rückfall auf das Dashboard fängt den Fall ab, dass jemand seine
@@ -420,6 +425,7 @@ export default function App() {
         {current === 'erinnerungen' && gedaechtnis && <Erinnerungen ansicht={gedaechtnis} />}
         {current === 'help' && <Help onToast={toast} />}
         {current === 'dsgvo' && <Dsgvo onToast={toast} />}
+        {current === 'datenschutz' && <Datenschutz onToast={toast} onHinweis={() => setView('dsgvo')} />}
         {current === 'meineki' && <MeineKiNutzung onToast={toast} />}
       </main>
 

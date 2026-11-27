@@ -21,12 +21,13 @@ Voraussetzung. Es gibt keinen Zwang zu einem externen Identity-Provider.
 
 ## Rollen
 
-Zwei Systemgruppen, nicht löschbar:
+Drei Systemgruppen, nicht löschbar:
 
 | Gruppe | Darf |
 |---|---|
 | **`admins`** | Alles: Workspaces, Golden Images, Nutzer, Gruppen, Zuweisungen, Registries, alle Sessions, Audit-Log, globale Einstellungen |
 | **`users`** | Nur das Eigene: zugewiesene Workspaces starten, eigene Sessions verwalten, eigene Einstellungen |
+| **`datenschutz`** | *Seit 2026-11-27.* Für Datenschutzbeauftragte (Recht `datenschutz.pruefen`): Seite **Datenschutz** mit Überblick, Rechten, Zugriffen, Prüfprotokoll, Auskunft nach Art. 15 und Datenschutzhinweis. Nur lesend, keine Verwaltung ([Kapitel 42](42-datenschutz.md)) |
 
 Weitere Gruppen sind frei anlegbar und dienen der Zuweisung und den Ressourcen-Abweichungen
 ([Kapitel 6](06-ressourcen-und-zuteilung.md)).
@@ -490,7 +491,9 @@ liegen die Daten weiter an ihrem Platz und müssen von Hand gelöscht werden.
 ## Auskunft nach Art. 15 ✅
 
 *Seit dem 2026-11-25.* Unter **Personen → Konto öffnen → Auskunft erstellen** (Recht *Nutzer
-anlegen und ändern*). Das Ergebnis ist ein ZIP mit allem, was OTA über das Konto gespeichert hat:
+anlegen und ändern*) und auf der Seite **Datenschutz → Auskunft** (Gruppe `datenschutz`,
+[Kapitel 42](42-datenschutz.md)). **Seit 2026-11-27 nur mit Begründung**, mindestens zehn
+Zeichen, zum Beispiel Aktenzeichen und Datum des Antrags. Das Ergebnis ist ein ZIP mit allem, was OTA über das Konto gespeichert hat:
 
 | Datei | Inhalt |
 |---|---|
@@ -516,7 +519,7 @@ Verarbeitung). Ein symbolischer Verweis im Zuhause wird als Verweis gelistet, ni
 getan haben, und `terminal.csv` enthält, was sie getippt haben. Ob das so hinausgeht, ist eine
 Abwägung nach Art. 15 Abs. 4 DSGVO; im Zweifel mit dem Datenschutz abstimmen.
 
-**Im Protokoll:** `user.auskunft`, mit der Zahl der Einträge je Datei.
+**Im Protokoll:** `user.auskunft`, mit Begründung und der Zahl der Einträge je Datei.
 
 ## Audit-Log
 
